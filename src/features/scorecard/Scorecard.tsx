@@ -88,12 +88,24 @@ export default function Scorecard() {
         title={course.name}
         back="/"
         right={
-          <button
-            onClick={() => setShowJump((v) => !v)}
-            className="rounded-lg px-3 py-2 text-sm font-semibold text-fairway-300 active:bg-fairway-800"
-          >
-            Holes
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Jump to the scavenger hunt, carrying where we came from so its
+                back button returns here rather than to Home (§Phase 3). */}
+            <button
+              onClick={() => navigate('/hunt', { state: { from: `/play/${clientId}` } })}
+              className="rounded-lg px-2 py-2 text-lg leading-none active:bg-fairway-800"
+              aria-label="Scavenger hunt"
+              title="Scavenger hunt"
+            >
+              🔍
+            </button>
+            <button
+              onClick={() => setShowJump((v) => !v)}
+              className="rounded-lg px-3 py-2 text-sm font-semibold text-fairway-300 active:bg-fairway-800"
+            >
+              Holes
+            </button>
+          </div>
         }
       />
 
