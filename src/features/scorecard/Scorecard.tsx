@@ -9,14 +9,11 @@ import {
   STROKE_CAP,
   STROKE_CAP_ENABLED,
   clampStrokes,
-  playerTotal,
-  overUnderEntered,
-  formatOverUnder,
   isRoundComplete,
 } from '../../lib/scoring';
 
 // §5.1 step 3 — the play screen. One hole at a time; per-hole entry for all
-// players; par + running totals + over/under; stroke cap; hole navigation and
+// players; par for the current hole; stroke cap; hole navigation and
 // edit; every edit persists to IndexedDB immediately (offline-first).
 export default function Scorecard() {
   const { clientId = '' } = useParams();
@@ -149,8 +146,6 @@ export default function Scorecard() {
         <div className="space-y-3">
           {round.playerTags.map((tag, p) => {
             const strokes = round.scores[p]?.[hole] ?? null;
-            const total = playerTotal(round.scores[p] ?? []);
-            const diff = overUnderEntered(course.pars, round.scores[p] ?? []);
             return (
               <div
                 key={p}
@@ -162,10 +157,6 @@ export default function Scorecard() {
                     style={{ color: course.accent }}
                   >
                     {tag}
-                  </span>
-                  <span className="text-sm text-fairway-100/60">
-                    Total {total} ·{' '}
-                    <span className="font-semibold text-fairway-200">{formatOverUnder(diff)}</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
