@@ -14,6 +14,9 @@ import {
 
 // Testing aid — how long the auto-player pauses on each hole before advancing.
 const AUTO_PLAY_MS = 450;
+// Fast-forward still visits every hole, but with only a brief, still-visible
+// pause so the walk stays watchable while running much faster than auto-play.
+const FAST_FORWARD_MS = 80;
 
 // A plausible-but-random stroke count for a hole, biased toward its par and
 // kept inside the sane/cap range. Used only by the auto-play testing tool.
@@ -60,10 +63,10 @@ export default function Scorecard() {
 
   // Auto-play tick: score the current hole for every player, then advance —
   // one hole per interval — until the last hole is filled or the user pauses.
-  // Fast-forward still visits every hole, but with no delay between them.
+  // Fast-forward still visits every hole, but with only a brief pause between.
   useEffect(() => {
     if (!autoPlaying || !round || !course) return;
-    const delay = fastForward ? 0 : AUTO_PLAY_MS;
+    const delay = fastForward ? FAST_FORWARD_MS : AUTO_PLAY_MS;
     const id = window.setTimeout(() => {
       const prev = roundRef.current;
       if (!prev) return;
@@ -297,8 +300,8 @@ export default function Scorecard() {
         </div>
 
         {/* Auto-play (testing) — walk the course, randomly scoring each hole.
-            Play adds a delay per hole; fast-forward visits every hole with no
-            delay. Either way, Pause stops mid-course. */}
+            Play adds a delay per hole; fast-forward visits every hole with just
+            a brief pause. Either way, Pause stops mid-course. */}
         <div className="mt-3">
           {autoPlaying ? (
             <Button
