@@ -59,7 +59,7 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--brand);outline-offs
   position:relative;min-height:62vh;display:flex;flex-direction:column;
   align-items:center;justify-content:space-between;text-align:center;overflow:hidden;
 }
-.hero::before{content:"";position:absolute;inset:0;background:url('../img/hero.svg') center/cover no-repeat;z-index:-3}
+.hero::before{content:"";position:absolute;inset:0;background:url('../img/hero.jpg') center/cover no-repeat;z-index:-3}
 .hero-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
 .hero::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,15,30,.45) 0%,rgba(15,15,30,.30) 45%,rgba(26,26,46,.96) 100%);z-index:-1}
 .hero-logo{margin-top:34px;width:min(420px,72vw);height:auto;filter:drop-shadow(0 6px 24px rgba(0,0,0,.55))}
@@ -80,9 +80,9 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--brand);outline-offs
 .card::before{content:"";position:absolute;inset:0;background-size:cover;background-position:center;transition:transform .5s;z-index:-2}
 .card::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 95% 80% at center,rgba(10,12,26,.84),rgba(10,12,26,.70));z-index:-1}
 .card:hover::before{transform:scale(1.06)}
-.card.wv::before{background-image:url('../img/loc-wilsonville.svg')}
-.card.tk::before{background-image:url('../img/loc-tukwila.svg')}
-.card.up::before{background-image:url('../img/loc-upland.svg')}
+.card.wv::before{background-image:url('../img/wilsonville.jpg')}
+.card.tk::before{background-image:url('../img/tukwila.jpg')}
+.card.up::before{background-image:url('../img/upland.jpg')}
 .card .city{font-family:var(--display);text-transform:uppercase;font-size:2rem;letter-spacing:.5px}
 .card address{font-style:normal;font-weight:700;text-transform:uppercase;letter-spacing:.5px;font-size:.95rem;margin-top:16px;line-height:1.7;text-shadow:0 2px 10px rgba(0,0,0,.6)}
 .card .tel{display:inline-flex;align-items:center;gap:8px;font-weight:700;margin-top:14px;font-size:1.05rem;text-shadow:0 2px 10px rgba(0,0,0,.6)}
@@ -172,7 +172,7 @@ a:focus-visible,button:focus-visible{outline:3px solid var(--brand);outline-offs
    LOCATION HERO
    ========================================================================== */
 .lhero{position:relative;min-height:74vh;display:flex;align-items:center;overflow:hidden}
-.lhero::before{content:"";position:absolute;inset:0;background:url('../img/hero.svg') center/cover no-repeat;z-index:-3}
+.lhero::before{content:"";position:absolute;inset:0;background:url('../img/loc/hero-loc.jpg') center/cover no-repeat;z-index:-3}
 .lhero::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(15,15,30,.86) 0%,rgba(15,15,30,.55) 55%,rgba(26,26,46,.35) 100%);z-index:-1}
 .lhero-inner{max-width:var(--wrap);margin:0 auto;padding:80px 24px;width:100%}
 .lhero h1{font-size:clamp(2.6rem,7vw,5rem);max-width:12ch}

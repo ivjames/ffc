@@ -32,10 +32,11 @@ other locations, and a full footer.
 
 ## Assets
 
-`assets/img/` holds **branded SVG placeholder art** (logo, hero panorama,
-location scenes, attraction thumbnails, park map). Swap these for real
-photography/video to finish the production site. Fonts load from Google Fonts
-with a `system-ui` fallback stack.
+`assets/img/` and `assets/video/` hold the **real Bullwinkle's assets**
+mirrored from the live site — logo, hero video + poster, location photos,
+the *Eat. Play. Repeat.* gallery, attraction/event thumbnails, and the
+official park map. Fonts load from Google Fonts with a `system-ui` fallback
+stack.
 
 ## Run locally
 
