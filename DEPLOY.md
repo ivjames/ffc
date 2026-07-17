@@ -28,10 +28,21 @@ Run as **root on the droplet**. Subdomain `ffc.lab980.com` throughout; change th
 #    (ivjames/ffc is private — export GITHUB_TOKEN=ghp_... first so the clone auths.)
 provision-site ffc ivjames/ffc
 
-# 2. Postgres db + role.
-sudo -u postgres psql -c "CREATE DATABASE ffc;"
-sudo -u postgres psql -c "CREATE ROLE ffc LOGIN PASSWORD 'CHANGE_ME';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ffc TO ffc;"
+# 2. Postgres: the role OWNS the db (so it can create tables in `public` on
+#    PG15+, where GRANT ALL ON DATABASE isn't enough), and the superuser creates
+#    the pgcrypto extension once (it's untrusted — a plain role can't create it;
+#    the migration's `create extension if not exists` is then a no-op).
+sudo -u postgres psql <<'SQL'
+CREATE ROLE ffc LOGIN PASSWORD 'CHANGE_ME';
+CREATE DATABASE ffc OWNER ffc;
+\connect ffc
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+SQL
+#    Already created the db as postgres? Fix it instead of recreating:
+#      ALTER DATABASE ffc OWNER TO ffc;
+#      \connect ffc
+#      GRANT ALL ON SCHEMA public TO ffc;
+#      CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 # 3. API config — the one bit that needs a human (secrets).
 cd /var/www/ffc/server && cp .env.example .env
