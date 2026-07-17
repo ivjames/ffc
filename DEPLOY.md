@@ -47,7 +47,10 @@ SQL
 # 3. API config — the one bit that needs a human (secrets).
 cd /var/www/ffc/server && cp .env.example .env
 #    edit .env:  DATABASE_URL=postgres://ffc:CHANGE_ME@localhost:5432/ffc
-#                PORT=8060 ; APP_TOKEN=$(openssl rand -hex 16)
+#                APP_TOKEN=$(openssl rand -hex 16)
+#                PORT=<free port>  — the droplet runs many apps on 8060+, so use
+#                the one provision-site reserved:  grep '^PORT=' /var/www/ffc/.env
+#    (bin/ffc reads this PORT for the vhost, health check and seeding.)
 
 # 4. Symlink the operate CLI onto PATH (once), then let it do the rest:
 #    migrate DB -> start API (pm2) -> first atomic build -> static vhost -> TLS -> seed.

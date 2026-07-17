@@ -25,7 +25,15 @@ SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 APP_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
 STUB="$(basename "$APP_DIR")"
 FQDN="${FFC_FQDN:-$STUB.lab980.com}"          # override: FFC_FQDN=putt.example.com
-API_PORT="${FFC_PORT:-8060}"                    # override: FFC_PORT=8061
+# API port: single source of truth is the API's own config (server/.env PORT),
+# then the port provision-site reserved (app-root .env), then 8060. The droplet
+# runs many apps on 8060+, so NEVER assume 8060 — read what's configured.
+# FFC_PORT overrides everything.
+API_PORT="${FFC_PORT:-$(
+  grep -hE '^[[:space:]]*(export[[:space:]]+)?PORT=' \
+    "$APP_DIR/server/.env" "$APP_DIR/.env" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1
+)}"
+: "${API_PORT:=8060}"
 BRANCH="${FFC_BRANCH:-main}"
 KEEP="${FFC_KEEP:-5}"                           # released builds to retain
 
