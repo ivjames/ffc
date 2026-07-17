@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# ffc — operate CLI for the Mini Golf PWA (lab980 convention: each site ships
+# bin/<name>). Symlink onto PATH once on the droplet:
+#
+#   ln -sf /var/www/ffc/bin/ffc /usr/local/bin/ffc
+#
+# Typical bring-up (after `provision-site ffc ivjames/ffc` clones the repo):
+#   1. cd /var/www/ffc/server && cp .env.example .env   # set DATABASE_URL, APP_TOKEN
+#   2. ffc setup                                          # everything else
+# Routine updates thereafter:  ffc deploy
+#
+# Subcommands:
+#   setup     one-time: static vhost + TLS, DB migrate, first build, seed
+#   deploy    pull main -> build atomically -> swap -> restart API  (redeploy)
+#   seed      (re)load the four courses into Postgres
+#   restart   restart the pm2 API
+#   logs      tail the pm2 API logs
+#   backup    pg_dump the database into data/
+#   vhost     (re)write the nginx vhost + (re)issue TLS
+set -euo pipefail
+
+# Resolve the app dir from this script's own location (…/ffc/bin/ffc -> …/ffc),
+# so the stub (dir name) drives the FQDN by default: ffc -> ffc.lab980.com.
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+APP_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
+STUB="$(basename "$APP_DIR")"
+FQDN="${FFC_FQDN:-$STUB.lab980.com}"          # override: FFC_FQDN=putt.example.com
+API_PORT="${FFC_PORT:-8060}"                    # override: FFC_PORT=8061
+BRANCH="${FFC_BRANCH:-main}"
+KEEP="${FFC_KEEP:-5}"                           # released builds to retain
+
+c_b=$'\033[1;34m'; c_r=$'\033[1;31m'; c_o=$'\033[0m'
+log(){ printf '%s==>%s %s\n' "$c_b" "$c_o" "$*"; }
+die(){ printf '%serror:%s %s\n' "$c_r" "$c_o" "$*" >&2; exit 1; }
+
+# Build into a fresh release dir and swap the `current` symlink atomically
+# (§3): never overwrite the served dir in place, or a mid-deploy load serves
+# mixed old/new hashed assets and poisons the service-worker cache.
+build_release(){
+  local ts release
+  ts="$(date +%Y%m%d%H%M%S)"
+  release="$APP_DIR/releases/$ts"
+  mkdir -p "$release"
+  log "Building into $release"
+  ( cd "$APP_DIR" && npm ci && npm run build )
+  cp -r "$APP_DIR/dist" "$release/dist"
+  ln -sfn "$release" "$APP_DIR/current.tmp"
+  mv -Tf "$APP_DIR/current.tmp" "$APP_DIR/current"
+  log "current -> $ts"
+  ls -1dt "$APP_DIR/releases"/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -rf
+}
+
+# Install deps + (re)start the API under pm2. Start from server/ (--cwd) so
+# dotenv loads server/.env (DATABASE_URL, APP_TOKEN).
+api_up(){
+  [ -d "$APP_DIR/server" ] || return 0
+  ( cd "$APP_DIR/server" && npm ci --omit=dev )
+  pm2 restart ffc-api --update-env \
+    || pm2 start index.js --name ffc-api --cwd "$APP_DIR/server"
+  pm2 save
+}
+
+cmd_vhost(){
+  [ -f "$APP_DIR/deploy/nginx.conf.template" ] || die "missing deploy/nginx.conf.template"
+  local conf="/etc/nginx/sites-available/$FQDN"
+  log "Writing static vhost $conf (root current/dist, /api -> :$API_PORT)"
+  sed -e "s/__FQDN__/$FQDN/g" -e "s#__APP_DIR__#$APP_DIR#g" -e "s/__API_PORT__/$API_PORT/g" \
+    "$APP_DIR/deploy/nginx.conf.template" > "$conf"
+  ln -sf "$conf" "/etc/nginx/sites-enabled/$FQDN"
+  nginx -t && systemctl reload nginx
+  if command -v certbot >/dev/null; then
+    log "Issuing/refreshing TLS for $FQDN"
+    certbot --nginx -d "$FQDN" --redirect -n --agree-tos \
+      -m "${CERTBOT_EMAIL:-ivjames@gmail.com}" \
+      || log "certbot did not complete (DNS still propagating?). Re-run later: ffc vhost"
+  else
+    log "certbot not found — install it, then: ffc vhost"
+  fi
+}
+
+cmd_seed(){
+  local token
+  token="$(grep -E '^APP_TOKEN=' "$APP_DIR/server/.env" 2>/dev/null | cut -d= -f2- || true)"
+  log "Seeding courses -> 127.0.0.1:$API_PORT/api/seed"
+  curl -fsS -X POST "http://127.0.0.1:$API_PORT/api/seed" \
+    -H 'content-type: application/json' \
+    ${token:+-H "x-app-token: $token"} \
+    --data-binary @"$APP_DIR/deploy/courses.seed.json" >/dev/null
+  log "Seeded 4 courses."
+}
+
+cmd_deploy(){
+  cd "$APP_DIR"
+  log "Fetching origin/$BRANCH"
+  git fetch --quiet origin "$BRANCH"
+  git checkout --quiet "$BRANCH"
+  git reset --hard --quiet "origin/$BRANCH"
+  build_release
+  api_up
+  nginx -t && systemctl reload nginx
+  log "Deployed $STUB -> https://$FQDN"
+}
+
+cmd_setup(){
+  [ "$(id -u)" -eq 0 ] || die "run as root (writes nginx + runs certbot)."
+  [ -f "$APP_DIR/server/.env" ] \
+    || die "create $APP_DIR/server/.env first (DATABASE_URL, PORT, APP_TOKEN) — see server/.env.example"
+  log "Migrating database"
+  ( cd "$APP_DIR/server" && npm ci && npm run migrate )
+  api_up
+  build_release
+  cmd_vhost
+  sleep 1   # let the API bind before seeding
+  cmd_seed || log "seed skipped — run 'ffc seed' once the API + DB are ready"
+  log "Setup complete: https://$FQDN"
+}
+
+cmd_backup(){
+  local url out
+  url="$(grep -E '^DATABASE_URL=' "$APP_DIR/server/.env" 2>/dev/null | cut -d= -f2- || true)"
+  [ -n "$url" ] || die "no DATABASE_URL in server/.env"
+  mkdir -p "$APP_DIR/data"
+  out="$APP_DIR/data/ffc-$(date +%Y%m%d%H%M%S).sql"
+  log "Dumping database -> $out"
+  pg_dump "$url" > "$out"
+  log "Backup written."
+}
+
+case "${1:-}" in
+  setup)            cmd_setup ;;
+  deploy|redeploy)  cmd_deploy ;;
+  vhost)            cmd_vhost ;;
+  seed)             cmd_seed ;;
+  restart)          pm2 restart ffc-api && pm2 save ;;
+  logs)             pm2 logs ffc-api ;;
+  backup)           cmd_backup ;;
+  ''|-h|--help)
+    awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$SELF"
+    ;;
+  *) die "unknown command: $1 (run 'ffc --help')" ;;
+esac

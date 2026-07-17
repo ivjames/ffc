@@ -72,13 +72,20 @@ public/
   maps/                    # bundled course map assets (SVG placeholders)
   icons/                   # PWA icons
 server/                    # Node/Express + Postgres API (see server/README.md)
-deploy/                    # atomic deploy script + nginx template
+bin/ffc                    # operate CLI (setup/deploy/seed/restart/logs/backup)
+deploy/                    # nginx vhost template + course seed JSON
 ```
 
 ## Deploy
 
-See [`DEPLOY.md`](./DEPLOY.md) — atomic release-dir + symlink swap, nginx, and
-certbot TLS on the droplet.
+Two commands on the droplet (lab980 convention):
+
+```bash
+provision-site ffc ivjames/ffc     # subdomain shell: DNS + clone + dir
+ffc setup                          # migrate + build + vhost + TLS + seed
+```
+
+Routine updates: `ffc deploy`. Full runbook in [`DEPLOY.md`](./DEPLOY.md).
 
 ## Known placeholders (Phase 1)
 
