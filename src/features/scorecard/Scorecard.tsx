@@ -72,10 +72,14 @@ export default function Scorecard() {
   }
 
   function bump(playerIndex: number, delta: number) {
-    const current = round!.scores[playerIndex]?.[hole];
-    // First tap from empty starts at par (fast entry); then +/- from there.
-    const base = current ?? par;
-    void setStroke(playerIndex, clampStrokes(base + delta));
+    const current = round!.scores[playerIndex]?.[hole] ?? null;
+    // No auto-fill: an empty hole starts blank. First + registers 1; − does
+    // nothing until there's a value to decrement.
+    if (current == null) {
+      if (delta > 0) void setStroke(playerIndex, 1);
+      return;
+    }
+    void setStroke(playerIndex, clampStrokes(current + delta));
   }
 
   return (
@@ -164,7 +168,7 @@ export default function Scorecard() {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => bump(p, -1)}
-                    disabled={strokes != null && strokes <= 1}
+                    disabled={strokes == null || strokes <= 1}
                     className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 active:bg-fairway-800 disabled:opacity-30"
                     aria-label={`Decrease strokes for ${tag}`}
                   >
@@ -185,12 +189,9 @@ export default function Scorecard() {
                   </button>
                 </div>
                 {strokes == null && (
-                  <button
-                    onClick={() => setStroke(p, par)}
-                    className="mt-2 w-full rounded-lg py-1 text-xs font-medium text-fairway-400 active:bg-fairway-800"
-                  >
-                    Tap to score (starts at par {par})
-                  </button>
+                  <p className="mt-2 text-center text-xs text-fairway-100/40">
+                    Tap + to score this hole
+                  </p>
                 )}
               </div>
             );
