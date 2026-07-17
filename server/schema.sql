@@ -161,5 +161,14 @@ on conflict (id) do update set location_id = excluded.location_id;
 -- idempotent so migrate can run repeatedly without duplicating rows.
 insert into hunt_item (course_id, slug, name, hint, sort_order) values
   -- Upland · Western — horseshoes are hidden around the course.
-  ('a4444444-4444-4444-8444-444444444444', 'horseshoe', 'A hidden horseshoe', 'A bunch are tucked around the Western course — find one.', 10)
+  ('a4444444-4444-4444-8444-444444444444', 'horseshoe', 'A hidden horseshoe', 'A bunch are tucked around the Western course — find one.', 10),
+  -- Upland · Dragon's Hollow — fairy-tale landmarks around the course. The
+  -- castle, pumpkin patch, and green cottage door are installed scenery; the
+  -- horned critter and giant purple cabbages are themed props being added.
+  ('a3333333-3333-4333-8333-333333333333', 'castle',     'The dragon''s castle',   'The big stone castle with red-topped towers and painted flower vines — frame the turrets.', 10),
+  ('a3333333-3333-4333-8333-333333333333', 'pumpkin',    'A giant pumpkin',        'Fat orange pumpkins grow by the painted hills — snap one from the patch.', 20),
+  ('a3333333-3333-4333-8333-333333333333', 'green-door', 'The little green door',  'A green fairy-tale door with stained-glass windows, beside the stone fireplace.', 30),
+  ('a3333333-3333-4333-8333-333333333333', 'critter',    'The horned critter',     'A goofy beast with floppy ears, little antlers, and a big toothy grin — say cheese.', 40),
+  ('a3333333-3333-4333-8333-333333333333', 'cabbage',    'A giant purple cabbage', 'An oversized purple cabbage, far too big for any garden — find it and snap it.', 50),
+  ('a3333333-3333-4333-8333-333333333333', 'carrot',     'A giant carrot',         'Enormous orange carrots poke up out of the gravel, green tops and all — snap one.', 60)
 on conflict (course_id, slug) do nothing;
