@@ -20,11 +20,13 @@ export default function Summary() {
   const navigate = useNavigate();
   const [round, setRound] = useState<LocalRound | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [syncFailed, setSyncFailed] = useState(false);
 
   useEffect(() => {
+    let alive = true;
     void getRound(clientId).then(async (r) => {
       if (!r) {
-        setNotFound(true);
+        if (alive) setNotFound(true);
         return;
       }
       // Mark complete + queue for sync exactly once.
@@ -32,10 +34,23 @@ export default function Summary() {
         r = { ...r, completedAt: r.completedAt ?? Date.now(), syncState: 'pending' };
         await putRound(r);
       }
-      setRound(r);
-      // Best-effort push now; retries happen on reconnect (§9).
-      void syncPending();
+      if (alive) setRound(r);
+      // Push now, then reflect the real outcome in the status note. The worker
+      // still retries on reconnect (§9); this just stops the note lying while
+      // we sit on the summary.
+      if (r.syncState === 'pending') {
+        await syncPending();
+        const updated = await getRound(clientId);
+        if (!alive || !updated) return;
+        setRound(updated);
+        // Online but still pending after the push means the server rejected it
+        // or was unreachable — surface that instead of a stuck "Saving…".
+        if (updated.syncState === 'pending' && navigator.onLine) setSyncFailed(true);
+      }
     });
+    return () => {
+      alive = false;
+    };
   }, [clientId]);
 
   const course = round ? courseById(round.courseId) : undefined;
@@ -159,7 +174,7 @@ export default function Summary() {
           </table>
         </div>
 
-        <SyncNote state={round.syncState} />
+        <SyncNote state={round.syncState} failed={syncFailed} />
 
         <div className="mt-4">
           <Button onClick={() => navigate('/')}>Done</Button>
@@ -169,12 +184,19 @@ export default function Summary() {
   );
 }
 
-function SyncNote({ state }: { state: LocalRound['syncState'] }) {
-  const text =
-    state === 'synced'
-      ? 'Saved to leaderboard ✓'
-      : navigator.onLine
-        ? 'Saving to leaderboard…'
-        : 'Saved on this device — will sync when back online';
+function SyncNote({ state, failed }: { state: LocalRound['syncState']; failed: boolean }) {
+  if (state === 'synced') {
+    return <p className="text-center text-xs text-fairway-100/40">Saved to leaderboard ✓</p>;
+  }
+  if (failed) {
+    return (
+      <p className="text-center text-xs text-amber-400/80">
+        Couldn’t reach the leaderboard — saved on this device, will retry.
+      </p>
+    );
+  }
+  const text = navigator.onLine
+    ? 'Saving to leaderboard…'
+    : 'Saved on this device — will sync when back online';
   return <p className="text-center text-xs text-fairway-100/40">{text}</p>;
 }

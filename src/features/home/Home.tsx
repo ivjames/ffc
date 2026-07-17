@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
 import { getActiveRound } from '../../db';
 import { courseById, locationById, coursesByLocation } from '../../data/courses';
@@ -120,12 +120,9 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/hunt')}>
             Scavenger hunt
           </Button>
-        </div>
-
-        <div className="mt-10 text-center text-xs text-fairway-100/40">
-          <Link to="/tv" className="underline">
+          <Button variant="ghost" onClick={() => navigate('/tv')}>
             See the leaderboard
-          </Link>
+          </Button>
         </div>
       </Content>
     </Screen>
