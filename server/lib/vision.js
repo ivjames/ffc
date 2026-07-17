@@ -13,9 +13,12 @@
 // caller gets a typed object, never free-form prose to parse.
 import Anthropic from "@anthropic-ai/sdk";
 
-// Adaptive thinking on Opus 4.8 gives the model room to actually look before it
-// answers. `effort: low` keeps a single-image yes/no cheap and fast.
-const MODEL = "claude-opus-4-8";
+// A single-image "is this item present + is it a photo-of-a-photo" check is a
+// simple classification, so we run it on Haiku 4.5 — ~5x cheaper per token than
+// Opus ($1/$5 vs $5/$25 per 1M in/out). This matters most for `countable` items
+// like the Western horseshoes, where every shot is judged (no dedup), so cost
+// scales with how many photos a group takes.
+const MODEL = "claude-haiku-4-5";
 
 // One client for the process. `new Anthropic()` reads ANTHROPIC_API_KEY from the
 // environment; construction is lazy so the server still boots (and other routes
@@ -93,13 +96,14 @@ export async function verifyItemInImage({ imageBase64, mediaType, itemName, item
 
   const response = await anthropic.messages.create({
     model: MODEL,
-    // Adaptive thinking draws from this same budget, so keep headroom above the
-    // small JSON verdict — otherwise a hard image can spend it all on thinking
-    // and emit no text block (handled below, but this makes that rare).
-    max_tokens: 2048,
-    thinking: { type: "adaptive" },
+    // The answer is a 4-field JSON verdict, so 1024 is ample (down from 2048, to
+    // cap worst-case output cost). Haiku 4.5 doesn't run adaptive thinking, and a
+    // single-image yes/no classification doesn't need it — we go straight to the
+    // structured verdict, which is both cheaper and makes an empty response (the
+    // VISION_NO_OUTPUT path below) very unlikely. `effort` isn't supported on
+    // Haiku either, so the only output_config knob here is the JSON schema.
+    max_tokens: 1024,
     output_config: {
-      effort: "low",
       format: { type: "json_schema", schema: VERDICT_SCHEMA },
     },
     messages: [
