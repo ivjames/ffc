@@ -71,9 +71,14 @@ create table if not exists hunt_item (
   hint        text,                        -- optional nudge shown to players
   sort_order  int  not null default 0,
   active      boolean not null default true,
+  countable   boolean not null default false, -- "find as many as you can": every
+                                              -- verified find counts, not just one
   primary key (id),
   unique (course_id, slug)
 );
+
+-- For databases created before `countable` existed: add it idempotently.
+alter table hunt_item add column if not exists countable boolean not null default false;
 
 create index if not exists hunt_item_course_idx on hunt_item (course_id);
 
@@ -92,21 +97,31 @@ create table if not exists hunt_find (
   reason          text,                    -- model's short explanation
   flagged         boolean not null default false,  -- anti-cheat: looks like a photo-of-a-photo
   photo_path      text,                    -- stored image path on the droplet disk
+  countable       boolean not null default false,  -- copy of hunt_item.countable at
+                                           -- write time; drives the partial index below
   created_at      timestamptz not null default now()
 );
+
+-- For databases created before `countable` existed: add it idempotently.
+alter table hunt_find add column if not exists countable boolean not null default false;
 
 create index if not exists hunt_find_round_idx  on hunt_find (round_client_id);
 create index if not exists hunt_find_item_idx   on hunt_find (item_id);
 create index if not exists hunt_find_player_idx on hunt_find (player_tag);
 
--- One verified find per (group, player, item). This backs the app-level dedup in
--- routes/hunt.js against a race: two concurrent submissions can both pass the
--- SELECT guard, so the DB is the real arbiter (the insert uses ON CONFLICT).
--- Partial on `verified` so repeated *failed* attempts (verified=false) still
--- insert freely. `if not exists` keeps migrate idempotent.
+-- One verified find per (group, player, item) — EXCEPT for `countable` items
+-- (e.g. the Western horseshoes), where finding many is the whole point, so those
+-- are exempt from the uniqueness rule. For non-countable items this still backs
+-- the app-level dedup in routes/hunt.js against a race: two concurrent
+-- submissions can both pass the SELECT guard, so the DB is the real arbiter (the
+-- insert uses a matching ON CONFLICT). Partial on `verified` so repeated *failed*
+-- attempts (verified=false) still insert freely. The predicate changed (added
+-- `and not countable`), so drop-then-create rather than `if not exists`, which
+-- would keep the old definition; drop+create stays idempotent across migrates.
+drop index if exists hunt_find_verified_unique;
 create unique index if not exists hunt_find_verified_unique
   on hunt_find (round_client_id, player_tag, item_id)
-  where verified;
+  where verified and not countable;
 
 -- Bullwinkle's three venues. Idempotent on id; ids + coords mirror
 -- src/data/courses.ts (exact coordinates geocoded from the street addresses;
@@ -157,18 +172,34 @@ on conflict (id) do update set location_id = excluded.location_id;
 
 -- Scavenger-hunt lists are per course (hunt_item.course_id). Only the client's
 -- real, confirmed hunt content is seeded; courses without a list yet simply
--- show an empty hunt (the UI handles that gracefully). ON CONFLICT keeps this
--- idempotent so migrate can run repeatedly without duplicating rows.
-insert into hunt_item (course_id, slug, name, hint, sort_order) values
-  -- Upland · Western — horseshoes are hidden around the course.
-  ('a4444444-4444-4444-8444-444444444444', 'horseshoe', 'A hidden horseshoe', 'A bunch are tucked around the Western course — find one.', 10),
+-- show an empty hunt (the UI handles that gracefully). ON CONFLICT DO UPDATE
+-- makes this seed authoritative for its content columns, so migrate can run
+-- repeatedly without duplicating rows AND existing rows pick up edits here (e.g.
+-- flipping the horseshoe to `countable`). `id` and `active` are left untouched.
+insert into hunt_item (course_id, slug, name, hint, sort_order, countable) values
+  -- Upland · Western — horseshoes are hidden all around the course; each one you
+  -- photograph counts, so this item is `countable` (find as many as you can).
+  ('a4444444-4444-4444-8444-444444444444', 'horseshoe', 'A hidden horseshoe', 'Horseshoes are hidden all around the Western course — find as many as you can!', 10, true),
   -- Upland · Dragon's Hollow — fairy-tale landmarks around the course. The
-  -- castle, pumpkin patch, and green cottage door are installed scenery; the
-  -- horned critter and giant purple cabbages are themed props being added.
-  ('a3333333-3333-4333-8333-333333333333', 'castle',     'The dragon''s castle',   'The big stone castle with red-topped towers and painted flower vines — frame the turrets.', 10),
-  ('a3333333-3333-4333-8333-333333333333', 'pumpkin',    'A giant pumpkin',        'Fat orange pumpkins grow by the painted hills — snap one from the patch.', 20),
-  ('a3333333-3333-4333-8333-333333333333', 'green-door', 'The little green door',  'A green fairy-tale door with stained-glass windows, beside the stone fireplace.', 30),
-  ('a3333333-3333-4333-8333-333333333333', 'critter',    'The horned critter',     'A goofy beast with floppy ears, little antlers, and a big toothy grin — say cheese.', 40),
-  ('a3333333-3333-4333-8333-333333333333', 'cabbage',    'A giant purple cabbage', 'An oversized purple cabbage, far too big for any garden — find it and snap it.', 50),
-  ('a3333333-3333-4333-8333-333333333333', 'carrot',     'A giant carrot',         'Enormous orange carrots poke up out of the gravel, green tops and all — snap one.', 60)
-on conflict (course_id, slug) do nothing;
+  -- castle, climbing vines, pumpkin patch, and green cottage door are installed
+  -- scenery; the horned critter and giant veg are themed props being added.
+  ('a3333333-3333-4333-8333-333333333333', 'castle',     'The dragon''s castle',   'The big stone castle with red-topped towers — frame the turrets.', 10, false),
+  ('a3333333-3333-4333-8333-333333333333', 'vines',      'Climbing flower vines',  'Painted flowering vines climb the castle''s white towers — snap a good stretch.', 20, false),
+  ('a3333333-3333-4333-8333-333333333333', 'pumpkin',    'A giant pumpkin',        'Fat orange pumpkins grow by the painted hills — snap one from the patch.', 30, false),
+  ('a3333333-3333-4333-8333-333333333333', 'green-door', 'The little green door',  'A green fairy-tale door with stained-glass windows, beside the stone fireplace.', 40, false),
+  ('a3333333-3333-4333-8333-333333333333', 'critter',    'The horned critter',     'A goofy beast with floppy ears, little antlers, and a big toothy grin — say cheese.', 50, false),
+  ('a3333333-3333-4333-8333-333333333333', 'cabbage',    'A giant purple cabbage', 'An oversized purple cabbage, far too big for any garden — find it and snap it.', 60, false),
+  ('a3333333-3333-4333-8333-333333333333', 'carrot',     'A giant carrot',         'Enormous orange carrots poke up out of the gravel, green tops and all — snap one.', 70, false)
+on conflict (course_id, slug) do update
+  set name       = excluded.name,
+      hint       = excluded.hint,
+      sort_order = excluded.sort_order,
+      countable  = excluded.countable;
+
+-- Backfill: existing finds for an item that is now `countable` must carry the
+-- flag too, so the partial unique index (which excludes countable finds) stops
+-- constraining them. Idempotent — only touches rows not already set.
+update hunt_find f
+   set countable = true
+  from hunt_item i
+ where f.item_id = i.id and i.countable and f.countable = false;
