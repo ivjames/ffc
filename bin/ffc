@@ -11,7 +11,8 @@
 #
 # Subcommands:
 #   setup     one-time: static vhost + TLS, DB migrate, first build, seed
-#   deploy    pull main -> build atomically -> swap -> restart API  (redeploy)
+#   deploy    pull main -> migrate -> build atomically -> swap -> restart API
+#   migrate   apply schema.sql (idempotent; new tables/columns)
 #   seed      (re)load the four courses into Postgres
 #   restart   restart the pm2 API
 #   logs      tail the pm2 API logs
@@ -95,6 +96,16 @@ cmd_vhost(){
   fi
 }
 
+# Apply schema.sql. All DDL is idempotent (create ... if not exists, on conflict
+# do nothing), so it's safe to run on every deploy — that's how new tables and
+# columns reach production without a manual step.
+cmd_migrate(){
+  [ -d "$APP_DIR/server" ] || return 0
+  log "Migrating database (idempotent)"
+  npm_install "$APP_DIR/server" --omit=dev
+  ( cd "$APP_DIR/server" && npm run migrate )
+}
+
 cmd_seed(){
   local token
   token="$(grep -E '^APP_TOKEN=' "$APP_DIR/server/.env" 2>/dev/null | cut -d= -f2- || true)"
@@ -113,6 +124,7 @@ cmd_deploy(){
   git checkout --quiet "$BRANCH"
   git reset --hard --quiet "origin/$BRANCH"
   build_release
+  cmd_migrate           # apply any new schema before the new code serves
   api_up
   nginx -t && systemctl reload nginx
   log "Deployed $STUB -> https://$FQDN"
@@ -122,9 +134,7 @@ cmd_setup(){
   [ "$(id -u)" -eq 0 ] || die "run as root (writes nginx + runs certbot)."
   [ -f "$APP_DIR/server/.env" ] \
     || die "create $APP_DIR/server/.env first (DATABASE_URL, PORT, APP_TOKEN) — see server/.env.example"
-  log "Migrating database"
-  npm_install "$APP_DIR/server"
-  ( cd "$APP_DIR/server" && npm run migrate )
+  cmd_migrate
   api_up
   build_release
   cmd_vhost
@@ -147,6 +157,7 @@ cmd_backup(){
 case "${1:-}" in
   setup)            cmd_setup ;;
   deploy|redeploy)  cmd_deploy ;;
+  migrate)          cmd_migrate ;;
   vhost)            cmd_vhost ;;
   seed)             cmd_seed ;;
   restart)          pm2 restart ffc-api && pm2 save ;;

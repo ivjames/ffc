@@ -77,8 +77,12 @@ systemctl is-enabled pm2-root             # -> enabled
 ## Routine redeploys
 
 ```bash
-ffc deploy      # pull main -> build into releases/<ts> -> swap current -> restart API
+ffc deploy      # pull main -> migrate DB -> build into releases/<ts> -> swap current -> restart API
 ```
+
+`ffc deploy` applies `schema.sql` on every deploy (all DDL is idempotent), so new
+tables and columns reach production automatically — no manual migrate step. Run
+it standalone with `ffc migrate` if needed.
 
 Other operate commands: `ffc restart`, `ffc logs`, `ffc backup` (pg_dump into
 `data/`), `ffc seed` (re-load courses), `ffc vhost` (rewrite vhost + re-cert).
