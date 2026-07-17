@@ -65,19 +65,65 @@ export async function verifyFind(args: {
   return body as VerifyResult;
 }
 
-/** Read a File as { base64, mediaType }, stripping the data: URL prefix. */
-export function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
+/** Read a Blob as base64 (data: URL prefix stripped). */
+function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Could not read the photo'));
     reader.onload = () => {
       const result = String(reader.result);
       const comma = result.indexOf(',');
-      resolve({
-        base64: comma >= 0 ? result.slice(comma + 1) : result,
-        mediaType: file.type || 'image/jpeg',
-      });
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
+}
+
+function loadImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not decode the photo'));
+    };
+    img.src = url;
+  });
+}
+
+/**
+ * Turn a camera File into an upload payload. Phone photos are several MB; we
+ * downscale to at most `maxDim` on the long edge and re-encode as JPEG so the
+ * request stays small (less mobile data, lower vision cost, no size limits).
+ * Falls back to the raw file if canvas encoding isn't available.
+ */
+export async function fileToUpload(
+  file: File,
+  maxDim = 1600,
+  quality = 0.82,
+): Promise<{ base64: string; mediaType: string }> {
+  try {
+    const img = await loadImage(file);
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('no 2d context');
+    ctx.drawImage(img, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob(res, 'image/jpeg', quality),
+    );
+    if (!blob) throw new Error('encode failed');
+    return { base64: await blobToBase64(blob), mediaType: 'image/jpeg' };
+  } catch {
+    // Fallback: send the original file as-is.
+    return { base64: await blobToBase64(file), mediaType: file.type || 'image/jpeg' };
+  }
 }

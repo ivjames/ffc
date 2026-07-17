@@ -8,7 +8,7 @@ import {
   fetchHuntItems,
   fetchHuntProgress,
   verifyFind,
-  fileToBase64,
+  fileToUpload,
   type HuntItem,
   type HuntFind,
 } from './api';
@@ -105,7 +105,7 @@ export default function Hunt() {
 
     setItemStates((s) => ({ ...s, [itemId]: { kind: 'verifying' } }));
     try {
-      const { base64, mediaType } = await fileToBase64(file);
+      const { base64, mediaType } = await fileToUpload(file);
       const result = await verifyFind({
         itemId,
         playerTag: selectedPlayer,
