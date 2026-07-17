@@ -83,7 +83,7 @@ router.get("/items", async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `select id, slug, name, hint
+      `select id, slug, name, hint, countable
          from hunt_item
         where active = true and course_id = $1
         order by sort_order asc, name asc`,
@@ -193,7 +193,7 @@ router.post(
     try {
       // Item must exist, be active, and belong to the round's course.
       const itemRes = await pool.query(
-        "select id, name, hint from hunt_item where id = $1 and course_id = $2 and active = true",
+        "select id, name, hint, countable from hunt_item where id = $1 and course_id = $2 and active = true",
         [itemId, courseId]
       );
       if (itemRes.rowCount === 0) {
@@ -203,22 +203,26 @@ router.post(
       }
       const item = itemRes.rows[0];
 
-      // Anti-cheat / anti-farming: if this player already has a verified find for
-      // this item in this round, don't re-credit it (and don't burn a vision call).
-      const dup = await pool.query(
-        `select id from hunt_find
-          where round_client_id = $1 and player_tag = $2 and item_id = $3
-            and verified = true
-          limit 1`,
-        [roundClientId, playerTag, itemId]
-      );
-      if (dup.rowCount > 0) {
-        return res.json({
-          ok: true,
-          verified: true,
-          alreadyFound: true,
-          reason: "You've already found this one.",
-        });
+      // Anti-cheat / anti-farming: for a normal (one-off) item, if this player
+      // already has a verified find for it in this round, don't re-credit it (and
+      // don't burn a vision call). `countable` items are exempt — finding many is
+      // the whole point (e.g. the Western horseshoes), so every shot is judged.
+      if (!item.countable) {
+        const dup = await pool.query(
+          `select id from hunt_find
+            where round_client_id = $1 and player_tag = $2 and item_id = $3
+              and verified = true
+            limit 1`,
+          [roundClientId, playerTag, itemId]
+        );
+        if (dup.rowCount > 0) {
+          return res.json({
+            ok: true,
+            verified: true,
+            alreadyFound: true,
+            reason: "You've already found this one.",
+          });
+        }
       }
 
       // Ask the model.
@@ -252,9 +256,9 @@ router.post(
       // arbiter — the loser DO-NOTHINGs instead of writing a second credit.
       const ins = await pool.query(
         `insert into hunt_find
-           (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)
-         on conflict (round_client_id, player_tag, item_id) where verified
+           (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path, countable)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         on conflict (round_client_id, player_tag, item_id) where verified and not countable
          do nothing
          returning id`,
         [
@@ -266,12 +270,15 @@ router.post(
           verdict.reason,
           flagged,
           photoPath,
+          item.countable,
         ]
       );
 
       // Lost the race: another concurrent submission already recorded this
-      // verified find. Drop the orphan photo we just wrote and report it as
-      // already found rather than double-crediting.
+      // verified find. Only possible for non-countable items (countable finds
+      // don't hit the unique index, so they never conflict). Drop the orphan
+      // photo we just wrote and report it as already found rather than
+      // double-crediting.
       if (verified && ins.rowCount === 0) {
         if (photoPath) await rm(photoPath, { force: true }).catch(() => {});
         return res.json({
@@ -282,12 +289,26 @@ router.post(
         });
       }
 
+      // For countable items, tell the client how many this player has now bagged
+      // in this round so the UI can show a running tally.
+      let count;
+      if (verified && item.countable) {
+        const c = await pool.query(
+          `select count(*)::int as n from hunt_find
+            where round_client_id = $1 and player_tag = $2 and item_id = $3
+              and verified = true`,
+          [roundClientId, playerTag, itemId]
+        );
+        count = c.rows[0].n;
+      }
+
       return res.json({
         ok: true,
         verified,
         flagged,
         confidence: verdict.confidence,
         reason: verdict.reason,
+        count,
       });
     } catch (err) {
       if (err.code === "VISION_UNCONFIGURED") {

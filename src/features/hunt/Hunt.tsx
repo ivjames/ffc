@@ -40,6 +40,17 @@ export default function Hunt() {
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
   const [finds, setFinds] = useState<HuntFind[]>([]);
   const [itemStates, setItemStates] = useState<Record<string, ItemState>>({});
+  // Hints are hidden until the player asks — track which item hints are revealed.
+  const [revealedHints, setRevealedHints] = useState<Set<string>>(new Set());
+
+  function toggleHint(itemId: string) {
+    setRevealedHints((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
 
   // A single hidden file input drives the camera; captureItemId says which item
   // the next photo is for.
@@ -98,6 +109,18 @@ export default function Hunt() {
     for (const f of finds) {
       if (!map.has(f.itemId)) map.set(f.itemId, new Set());
       map.get(f.itemId)!.add(f.playerTag);
+    }
+    return map;
+  }, [finds]);
+
+  // itemId -> (playerTag -> how many they've found). Only meaningful for
+  // countable items, where a player can rack up more than one.
+  const findCounts = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    for (const f of finds) {
+      let byPlayer = map.get(f.itemId);
+      if (!byPlayer) map.set(f.itemId, (byPlayer = new Map()));
+      byPlayer.set(f.playerTag, (byPlayer.get(f.playerTag) ?? 0) + 1);
     }
     return map;
   }, [finds]);
@@ -232,6 +255,13 @@ export default function Hunt() {
             const finders = foundBy.get(item.id);
             const state = itemStates[item.id] ?? { kind: 'idle' };
             const foundByMe = finders?.has(selectedPlayer) ?? false;
+            const myCount = item.countable
+              ? findCounts.get(item.id)?.get(selectedPlayer) ?? 0
+              : 0;
+            const hintShown = revealedHints.has(item.id);
+            // Countable items stay snappable so you can keep finding more; one-off
+            // items lock once you've found them.
+            const canSnap = item.countable || !foundByMe;
             return (
               <li
                 key={item.id}
@@ -245,10 +275,27 @@ export default function Hunt() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-base font-bold text-fairway-50">{item.name}</span>
-                      {foundByMe && <span className="text-fairway-400">✓</span>}
+                      {item.countable
+                        ? myCount > 0 && (
+                            <span className="rounded-full bg-fairway-500/20 px-2 py-0.5 text-xs font-bold text-fairway-300">
+                              ×{myCount}
+                            </span>
+                          )
+                        : foundByMe && <span className="text-fairway-400">✓</span>}
                     </div>
                     {item.hint && (
-                      <div className="mt-0.5 text-xs text-fairway-100/50">{item.hint}</div>
+                      <div className="mt-1">
+                        <button
+                          onClick={() => toggleHint(item.id)}
+                          aria-expanded={hintShown}
+                          className="text-xs font-semibold text-fairway-400 active:opacity-70"
+                        >
+                          {hintShown ? 'Hide hint' : '💡 Hint'}
+                        </button>
+                        {hintShown && (
+                          <div className="mt-1 text-xs text-fairway-100/60">{item.hint}</div>
+                        )}
+                      </div>
                     )}
                     {finders && finders.size > 0 && (
                       <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -265,10 +312,18 @@ export default function Hunt() {
                   </div>
                   <button
                     onClick={() => onSnapClick(item.id)}
-                    disabled={state.kind === 'verifying' || foundByMe}
+                    disabled={state.kind === 'verifying' || !canSnap}
                     className="shrink-0 rounded-xl bg-fairway-500 px-4 py-2 text-sm font-semibold text-fairway-950 transition active:scale-[0.98] active:bg-fairway-400 disabled:opacity-40 disabled:active:scale-100"
                   >
-                    {state.kind === 'verifying' ? 'Checking…' : foundByMe ? 'Found' : '📷 Snap'}
+                    {state.kind === 'verifying'
+                      ? 'Checking…'
+                      : item.countable
+                        ? myCount > 0
+                          ? '📷 Snap another'
+                          : '📷 Snap'
+                        : foundByMe
+                          ? 'Found'
+                          : '📷 Snap'}
                   </button>
                 </div>
 
@@ -283,7 +338,9 @@ export default function Hunt() {
                     }`}
                   >
                     {state.verified
-                      ? `Nice — ${selectedPlayer} found it!`
+                      ? item.countable
+                        ? `Nice — that's ${myCount} for ${selectedPlayer}!`
+                        : `Nice — ${selectedPlayer} found it!`
                       : state.flagged
                         ? "That looks like a photo of a screen — take a real one."
                         : state.reason || 'Not quite — try again.'}

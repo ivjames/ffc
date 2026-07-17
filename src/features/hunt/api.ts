@@ -8,6 +8,9 @@ export type HuntItem = {
   slug: string;
   name: string;
   hint: string | null;
+  // "Find as many as you can" — every verified find counts, not just the first
+  // (e.g. the Western horseshoes). Normal items are found once.
+  countable: boolean;
 };
 
 // One row per verified find for a group (round), from GET /api/hunt/progress.
@@ -27,6 +30,8 @@ export type VerifyResult = {
   confidence?: number;
   reason?: string;
   alreadyFound?: boolean;
+  // For countable items: how many this player has now found in this round.
+  count?: number;
 };
 
 // Each course has its own themed list, so items are fetched by course.
