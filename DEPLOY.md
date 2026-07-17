@@ -87,7 +87,9 @@ if the live config is missing `client_max_body_size` (needed for scavenger-hunt
 photo uploads), deploy re-renders it once (which re-runs certbot); otherwise it
 just reloads.
 
-`ffc deploy` ends by printing the client vs API build hash and whether they
+`ffc deploy` pulls `main`, then **re-execs the freshly-pulled copy of itself** so
+changes to the deploy logic take effect on the same run (no more "lands one
+deploy late"). It ends by printing the client vs API build hash and whether they
 match (also available standalone as `ffc version`) — the client hash comes from
 the served `/version.json`, the API hash from `/api/health`.
 

@@ -136,10 +136,19 @@ cmd_seed(){
 
 cmd_deploy(){
   cd "$APP_DIR"
-  log "Fetching origin/$BRANCH"
-  git fetch --quiet origin "$BRANCH"
-  git checkout --quiet "$BRANCH"
-  git reset --hard --quiet "origin/$BRANCH"
+  # Pull first, then re-exec the freshly-pulled copy of THIS script so that any
+  # changes to the deploy logic itself take effect on the same run — otherwise
+  # every deploy-script change lands one deploy late (the running process is the
+  # pre-pull version). FFC_REEXEC guards against an infinite re-exec loop.
+  if [ -z "${FFC_REEXEC:-}" ]; then
+    log "Fetching origin/$BRANCH"
+    git fetch --quiet origin "$BRANCH"
+    git checkout --quiet "$BRANCH"
+    git reset --hard --quiet "origin/$BRANCH"
+    log "Re-exec updated deploy script"
+    FFC_REEXEC=1 exec "$SELF" deploy
+  fi
+  # Past this point we are running the up-to-date script (post-pull).
   build_release
   cmd_migrate           # apply any new schema before the new code serves
   api_up
