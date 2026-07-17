@@ -108,6 +108,9 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/hunt')}>
             Scavenger hunt
           </Button>
+          <Button variant="ghost" onClick={() => navigate('/golf')}>
+            ⛳️ JS Golf
+          </Button>
           <Button variant="ghost" onClick={() => navigate('/tv')}>
             See the leaderboard
           </Button>
