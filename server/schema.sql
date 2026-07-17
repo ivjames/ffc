@@ -156,7 +156,11 @@ delete from course where id in (
   '44444444-4444-4444-8444-444444444444'
 );
 
--- Scavenger-hunt lists are per course (hunt_item.course_id). The earlier themed
--- demo lists were tied to the removed placeholder courses, so no hunt items are
--- seeded yet -- they're added per course once the client's real hunt content is
--- defined. The hunt UI handles an empty list gracefully.
+-- Scavenger-hunt lists are per course (hunt_item.course_id). Only the client's
+-- real, confirmed hunt content is seeded; courses without a list yet simply
+-- show an empty hunt (the UI handles that gracefully). ON CONFLICT keeps this
+-- idempotent so migrate can run repeatedly without duplicating rows.
+insert into hunt_item (course_id, slug, name, hint, sort_order) values
+  -- Upland · Western — horseshoes are hidden around the course.
+  ('a4444444-4444-4444-8444-444444444444', 'horseshoe', 'A hidden horseshoe', 'A bunch are tucked around the Western course — find one.', 10)
+on conflict (course_id, slug) do nothing;
