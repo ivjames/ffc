@@ -1,0 +1,234 @@
+# Mini Golf App — Full Build Plan
+
+A self-contained spec for building the app. Hand this to Claude Code as the source of truth.
+
+---
+
+## 1. Product summary
+
+An app for a mini golf venue with **four themed 18-hole courses**. Core is an easy 4-player scorecard. Ships web-first as an installable PWA, with a clean path to native later. Additional features (TV leaderboard, AI scavenger hunt, interactive course hardware) are planned as later phases but the v1 data layer is designed so they don't require a rewrite.
+
+### Locked decisions
+| Decision | Choice |
+|---|---|
+| Platform | Web-first **PWA**, native later via Capacitor |
+| Build | Coded in Claude Code |
+| v1 scope | 4-player scorecard + course maps + rules |
+| Courses | 4 themed, **18 holes each** |
+| Rounds | **One round = one course** (separate rounds per course) |
+| Par | Per-hole, values 2–4 (seeded/random placeholder until real pars exist) |
+| Player identity | **Three-initial tags** per player (arcade style), 1–4 players; `[A-Z0-9]{3}` |
+| Leaderboard tracking | **Individual player only** for now; group tag deferred |
+| Deferred | Group tag/leaderboard, TV leaderboard (P2), AI scavenger hunt (P3), native + IoT (P4) |
+
+---
+
+## 2. Tech stack
+
+| Layer | Choice | Rationale |
+|---|---|---|
+| Frontend | **React + TypeScript + Vite** | Fast, standard, Capacitor-compatible |
+| PWA | `vite-plugin-pwa` (Workbox) | Installable, offline service worker |
+| Styling | Tailwind CSS | Fast to build touch-friendly UI |
+| Local storage | **IndexedDB** via `idb` or Dexie | Offline round state + write queue |
+| Backend | **Existing Postgres** on the droplet + **Node/Express API** | No Supabase — you already run Postgres; the Node API (also the write-validation layer) is the data access point |
+| Hosting | **DigitalOcean droplet** (nginx) | Server you control; consolidates DB, API, static serving, and the later P3 vision proxy / P4 MQTT on one box |
+| Native (P4) | **Capacitor** | Wraps the same web build as iOS/Android |
+| Vision (P3) | Claude or GPT-4o vision | Scavenger-hunt verification |
+
+**Why Capacitor, not React Native:** the "PWA now, native later" strategy only pays off if the native app reuses the web codebase. Capacitor wraps the identical Vite build and exposes native camera/storage when needed. React Native would mean a rewrite. Do not choose React Native.
+
+---
+
+## 3. Architecture principles
+
+**Offline-first is mandatory for v1.** Outdoor cell coverage is unreliable; a scorecard that fails mid-round is worse than paper. All scoring works fully offline against IndexedDB. Completed rounds are queued and synced to Supabase when a connection is available.
+
+**Persist finished rounds from v1, even though the leaderboard is P2.** The leaderboard needs score history to already exist. If v1 doesn't collect it, P2 starts empty. Syncing completed rounds to the Postgres-backed API costs nothing now and removes the cold-start problem.
+
+**Three-initial tags, arcade-style — no identity system, and collisions are the convention, not a bug.** Each player enters a 3-character tag (`[A-Z0-9]{3}`). No accounts, no PINs. Two different players who both pick "JIM" show as two separate leaderboard rows with their own scores and dates — exactly how arcade high-score tables always worked. This is the intended model, not a limitation. Group-level tracking is deferred; when it returns it's just a second aggregation over the same `score` rows.
+
+**Static content bundled, not fetched.** Maps and rules ship in the build so they work offline. Move them behind the API/DB later only if they need frequent editing.
+
+**Hosting on a DigitalOcean droplet (nginx).** The Vite build is static assets served by nginx. Two hard requirements: (1) **HTTPS via Let's Encrypt/certbot with auto-renewal** — service workers, and therefore offline + install, only run in a secure context and will silently fail without TLS in production. (2) **Atomic deploys** — build to a new release directory and swap an nginx `root` symlink; never overwrite in place, or a mid-deploy load serves mixed old/new hashed assets and poisons the service-worker cache. The droplet also hosts Postgres, the Node/Express API (§6 write validation), and later the P3 vision proxy and P4 MQTT broker, so DB, backend logic, and static serving live on one box.
+
+---
+
+## 4. Data model
+
+### Schema (Postgres DDL — your existing server)
+```sql
+create table course (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  theme       text not null,
+  hole_count  int  not null default 18,
+  pars        int[] not null,          -- length 18, values 2..4
+  sort_order  int  not null default 0
+);
+
+create table round (
+  id            uuid primary key default gen_random_uuid(),
+  course_id     uuid not null references course(id),
+  player_tags   text[] not null,       -- 1..4 entries, each [A-Z0-9]{3}
+  created_at    timestamptz not null default now(),
+  completed_at  timestamptz,
+  client_id     text                    -- dedupe key from device (idempotent sync)
+);
+-- group_tag deferred; add a nullable group_tag char(3) column when the group feature returns
+
+create table score (
+  round_id      uuid not null references round(id) on delete cascade,
+  player_index  int  not null,          -- 0..3, maps to player_tags[player_index]
+  hole          int  not null,          -- 1..18
+  strokes       int  not null,
+  primary key (round_id, player_index, hole)
+);
+```
+
+Notes:
+- `client_id` on `round` is a device-generated UUID used as an idempotency key so a retried sync doesn't create duplicate rounds. Upsert on `client_id`.
+- Writes go **only through the Node/Express API**, which holds the DB credentials server-side and re-validates every input (§6). The browser never talks to Postgres directly — there is no anon-key path to lock down because there is no direct client DB access.
+- Leaderboard queries derive from these tables — no separate leaderboard table needed for P2.
+- **If you use SQLite instead of Postgres:** it has no array type — store `pars` and `player_tags` as JSON text columns and parse them in the API. Everything else is identical. Postgres is the default here since it's already running and handles concurrent TV reads + round writes cleanly.
+
+### Local state (IndexedDB)
+```ts
+// Active round held locally while playing
+type LocalRound = {
+  clientId: string;          // UUID, becomes round.client_id on sync
+  courseId: string;
+  playerTags: string[];      // 1..4 tags, each [A-Z0-9]{3}
+  scores: Record<number, (number | null)[]>; // playerIndex -> [18] strokes, null = unentered
+  createdAt: number;
+  completedAt: number | null;
+  syncState: 'active' | 'pending' | 'synced';
+};
+```
+- Active round persists to IndexedDB on every stroke edit so a refresh/crash never loses a game.
+- On completion, `syncState -> 'pending'`; a sync worker pushes to Supabase and marks `'synced'`. Pending rounds retry on next app open / connection.
+
+### Course data (bundled JSON for v1)
+```ts
+type CourseSeed = {
+  id: string; name: string; theme: string;
+  holeCount: 18; pars: number[]; // length 18
+  mapAsset: string;              // path to bundled image/SVG
+  rules?: string[];              // course-specific notes
+};
+```
+Seed the four courses in `src/data/courses.ts`. Randomize pars (2–4) as placeholders now; replace with real values later. The same seed loads into the `course` table (via the API or a one-off script) when the backend goes live.
+
+---
+
+## 5. v1 feature specs
+
+### 5.1 Scorecard (core)
+Flow:
+1. **New round** → pick one of the four courses.
+2. **Setup** → choose player count (1–4); each player enters a **three-initial tag** (`[A-Z0-9]{3}`, arcade-style entry). Validated per §6. No group name in v1.
+3. **Play** → per-hole score entry for all players. Show par for the current hole, each player's running total, and over/under par.
+4. **Complete** → final scorecard summary (per-player totals, winner, vs par). Round saved locally and queued for sync.
+
+Requirements:
+- Works fully offline; every edit persists to IndexedDB immediately.
+- Fast stroke entry — large tap targets, +/- steppers per player per hole (glove-friendly, outdoor sunlight).
+- Optional per-hole **max stroke cap** (common in mini golf, e.g. 6) — configurable constant, not hard-coded UI. Default on.
+- Navigate holes forward/back; jump to any hole; edit already-entered scores.
+- Resume an in-progress round if the app is reopened.
+- Handle 1–4 players (not just exactly 4).
+
+### 5.2 Course maps
+- One map per course, bundled asset (image or SVG). Viewable offline.
+- Per-hole par shown alongside or on the map. Pan/zoom if images are detailed.
+
+### 5.3 Rules
+- General rules screen + optional per-course notes. Static bundled content. Offline.
+
+---
+
+## 6. Input validation
+
+Player entry is a **three-character tag** (arcade high-score style). These render on a public TV leaderboard in P2, so treat them as public content.
+
+- Constrain to exactly **3 characters, `[A-Z0-9]`**. Uppercase on input; reject anything else. This alone eliminates almost all abuse surface (no free text, no length handling, no markup).
+- **Blocklist of offensive 3-character combos** — the classic arcade problem (ASS, FUK, SEX, etc.). It's a small fixed list, not an open-ended profanity library. Maintain it as a simple array; reject on match and prompt for a different tag.
+- Require 1–4 players; each must have a valid tag before a round can start.
+- The Node API re-validates the charset + blocklist on write — the client check is bypassable by hitting the endpoint directly.
+- **Group tag (deferred):** when added, apply the same `[A-Z0-9]{3}` + blocklist rule so validation stays uniform and no free-text field is ever introduced.
+
+---
+
+## 7. Routes / screens
+
+| Route | Screen | Phase |
+|---|---|---|
+| `/` | Home — start round, view maps/rules | v1 |
+| `/new` | Course picker | v1 |
+| `/new/setup` | Player count + three-initial tags | v1 |
+| `/play/:clientId` | Active scorecard | v1 |
+| `/play/:clientId/summary` | Final scorecard | v1 |
+| `/courses` | Course list | v1 |
+| `/courses/:id/map` | Course map + pars | v1 |
+| `/rules` | Rules | v1 |
+| `/tv` | TV leaderboard (full-screen, read-only) | P2 |
+| `/hunt` | Scavenger hunt | P3 |
+
+---
+
+## 8. Suggested project structure
+```
+src/
+  data/courses.ts          # four-course seed (pars, map paths, rules)
+  db/                       # IndexedDB wrapper (idb/Dexie), LocalRound CRUD
+  sync/                     # pending-round sync worker + Supabase client
+  lib/sanitize.ts           # §6 validation/profanity
+  lib/scoring.ts            # totals, over/under par, winner, stroke cap
+  features/
+    scorecard/              # setup, play, summary components + state
+    courses/                # list, map viewer
+    rules/
+  routes/                   # route components
+  pwa/                      # service worker config, manifest
+  App.tsx  main.tsx
+public/
+  maps/                     # bundled course map assets
+  icons/                    # PWA icons
+```
+
+---
+
+## 9. Phasing roadmap
+
+**Phase 1 — Launch (this build).** Offline-first PWA: 4-player scorecard, four courses, maps, rules, installable. Silently syncs completed rounds to the Node API / Postgres to seed the leaderboard.
+
+**Phase 2 — TV leaderboard.** Full-screen `/tv` route. Reads persisted rounds/scores; shows best **player** (three-initial) scores for day / week / month / all-time — the classic arcade high-score board. Auto-refresh by **polling the API every few seconds** (or SSE from the Node backend) — no realtime service needed. Runs on any browser or TV stick. Low effort because P1 already stored the data. (Group leaderboard slots in here once the group tag ships.)
+
+**Phase 3 — AI scavenger hunt.** Photo capture (native camera via Capacitor is much better here) → vision model verifies the target item is present → track findings per group. Must-address before committing: per-image vision cost at volume; **content moderation** (public, possibly minors); anti-cheat (photo-of-a-photo); fixed vs rotating item lists (fixed is far simpler). Photos stored on **droplet disk or DO Spaces** (S3-compatible); the Node API proxies the vision calls to keep the API key server-side.
+
+**Phase 4 — Native + interactive course hardware.** Capacitor wrap for app stores if adoption justifies it. Sound/light cues are a **separate hardware project** (ESP32 / Raspberry Pi / smart plugs) reached over local network or an MQTT broker. Architecturally model every effect as "app fires an event → device reacts" so the app stays simple. Out of scope until the software is proven.
+
+---
+
+## 10. Build sequence for Code
+
+Order to hand to Claude Code:
+1. Scaffold Vite + React + TS + Tailwind; add `vite-plugin-pwa` with manifest and icons; confirm it installs to a phone home screen.
+2. Seed `src/data/courses.ts` with four 18-hole courses (randomized par 2–4, placeholder map assets).
+3. Build the scorecard **local-only**: course picker → player-count + three-initial tag entry (§6 validation) → play screen (per-hole entry, running totals, over/under par, stroke cap) → summary. Persist active round to IndexedDB on every edit; support resume.
+4. Add maps and rules screens from bundled content.
+5. Stand up the Node/Express API against the existing Postgres: schema from §4, all writes through the API (DB creds server-side), `client_id` idempotent upsert, background sync of `pending` rounds with retry. Server-side re-validate names.
+7. Deploy to the droplet: nginx serving the static build, certbot TLS with auto-renewal, atomic release-dir + symlink-swap deploy script. Verify the PWA installs over HTTPS from a phone.
+6. QA offline: airplane mode mid-round, refresh mid-round, sync-on-reconnect, duplicate-sync prevention.
+
+Get step 3 feeling right in the hand before wiring the backend — the core loop is the whole product.
+
+---
+
+## 11. Known limitations / open items
+- **Three-initial tags collide by design** — two different players picking "JIM" appear as separate rows. This is the arcade convention, not a defect; no identity system in v1.
+- **No group tag / group leaderboard in v1** — deferred. Data model and validation reserve space for it (add nullable `group_tag char(3)`, same `[A-Z0-9]{3}` rule) so it's an additive change.
+- **Par values are placeholders** (random 2–4) until real course pars are supplied.
+- **Map assets are placeholders** until real course maps exist.
+- **TV display hardware** (smart TV browser vs. Fire Stick vs. mini PC) — decide before P2; does not affect v1.
+- **Anonymous writes** — v1 has no auth. The Node API is the only write path and must rate-limit and fully re-validate input, since anyone can hit the endpoint directly. Consider a simple shared app token + rate limiting to blunt abuse.
