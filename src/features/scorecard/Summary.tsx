@@ -176,7 +176,26 @@ export default function Summary() {
 
         <SyncNote state={round.syncState} failed={syncFailed} />
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
+          <Button
+            variant="ghost"
+            onClick={() =>
+              navigate('/tv', {
+                state: {
+                  highlightCourseId: round.courseId,
+                  // Carry this session's exact totals — a tag alone isn't a stable
+                  // identity (tags get reused), so the board matches tag + course +
+                  // this round's total to highlight only the score just played.
+                  highlightScores: round.playerTags.map((tag, p) => ({
+                    tag,
+                    total: playerTotal(round.scores[p] ?? []),
+                  })),
+                },
+              })
+            }
+          >
+            🏆 View leaderboard
+          </Button>
           <Button onClick={() => navigate('/')}>Done</Button>
         </div>
       </Content>
