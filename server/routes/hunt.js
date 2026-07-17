@@ -36,6 +36,14 @@ const UPLOAD_DIR =
 // path, or a stale client bundle) still goes through rather than 413/400.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
+// TESTING ONLY — remove before production. When HUNT_ALLOW_PHOTO_OF_PHOTO is
+// truthy, the anti-cheat photo-of-a-photo check is bypassed, so testers can
+// verify landmarks from screenshots or pictures of a screen. Leave this UNSET
+// in production so the anti-cheat is active (the default, production-safe path).
+const ALLOW_PHOTO_OF_PHOTO = /^(1|true|yes|on)$/i.test(
+  process.env.HUNT_ALLOW_PHOTO_OF_PHOTO ?? ""
+);
+
 const EXT_BY_MEDIA = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -234,8 +242,9 @@ router.post(
       });
 
       // A photo-of-a-photo never counts as a genuine find, regardless of what's
-      // depicted — flag it and reject.
-      const flagged = verdict.photoOfPhoto;
+      // depicted — flag it and reject. TESTING: when ALLOW_PHOTO_OF_PHOTO is on
+      // we treat it as un-flagged so a screenshot of a landmark still verifies.
+      const flagged = ALLOW_PHOTO_OF_PHOTO ? false : verdict.photoOfPhoto;
       const verified = verdict.present && !flagged;
 
       // Persist the photo, then record the find. We only keep the file for

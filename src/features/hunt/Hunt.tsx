@@ -26,6 +26,12 @@ type ItemState =
   | { kind: 'verifying' }
   | { kind: 'result'; verified: boolean; flagged?: boolean; reason?: string };
 
+// TESTING ONLY — remove before production. When VITE_HUNT_ALLOW_UPLOAD is
+// 'true' at build time, we drop the `capture` hint on the file input so the
+// picker also offers the phone's photo library (upload a saved image), not just
+// the live camera. Unset in production so players must take a real photo.
+const ALLOW_UPLOAD = import.meta.env.VITE_HUNT_ALLOW_UPLOAD === 'true';
+
 export default function Hunt() {
   const navigate = useNavigate();
   // Intelligent back: return to wherever the hunt was opened from (e.g. the
@@ -201,7 +207,9 @@ export default function Hunt() {
         ref={fileRef}
         type="file"
         accept="image/*"
-        capture="environment"
+        // TESTING: when uploads are allowed, omit `capture` so the OS offers the
+        // photo library too; otherwise force the rear camera as in production.
+        capture={ALLOW_UPLOAD ? undefined : 'environment'}
         className="hidden"
         onChange={onFileChosen}
       />

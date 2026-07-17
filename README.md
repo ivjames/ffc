@@ -40,6 +40,16 @@ round, so it isn't an open invitation to wander the course during others' games.
 A future expansion is at most new **zones** (each a course-like area with its own
 list). See [`server/README.md`](./server/README.md) for the `/api/hunt/*` endpoints.
 
+**Testing toggles (remove before production).** Two env flags loosen the hunt for
+on-site testing; both default off, so leaving them unset is the production-safe
+state:
+
+- `HUNT_ALLOW_PHOTO_OF_PHOTO` (server, `server/.env.example`) — bypass the
+  photo-of-a-photo anti-cheat so a screenshot / picture of a screen still
+  verifies a landmark.
+- `VITE_HUNT_ALLOW_UPLOAD` (client, `.env.example`) — let a find come from the
+  phone's photo library, not just a live camera capture.
+
 ## Tech stack
 
 React + TypeScript + Vite · Tailwind CSS v4 · `vite-plugin-pwa` · IndexedDB
