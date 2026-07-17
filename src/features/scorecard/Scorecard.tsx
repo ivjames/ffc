@@ -34,7 +34,9 @@ export default function Scorecard() {
   const [showJump, setShowJump] = useState(false);
   // Testing aid: auto-play walks the course, randomly scoring every player on
   // each hole and advancing to the end. Pause/stop halts it mid-course.
+  // `fastForward` runs the same hole-by-hole walk with no delay between holes.
   const [autoPlaying, setAutoPlaying] = useState(false);
+  const [fastForward, setFastForward] = useState(false);
 
   useEffect(() => {
     void getRound(clientId).then((r) => {
@@ -58,8 +60,10 @@ export default function Scorecard() {
 
   // Auto-play tick: score the current hole for every player, then advance —
   // one hole per interval — until the last hole is filled or the user pauses.
+  // Fast-forward still visits every hole, but with no delay between them.
   useEffect(() => {
     if (!autoPlaying || !round || !course) return;
+    const delay = fastForward ? 0 : AUTO_PLAY_MS;
     const id = window.setTimeout(() => {
       const prev = roundRef.current;
       if (!prev) return;
@@ -76,13 +80,14 @@ export default function Scorecard() {
         setHole((h) => h + 1);
       } else {
         setAutoPlaying(false); // reached the end
+        setFastForward(false);
       }
-    }, AUTO_PLAY_MS);
+    }, delay);
     return () => window.clearTimeout(id);
     // `round`/`course` intentionally excluded: identity churns as we fill, and
     // `hole` advancing already re-arms the timer for the next hole.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlaying, hole]);
+  }, [autoPlaying, fastForward, hole]);
 
   if (notFound) {
     return (
@@ -291,19 +296,47 @@ export default function Scorecard() {
           )}
         </div>
 
-        {/* Auto-play (testing) — walk the course, randomly scoring each hole,
-            with a pause to stop mid-course. */}
+        {/* Auto-play (testing) — walk the course, randomly scoring each hole.
+            Play adds a delay per hole; fast-forward visits every hole with no
+            delay. Either way, Pause stops mid-course. */}
         <div className="mt-3">
-          <Button
-            variant={autoPlaying ? 'danger' : 'ghost'}
-            onClick={() => setAutoPlaying((v) => !v)}
-            disabled={complete && !autoPlaying}
-          >
-            {autoPlaying ? '⏸ Pause auto-play' : '▶ Auto play (test)'}
-          </Button>
+          {autoPlaying ? (
+            <Button
+              variant="danger"
+              onClick={() => {
+                setAutoPlaying(false);
+                setFastForward(false);
+              }}
+            >
+              ⏸ Pause
+            </Button>
+          ) : (
+            <div className="flex gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setFastForward(false);
+                  setAutoPlaying(true);
+                }}
+                disabled={complete}
+              >
+                ▶ Auto play (test)
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setFastForward(true);
+                  setAutoPlaying(true);
+                }}
+                disabled={complete}
+              >
+                ⏭ Fast forward
+              </Button>
+            </div>
+          )}
           {autoPlaying && (
             <p className="mt-2 text-center text-xs text-fairway-100/50">
-              Auto-playing hole {hole + 1} of {HOLE_COUNT}…
+              {fastForward ? 'Fast-forwarding' : 'Auto-playing'} hole {hole + 1} of {HOLE_COUNT}…
             </p>
           )}
         </div>
