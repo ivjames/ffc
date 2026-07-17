@@ -95,35 +95,60 @@ function loadImage(file: File): Promise<HTMLImageElement> {
   });
 }
 
+// Re-encode an image at a given long-edge size and JPEG quality.
+function encodeJpeg(
+  img: HTMLImageElement,
+  maxDim: number,
+  quality: number,
+): Promise<Blob | null> {
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return Promise.resolve(null);
+  ctx.drawImage(img, 0, 0, w, h);
+  return new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
+}
+
+// Target blob size. base64 inflates ~33%, so a 600 KB blob is ~800 KB on the
+// wire — comfortably under nginx's default 1 MB body cap AND the server's 10 MB.
+// The vision model doesn't need more than this to identify a scavenger item.
+const TARGET_BYTES = 600_000;
+
 /**
- * Turn a camera File into an upload payload. Phone photos are several MB; we
- * downscale to at most `maxDim` on the long edge and re-encode as JPEG so the
- * request stays small (less mobile data, lower vision cost, no size limits).
- * Falls back to the raw file if canvas encoding isn't available.
+ * Turn a camera File into a small upload payload. Phone photos are several MB;
+ * we downscale + re-encode as JPEG, stepping size/quality down until the result
+ * fits the byte budget so it reliably passes body-size limits (no 413), uses
+ * less mobile data, and costs fewer vision tokens. Falls back to the raw file
+ * only if canvas encoding is entirely unavailable.
  */
 export async function fileToUpload(
   file: File,
-  maxDim = 1600,
-  quality = 0.82,
 ): Promise<{ base64: string; mediaType: string }> {
   try {
     const img = await loadImage(file);
-    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-    const w = Math.max(1, Math.round(img.width * scale));
-    const h = Math.max(1, Math.round(img.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('no 2d context');
-    ctx.drawImage(img, 0, 0, w, h);
-    const blob = await new Promise<Blob | null>((res) =>
-      canvas.toBlob(res, 'image/jpeg', quality),
-    );
-    if (!blob) throw new Error('encode failed');
-    return { base64: await blobToBase64(blob), mediaType: 'image/jpeg' };
+    // Progressively smaller/cheaper encodings; stop at the first under budget.
+    const steps: Array<[number, number]> = [
+      [1280, 0.72],
+      [1024, 0.68],
+      [1024, 0.55],
+      [800, 0.55],
+      [640, 0.5],
+    ];
+    let best: Blob | null = null;
+    for (const [dim, q] of steps) {
+      const blob = await encodeJpeg(img, dim, q);
+      if (!blob) continue;
+      best = blob;
+      if (blob.size <= TARGET_BYTES) break;
+    }
+    if (best) return { base64: await blobToBase64(best), mediaType: 'image/jpeg' };
+    throw new Error('encode produced no output');
   } catch {
-    // Fallback: send the original file as-is.
+    // Last resort: send the original file (may be large; server/nginx caps apply).
     return { base64: await blobToBase64(file), mediaType: file.type || 'image/jpeg' };
   }
 }
