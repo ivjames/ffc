@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1000" role="img" aria-label="Pirate's Cove course map">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a3550"/>
+      <stop offset="1" stop-color="#05140d"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="1000" fill="url(#bg)"/>
+  <text x="400" y="72" text-anchor="middle" font-family="system-ui, sans-serif"
+        font-size="44" font-weight="800" fill="#f59e0b">⚓ Pirate's Cove</text>
+  <text x="400" y="108" text-anchor="middle" font-family="system-ui, sans-serif"
+        font-size="18" fill="#94a3b8">Placeholder map — 18 holes</text>
+  <path d="M 90 150 L 400 150 L 710 150 L 710 290 L 400 290 L 90 290 L 90 430 L 400 430 L 710 430 L 710 570 L 400 570 L 90 570 L 90 710 L 400 710 L 710 710 L 710 850 L 400 850 L 90 850" fill="none" stroke="#f59e0b" stroke-width="6" stroke-dasharray="2 14"
+        stroke-linecap="round" opacity="0.55"/>
+  
+    <g>
+      <circle cx="90" cy="150" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="90" y="157" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">1</text>
+    </g>
+    <g>
+      <circle cx="400" cy="150" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="400" y="157" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">2</text>
+    </g>
+    <g>
+      <circle cx="710" cy="150" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="710" y="157" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">3</text>
+    </g>
+    <g>
+      <circle cx="710" cy="290" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="710" y="297" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">4</text>
+    </g>
+    <g>
+      <circle cx="400" cy="290" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="400" y="297" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">5</text>
+    </g>
+    <g>
+      <circle cx="90" cy="290" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="90" y="297" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">6</text>
+    </g>
+    <g>
+      <circle cx="90" cy="430" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="90" y="437" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">7</text>
+    </g>
+    <g>
+      <circle cx="400" cy="430" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="400" y="437" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">8</text>
+    </g>
+    <g>
+      <circle cx="710" cy="430" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="710" y="437" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">9</text>
+    </g>
+    <g>
+      <circle cx="710" cy="570" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="710" y="577" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">10</text>
+    </g>
+    <g>
+      <circle cx="400" cy="570" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="400" y="577" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">11</text>
+    </g>
+    <g>
+      <circle cx="90" cy="570" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="90" y="577" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">12</text>
+    </g>
+    <g>
+      <circle cx="90" cy="710" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="90" y="717" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">13</text>
+    </g>
+    <g>
+      <circle cx="400" cy="710" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="400" y="717" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">14</text>
+    </g>
+    <g>
+      <circle cx="710" cy="710" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="710" y="717" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">15</text>
+    </g>
+    <g>
+      <circle cx="710" cy="850" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="710" y="857" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">16</text>
+    </g>
+    <g>
+      <circle cx="400" cy="850" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="400" y="857" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">17</text>
+    </g>
+    <g>
+      <circle cx="90" cy="850" r="26" fill="#0a3550" stroke="#f59e0b" stroke-width="3"/>
+      <text x="90" y="857" text-anchor="middle" font-family="system-ui, sans-serif"
+            font-size="22" font-weight="700" fill="#f0fdf4">18</text>
+    </g>
+</svg>

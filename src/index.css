@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+
+/* Design tokens — fairway greens + arcade accents */
+@theme {
+  --color-fairway-50: #f0fdf4;
+  --color-fairway-100: #dcfce7;
+  --color-fairway-500: #22c55e;
+  --color-fairway-600: #16a34a;
+  --color-fairway-700: #15803d;
+  --color-fairway-800: #166534;
+  --color-fairway-900: #14532d;
+  --color-fairway-950: #052e16;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-fairway-950);
+  color: #f0fdf4;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Respect device safe areas (notches) since we run full-screen as a PWA */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Big, glove-friendly tap targets by default for stepper buttons */
+button {
+  touch-action: manipulation;
+}
+
+/* Arcade-style tag display */
+.font-arcade {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+  letter-spacing: 0.15em;
+}

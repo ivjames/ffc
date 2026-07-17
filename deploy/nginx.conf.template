@@ -1,0 +1,57 @@
+# nginx site for the Mini Golf PWA — lab980 droplet convention:
+# /etc/nginx/sites-available/<fqdn> symlinked into sites-enabled/.
+#
+# Placeholders to replace:
+#   __FQDN__     e.g. minigolf.lab980.com   (or an apex like putt.example.com)
+#   __APP_DIR__  e.g. /var/www/ffc
+#   __API_PORT__ e.g. 8060  (the Node/Express API's local pm2 port)
+#
+# TLS is added by certbot (`certbot --nginx -d __FQDN__ --redirect`), which
+# rewrites this file to add the 443 server block + HTTP->HTTPS redirect.
+# §3: HTTPS is mandatory — the service worker (offline + install) only runs in
+# a secure context and silently fails without TLS in production.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __FQDN__;
+
+    # Static build served from the atomically-swapped release symlink.
+    root __APP_DIR__/current/dist;
+    index index.html;
+
+    # API → Node/Express (pm2) on its local port. Must come before the SPA
+    # fallback so /api/* is never rewritten to index.html.
+    location /api/ {
+        proxy_pass http://127.0.0.1:__API_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Hashed build assets are immutable — cache hard.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # The service worker must never be cached by the browser, or clients get
+    # stuck on an old SW and never pick up new releases.
+    location = /sw.js {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+    location = /registerSW.js {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+    location = /manifest.webmanifest {
+        add_header Cache-Control "no-cache";
+    }
+
+    # SPA fallback — client-side routes (/play/:id, /courses/... ) resolve to
+    # the app shell.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

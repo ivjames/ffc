@@ -1,0 +1,20 @@
+{
+  "name": "ffc-server",
+  "version": "1.0.0",
+  "description": "Backend API for the mini-golf scorecard PWA (Free For Cart / FFC).",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "migrate": "node migrate.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}
