@@ -56,7 +56,7 @@ export default function Home() {
 
         <div className="mt-10 text-center text-xs text-fairway-100/40">
           <Link to="/tv" className="underline">
-            TV leaderboard
+            See the leaderboard
           </Link>
         </div>
       </Content>
