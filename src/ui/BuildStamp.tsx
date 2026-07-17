@@ -4,8 +4,13 @@ import { apiUrl } from '../sync';
 // Tiny build indicator so we can confirm which build the browser actually loaded
 // (the service worker caches aggressively). Shows the client build baked in at
 // build time, plus the API's build from /api/health, and flags a mismatch.
+//
+// Tap it to copy the hashes (text selection is fiddly on mobile). The pill opts
+// back into pointer events; the surrounding overlay stays pass-through so it
+// never blocks a real control.
 export function BuildStamp() {
   const [apiBuild, setApiBuild] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     void fetch(apiUrl('/api/health'))
@@ -17,12 +22,34 @@ export function BuildStamp() {
   }, []);
 
   const mismatch = apiBuild != null && apiBuild !== __BUILD_ID__;
+  const text = `build ${__BUILD_ID__}${apiBuild ? ` · api ${apiBuild}` : ''}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* clipboard blocked — the text is still selectable as a fallback */
+    }
+  }
 
   return (
-    <div className="rounded bg-fairway-950/50 px-1.5 py-0.5 text-[10px] leading-none text-fairway-100/40 backdrop-blur-sm">
-      build {__BUILD_ID__}
-      {apiBuild && <> · api {apiBuild}</>}
-      {mismatch && <span className="text-amber-400/80"> (mismatch)</span>}
-    </div>
+    <button
+      type="button"
+      onClick={copy}
+      title="Tap to copy build info"
+      className="pointer-events-auto max-w-full select-text truncate rounded bg-fairway-950/60 px-1.5 py-1 text-[10px] leading-none text-fairway-100/40 backdrop-blur-sm active:text-fairway-100/80"
+    >
+      {copied ? (
+        'copied ✓'
+      ) : (
+        <>
+          build {__BUILD_ID__}
+          {apiBuild && <> · api {apiBuild}</>}
+          {mismatch && <span className="text-amber-400/80"> (mismatch)</span>}
+        </>
+      )}
+    </button>
   );
 }
