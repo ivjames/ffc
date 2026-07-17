@@ -44,7 +44,11 @@ nginx -t && systemctl reload nginx
 echo "==> Restarting API (pm2)"
 if [ -d "$APP_DIR/server" ]; then
   ( cd "$APP_DIR/server" && npm ci --omit=dev )
-  pm2 restart ffc-api --update-env || pm2 start "$APP_DIR/server/index.js" --name ffc-api
+  # Start from the server dir (--cwd) so dotenv loads server/.env (DATABASE_URL,
+  # APP_TOKEN). A restart reuses the process's stored cwd, so this matters most
+  # on the first start (the fallback branch).
+  pm2 restart ffc-api --update-env \
+    || pm2 start index.js --name ffc-api --cwd "$APP_DIR/server"
   pm2 save
 fi
 
