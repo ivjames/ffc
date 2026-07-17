@@ -27,17 +27,18 @@ Built to the spec in [`mini-golf-app-plan.md`](./mini-golf-app-plan.md). This is
 
 ## Phase 3 — AI scavenger hunt (`/hunt`)
 
-Players work a fixed list of things to find on the course, snap a photo of each,
-and a vision model verifies it. The model call is proxied by the Node API so the
-key (`ANTHROPIC_API_KEY`) stays server-side; verified photos are stored on the
-droplet disk. Findings are tracked per player and per group (the round's roster).
-The model also flags photo-of-a-photo attempts (anti-cheat). The item list is
-fixed for now; content moderation of stored photos is deferred.
+Each course has its own themed list of things to find — four courses, four
+lists. Players snap a photo of each, and a vision model verifies it. The model
+call is proxied by the Node API so the key (`ANTHROPIC_API_KEY`) stays
+server-side; verified photos are stored on the droplet disk. Findings are tracked
+per player and per group (the round's roster). The model also flags
+photo-of-a-photo attempts (anti-cheat). The lists are fixed for now; content
+moderation of stored photos is deferred.
 
 The hunt is available **during gameplay only** — it's gated on an in-progress
 round, so it isn't an open invitation to wander the course during others' games.
-(Broadening it to the whole park is a possible later expansion.) See
-[`server/README.md`](./server/README.md) for the `/api/hunt/*` endpoints.
+A future expansion is at most new **zones** (each a course-like area with its own
+list). See [`server/README.md`](./server/README.md) for the `/api/hunt/*` endpoints.
 
 ## Tech stack
 

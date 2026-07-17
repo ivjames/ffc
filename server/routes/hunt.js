@@ -72,14 +72,20 @@ setInterval(() => {
   }
 }, RATE_LIMIT_WINDOW_MS).unref?.();
 
-// --- GET /api/hunt/items ---------------------------------------------------
-router.get("/items", async (_req, res) => {
+// --- GET /api/hunt/items?course=<uuid> -------------------------------------
+// Each course has its own themed list, so the caller must say which course.
+router.get("/items", async (req, res) => {
+  const course = req.query.course;
+  if (typeof course !== "string" || !UUID_RE.test(course)) {
+    return res.status(400).json({ ok: false, error: "course (uuid) is required" });
+  }
   try {
     const result = await pool.query(
       `select id, slug, name, hint
          from hunt_item
-        where active = true
-        order by sort_order asc, name asc`
+        where active = true and course_id = $1
+        order by sort_order asc, name asc`,
+      [course]
     );
     return res.json(result.rows);
   } catch (err) {

@@ -29,8 +29,9 @@ export type VerifyResult = {
   alreadyFound?: boolean;
 };
 
-export async function fetchHuntItems(): Promise<HuntItem[]> {
-  const res = await fetch(apiUrl('/api/hunt/items'));
+// Each course has its own themed list, so items are fetched by course.
+export async function fetchHuntItems(courseId: string): Promise<HuntItem[]> {
+  const res = await fetch(apiUrl(`/api/hunt/items?course=${encodeURIComponent(courseId)}`));
   if (!res.ok) throw new Error(`Hunt items failed: HTTP ${res.status}`);
   return res.json();
 }

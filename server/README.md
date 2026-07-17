@@ -100,20 +100,24 @@ Request: array of seeds
 
 ### Scavenger hunt (Phase 3)
 
-The item list is fixed and seeded by `schema.sql` (idempotent on `slug`). Photos
-are verified by a vision model proxied server-side (the key never reaches the
-browser) and stored on the droplet disk. Content moderation of stored photos is
-deferred — verified photos are kept but nothing is displayed publicly yet.
+Each course has its **own themed list** — four courses, four lists — seeded by
+`schema.sql` (idempotent on `(course_id, slug)`). Photos are verified by a vision
+model proxied server-side (the key never reaches the browser) and stored on the
+droplet disk. Content moderation of stored photos is deferred — verified photos
+are kept but nothing is displayed publicly yet.
 
 The hunt is a **play-time** activity: every find is tied to a group's in-progress
 round (`roundClientId` is required on verify), so it isn't an open invitation to
-wander the course during others' games. A broader park-wide mode would relax this.
+wander the course during others' games. A future expansion is at most new
+**zones** — each a course-like area with its own list, so the shape is unchanged.
 
-#### `GET /api/hunt/items`
-→ `200` array of the active items to find:
+#### `GET /api/hunt/items?course=<uuid>`
+The list is scoped to a course (a round is one course), so `course` is required.
+→ `200` array of that course's active items:
 ```json
-[ { "id": "<uuid>", "slug": "windmill", "name": "A windmill", "hint": "Every good mini-golf course has one." } ]
+[ { "id": "<uuid>", "slug": "ship", "name": "A pirate ship or shipwreck", "hint": "The hull ramp is on hole 5." } ]
 ```
+Missing/invalid `course` → `400`.
 
 #### `GET /api/hunt/progress?round=<clientId>`
 A group's verified finds so far (`round` is the device round id — §4 `LocalRound.clientId`).
@@ -155,7 +159,8 @@ Responses:
 
 - `index.js` — Express app, middleware, route mounting, listen.
 - `db.js` — shared `pg` Pool from `DATABASE_URL`.
-- `schema.sql` — DDL (course / round / score / hunt_item / hunt_find) + hunt seed.
+- `schema.sql` — DDL (course / round / score / hunt_item / hunt_find) + per-course
+  hunt seed (ensures the four courses exist so the hunt FK resolves on a fresh migrate).
 - `migrate.js` — applies `schema.sql`.
 - `lib/sanitize.js` — tag validation + offensive-word blocklist (`isValidTag`,
   `validateTags`, `BLOCKLIST`). Mirrors the client's rules exactly.

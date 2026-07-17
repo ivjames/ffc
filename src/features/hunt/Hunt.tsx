@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button, TagChip } from '../../ui/components';
 import { getActiveRound } from '../../db';
+import { courseById } from '../../data/courses';
 import type { LocalRound } from '../../types';
 import {
   fetchHuntItems,
@@ -42,6 +43,7 @@ export default function Hunt() {
 
   const players = round?.playerTags ?? [];
   const roundClientId = round?.clientId ?? null;
+  const course = round ? courseById(round.courseId) : undefined;
 
   // Load the active round first (the hunt is gated on it), then items.
   useEffect(() => {
@@ -51,7 +53,8 @@ export default function Hunt() {
         setRound(activeRound ?? null);
         if (activeRound) {
           setSelectedPlayer(activeRound.playerTags[0]);
-          setItems(await fetchHuntItems());
+          // The item list is scoped to the round's course (one list per course).
+          setItems(await fetchHuntItems(activeRound.courseId));
         }
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load the hunt');
@@ -169,7 +172,14 @@ export default function Hunt() {
       />
       <Content>
         <p className="mb-4 text-sm text-fairway-100/70">
-          Find each thing on the course and snap a photo. We'll check it and mark it off.
+          {course ? (
+            <>
+              Things to find on <span className="font-semibold text-fairway-50">{course.name}</span>.
+              Snap a photo of each — we'll check it and mark it off.
+            </>
+          ) : (
+            <>Find each thing on the course and snap a photo. We'll check it and mark it off.</>
+          )}
         </p>
 
         {/* Who's playing — pick from the round roster. */}
