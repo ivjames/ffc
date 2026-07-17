@@ -143,12 +143,15 @@ router.post(
     if (!isValidTag(playerTag)) {
       return res.status(400).json({ ok: false, error: "playerTag is invalid" });
     }
-    // roundClientId — optional group key.
+    // roundClientId — required. The hunt is a play-time activity: every find is
+    // tied to the group's in-progress round, so a submission without one is
+    // rejected (a broader park-wide mode would relax this).
     if (
-      roundClientId != null &&
-      (typeof roundClientId !== "string" || roundClientId.length > 200)
+      typeof roundClientId !== "string" ||
+      roundClientId.length === 0 ||
+      roundClientId.length > 200
     ) {
-      return res.status(400).json({ ok: false, error: "roundClientId must be a string" });
+      return res.status(400).json({ ok: false, error: "roundClientId is required" });
     }
     // mediaType — allowlist.
     if (typeof mediaType !== "string" || !ALLOWED_MEDIA_TYPES.has(mediaType)) {
@@ -185,22 +188,20 @@ router.post(
 
       // Anti-cheat / anti-farming: if this player already has a verified find for
       // this item in this round, don't re-credit it (and don't burn a vision call).
-      if (roundClientId) {
-        const dup = await pool.query(
-          `select id from hunt_find
-            where round_client_id = $1 and player_tag = $2 and item_id = $3
-              and verified = true
-            limit 1`,
-          [roundClientId, playerTag, itemId]
-        );
-        if (dup.rowCount > 0) {
-          return res.json({
-            ok: true,
-            verified: true,
-            alreadyFound: true,
-            reason: "You've already found this one.",
-          });
-        }
+      const dup = await pool.query(
+        `select id from hunt_find
+          where round_client_id = $1 and player_tag = $2 and item_id = $3
+            and verified = true
+          limit 1`,
+        [roundClientId, playerTag, itemId]
+      );
+      if (dup.rowCount > 0) {
+        return res.json({
+          ok: true,
+          verified: true,
+          alreadyFound: true,
+          reason: "You've already found this one.",
+        });
       }
 
       // Ask the model.
@@ -233,7 +234,7 @@ router.post(
            (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path)
          values ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
-          roundClientId ?? null,
+          roundClientId,
           playerTag,
           itemId,
           verified,

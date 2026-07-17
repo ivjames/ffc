@@ -32,7 +32,11 @@ and a vision model verifies it. The model call is proxied by the Node API so the
 key (`ANTHROPIC_API_KEY`) stays server-side; verified photos are stored on the
 droplet disk. Findings are tracked per player and per group (the round's roster).
 The model also flags photo-of-a-photo attempts (anti-cheat). The item list is
-fixed for now; content moderation of stored photos is deferred. See
+fixed for now; content moderation of stored photos is deferred.
+
+The hunt is available **during gameplay only** — it's gated on an in-progress
+round, so it isn't an open invitation to wander the course during others' games.
+(Broadening it to the whole park is a possible later expansion.) See
 [`server/README.md`](./server/README.md) for the `/api/hunt/*` endpoints.
 
 ## Tech stack

@@ -105,6 +105,10 @@ are verified by a vision model proxied server-side (the key never reaches the
 browser) and stored on the droplet disk. Content moderation of stored photos is
 deferred — verified photos are kept but nothing is displayed publicly yet.
 
+The hunt is a **play-time** activity: every find is tied to a group's in-progress
+round (`roundClientId` is required on verify), so it isn't an open invitation to
+wander the course during others' games. A broader park-wide mode would relax this.
+
 #### `GET /api/hunt/items`
 → `200` array of the active items to find:
 ```json
@@ -130,11 +134,12 @@ Request:
 {
   "itemId": "<uuid, must exist and be active>",
   "playerTag": "ABC",
-  "roundClientId": "<device round id, optional group key>",
+  "roundClientId": "<device round id — required, the group's in-progress round>",
   "imageBase64": "<base64 image bytes, no data: prefix>",
   "mediaType": "image/jpeg"
 }
 ```
+- `roundClientId`: required — the hunt runs during gameplay only.
 - `mediaType`: one of `image/jpeg|png|webp|gif`; decoded image ≤ 6 MB.
 - If the player already has a verified find for this item in this round, the call
   short-circuits (`alreadyFound: true`) without a model call.

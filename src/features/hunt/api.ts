@@ -48,7 +48,7 @@ export async function fetchHuntProgress(roundClientId: string): Promise<HuntFind
 export async function verifyFind(args: {
   itemId: string;
   playerTag: string;
-  roundClientId: string | null;
+  roundClientId: string; // required — the hunt is tied to an in-progress round
   imageBase64: string;
   mediaType: string;
 }): Promise<VerifyResult> {

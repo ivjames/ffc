@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Screen, TopBar, Content, TagChip } from '../../ui/components';
+import { useNavigate } from 'react-router-dom';
+import { Screen, TopBar, Content, Button, TagChip } from '../../ui/components';
 import { getActiveRound } from '../../db';
-import { sanitizeTagInput, isValidTag } from '../../lib/sanitize';
 import type { LocalRound } from '../../types';
 import {
   fetchHuntItems,
@@ -15,6 +15,10 @@ import {
 // §Phase 3 — AI scavenger hunt. Players snap a photo of a target item; the Node
 // API proxies a vision model that verifies it, and confirmed finds are tracked
 // per player and per group (the round's roster).
+//
+// The hunt is a *play-time* activity: it's only available while a round is in
+// progress, so we don't invite people to wander the course during others' games.
+// (Broadening it to the whole park is a possible later expansion.)
 
 type ItemState =
   | { kind: 'idle' }
@@ -22,10 +26,11 @@ type ItemState =
   | { kind: 'result'; verified: boolean; flagged?: boolean; reason?: string };
 
 export default function Hunt() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<HuntItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [round, setRound] = useState<LocalRound | null>(null);
-  const [soloTag, setSoloTag] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
   const [finds, setFinds] = useState<HuntFind[]>([]);
   const [itemStates, setItemStates] = useState<Record<string, ItemState>>({});
@@ -38,21 +43,20 @@ export default function Hunt() {
   const players = round?.playerTags ?? [];
   const roundClientId = round?.clientId ?? null;
 
-  // Load items + the active round (for the roster) on mount.
+  // Load the active round first (the hunt is gated on it), then items.
   useEffect(() => {
     void (async () => {
       try {
-        const [loadedItems, activeRound] = await Promise.all([
-          fetchHuntItems(),
-          getActiveRound(),
-        ]);
-        setItems(loadedItems);
+        const activeRound = await getActiveRound();
         setRound(activeRound ?? null);
-        if (activeRound?.playerTags.length) {
+        if (activeRound) {
           setSelectedPlayer(activeRound.playerTags[0]);
+          setItems(await fetchHuntItems());
         }
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load the hunt');
+      } finally {
+        setLoaded(true);
       }
     })();
   }, []);
@@ -84,9 +88,6 @@ export default function Hunt() {
     return map;
   }, [finds]);
 
-  const activeTag = players.length ? selectedPlayer : soloTag;
-  const canSnap = isValidTag(activeTag);
-
   function onSnapClick(itemId: string) {
     captureItemId.current = itemId;
     fileRef.current?.click();
@@ -97,15 +98,14 @@ export default function Hunt() {
     e.target.value = ''; // allow re-picking the same file
     const itemId = captureItemId.current;
     captureItemId.current = null;
-    if (!file || !itemId) return;
-    if (!isValidTag(activeTag)) return;
+    if (!file || !itemId || !roundClientId || !selectedPlayer) return;
 
     setItemStates((s) => ({ ...s, [itemId]: { kind: 'verifying' } }));
     try {
       const { base64, mediaType } = await fileToBase64(file);
       const result = await verifyFind({
         itemId,
-        playerTag: activeTag,
+        playerTag: selectedPlayer,
         roundClientId,
         imageBase64: base64,
         mediaType,
@@ -132,6 +132,30 @@ export default function Hunt() {
     }
   }
 
+  // Gate: the hunt is only available during an in-progress round.
+  if (loaded && !round) {
+    return (
+      <Screen>
+        <TopBar title="Scavenger hunt" back="/" />
+        <Content>
+          <div className="mt-10 text-center">
+            <div className="text-5xl">🔍</div>
+            <h2 className="mt-3 text-xl font-bold text-fairway-50">
+              Start a round to play
+            </h2>
+            <p className="mx-auto mt-2 max-w-xs text-sm text-fairway-100/60">
+              The scavenger hunt runs alongside your game — begin a round and it'll be
+              ready for your group on the course.
+            </p>
+            <div className="mt-6">
+              <Button onClick={() => navigate('/new')}>Start new round</Button>
+            </div>
+          </div>
+        </Content>
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
       <TopBar title="Scavenger hunt" back="/" />
@@ -148,43 +172,27 @@ export default function Hunt() {
           Find each thing on the course and snap a photo. We'll check it and mark it off.
         </p>
 
-        {/* Who's playing — pick from the round roster, or enter a tag solo. */}
+        {/* Who's playing — pick from the round roster. */}
         <div className="mb-5">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-fairway-400">
             Playing as
           </div>
-          {players.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {players.map((tag, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedPlayer(tag)}
-                  className={`rounded-lg p-1 transition ${
-                    selectedPlayer === tag
-                      ? 'ring-2 ring-fairway-400'
-                      : 'opacity-60 active:opacity-100'
-                  }`}
-                  aria-pressed={selectedPlayer === tag}
-                >
-                  <TagChip tag={tag} />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div>
-              <input
-                inputMode="text"
-                autoCapitalize="characters"
-                placeholder="ABC"
-                value={soloTag}
-                onChange={(e) => setSoloTag(sanitizeTagInput(e.target.value))}
-                className="font-arcade w-24 rounded-lg border border-fairway-700 bg-fairway-900/60 px-3 py-2 text-center text-xl font-bold tracking-widest text-fairway-50 placeholder:text-fairway-100/30"
-              />
-              <p className="mt-1 text-xs text-fairway-100/50">
-                Enter your 3-character tag, or start a round to play as a group.
-              </p>
-            </div>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {players.map((tag, i) => (
+              <button
+                key={i}
+                onClick={() => setSelectedPlayer(tag)}
+                className={`rounded-lg p-1 transition ${
+                  selectedPlayer === tag
+                    ? 'ring-2 ring-fairway-400'
+                    : 'opacity-60 active:opacity-100'
+                }`}
+                aria-pressed={selectedPlayer === tag}
+              >
+                <TagChip tag={tag} />
+              </button>
+            ))}
+          </div>
         </div>
 
         {loadError && (
@@ -201,7 +209,7 @@ export default function Hunt() {
           {items?.map((item) => {
             const finders = foundBy.get(item.id);
             const state = itemStates[item.id] ?? { kind: 'idle' };
-            const foundByMe = finders?.has(activeTag) ?? false;
+            const foundByMe = finders?.has(selectedPlayer) ?? false;
             return (
               <li
                 key={item.id}
@@ -235,7 +243,7 @@ export default function Hunt() {
                   </div>
                   <button
                     onClick={() => onSnapClick(item.id)}
-                    disabled={!canSnap || state.kind === 'verifying' || foundByMe}
+                    disabled={state.kind === 'verifying' || foundByMe}
                     className="shrink-0 rounded-xl bg-fairway-500 px-4 py-2 text-sm font-semibold text-fairway-950 transition active:scale-[0.98] active:bg-fairway-400 disabled:opacity-40 disabled:active:scale-100"
                   >
                     {state.kind === 'verifying' ? 'Checking…' : foundByMe ? 'Found' : '📷 Snap'}
@@ -253,7 +261,7 @@ export default function Hunt() {
                     }`}
                   >
                     {state.verified
-                      ? `Nice — ${activeTag} found it!`
+                      ? `Nice — ${selectedPlayer} found it!`
                       : state.flagged
                         ? "That looks like a photo of a screen — take a real one."
                         : state.reason || 'Not quite — try again.'}
@@ -263,12 +271,6 @@ export default function Hunt() {
             );
           })}
         </ul>
-
-        {!canSnap && items && (
-          <p className="mt-4 text-center text-xs text-fairway-100/40">
-            Pick who's playing to start snapping.
-          </p>
-        )}
       </Content>
     </Screen>
   );
