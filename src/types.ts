@@ -14,9 +14,21 @@ export type LocalRound = {
   syncState: SyncState;
 };
 
+// §4 Location seed. White-label: one client owns multiple physical locations,
+// each with its own distinct set of courses (a course belongs to exactly one
+// location). Placeholders until the client's real sites are supplied (§11).
+export type LocationSeed = {
+  id: string;
+  name: string;
+  slug: string; // stable short key (unique per client), e.g. 'riverside'
+  accent: string; // per-site brand accent color (hex) for UI
+  sortOrder?: number;
+};
+
 // §4 Course seed (bundled JSON for v1).
 export type CourseSeed = {
   id: string;
+  locationId: string; // the site this course belongs to (→ LocationSeed.id)
   name: string;
   theme: string;
   holeCount: 18;

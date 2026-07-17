@@ -1,7 +1,9 @@
 // POST /api/seed — dev helper to load/upsert courses.
 //
 // Body: an array of course seeds:
-//   { id?: uuid, name: string, theme: string, holeCount?: number, pars: int[18] }
+//   { id?: uuid, locationId?: uuid, name: string, theme: string,
+//     holeCount?: number, pars: int[18] }
+// locationId, when given, must reference an existing location(id).
 //
 // Guard: requires header `x-app-token` to match process.env.APP_TOKEN. If
 // APP_TOKEN is unset we assume dev and allow it (so a fresh local box can seed
@@ -22,7 +24,7 @@ function normalizeSeed(seed, idx) {
   if (seed == null || typeof seed !== "object") {
     return { error: `seed[${idx}] must be an object` };
   }
-  const { id, name, theme } = seed;
+  const { id, name, theme, locationId } = seed;
   const holeCount = seed.holeCount ?? 18;
   const pars = seed.pars;
 
@@ -46,7 +48,14 @@ function normalizeSeed(seed, idx) {
   if (id !== undefined && (typeof id !== "string" || id.length === 0)) {
     return { error: `seed[${idx}].id must be a uuid string when provided` };
   }
-  return { row: { id, name, theme, holeCount, pars } };
+  if (
+    locationId !== undefined &&
+    locationId !== null &&
+    (typeof locationId !== "string" || locationId.length === 0)
+  ) {
+    return { error: `seed[${idx}].locationId must be a uuid string when provided` };
+  }
+  return { row: { id, name, theme, holeCount, pars, locationId: locationId ?? null } };
 }
 
 router.post("/", async (req, res) => {
@@ -76,24 +85,25 @@ router.post("/", async (req, res) => {
       if (row.id) {
         // Explicit id -> upsert on primary key so re-seeding is idempotent.
         const r = await client.query(
-          `insert into course (id, name, theme, hole_count, pars)
-             values ($1, $2, $3, $4, $5)
+          `insert into course (id, name, theme, hole_count, pars, location_id)
+             values ($1, $2, $3, $4, $5, $6)
            on conflict (id) do update
              set name = excluded.name,
                  theme = excluded.theme,
                  hole_count = excluded.hole_count,
-                 pars = excluded.pars
+                 pars = excluded.pars,
+                 location_id = excluded.location_id
            returning id`,
-          [row.id, row.name, row.theme, row.holeCount, row.pars]
+          [row.id, row.name, row.theme, row.holeCount, row.pars, row.locationId]
         );
         ids.push(r.rows[0].id);
       } else {
         // No id -> plain insert (course has no natural key to conflict on).
         const r = await client.query(
-          `insert into course (name, theme, hole_count, pars)
-             values ($1, $2, $3, $4)
+          `insert into course (name, theme, hole_count, pars, location_id)
+             values ($1, $2, $3, $4, $5)
            returning id`,
-          [row.name, row.theme, row.holeCount, row.pars]
+          [row.name, row.theme, row.holeCount, row.pars, row.locationId]
         );
         ids.push(r.rows[0].id);
       }

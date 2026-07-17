@@ -1,5 +1,6 @@
 import { Screen, TopBar, Content } from '../../ui/components';
-import { COURSES } from '../../data/courses';
+import { coursesByLocation } from '../../data/courses';
+import { useCurrentLocationId } from '../../lib/location';
 import { STROKE_CAP } from '../../lib/scoring';
 
 // §5.3 Rules — general rules + optional per-course notes. Static bundled
@@ -14,6 +15,8 @@ const GENERAL_RULES = [
 ];
 
 export default function Rules() {
+  const courses = coursesByLocation(useCurrentLocationId());
+  const noted = courses.filter((c) => c.rules && c.rules.length > 0);
   return (
     <Screen>
       <TopBar title="Rules" back="/" />
@@ -34,7 +37,7 @@ export default function Rules() {
           Course notes
         </h2>
         <div className="space-y-4">
-          {COURSES.filter((c) => c.rules && c.rules.length > 0).map((c) => (
+          {noted.map((c) => (
             <div key={c.id} className="rounded-2xl border border-fairway-800 bg-fairway-900/40 p-4">
               <div className="mb-2 font-bold" style={{ color: c.accent }}>
                 {c.name}

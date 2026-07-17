@@ -1,17 +1,36 @@
-import type { CourseSeed } from '../types';
+import type { CourseSeed, LocationSeed } from '../types';
 
-// §4 Four themed 18-hole courses. Pars and hole names are PLACEHOLDERS until
-// the real client's courses are supplied (§11). Map assets are placeholders
-// too. Fixed UUIDs so the same seed loads 1:1 into the Postgres `course` table
-// (via POST /api/seed or a one-off script) when the backend goes live.
+// §4 White-label content. The first client operates THREE locations, and each
+// location has its own distinct courses (a course belongs to exactly one
+// location). Locations, courses, pars, and hole names are all PLACEHOLDERS
+// until the client's real sites/courses are supplied (§11). Map assets are
+// placeholders too. Fixed UUIDs so the same seed loads 1:1 into the Postgres
+// `location`/`course` tables (via schema seed or POST /api/seed).
+//
+// The placeholder split spreads the four themed courses across the three sites
+// (2 / 1 / 1) so both multi-course and single-course locations are exercised;
+// it swaps out wholesale for the client's real per-site course lists.
 //
 // To regenerate placeholder pars, replace the `pars` arrays below — each must
 // be length 18 with every value in 2..4. Hole names in `holeNames` are themed
 // flavor (length 18) and swap out wholesale for the client's real hole names.
 
+// Placeholder site ids — one 'letter' per location, mirroring the numeric
+// course ids. These land in the `location` table 1:1.
+const LOC_RIVERSIDE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const LOC_SUMMIT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const LOC_HARBORWALK = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+export const LOCATIONS: LocationSeed[] = [
+  { id: LOC_RIVERSIDE, name: 'Riverside', slug: 'riverside', accent: '#38bdf8', sortOrder: 10 },
+  { id: LOC_SUMMIT, name: 'Summit', slug: 'summit', accent: '#f472b6', sortOrder: 20 },
+  { id: LOC_HARBORWALK, name: 'Harborwalk', slug: 'harborwalk', accent: '#facc15', sortOrder: 30 },
+];
+
 export const COURSES: CourseSeed[] = [
   {
     id: '11111111-1111-4111-8111-111111111111',
+    locationId: LOC_RIVERSIDE,
     name: 'Jungle Run',
     theme: 'jungle',
     holeCount: 18,
@@ -45,6 +64,7 @@ export const COURSES: CourseSeed[] = [
   },
   {
     id: '22222222-2222-4222-8222-222222222222',
+    locationId: LOC_RIVERSIDE,
     name: "Pirate's Cove",
     theme: 'pirate',
     holeCount: 18,
@@ -78,6 +98,7 @@ export const COURSES: CourseSeed[] = [
   },
   {
     id: '33333333-3333-4333-8333-333333333333',
+    locationId: LOC_SUMMIT,
     name: 'Space Odyssey',
     theme: 'space',
     holeCount: 18,
@@ -111,6 +132,7 @@ export const COURSES: CourseSeed[] = [
   },
   {
     id: '44444444-4444-4444-8444-444444444444',
+    locationId: LOC_HARBORWALK,
     name: 'Haunted Manor',
     theme: 'haunted',
     holeCount: 18,
@@ -146,4 +168,13 @@ export const COURSES: CourseSeed[] = [
 
 export function courseById(id: string): CourseSeed | undefined {
   return COURSES.find((c) => c.id === id);
+}
+
+export function locationById(id: string): LocationSeed | undefined {
+  return LOCATIONS.find((l) => l.id === id);
+}
+
+/** Courses that belong to a given location (distinct per location). */
+export function coursesByLocation(locationId: string): CourseSeed[] {
+  return COURSES.filter((c) => c.locationId === locationId);
 }

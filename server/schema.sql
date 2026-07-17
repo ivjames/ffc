@@ -2,14 +2,28 @@
 -- Requires the pgcrypto extension for gen_random_uuid() (bundled with modern Postgres).
 create extension if not exists pgcrypto;
 
+-- White-label: one client operates several physical locations, each with its
+-- own distinct courses (a course belongs to exactly one location).
+create table if not exists location (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  slug        text not null unique,    -- stable short key, e.g. 'riverside'
+  sort_order  int  not null default 0
+);
+
 create table if not exists course (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
   theme       text not null,
   hole_count  int  not null default 18,
   pars        int[] not null,          -- length 18, values 2..4
+  location_id uuid references location(id),
   sort_order  int  not null default 0
 );
+
+-- For databases created before locations existed: add the column idempotently.
+alter table course add column if not exists location_id uuid references location(id);
+create index if not exists course_location_idx on course (location_id);
 
 create table if not exists round (
   id            uuid primary key default gen_random_uuid(),
@@ -86,16 +100,27 @@ create unique index if not exists hunt_find_verified_unique
   on hunt_find (round_client_id, player_tag, item_id)
   where verified;
 
+-- Placeholder locations for the first client (three sites). Idempotent on id;
+-- ids mirror src/data/courses.ts. The client's real sites swap in here.
+insert into location (id, name, slug, sort_order) values
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Riverside',  'riverside',  10),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Summit',     'summit',     20),
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Harborwalk', 'harborwalk', 30)
+on conflict (id) do nothing;
+
 -- Ensure the four courses exist so the hunt seed's course FK resolves even on a
 -- fresh `npm run migrate` (before `ffc seed` loads them via the API). Idempotent
 -- on id; `deploy/courses.seed.json` / `ffc seed` remains the source of truth and
--- upserts name/theme/pars over these. Ids + pars mirror src/data/courses.ts.
-insert into course (id, name, theme, pars) values
-  ('11111111-1111-4111-8111-111111111111', 'Jungle Run',    'jungle',  '{3,2,4,3,3,2,4,3,2,3,4,3,2,3,3,4,2,3}'),
-  ('22222222-2222-4222-8222-222222222222', 'Pirate''s Cove', 'pirate', '{2,3,3,4,3,2,3,4,3,2,3,3,4,2,3,3,4,3}'),
-  ('33333333-3333-4333-8333-333333333333', 'Space Odyssey', 'space',   '{3,3,2,4,3,3,2,3,4,3,3,2,4,3,3,2,3,4}'),
-  ('44444444-4444-4444-8444-444444444444', 'Haunted Manor', 'haunted', '{3,4,2,3,3,4,3,2,3,4,2,3,3,4,3,2,3,3}')
-on conflict (id) do nothing;
+-- upserts name/theme/pars over these. Ids + pars + location_id mirror
+-- src/data/courses.ts (placeholder 2/1/1 split across the three sites). The
+-- conflict clause keeps location_id in sync even for pre-existing course rows,
+-- while leaving name/theme/pars for the seed route to own.
+insert into course (id, name, theme, pars, location_id) values
+  ('11111111-1111-4111-8111-111111111111', 'Jungle Run',    'jungle',  '{3,2,4,3,3,2,4,3,2,3,4,3,2,3,3,4,2,3}', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+  ('22222222-2222-4222-8222-222222222222', 'Pirate''s Cove', 'pirate', '{2,3,3,4,3,2,3,4,3,2,3,3,4,2,3,3,4,3}', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+  ('33333333-3333-4333-8333-333333333333', 'Space Odyssey', 'space',   '{3,3,2,4,3,3,2,3,4,3,3,2,4,3,3,2,3,4}', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+  ('44444444-4444-4444-8444-444444444444', 'Haunted Manor', 'haunted', '{3,4,2,3,3,4,3,2,3,4,2,3,3,4,3,2,3,3}', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+on conflict (id) do update set location_id = excluded.location_id;
 
 -- Seed the four themed hunt lists (one per course). ON CONFLICT (course_id, slug)
 -- DO NOTHING keeps this idempotent so migrate can run repeatedly without
