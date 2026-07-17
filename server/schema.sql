@@ -182,12 +182,11 @@ insert into hunt_item (course_id, slug, name, hint, sort_order, countable) value
   ('a4444444-4444-4444-8444-444444444444', 'horseshoe', 'A hidden horseshoe', 'Horseshoes are hidden all around the Western course — find as many as you can!', 10, true),
   -- Upland · Dragon's Hollow — fairy-tale landmarks around the course. The
   -- castle, climbing vines, pumpkin patch, and green doors are installed scenery;
-  -- the cartoon cow and giant veg are themed props being added. There are two
-  -- green doors, so that item is `countable` (find them both).
+  -- the cartoon cow and giant veg are themed props being added.
   ('a3333333-3333-4333-8333-333333333333', 'castle',     'The dragon''s castle',   'The big stone castle with red-topped towers — frame the turrets.', 10, false),
   ('a3333333-3333-4333-8333-333333333333', 'vines',      'Climbing flower vines',  'Painted flowering vines climb the castle''s white towers — snap a good stretch.', 20, false),
   ('a3333333-3333-4333-8333-333333333333', 'pumpkin',    'A giant pumpkin',        'Fat orange pumpkins grow by the painted hills — snap one from the patch.', 30, false),
-  ('a3333333-3333-4333-8333-333333333333', 'green-door', 'A green door',           'Two green fairy-tale doors with stained-glass windows hide on the course — find them both!', 40, true),
+  ('a3333333-3333-4333-8333-333333333333', 'green-door', 'The green doors',        'A pair of green fairy-tale doors with stained-glass windows, beside the stone fireplace.', 40, false),
   ('a3333333-3333-4333-8333-333333333333', 'cow',        'A cartoon cow',          'A big goofy cartoon cow with a lolling tongue — say cheese!', 50, false),
   ('a3333333-3333-4333-8333-333333333333', 'cabbage',    'A giant purple cabbage', 'An oversized purple cabbage, far too big for any garden — find it and snap it.', 60, false),
   ('a3333333-3333-4333-8333-333333333333', 'carrot',     'A giant carrot',         'Enormous orange carrots poke up out of the gravel, green tops and all — snap one.', 70, false)
