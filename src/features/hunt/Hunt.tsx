@@ -41,7 +41,13 @@ export default function Hunt() {
   const fileRef = useRef<HTMLInputElement>(null);
   const captureItemId = useRef<string | null>(null);
 
-  const players = round?.playerTags ?? [];
+  // The hunt identifies a player solely by tag (that's all the server stores),
+  // so collapse any duplicate tags to a single chip — two "ABC" players are one
+  // hunt identity, and showing two chips just double-highlights on select.
+  const players = useMemo(
+    () => [...new Set(round?.playerTags ?? [])],
+    [round],
+  );
   const roundClientId = round?.clientId ?? null;
   const course = round ? courseById(round.courseId) : undefined;
 
@@ -101,13 +107,14 @@ export default function Hunt() {
     e.target.value = ''; // allow re-picking the same file
     const itemId = captureItemId.current;
     captureItemId.current = null;
-    if (!file || !itemId || !roundClientId || !selectedPlayer) return;
+    if (!file || !itemId || !round || !roundClientId || !selectedPlayer) return;
 
     setItemStates((s) => ({ ...s, [itemId]: { kind: 'verifying' } }));
     try {
       const { base64, mediaType } = await fileToUpload(file);
       const result = await verifyFind({
         itemId,
+        courseId: round.courseId,
         playerTag: selectedPlayer,
         roundClientId,
         imageBase64: base64,
@@ -188,9 +195,9 @@ export default function Hunt() {
             Playing as
           </div>
           <div className="flex flex-wrap gap-2">
-            {players.map((tag, i) => (
+            {players.map((tag) => (
               <button
-                key={i}
+                key={tag}
                 onClick={() => setSelectedPlayer(tag)}
                 className={`rounded-lg p-1 transition ${
                   selectedPlayer === tag

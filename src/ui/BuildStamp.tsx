@@ -38,7 +38,7 @@ export function BuildStamp() {
     <button
       type="button"
       onClick={copy}
-      title="Tap to copy build info"
+      title={`Built ${__BUILD_TIME__} — tap to copy build info`}
       className="pointer-events-auto max-w-full select-text truncate rounded bg-fairway-950/60 px-1.5 py-1 text-[10px] leading-none text-fairway-100/40 backdrop-blur-sm active:text-fairway-100/80"
     >
       {copied ? (

@@ -77,6 +77,15 @@ create index if not exists hunt_find_round_idx  on hunt_find (round_client_id);
 create index if not exists hunt_find_item_idx   on hunt_find (item_id);
 create index if not exists hunt_find_player_idx on hunt_find (player_tag);
 
+-- One verified find per (group, player, item). This backs the app-level dedup in
+-- routes/hunt.js against a race: two concurrent submissions can both pass the
+-- SELECT guard, so the DB is the real arbiter (the insert uses ON CONFLICT).
+-- Partial on `verified` so repeated *failed* attempts (verified=false) still
+-- insert freely. `if not exists` keeps migrate idempotent.
+create unique index if not exists hunt_find_verified_unique
+  on hunt_find (round_client_id, player_tag, item_id)
+  where verified;
+
 -- Ensure the four courses exist so the hunt seed's course FK resolves even on a
 -- fresh `npm run migrate` (before `ffc seed` loads them via the API). Idempotent
 -- on id; `deploy/courses.seed.json` / `ffc seed` remains the source of truth and

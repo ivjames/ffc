@@ -130,13 +130,15 @@ Missing `round` → `400`.
 
 #### `POST /api/hunt/verify`
 Submit a photo; the model judges whether the target item is present and whether
-the shot looks like a photo-of-a-photo (anti-cheat). Uses its own 10 MB body
-parser for the base64 image.
+the shot looks like a photo-of-a-photo (anti-cheat). Uses its own 16 MB body
+parser for the base64 image (aligned with nginx's `client_max_body_size`); the
+decoded image itself is capped at 10 MB.
 
 Request:
 ```json
 {
-  "itemId": "<uuid, must exist and be active>",
+  "itemId": "<uuid, must exist and be active on this course>",
+  "courseId": "<uuid — the round's course; the item must belong to it>",
   "playerTag": "ABC",
   "roundClientId": "<device round id — required, the group's in-progress round>",
   "imageBase64": "<base64 image bytes, no data: prefix>",
@@ -144,7 +146,8 @@ Request:
 }
 ```
 - `roundClientId`: required — the hunt runs during gameplay only.
-- `mediaType`: one of `image/jpeg|png|webp|gif`; decoded image ≤ 6 MB.
+- `courseId`: required — the item is looked up scoped to this course.
+- `mediaType`: one of `image/jpeg|png|webp|gif`; decoded image ≤ 10 MB.
 - If the player already has a verified find for this item in this round, the call
   short-circuits (`alreadyFound: true`) without a model call.
 - A photo-of-a-photo is `flagged` and never counts as a find.
