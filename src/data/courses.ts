@@ -16,19 +16,22 @@ const LOC_UPLAND = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const LOC_TUKWILA = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const LOC_WILSONVILLE = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
-// The client's three venues. Coordinates are city-center approximations until
-// exact venue addresses are supplied — the 25 km geofence comfortably covers
-// each city, and the sites are hundreds of km apart so there is no overlap.
-// Tighten geofenceKm (~1 km) once precise venue coords land (§11).
+// Bullwinkle's three venues, with exact coordinates geocoded from the street
+// addresses. The 2 km geofence covers each property + parking + GPS drift while
+// meaning "you're actually here"; the sites are hundreds of km apart, so there
+// is no overlap. Addresses:
+//   Upland      — 1560 W 7th St, Upland, CA 91786
+//   Tukwila     — 7300 Fun Center Way, Tukwila, WA 98188
+//   Wilsonville — 29111 SW Town Center Loop W, Wilsonville, OR 97070
 export const LOCATIONS: LocationSeed[] = [
   {
     id: LOC_UPLAND,
     name: 'Upland',
     slug: 'upland',
     accent: '#38bdf8',
-    lat: 34.0975,
-    lng: -117.6484,
-    geofenceKm: 25,
+    lat: 34.08867,
+    lng: -117.67946,
+    geofenceKm: 2,
     sortOrder: 10,
   },
   {
@@ -36,9 +39,9 @@ export const LOCATIONS: LocationSeed[] = [
     name: 'Tukwila',
     slug: 'tukwila',
     accent: '#f472b6',
-    lat: 47.4739,
-    lng: -122.2612,
-    geofenceKm: 25,
+    lat: 47.46562,
+    lng: -122.24302,
+    geofenceKm: 2,
     sortOrder: 20,
   },
   {
@@ -46,9 +49,9 @@ export const LOCATIONS: LocationSeed[] = [
     name: 'Wilsonville',
     slug: 'wilsonville',
     accent: '#facc15',
-    lat: 45.3132,
-    lng: -122.7737,
-    geofenceKm: 25,
+    lat: 45.30969,
+    lng: -122.7668,
+    geofenceKm: 2,
     sortOrder: 30,
   },
 ];

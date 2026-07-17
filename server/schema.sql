@@ -108,17 +108,18 @@ create unique index if not exists hunt_find_verified_unique
   on hunt_find (round_client_id, player_tag, item_id)
   where verified;
 
--- The client's three venues. Idempotent on id; ids + coords mirror
--- src/data/courses.ts. Coords are city-center approximations until exact venue
--- addresses land (the 25 km geofence covers each city; sites are hundreds of km
--- apart, so no overlap). schema.sql is the sole source of truth for location
--- rows (there is no separate location seed API), so the conflict clause syncs
--- every field authoritatively — that's how existing DBs pick up name/coord
--- changes on the next migrate.
+-- Bullwinkle's three venues. Idempotent on id; ids + coords mirror
+-- src/data/courses.ts (exact coordinates geocoded from the street addresses;
+-- 2 km geofence per venue, sites hundreds of km apart so no overlap).
+-- schema.sql is the sole source of truth for location rows (there is no
+-- separate location seed API), so the conflict clause syncs every field
+-- authoritatively — that's how existing DBs pick up name/coord changes on the
+-- next migrate. Addresses: Upland 1560 W 7th St 91786; Tukwila 7300 Fun Center
+-- Way 98188; Wilsonville 29111 SW Town Center Loop W 97070.
 insert into location (id, name, slug, lat, lng, geofence_km, sort_order) values
-  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Upland',      'upland',      34.0975, -117.6484, 25, 10),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Tukwila',     'tukwila',     47.4739, -122.2612, 25, 20),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Wilsonville', 'wilsonville', 45.3132, -122.7737, 25, 30)
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Upland',      'upland',      34.08867, -117.67946, 2, 10),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Tukwila',     'tukwila',     47.46562, -122.24302, 2, 20),
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Wilsonville', 'wilsonville', 45.30969, -122.76680, 2, 30)
 on conflict (id) do update
   set name        = excluded.name,
       slug        = excluded.slug,
