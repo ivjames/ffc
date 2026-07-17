@@ -6,6 +6,7 @@ import Scorecard from './features/scorecard/Scorecard';
 import Summary from './features/scorecard/Summary';
 import CourseList from './features/courses/CourseList';
 import CourseMap from './features/courses/CourseMap';
+import LocationPicker from './features/locations/LocationPicker';
 import Rules from './features/rules/Rules';
 import TvLeaderboard from './features/tv/TvLeaderboard';
 import Hunt from './features/hunt/Hunt';
@@ -17,6 +18,7 @@ export default function App() {
     <>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/locations" element={<LocationPicker />} />
         <Route path="/new" element={<CoursePicker />} />
         <Route path="/new/setup" element={<PlayerSetup />} />
         <Route path="/play/:clientId" element={<Scorecard />} />
