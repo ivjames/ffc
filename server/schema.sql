@@ -145,23 +145,15 @@ insert into course (id, name, theme, pars, location_id, sort_order) values
   ('c2222222-2222-4222-8222-222222222222', 'Green Course', 'green', '{3,2,3,3,2,4,2,3,3,2,3,2,4,3,2,3,2,3}', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 20)
 on conflict (id) do update set location_id = excluded.location_id;
 
--- Remove the earlier placeholder courses (Jungle Run / Pirate's Cove / Space
--- Odyssey / Haunted Manor) from databases seeded before the real lineup landed.
--- hunt_item rows cascade with the course. IMPORTANT: only delete a placeholder
--- course that NO round references — a played round (round.course_id has no
--- cascade) must not be destroyed by a schema migration, and would otherwise
--- fail the whole migrate. Any placeholder course that still holds round history
--- is left in place (it never appears in the app, which lists courses from the
--- bundled frontend data, not the DB); purge its rounds manually if you want it
--- fully gone. Idempotent.
-delete from course c
- where c.id in (
-   '11111111-1111-4111-8111-111111111111',
-   '22222222-2222-4222-8222-222222222222',
-   '33333333-3333-4333-8333-333333333333',
-   '44444444-4444-4444-8444-444444444444'
- )
- and not exists (select 1 from round r where r.course_id = c.id);
+-- NOTE: the earlier placeholder courses (Jungle Run / Pirate's Cove / Space
+-- Odyssey / Haunted Manor) may still exist in databases seeded before the real
+-- lineup landed. The migration deliberately does NOT delete them: they never
+-- appear in the app (course lists come from the bundled frontend data, not the
+-- DB), and deleting them is destructive — rounds, scores, and hunt finds
+-- reference that pre-launch test data, and cascading through it repeatedly
+-- failed migrate on FK constraints. A schema migration must never silently drop
+-- played user data. To purge the placeholder courses and everything tied to
+-- them explicitly, run `deploy/purge-placeholder-data.sql` (dependency-ordered).
 
 -- Scavenger-hunt lists are per course (hunt_item.course_id). Only the client's
 -- real, confirmed hunt content is seeded; courses without a list yet simply
