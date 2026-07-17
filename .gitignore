@@ -17,6 +17,9 @@ server/.env
 *.log
 npm-debug.log*
 
+# runtime-uploaded scavenger-hunt photos (server/lib default dir)
+server/data/
+
 # editor / os
 .DS_Store
 .vscode/

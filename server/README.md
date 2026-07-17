@@ -28,9 +28,11 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 
 | var            | purpose                                                        |
 | -------------- | -------------------------------------------------------------- |
-| `DATABASE_URL` | Postgres connection string (server-side creds).                |
-| `PORT`         | Listen port (default 8060).                                    |
-| `APP_TOKEN`    | Shared token guarding `POST /api/seed`. Unset = allow (dev).   |
+| `DATABASE_URL`      | Postgres connection string (server-side creds).           |
+| `PORT`              | Listen port (default 8060).                               |
+| `APP_TOKEN`         | Shared token guarding `POST /api/seed`. Unset = allow (dev). |
+| `ANTHROPIC_API_KEY` | Vision key for the scavenger hunt (`POST /api/hunt/verify`). Unset = hunt verification returns `503`; the rest of the API is unaffected. |
+| `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
 
 ## Endpoints
 
@@ -96,14 +98,65 @@ Request: array of seeds
 → `200 { "ok": true, "count": N, "ids": ["<uuid>", ...] }`
 → `401` if the token is required and missing/wrong; `400` on validation failure.
 
+### Scavenger hunt (Phase 3)
+
+The item list is fixed and seeded by `schema.sql` (idempotent on `slug`). Photos
+are verified by a vision model proxied server-side (the key never reaches the
+browser) and stored on the droplet disk. Content moderation of stored photos is
+deferred — verified photos are kept but nothing is displayed publicly yet.
+
+#### `GET /api/hunt/items`
+→ `200` array of the active items to find:
+```json
+[ { "id": "<uuid>", "slug": "windmill", "name": "A windmill", "hint": "Every good mini-golf course has one." } ]
+```
+
+#### `GET /api/hunt/progress?round=<clientId>`
+A group's verified finds so far (`round` is the device round id — §4 `LocalRound.clientId`).
+→ `200` array:
+```json
+[ { "itemId": "<uuid>", "itemSlug": "windmill", "playerTag": "ABC",
+    "confidence": 0.9, "flagged": false, "createdAt": "2026-07-17T12:00:00.000Z" } ]
+```
+Missing `round` → `400`.
+
+#### `POST /api/hunt/verify`
+Submit a photo; the model judges whether the target item is present and whether
+the shot looks like a photo-of-a-photo (anti-cheat). Uses its own 10 MB body
+parser for the base64 image.
+
+Request:
+```json
+{
+  "itemId": "<uuid, must exist and be active>",
+  "playerTag": "ABC",
+  "roundClientId": "<device round id, optional group key>",
+  "imageBase64": "<base64 image bytes, no data: prefix>",
+  "mediaType": "image/jpeg"
+}
+```
+- `mediaType`: one of `image/jpeg|png|webp|gif`; decoded image ≤ 6 MB.
+- If the player already has a verified find for this item in this round, the call
+  short-circuits (`alreadyFound: true`) without a model call.
+- A photo-of-a-photo is `flagged` and never counts as a find.
+- Only verified, unflagged photos are written to disk.
+
+Responses:
+- `200 { "ok": true, "verified": true|false, "flagged": bool, "confidence": num, "reason": "…" }`
+- `200 { "ok": true, "verified": true, "alreadyFound": true, "reason": "…" }` — dedupe.
+- `400` — validation failure. `429` — per-IP cap (20/min). `503` — `ANTHROPIC_API_KEY` unset.
+
 ## Files
 
 - `index.js` — Express app, middleware, route mounting, listen.
 - `db.js` — shared `pg` Pool from `DATABASE_URL`.
-- `schema.sql` — DDL (course / round / score).
+- `schema.sql` — DDL (course / round / score / hunt_item / hunt_find) + hunt seed.
 - `migrate.js` — applies `schema.sql`.
 - `lib/sanitize.js` — tag validation + offensive-word blocklist (`isValidTag`,
   `validateTags`, `BLOCKLIST`). Mirrors the client's rules exactly.
 - `routes/rounds.js` — `POST /api/rounds` (idempotent sync, per-IP rate limit).
 - `routes/leaderboard.js` — `GET /api/leaderboard`.
 - `routes/seed.js` — `POST /api/seed`.
+- `routes/hunt.js` — scavenger hunt: `GET /api/hunt/items`, `GET /api/hunt/progress`,
+  `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe).
+- `lib/vision.js` — Claude vision proxy (`claude-opus-4-8`, structured JSON verdict).

@@ -12,6 +12,7 @@
     "migrate": "node migrate.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",

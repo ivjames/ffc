@@ -52,6 +52,9 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/rules')}>
             Rules
           </Button>
+          <Button variant="ghost" onClick={() => navigate('/hunt')}>
+            Scavenger hunt
+          </Button>
         </div>
 
         <div className="mt-10 text-center text-xs text-fairway-100/40">

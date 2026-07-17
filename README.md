@@ -25,6 +25,16 @@ Built to the spec in [`mini-golf-app-plan.md`](./mini-golf-app-plan.md). This is
   through it (creds server-side); it re-validates every input. Also serves a
   leaderboard query (Phase 2 preview at `/tv`).
 
+## Phase 3 — AI scavenger hunt (`/hunt`)
+
+Players work a fixed list of things to find on the course, snap a photo of each,
+and a vision model verifies it. The model call is proxied by the Node API so the
+key (`ANTHROPIC_API_KEY`) stays server-side; verified photos are stored on the
+droplet disk. Findings are tracked per player and per group (the round's roster).
+The model also flags photo-of-a-photo attempts (anti-cheat). The item list is
+fixed for now; content moderation of stored photos is deferred. See
+[`server/README.md`](./server/README.md) for the `/api/hunt/*` endpoints.
+
 ## Tech stack
 
 React + TypeScript + Vite · Tailwind CSS v4 · `vite-plugin-pwa` · IndexedDB

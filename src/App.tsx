@@ -8,6 +8,7 @@ import CourseList from './features/courses/CourseList';
 import CourseMap from './features/courses/CourseMap';
 import Rules from './features/rules/Rules';
 import TvLeaderboard from './features/tv/TvLeaderboard';
+import Hunt from './features/hunt/Hunt';
 
 // §7 Routes / screens.
 export default function App() {
@@ -23,6 +24,8 @@ export default function App() {
       <Route path="/rules" element={<Rules />} />
       {/* P2 preview — the API already serves the leaderboard. */}
       <Route path="/tv" element={<TvLeaderboard />} />
+      {/* P3 — AI scavenger hunt. */}
+      <Route path="/hunt" element={<Hunt />} />
       <Route path="*" element={<Home />} />
     </Routes>
   );
