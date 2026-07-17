@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Install sign — Mini Golf Scorecard</title>
+    <style>
+      /* Print-ready venue sign. Open in a browser and print (or "Save as PDF").
+         Letter portrait; white background keeps the QR crisp and saves ink. */
+      @page {
+        size: letter portrait;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+          sans-serif;
+        color: #052e16;
+        background: #ffffff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .sheet {
+        width: 8.5in;
+        height: 11in;
+        margin: 0 auto;
+        padding: 0.5in 0.7in 0.45in;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        overflow: hidden;
+      }
+      .kicker {
+        font-size: 18pt;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #15803d;
+      }
+      .emoji {
+        font-size: 50pt;
+        line-height: 1;
+        margin: 4pt 0 0;
+      }
+      h1 {
+        font-size: 40pt;
+        font-weight: 900;
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+        margin-top: 4pt;
+      }
+      .sub {
+        font-size: 16pt;
+        color: #166534;
+        margin-top: 8pt;
+        font-weight: 600;
+      }
+      .qr-wrap {
+        margin: 16pt 0 8pt;
+        padding: 16pt;
+        border: 4pt solid #15803d;
+        border-radius: 22pt;
+        background: #ffffff;
+      }
+      .qr-wrap svg {
+        display: block;
+        width: 2.9in;
+        height: 2.9in;
+      }
+      .scan {
+        font-size: 16pt;
+        font-weight: 700;
+        color: #052e16;
+      }
+      .scan span {
+        color: #15803d;
+      }
+      .steps {
+        display: flex;
+        gap: 20pt;
+        margin-top: 20pt;
+        width: 100%;
+        max-width: 6.6in;
+      }
+      .col {
+        flex: 1;
+        border: 1.5pt solid #bbf7d0;
+        border-radius: 16pt;
+        padding: 16pt 16pt 18pt;
+        text-align: left;
+        background: #f0fdf4;
+      }
+      .col h2 {
+        font-size: 15pt;
+        font-weight: 800;
+        color: #15803d;
+        margin-bottom: 10pt;
+        display: flex;
+        align-items: center;
+        gap: 8pt;
+      }
+      .col ol {
+        list-style: none;
+        counter-reset: step;
+      }
+      .col li {
+        counter-increment: step;
+        position: relative;
+        padding-left: 26pt;
+        font-size: 12.5pt;
+        line-height: 1.35;
+        margin-bottom: 9pt;
+        color: #052e16;
+      }
+      .col li:last-child {
+        margin-bottom: 0;
+      }
+      .col li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 18pt;
+        height: 18pt;
+        background: #15803d;
+        color: #fff;
+        border-radius: 50%;
+        font-size: 10pt;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .col b {
+        font-weight: 800;
+      }
+      .foot {
+        margin-top: auto;
+        padding-top: 18pt;
+        font-size: 13pt;
+        color: #166534;
+      }
+      .foot .badge {
+        font-weight: 800;
+        color: #052e16;
+      }
+      .url {
+        margin-top: 6pt;
+        font-size: 12pt;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: #15803d;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="kicker">Play &amp; keep score</div>
+      <div class="emoji">⛳️</div>
+      <h1>Get the Mini&nbsp;Golf app</h1>
+      <div class="sub">Scan to install it on your phone — free, no app store</div>
+
+      <div class="qr-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h33v33H0z"/><path stroke="#052e16" d="M2 2.5h7m3 0h6m1 0h3m2 0h7M2 3.5h1m5 0h1m3 0h8m2 0h1m1 0h1m5 0h1M2 4.5h1m1 0h3m1 0h1m1 0h1m1 0h4m1 0h1m4 0h1m1 0h1m1 0h3m1 0h1M2 5.5h1m1 0h3m1 0h1m1 0h2m2 0h1m1 0h2m1 0h1m1 0h1m2 0h1m1 0h3m1 0h1M2 6.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h6m1 0h1m1 0h3m1 0h1M2 7.5h1m5 0h1m1 0h1m9 0h1m1 0h1m1 0h1m5 0h1M2 8.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M10 9.5h4m2 0h1m1 0h1m2 0h2M2 10.5h1m1 0h5m2 0h1m1 0h1m4 0h2m1 0h1m2 0h5M2 11.5h3m2 0h1m1 0h2m1 0h6m1 0h8m3 0h1M2 12.5h2m4 0h1m3 0h2m1 0h5m2 0h1m1 0h1M3 13.5h3m1 0h1m2 0h1m4 0h1m1 0h1m2 0h2m1 0h1m1 0h1m1 0h1m1 0h1M2 14.5h2m2 0h1m1 0h2m4 0h1m1 0h2m1 0h1m7 0h2M2 15.5h1m7 0h3m4 0h2m2 0h4m1 0h1m3 0h1M4 16.5h2m2 0h3m1 0h2m5 0h2m2 0h1m1 0h1m1 0h2M3 17.5h1m2 0h2m2 0h4m2 0h1m1 0h1m2 0h2m3 0h1m2 0h1M4 18.5h2m1 0h2m1 0h1m2 0h2m3 0h2m1 0h1m5 0h2M2 19.5h6m1 0h1m2 0h1m1 0h4m3 0h1m1 0h4m1 0h1m1 0h1M2 20.5h1m1 0h3m1 0h2m1 0h1m1 0h1m1 0h4m4 0h1m4 0h1M2 21.5h1m2 0h3m2 0h2m2 0h2m1 0h1m2 0h1m2 0h4m2 0h1M2 22.5h1m1 0h1m1 0h1m1 0h2m2 0h1m3 0h2m1 0h1m2 0h5m1 0h3M10 23.5h2m1 0h2m2 0h2m1 0h3m3 0h5M2 24.5h7m3 0h2m6 0h3m1 0h1m1 0h3M2 25.5h1m5 0h1m1 0h1m1 0h3m1 0h1m1 0h1m3 0h1m3 0h1m2 0h2M2 26.5h1m1 0h3m1 0h1m1 0h3m6 0h1m2 0h5m1 0h1m1 0h1M2 27.5h1m1 0h3m1 0h1m1 0h1m2 0h1m2 0h2m1 0h2m2 0h1m3 0h2M2 28.5h1m1 0h3m1 0h1m1 0h1m1 0h1m2 0h3m4 0h1m1 0h6M2 29.5h1m5 0h1m3 0h1m1 0h5m1 0h5m2 0h1m1 0h1M2 30.5h7m1 0h1m2 0h1m5 0h1m5 0h2m1 0h1"/></svg>
+      </div>
+      <div class="scan">Point your phone&apos;s camera at the code <span>— no app needed to scan</span></div>
+
+      <div class="steps">
+        <div class="col">
+          <h2>📱 iPhone</h2>
+          <ol>
+            <li>Scan with the <b>Camera</b> app, tap the link (opens Safari).</li>
+            <li>Tap <b>Share</b> <span aria-hidden>&#x2191;</span>, then <b>Add to Home Screen</b>.</li>
+            <li>Tap <b>Add</b> — done!</li>
+          </ol>
+        </div>
+        <div class="col">
+          <h2>🤖 Android</h2>
+          <ol>
+            <li>Scan with the <b>Camera</b>, tap the link (opens Chrome).</li>
+            <li>Tap <b>Install this on my device</b> on the page.</li>
+            <li>Confirm — the icon lands on your home screen!</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="foot">
+        <span class="badge">No app store · No download · Free</span>
+        <div class="url">ffc.lab980.com/install</div>
+      </div>
+    </div>
+  </body>
+</html>
