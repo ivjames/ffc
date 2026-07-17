@@ -3,9 +3,15 @@
 export type Coords = { lat: number; lng: number };
 
 const EARTH_RADIUS_KM = 6371;
+const MILES_PER_KM = 0.621371;
 
 function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
+}
+
+/** Convert kilometers to miles (for US-facing distance display). */
+export function kmToMiles(km: number): number {
+  return km * MILES_PER_KM;
 }
 
 /** Haversine distance in kilometers between two lat/lng points. */
