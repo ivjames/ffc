@@ -7,20 +7,25 @@ type Period = 'day' | 'week' | 'month' | 'all';
 const PERIODS: Period[] = ['day', 'week', 'month', 'all'];
 
 // Passed via router state when arriving from a round's final scorecard, so we
-// can highlight that session's players on the board. The board keeps one row
-// per (tag, course), so tag + courseId pinpoints each player's standing on the
-// course they just played.
-type HighlightState = { highlightTags?: string[]; highlightCourseId?: string };
+// can highlight that session's scores on the board. A tag isn't a stable
+// identity (tags get reused), so we match on course + this round's exact total
+// per tag — highlighting only the score just played, never an older best.
+type HighlightState = {
+  highlightCourseId?: string;
+  highlightScores?: { tag: string; total: number }[];
+};
 
 // P2 preview. The full-screen /tv board is Phase 2, but the API already serves
 // the arcade high-score data, so this is a lightweight live view. Polls every
 // few seconds (§9 — no realtime service needed).
 export default function TvLeaderboard() {
   const { state } = useLocation();
-  const { highlightTags, highlightCourseId } = (state as HighlightState | null) ?? {};
-  const highlightSet = new Set(highlightTags ?? []);
+  const { highlightCourseId, highlightScores } = (state as HighlightState | null) ?? {};
+  // Key on tag + total so we highlight the exact score from this session, not
+  // a player's older personal best (the board keeps best-per-tag-course).
+  const highlightSet = new Set((highlightScores ?? []).map((s) => `${s.tag}:${s.total}`));
   const isHighlighted = (r: LeaderboardRow) =>
-    r.courseId === highlightCourseId && highlightSet.has(r.tag);
+    r.courseId === highlightCourseId && highlightSet.has(`${r.tag}:${r.total}`);
 
   const [period, setPeriod] = useState<Period>('all');
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
