@@ -176,7 +176,17 @@ export default function Summary() {
 
         <SyncNote state={round.syncState} failed={syncFailed} />
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
+          <Button
+            variant="ghost"
+            onClick={() =>
+              navigate('/tv', {
+                state: { highlightTags: round.playerTags, highlightCourseId: round.courseId },
+              })
+            }
+          >
+            🏆 View leaderboard
+          </Button>
           <Button onClick={() => navigate('/')}>Done</Button>
         </div>
       </Content>
