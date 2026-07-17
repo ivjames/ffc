@@ -24,7 +24,10 @@ app.use(cors());
 // the route ever runs (req.path excludes the query string).
 const parseJson = express.json({ limit: "256kb" });
 app.use((req, res, next) => {
-  if (req.path === "/api/hunt/verify") return next();
+  // Normalize a trailing slash so /api/hunt/verify and /api/hunt/verify/ both
+  // match — Express routes both to the upload handler, but a bare `===` check
+  // would let the slash form fall through to the 256kb cap and 413 the upload.
+  if (req.path.replace(/\/+$/, "") === "/api/hunt/verify") return next();
   return parseJson(req, res, next);
 });
 

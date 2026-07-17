@@ -93,7 +93,10 @@ export async function verifyItemInImage({ imageBase64, mediaType, itemName, item
 
   const response = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    // Adaptive thinking draws from this same budget, so keep headroom above the
+    // small JSON verdict — otherwise a hard image can spend it all on thinking
+    // and emit no text block (handled below, but this makes that rare).
+    max_tokens: 2048,
     thinking: { type: "adaptive" },
     output_config: {
       effort: "low",
@@ -113,10 +116,15 @@ export async function verifyItemInImage({ imageBase64, mediaType, itemName, item
     ],
   });
 
-  // With output_config.format the answer is a single JSON text block.
+  // With output_config.format the answer is a single JSON text block. If the
+  // model produced none (e.g. the token budget went entirely to thinking), flag
+  // it as retryable so the route can tell the player to try again rather than
+  // surfacing an opaque 500.
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock) {
-    throw new Error("vision returned no text content");
+    const err = new Error("vision returned no text content");
+    err.code = "VISION_NO_OUTPUT";
+    throw err;
   }
   const parsed = JSON.parse(textBlock.text);
 

@@ -48,6 +48,7 @@ export async function fetchHuntProgress(roundClientId: string): Promise<HuntFind
  */
 export async function verifyFind(args: {
   itemId: string;
+  courseId: string; // the round's course — the item must belong to it
   playerTag: string;
   roundClientId: string; // required — the hunt is tied to an in-progress round
   imageBase64: string;

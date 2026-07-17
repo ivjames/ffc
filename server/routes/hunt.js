@@ -11,7 +11,7 @@
 import { Router } from "express";
 import express from "express";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pool } from "../db.js";
 import { isValidTag } from "../lib/sanitize.js";
@@ -143,11 +143,16 @@ router.post(
     }
 
     const body = req.body ?? {};
-    const { itemId, playerTag, roundClientId, imageBase64, mediaType } = body;
+    const { itemId, courseId, playerTag, roundClientId, imageBase64, mediaType } = body;
 
     // itemId — must look like a uuid; existence checked below.
     if (typeof itemId !== "string" || !UUID_RE.test(itemId)) {
       return res.status(400).json({ ok: false, error: "itemId must be a uuid" });
+    }
+    // courseId — the round's course. The item must belong to it, so a client
+    // can't submit an item from a different course's list against this round.
+    if (typeof courseId !== "string" || !UUID_RE.test(courseId)) {
+      return res.status(400).json({ ok: false, error: "courseId must be a uuid" });
     }
     // playerTag — same rule as scorecard tags.
     if (!isValidTag(playerTag)) {
@@ -186,13 +191,15 @@ router.post(
     }
 
     try {
-      // Item must exist and be active.
+      // Item must exist, be active, and belong to the round's course.
       const itemRes = await pool.query(
-        "select id, name, hint from hunt_item where id = $1 and active = true",
-        [itemId]
+        "select id, name, hint from hunt_item where id = $1 and course_id = $2 and active = true",
+        [itemId, courseId]
       );
       if (itemRes.rowCount === 0) {
-        return res.status(400).json({ ok: false, error: "itemId does not exist" });
+        return res
+          .status(400)
+          .json({ ok: false, error: "itemId does not exist on this course" });
       }
       const item = itemRes.rows[0];
 
@@ -239,10 +246,17 @@ router.post(
         await writeFile(photoPath, imageBytes);
       }
 
-      await pool.query(
+      // ON CONFLICT closes the TOCTOU window above: the dup SELECT and this
+      // INSERT aren't atomic, so a concurrent submission (double-tap, retry)
+      // could pass the guard too. The partial unique index makes the DB the
+      // arbiter — the loser DO-NOTHINGs instead of writing a second credit.
+      const ins = await pool.query(
         `insert into hunt_find
            (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         on conflict (round_client_id, player_tag, item_id) where verified
+         do nothing
+         returning id`,
         [
           roundClientId,
           playerTag,
@@ -254,6 +268,19 @@ router.post(
           photoPath,
         ]
       );
+
+      // Lost the race: another concurrent submission already recorded this
+      // verified find. Drop the orphan photo we just wrote and report it as
+      // already found rather than double-crediting.
+      if (verified && ins.rowCount === 0) {
+        if (photoPath) await rm(photoPath, { force: true }).catch(() => {});
+        return res.json({
+          ok: true,
+          verified: true,
+          alreadyFound: true,
+          reason: "You've already found this one.",
+        });
+      }
 
       return res.json({
         ok: true,
@@ -267,6 +294,16 @@ router.post(
         return res
           .status(503)
           .json({ ok: false, error: "vision is not configured on the server" });
+      }
+      if (err.code === "VISION_NO_OUTPUT") {
+        // Transient: the model returned no verdict. Nothing recorded — let the
+        // player retry with a fresh shot instead of failing hard.
+        return res.json({
+          ok: true,
+          verified: false,
+          flagged: false,
+          reason: "Couldn't read that photo — try another shot.",
+        });
       }
       console.error("[hunt] verify error:", err);
       return res.status(500).json({ ok: false, error: "internal error" });
