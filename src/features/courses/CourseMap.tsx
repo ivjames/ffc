@@ -43,17 +43,25 @@ export default function CourseMap() {
           Tap the map to {zoomed ? 'shrink' : 'zoom'} · placeholder art until real maps land
         </p>
 
-        {/* Per-hole pars */}
-        <h2 className="mt-6 mb-2 text-sm font-semibold text-fairway-100/80">Pars</h2>
-        <div className="grid grid-cols-6 gap-2">
+        {/* Per-hole names and pars */}
+        <h2 className="mt-6 mb-2 text-sm font-semibold text-fairway-100/80">Holes</h2>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {course.pars.map((p, h) => (
             <div
               key={h}
-              className="rounded-lg border border-fairway-800 bg-fairway-950 py-2 text-center"
+              className="flex items-center justify-between gap-2 rounded-lg border border-fairway-800 bg-fairway-950 px-3 py-2"
             >
-              <div className="text-[10px] text-fairway-100/40">{h + 1}</div>
-              <div className="text-lg font-bold" style={{ color: course.accent }}>
-                {p}
+              <div className="min-w-0">
+                <div className="text-[10px] text-fairway-100/40">Hole {h + 1}</div>
+                <div className="truncate text-sm font-semibold text-fairway-100">
+                  {course.holeNames[h]}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-fairway-100/40">Par</div>
+                <div className="text-lg font-bold leading-none" style={{ color: course.accent }}>
+                  {p}
+                </div>
               </div>
             </div>
           ))}

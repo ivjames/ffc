@@ -1,12 +1,13 @@
 import type { CourseSeed } from '../types';
 
-// §4 Four themed 18-hole courses. Pars are PLACEHOLDERS (values 2..4) until
-// real course pars are supplied (§11). Map assets are placeholders too.
-// Fixed UUIDs so the same seed loads 1:1 into the Postgres `course` table
+// §4 Four themed 18-hole courses. Pars and hole names are PLACEHOLDERS until
+// the real client's courses are supplied (§11). Map assets are placeholders
+// too. Fixed UUIDs so the same seed loads 1:1 into the Postgres `course` table
 // (via POST /api/seed or a one-off script) when the backend goes live.
 //
-// To regenerate placeholder pars, replace the arrays below — each must be
-// length 18 with every value in 2..4.
+// To regenerate placeholder pars, replace the `pars` arrays below — each must
+// be length 18 with every value in 2..4. Hole names in `holeNames` are themed
+// flavor (length 18) and swap out wholesale for the client's real hole names.
 
 export const COURSES: CourseSeed[] = [
   {
@@ -15,6 +16,26 @@ export const COURSES: CourseSeed[] = [
     theme: 'jungle',
     holeCount: 18,
     pars: [3, 2, 4, 3, 3, 2, 4, 3, 2, 3, 4, 3, 2, 3, 3, 4, 2, 3],
+    holeNames: [
+      'Vine Swing',
+      "Tiger's Leap",
+      'Monkey Business',
+      'Snake Pit',
+      'Canopy Climb',
+      'Toucan Turn',
+      'Croc Creek', // water hazard (see rules)
+      "Jaguar's Jaws",
+      'Fern Gully',
+      'Parrot Pass',
+      'Rope Bridge', // the rope bridge hole (see rules)
+      'Quicksand Bend',
+      'Panther Prowl',
+      'Waterfall Way', // water hazard (see rules)
+      'Gorilla Grove',
+      'Temple Ruins',
+      'Jungle Drums',
+      'Lost Idol',
+    ],
     mapAsset: '/maps/jungle-run.svg',
     accent: '#22c55e',
     rules: [
@@ -28,6 +49,26 @@ export const COURSES: CourseSeed[] = [
     theme: 'pirate',
     holeCount: 18,
     pars: [2, 3, 3, 4, 3, 2, 3, 4, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3],
+    holeNames: [
+      'Cannon Run',
+      "Davy Jones",
+      'Plank Walk',
+      "Kraken's Grip",
+      'Shipwreck Ramp', // the hull ramp hole (see rules)
+      'Cutlass Curve',
+      'Treasure Bay',
+      'Skull Rock',
+      "Anchors Aweigh",
+      'Parrot Perch',
+      'Powder Keg',
+      'Mermaid Lagoon',
+      'Buccaneer Bend',
+      'Cannonball Cove',
+      'Jolly Roger',
+      'Doubloon Drop',
+      "Crow's Nest",
+      "Dead Man's Chest",
+    ],
     mapAsset: '/maps/pirates-cove.svg',
     accent: '#f59e0b',
     rules: [
@@ -41,6 +82,26 @@ export const COURSES: CourseSeed[] = [
     theme: 'space',
     holeCount: 18,
     pars: [3, 3, 2, 4, 3, 3, 2, 3, 4, 3, 3, 2, 4, 3, 3, 2, 3, 4],
+    holeNames: [
+      'Launch Pad',
+      'Lunar Landing',
+      'Asteroid Belt',
+      'Comet Trail',
+      'Nebula Nine',
+      "Saturn's Rings",
+      'Meteor Shower',
+      'Solar Flare',
+      'Wormhole', // teleport hole (see rules)
+      'Galaxy Gate',
+      'Zero-G Zone',
+      'Red Planet',
+      'Black Hole',
+      'Star Cluster',
+      'Cosmic Drift',
+      'Satellite Sweep',
+      'Alien Outpost',
+      'Mission Control',
+    ],
     mapAsset: '/maps/space-odyssey.svg',
     accent: '#818cf8',
     rules: [
@@ -54,6 +115,26 @@ export const COURSES: CourseSeed[] = [
     theme: 'haunted',
     holeCount: 18,
     pars: [3, 4, 2, 3, 3, 4, 3, 2, 3, 4, 2, 3, 3, 4, 3, 2, 3, 3],
+    holeNames: [
+      'Creaky Gate',
+      'Cobweb Corner',
+      'Rattling Bones',
+      'Phantom Foyer',
+      'Candle Hall',
+      'Spinning Gate', // timed gate hole (see rules)
+      "Witch's Brew",
+      'Bat Belfry',
+      'Moonlit Maze',
+      'Cursed Cellar',
+      'Ghostly Gallery',
+      "Raven's Roost",
+      'Crypt Drop', // hole-in-one shortcut (see rules)
+      'Howling Hall',
+      'Shadow Stair',
+      'Pumpkin Patch',
+      'Cauldron Curve',
+      'Final Rest',
+    ],
     mapAsset: '/maps/haunted-manor.svg',
     accent: '#a855f7',
     rules: [

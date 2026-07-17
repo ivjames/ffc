@@ -51,6 +51,7 @@ export default function Scorecard() {
   if (!round || !course) return null;
 
   const par = course.pars[hole];
+  const holeName = course.holeNames[hole];
   const complete = isRoundComplete(round.scores, round.playerTags.length);
   // Every player must have a score on the current hole before advancing, so a
   // hole is never left half-scored by moving on.
@@ -140,9 +141,9 @@ export default function Scorecard() {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
-              Hole
+              Hole {hole + 1}
             </div>
-            <div className="text-4xl font-black text-fairway-50">{hole + 1}</div>
+            <div className="text-3xl font-black text-fairway-50">{holeName}</div>
           </div>
           <div className="text-right">
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
