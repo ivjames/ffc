@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button, TagChip } from '../../ui/components';
 import { getActiveRound } from '../../db';
 import { courseById } from '../../data/courses';
@@ -28,6 +28,11 @@ type ItemState =
 
 export default function Hunt() {
   const navigate = useNavigate();
+  // Intelligent back: return to wherever the hunt was opened from (e.g. the
+  // scorecard passes its own path in navigation state) and fall back to Home
+  // when opened directly or from the menu.
+  const location = useLocation();
+  const backTo = (location.state as { from?: string } | null)?.from ?? '/';
   const [items, setItems] = useState<HuntItem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -146,7 +151,7 @@ export default function Hunt() {
   if (loaded && !round) {
     return (
       <Screen>
-        <TopBar title="Scavenger hunt" back="/" />
+        <TopBar title="Scavenger hunt" back={backTo} />
         <Content>
           <div className="mt-10 text-center">
             <div className="text-5xl">🔍</div>
@@ -168,7 +173,7 @@ export default function Hunt() {
 
   return (
     <Screen>
-      <TopBar title="Scavenger hunt" back="/" />
+      <TopBar title="Scavenger hunt" back={backTo} />
       <input
         ref={fileRef}
         type="file"
