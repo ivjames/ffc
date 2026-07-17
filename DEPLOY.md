@@ -82,7 +82,10 @@ ffc deploy      # pull main -> migrate DB -> build into releases/<ts> -> swap cu
 
 `ffc deploy` applies `schema.sql` on every deploy (all DDL is idempotent), so new
 tables and columns reach production automatically — no manual migrate step. Run
-it standalone with `ffc migrate` if needed.
+it standalone with `ffc migrate` if needed. It also self-heals the nginx vhost:
+if the live config is missing `client_max_body_size` (needed for scavenger-hunt
+photo uploads), deploy re-renders it once (which re-runs certbot); otherwise it
+just reloads.
 
 Other operate commands: `ffc restart`, `ffc logs`, `ffc backup` (pg_dump into
 `data/`), `ffc seed` (re-load courses), `ffc vhost` (rewrite vhost + re-cert).

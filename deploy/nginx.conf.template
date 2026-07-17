@@ -25,8 +25,8 @@ server {
     location /api/ {
         # Scavenger-hunt photo uploads (POST /api/hunt/verify) carry a base64
         # image; the default 1m cap would 413 them. Keep this aligned with the
-        # server's own body limit (express.json 10mb in routes/hunt.js).
-        client_max_body_size 12m;
+        # server's own body limit (express.json 16mb in routes/hunt.js).
+        client_max_body_size 16m;
 
         proxy_pass http://127.0.0.1:__API_PORT__;
         proxy_http_version 1.1;

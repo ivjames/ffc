@@ -31,8 +31,10 @@ const UUID_RE =
 const UPLOAD_DIR =
   process.env.HUNT_UPLOAD_DIR || join(process.cwd(), "data", "hunt-uploads");
 
-// Max decoded image size we'll accept (bytes). ~6 MB covers a full-res phone JPEG.
-const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+// Max decoded image size we'll accept (bytes). The client downscales before
+// upload, but be generous so an uncompressed full-res phone photo (fallback
+// path, or a stale client bundle) still goes through rather than 413/400.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 const EXT_BY_MEDIA = {
   "image/jpeg": "jpg",
@@ -130,7 +132,9 @@ router.get("/progress", async (req, res) => {
 router.post(
   "/verify",
   rateLimit,
-  express.json({ limit: "10mb" }),
+  // Base64 inflates ~33%, so a 10 MB decoded image is ~13.3 MB of JSON. Give
+  // headroom above that; keep it aligned with nginx's client_max_body_size.
+  express.json({ limit: "16mb" }),
   async (req, res) => {
     if (!isVisionConfigured()) {
       return res

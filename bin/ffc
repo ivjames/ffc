@@ -126,7 +126,17 @@ cmd_deploy(){
   build_release
   cmd_migrate           # apply any new schema before the new code serves
   api_up
-  nginx -t && systemctl reload nginx
+  # Ensure the live vhost carries current nginx directives (e.g. the photo-upload
+  # client_max_body_size). Re-rendering re-runs certbot, so only do it when the
+  # directive is actually missing — otherwise just reload. Self-heals the "you
+  # also had to run ffc vhost" gap without touching TLS on every deploy.
+  local conf="/etc/nginx/sites-available/$FQDN"
+  if [ -f "$conf" ] && ! grep -q 'client_max_body_size' "$conf"; then
+    log "vhost missing client_max_body_size — re-rendering (runs certbot once)"
+    cmd_vhost
+  else
+    nginx -t && systemctl reload nginx
+  fi
   log "Deployed $STUB -> https://$FQDN"
 }
 
