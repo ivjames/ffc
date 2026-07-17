@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -21,6 +21,21 @@ function gitSha(): string {
 const BUILD_ID = process.env.BUILD_ID || gitSha();
 const BUILD_TIME = new Date().toISOString();
 
+// Emit a static /version.json alongside the build so the deployed client build
+// is checkable with a plain curl (mirrors the API's /api/health).
+function emitVersion(): Plugin {
+  return {
+    name: 'emit-version',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ build: BUILD_ID, time: BUILD_TIME }),
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -28,6 +43,7 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
   },
   plugins: [
+    emitVersion(),
     react(),
     tailwindcss(),
     VitePWA({
