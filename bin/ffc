@@ -33,6 +33,14 @@ c_b=$'\033[1;34m'; c_r=$'\033[1;31m'; c_o=$'\033[0m'
 log(){ printf '%s==>%s %s\n' "$c_b" "$c_o" "$*"; }
 die(){ printf '%serror:%s %s\n' "$c_r" "$c_o" "$*" >&2; exit 1; }
 
+# Install deps in $1. Prefer reproducible `npm ci` when a lockfile is present,
+# fall back to `npm install` if one is missing (npm ci hard-fails without it).
+npm_install(){
+  local dir="$1"; shift
+  if [ -f "$dir/package-lock.json" ]; then ( cd "$dir" && npm ci "$@" )
+  else log "no lockfile in $dir — using npm install"; ( cd "$dir" && npm install "$@" ); fi
+}
+
 # Build into a fresh release dir and swap the `current` symlink atomically
 # (§3): never overwrite the served dir in place, or a mid-deploy load serves
 # mixed old/new hashed assets and poisons the service-worker cache.
@@ -42,7 +50,8 @@ build_release(){
   release="$APP_DIR/releases/$ts"
   mkdir -p "$release"
   log "Building into $release"
-  ( cd "$APP_DIR" && npm ci && npm run build )
+  npm_install "$APP_DIR"
+  ( cd "$APP_DIR" && npm run build )
   cp -r "$APP_DIR/dist" "$release/dist"
   ln -sfn "$release" "$APP_DIR/current.tmp"
   mv -Tf "$APP_DIR/current.tmp" "$APP_DIR/current"
@@ -54,7 +63,7 @@ build_release(){
 # dotenv loads server/.env (DATABASE_URL, APP_TOKEN).
 api_up(){
   [ -d "$APP_DIR/server" ] || return 0
-  ( cd "$APP_DIR/server" && npm ci --omit=dev )
+  npm_install "$APP_DIR/server" --omit=dev
   pm2 restart ffc-api --update-env \
     || pm2 start index.js --name ffc-api --cwd "$APP_DIR/server"
   pm2 save
@@ -106,7 +115,8 @@ cmd_setup(){
   [ -f "$APP_DIR/server/.env" ] \
     || die "create $APP_DIR/server/.env first (DATABASE_URL, PORT, APP_TOKEN) — see server/.env.example"
   log "Migrating database"
-  ( cd "$APP_DIR/server" && npm ci && npm run migrate )
+  npm_install "$APP_DIR/server"
+  ( cd "$APP_DIR/server" && npm run migrate )
   api_up
   build_release
   cmd_vhost
