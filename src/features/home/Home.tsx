@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
+import { BuildStamp } from '../../ui/BuildStamp';
 import { getActiveRound } from '../../db';
 import { courseById } from '../../data/courses';
 import type { LocalRound } from '../../types';
@@ -61,6 +62,10 @@ export default function Home() {
           <Link to="/tv" className="underline">
             See the leaderboard
           </Link>
+        </div>
+
+        <div className="mt-6 text-center">
+          <BuildStamp />
         </div>
       </Content>
     </Screen>

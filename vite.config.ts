@@ -1,10 +1,32 @@
+import { execSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// Build stamp baked into the bundle so we can confirm which build is actually
+// loaded (the service worker caches aggressively). Short git SHA + build time.
+// BUILD_ID can be overridden via env if git isn't available.
+function gitSha(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return 'dev';
+  }
+}
+const BUILD_ID = process.env.BUILD_ID || gitSha();
+const BUILD_TIME = new Date().toISOString();
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
   plugins: [
     react(),
     tailwindcss(),

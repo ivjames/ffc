@@ -2,6 +2,7 @@
 // Runs under pm2 on the lab980 droplet on a port in the 8060+ range, behind nginx.
 import express from "express";
 import cors from "cors";
+import { execSync } from "node:child_process";
 import "dotenv/config";
 
 import { router as roundsRouter } from "./routes/rounds.js";
@@ -17,9 +18,25 @@ app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json({ limit: "256kb" }));
 
+// Build stamp — the git SHA this API process is running, resolved once at
+// startup. Lets the client compare its bundle build against the live API.
+// BUILD_ID env overrides (e.g. if the deploy sets it) and avoids the git call.
+const BUILD_ID = (() => {
+  if (process.env.BUILD_ID) return process.env.BUILD_ID;
+  try {
+    return execSync("git rev-parse --short HEAD", {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return "unknown";
+  }
+})();
+
 // Health check.
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, build: BUILD_ID });
 });
 
 // Feature routes.
