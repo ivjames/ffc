@@ -11,6 +11,7 @@ import Rules from './features/rules/Rules';
 import TvLeaderboard from './features/tv/TvLeaderboard';
 import Hunt from './features/hunt/Hunt';
 import { BuildStamp } from './ui/BuildStamp';
+import { UpdateModal } from './ui/UpdateModal';
 
 // §7 Routes / screens.
 export default function App() {
@@ -41,6 +42,10 @@ export default function App() {
       >
         <BuildStamp />
       </div>
+
+      {/* Blocking prompt when a deploy lands while the app is open on a stale
+          cached bundle — reloads onto the fresh build. */}
+      <UpdateModal />
     </>
   );
 }
