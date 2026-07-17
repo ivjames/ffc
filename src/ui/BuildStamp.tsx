@@ -19,10 +19,10 @@ export function BuildStamp() {
   const mismatch = apiBuild != null && apiBuild !== __BUILD_ID__;
 
   return (
-    <div className="text-[10px] text-fairway-100/30">
+    <div className="rounded bg-fairway-950/50 px-1.5 py-0.5 text-[10px] leading-none text-fairway-100/40 backdrop-blur-sm">
       build {__BUILD_ID__}
       {apiBuild && <> · api {apiBuild}</>}
-      {mismatch && <span className="text-amber-400/70"> (mismatch)</span>}
+      {mismatch && <span className="text-amber-400/80"> (mismatch)</span>}
     </div>
   );
 }
