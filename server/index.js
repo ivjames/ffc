@@ -16,7 +16,17 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(cors());
-app.use(express.json({ limit: "256kb" }));
+
+// Global JSON parser for normal endpoints — small payloads only. The hunt
+// photo-upload endpoint (POST /api/hunt/verify) carries a large base64 image and
+// installs its OWN bigger parser inside the hunt router, so skip it here.
+// Otherwise this 256kb cap consumes the stream first and 413s the upload before
+// the route ever runs (req.path excludes the query string).
+const parseJson = express.json({ limit: "256kb" });
+app.use((req, res, next) => {
+  if (req.path === "/api/hunt/verify") return next();
+  return parseJson(req, res, next);
+});
 
 // Build stamp — the git SHA this API process is running, resolved once at
 // startup. Lets the client compare its bundle build against the live API.
