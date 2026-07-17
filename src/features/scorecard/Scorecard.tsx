@@ -55,6 +55,9 @@ export default function Scorecard() {
 
   const par = course.pars[hole];
   const complete = isRoundComplete(round.scores, round.playerTags.length);
+  // Every player must have a score on the current hole before advancing, so a
+  // hole is never left half-scored by moving on.
+  const currentHoleScored = round.playerTags.every((_t, p) => round.scores[p]?.[hole] != null);
 
   // Persist a single stroke edit (§5.1: persist on every edit).
   async function setStroke(playerIndex: number, value: number | null) {
@@ -208,7 +211,11 @@ export default function Scorecard() {
             ‹ Prev
           </Button>
           {hole < HOLE_COUNT - 1 ? (
-            <Button variant="ghost" onClick={() => setHole((h) => Math.min(HOLE_COUNT - 1, h + 1))}>
+            <Button
+              variant="ghost"
+              onClick={() => setHole((h) => Math.min(HOLE_COUNT - 1, h + 1))}
+              disabled={!currentHoleScored}
+            >
               Next ›
             </Button>
           ) : (
@@ -217,6 +224,12 @@ export default function Scorecard() {
             </Button>
           )}
         </div>
+
+        {hole < HOLE_COUNT - 1 && !currentHoleScored && (
+          <p className="mt-3 text-center text-xs text-fairway-100/50">
+            Score every player on this hole to continue.
+          </p>
+        )}
 
         {hole === HOLE_COUNT - 1 && !complete && (
           <p className="mt-3 text-center text-xs text-fairway-100/50">
