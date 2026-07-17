@@ -133,6 +133,19 @@ export const PUZZLES: GolfPuzzle[] = [
       { args: [0], expect: [] },
     ],
   },
+  {
+    id: 'turn',
+    title: 'The Turn',
+    brief: 'Reverse the order of the words in a space-separated sentence.',
+    par: 34,
+    hint: 's => …',
+    tests: [
+      { args: ['hole in one'], expect: 'one in hole' },
+      { args: ['golf'], expect: 'golf' },
+      { args: ['a b c d'], expect: 'd c b a' },
+      { args: ['back nine awaits'], expect: 'awaits nine back' },
+    ],
+  },
 ];
 
 /** Golf scoring: how a stroke count compares to par. */

@@ -102,7 +102,7 @@ export default function JsGolf() {
           beat <span className="font-semibold text-fairway-300">par</span> for a birdie.
         </p>
 
-        {/* Hole picker — the front nine (well, eight). */}
+        {/* Hole picker — the front nine. */}
         <div className="mb-4 flex flex-wrap gap-2">
           {PUZZLES.map((p, i) => {
             const b = best[p.id];
