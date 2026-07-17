@@ -39,8 +39,8 @@ export type CourseSeed = {
   theme: string;
   holeCount: 18;
   pars: number[]; // length 18, values 2..4
-  holeNames: string[]; // length 18, themed placeholder names (per hole)
-  mapAsset: string; // path to bundled image/SVG
+  holeNames?: string[]; // length 18 when known; per-hole names (client-supplied)
+  mapAsset?: string; // path to bundled image/SVG when a map exists
   rules?: string[]; // course-specific notes
   accent: string; // themed accent color (hex) for UI
 };

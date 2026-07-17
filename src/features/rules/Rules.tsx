@@ -33,26 +33,33 @@ export default function Rules() {
           ))}
         </ul>
 
-        <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-fairway-400">
-          Course notes
-        </h2>
-        <div className="space-y-4">
-          {noted.map((c) => (
-            <div key={c.id} className="rounded-2xl border border-fairway-800 bg-fairway-900/40 p-4">
-              <div className="mb-2 font-bold" style={{ color: c.accent }}>
-                {c.name}
-              </div>
-              <ul className="space-y-2">
-                {c.rules!.map((r, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-fairway-100/80">
-                    <span style={{ color: c.accent }}>•</span>
-                    <span>{r}</span>
-                  </li>
-                ))}
-              </ul>
+        {noted.length > 0 && (
+          <>
+            <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-fairway-400">
+              Course notes
+            </h2>
+            <div className="space-y-4">
+              {noted.map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded-2xl border border-fairway-800 bg-fairway-900/40 p-4"
+                >
+                  <div className="mb-2 font-bold" style={{ color: c.accent }}>
+                    {c.name}
+                  </div>
+                  <ul className="space-y-2">
+                    {c.rules!.map((r, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-fairway-100/80">
+                        <span style={{ color: c.accent }}>•</span>
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </Content>
     </Screen>
   );

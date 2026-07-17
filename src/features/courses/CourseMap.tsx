@@ -26,22 +26,30 @@ export default function CourseMap() {
     <Screen>
       <TopBar title={course.name} back="/courses" />
       <Content>
-        <div
-          className={`overflow-auto rounded-2xl border border-fairway-800 bg-fairway-900/40 ${
-            zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
-          }`}
-          onClick={() => setZoomed((z) => !z)}
-        >
-          <img
-            src={course.mapAsset}
-            alt={`${course.name} course map`}
-            className="mx-auto block h-auto transition-all"
-            style={{ width: zoomed ? '200%' : '100%', maxWidth: zoomed ? 'none' : '100%' }}
-          />
-        </div>
-        <p className="mt-2 text-center text-xs text-fairway-100/40">
-          Tap the map to {zoomed ? 'shrink' : 'zoom'} · placeholder art until real maps land
-        </p>
+        {course.mapAsset ? (
+          <>
+            <div
+              className={`overflow-auto rounded-2xl border border-fairway-800 bg-fairway-900/40 ${
+                zoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
+              }`}
+              onClick={() => setZoomed((z) => !z)}
+            >
+              <img
+                src={course.mapAsset}
+                alt={`${course.name} course map`}
+                className="mx-auto block h-auto transition-all"
+                style={{ width: zoomed ? '200%' : '100%', maxWidth: zoomed ? 'none' : '100%' }}
+              />
+            </div>
+            <p className="mt-2 text-center text-xs text-fairway-100/40">
+              Tap the map to {zoomed ? 'shrink' : 'zoom'}
+            </p>
+          </>
+        ) : (
+          <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-fairway-800 bg-fairway-900/40 text-center text-sm text-fairway-100/40">
+            Course map coming soon
+          </div>
+        )}
 
         {/* Per-hole names and pars */}
         <h2 className="mt-6 mb-2 text-sm font-semibold text-fairway-100/80">Holes</h2>
@@ -53,9 +61,11 @@ export default function CourseMap() {
             >
               <div className="min-w-0">
                 <div className="text-[10px] text-fairway-100/40">Hole {h + 1}</div>
-                <div className="truncate text-sm font-semibold text-fairway-100">
-                  {course.holeNames[h]}
-                </div>
+                {course.holeNames?.[h] && (
+                  <div className="truncate text-sm font-semibold text-fairway-100">
+                    {course.holeNames[h]}
+                  </div>
+                )}
               </div>
               <div className="text-right">
                 <div className="text-[10px] text-fairway-100/40">Par</div>

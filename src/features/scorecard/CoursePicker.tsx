@@ -61,6 +61,17 @@ export default function CoursePicker() {
 
 function themeEmoji(theme: string): string {
   switch (theme) {
+    case 'blue':
+      return '🔵';
+    case 'green':
+      return '🟢';
+    case 'red':
+      return '🔴';
+    case 'dragon':
+      return '🐉';
+    case 'western':
+      return '🤠';
+    // Retained for any legacy themed courses.
     case 'jungle':
       return '🌴';
     case 'pirate':
