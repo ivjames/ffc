@@ -3,7 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
 import { getActiveRound } from '../../db';
 import { courseById, locationById, coursesByLocation } from '../../data/courses';
-import { useCurrentLocationId } from '../../lib/location';
+import { useCurrentLocationId, setCurrentLocationId, isLocationPinned } from '../../lib/location';
+import {
+  geolocationSupported,
+  geoPermissionState,
+  detectNearestLocation,
+} from '../../lib/geolocate';
+import { useDetectLocation } from '../locations/useDetectLocation';
 import type { LocalRound } from '../../types';
 
 // §7 Home — start round, view maps/rules, resume an in-progress game.
@@ -13,9 +19,29 @@ export default function Home() {
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
   const courseCount = coursesByLocation(locationId).length;
+  const { detect, detecting, message } = useDetectLocation();
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
+  }, []);
+
+  // Silent GPS auto-detect: only when location is already granted (so we never
+  // fire an unsolicited permission prompt on load) and the player hasn't pinned
+  // a site by hand. The explicit "Use my location" button covers the first
+  // permission grant via a user gesture.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (isLocationPinned() || !geolocationSupported()) return;
+      if ((await geoPermissionState()) !== 'granted') return;
+      const res = await detectNearestLocation();
+      if (!cancelled && res.status === 'matched') {
+        setCurrentLocationId(res.locationId, 'auto');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const resumeCourse = resume ? courseById(resume.courseId) : undefined;
@@ -31,24 +57,38 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Current location — tap to switch sites. */}
-        <button
-          onClick={() => navigate('/locations')}
-          className="mb-4 flex w-full items-center justify-between rounded-2xl border border-fairway-800 bg-fairway-900/40 px-4 py-3 text-left active:bg-fairway-800/60"
-        >
-          <span className="flex items-center gap-2">
-            <span className="text-lg">📍</span>
-            <span className="min-w-0">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
-                Location
-              </span>
-              <span className="block truncate font-bold text-fairway-50">
-                {location?.name ?? 'Choose a location'}
+        {/* Current location — tap to switch sites, or GPS-detect the venue. */}
+        <div className="mb-4">
+          <button
+            onClick={() => navigate('/locations')}
+            className="flex w-full items-center justify-between rounded-2xl border border-fairway-800 bg-fairway-900/40 px-4 py-3 text-left active:bg-fairway-800/60"
+          >
+            <span className="flex items-center gap-2">
+              <span className="text-lg">📍</span>
+              <span className="min-w-0">
+                <span className="block text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
+                  Location
+                </span>
+                <span className="block truncate font-bold text-fairway-50">
+                  {location?.name ?? 'Choose a location'}
+                </span>
               </span>
             </span>
-          </span>
-          <span className="text-sm font-semibold text-fairway-400">Change</span>
-        </button>
+            <span className="text-sm font-semibold text-fairway-400">Change</span>
+          </button>
+
+          {geolocationSupported() && (
+            <button
+              onClick={() => void detect()}
+              disabled={detecting}
+              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-fairway-400 active:bg-fairway-800/60 disabled:opacity-50"
+            >
+              <span>🧭</span>
+              {detecting ? 'Locating…' : 'Use my location'}
+            </button>
+          )}
+          {message && <p className="mt-1 text-center text-xs text-amber-400">{message}</p>}
+        </div>
 
         {resume && resumeCourse && (
           <button

@@ -8,8 +8,16 @@ create table if not exists location (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
   slug        text not null unique,    -- stable short key, e.g. 'riverside'
+  lat         double precision,        -- venue latitude (WGS84), for GPS detect
+  lng         double precision,        -- venue longitude
+  geofence_km double precision,        -- "you're here" radius; null -> app default
   sort_order  int  not null default 0
 );
+
+-- For databases created before GPS columns existed: add them idempotently.
+alter table location add column if not exists lat         double precision;
+alter table location add column if not exists lng         double precision;
+alter table location add column if not exists geofence_km double precision;
 
 create table if not exists course (
   id          uuid primary key default gen_random_uuid(),
@@ -101,12 +109,18 @@ create unique index if not exists hunt_find_verified_unique
   where verified;
 
 -- Placeholder locations for the first client (three sites). Idempotent on id;
--- ids mirror src/data/courses.ts. The client's real sites swap in here.
-insert into location (id, name, slug, sort_order) values
-  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Riverside',  'riverside',  10),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Summit',     'summit',     20),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Harborwalk', 'harborwalk', 30)
-on conflict (id) do nothing;
+-- ids + coords mirror src/data/courses.ts. Coords are placeholders in far-apart
+-- cities so GPS detect is unambiguous while testing; the client's real venues
+-- swap in here. The conflict clause backfills coords onto rows that predate the
+-- GPS columns (coalesce) without clobbering any real values already set.
+insert into location (id, name, slug, lat, lng, geofence_km, sort_order) values
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Riverside',  'riverside',  40.7128,  -74.0060, 25, 10),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Summit',     'summit',     34.0522, -118.2437, 25, 20),
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Harborwalk', 'harborwalk', 41.8781,  -87.6298, 25, 30)
+on conflict (id) do update
+  set lat         = coalesce(location.lat, excluded.lat),
+      lng         = coalesce(location.lng, excluded.lng),
+      geofence_km = coalesce(location.geofence_km, excluded.geofence_km);
 
 -- Ensure the four courses exist so the hunt seed's course FK resolves even on a
 -- fresh `npm run migrate` (before `ffc seed` loads them via the API). Idempotent

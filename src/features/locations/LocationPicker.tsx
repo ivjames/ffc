@@ -2,26 +2,46 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content } from '../../ui/components';
 import { LOCATIONS, coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId, setCurrentLocationId } from '../../lib/location';
+import { geolocationSupported } from '../../lib/geolocate';
+import { useDetectLocation } from './useDetectLocation';
 
 // §5 Location picker — the client runs several sites; choose which one you're
-// playing at. The choice is remembered (localStorage) and scopes course lists
-// and round setup. An optional `?next=/path` chains onward after choosing
-// (e.g. straight into starting a round); otherwise we return to Home.
+// playing at (by hand, or via GPS "Use my location"). The choice is remembered
+// (localStorage) and scopes course lists and round setup. An optional
+// `?next=/path` chains onward after choosing; otherwise we return to Home.
 export default function LocationPicker() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = params.get('next') || '/';
   const current = useCurrentLocationId();
+  const { detect, detecting, message } = useDetectLocation();
 
   function choose(id: string) {
-    setCurrentLocationId(id);
+    setCurrentLocationId(id); // manual pick — pins against GPS override
     navigate(next, { replace: true });
+  }
+
+  async function useMyLocation() {
+    const matched = await detect();
+    if (matched) navigate(next, { replace: true });
   }
 
   return (
     <Screen>
       <TopBar title="Choose a location" back="/" />
       <Content>
+        {geolocationSupported() && (
+          <button
+            onClick={useMyLocation}
+            disabled={detecting}
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-fairway-700 bg-fairway-900/40 px-4 py-3 text-sm font-semibold text-fairway-100 active:bg-fairway-800 disabled:opacity-50"
+          >
+            <span>🧭</span>
+            {detecting ? 'Locating…' : 'Use my location'}
+          </button>
+        )}
+        {message && <p className="mb-4 text-center text-sm text-amber-400">{message}</p>}
+
         <div className="space-y-3">
           {LOCATIONS.map((loc) => {
             const count = coursesByLocation(loc.id).length;

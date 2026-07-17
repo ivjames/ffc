@@ -21,10 +21,40 @@ const LOC_RIVERSIDE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const LOC_SUMMIT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const LOC_HARBORWALK = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
+// Placeholder venue coordinates — deliberately far apart (different cities) so
+// GPS auto-detect is unambiguous while testing. The client's real venue coords
+// + tighter geofences swap in here.
 export const LOCATIONS: LocationSeed[] = [
-  { id: LOC_RIVERSIDE, name: 'Riverside', slug: 'riverside', accent: '#38bdf8', sortOrder: 10 },
-  { id: LOC_SUMMIT, name: 'Summit', slug: 'summit', accent: '#f472b6', sortOrder: 20 },
-  { id: LOC_HARBORWALK, name: 'Harborwalk', slug: 'harborwalk', accent: '#facc15', sortOrder: 30 },
+  {
+    id: LOC_RIVERSIDE,
+    name: 'Riverside',
+    slug: 'riverside',
+    accent: '#38bdf8',
+    lat: 40.7128,
+    lng: -74.006,
+    geofenceKm: 25,
+    sortOrder: 10,
+  },
+  {
+    id: LOC_SUMMIT,
+    name: 'Summit',
+    slug: 'summit',
+    accent: '#f472b6',
+    lat: 34.0522,
+    lng: -118.2437,
+    geofenceKm: 25,
+    sortOrder: 20,
+  },
+  {
+    id: LOC_HARBORWALK,
+    name: 'Harborwalk',
+    slug: 'harborwalk',
+    accent: '#facc15',
+    lat: 41.8781,
+    lng: -87.6298,
+    geofenceKm: 25,
+    sortOrder: 30,
+  },
 ];
 
 export const COURSES: CourseSeed[] = [

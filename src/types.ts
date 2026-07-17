@@ -22,6 +22,12 @@ export type LocationSeed = {
   name: string;
   slug: string; // stable short key (unique per client), e.g. 'riverside'
   accent: string; // per-site brand accent color (hex) for UI
+  // §5 Venue coordinates (WGS84) for GPS auto-detect. A device within
+  // `geofenceKm` of this point is treated as "at this site". Placeholder
+  // coords until the client supplies real venue locations (§11).
+  lat: number;
+  lng: number;
+  geofenceKm?: number; // detection radius; falls back to DEFAULT_GEOFENCE_KM
   sortOrder?: number;
 };
 
