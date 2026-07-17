@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { courseById } from '../../data/courses';
@@ -12,6 +12,16 @@ import {
   isRoundComplete,
 } from '../../lib/scoring';
 
+// Testing aid — how long the auto-player pauses on each hole before advancing.
+const AUTO_PLAY_MS = 450;
+
+// A plausible-but-random stroke count for a hole, biased toward its par and
+// kept inside the sane/cap range. Used only by the auto-play testing tool.
+function randomStrokes(par: number): number {
+  const max = STROKE_CAP_ENABLED ? STROKE_CAP : par + 3;
+  return clampStrokes(1 + Math.floor(Math.random() * max));
+}
+
 // §5.1 step 3 — the play screen. One hole at a time; per-hole entry for all
 // players; par for the current hole; stroke cap; hole navigation and
 // edit; every edit persists to IndexedDB immediately (offline-first).
@@ -22,6 +32,9 @@ export default function Scorecard() {
   const [notFound, setNotFound] = useState(false);
   const [hole, setHole] = useState(0); // 0-based index
   const [showJump, setShowJump] = useState(false);
+  // Testing aid: auto-play walks the course, randomly scoring every player on
+  // each hole and advancing to the end. Pause/stop halts it mid-course.
+  const [autoPlaying, setAutoPlaying] = useState(false);
 
   useEffect(() => {
     void getRound(clientId).then((r) => {
@@ -37,6 +50,39 @@ export default function Scorecard() {
   }, [clientId]);
 
   const course = round ? courseById(round.courseId) : undefined;
+
+  // Keep the latest scores reachable from the timer callback without making
+  // `round` an effect dependency (which would restart the timer on every fill).
+  const roundRef = useRef(round);
+  roundRef.current = round;
+
+  // Auto-play tick: score the current hole for every player, then advance —
+  // one hole per interval — until the last hole is filled or the user pauses.
+  useEffect(() => {
+    if (!autoPlaying || !round || !course) return;
+    const id = window.setTimeout(() => {
+      const prev = roundRef.current;
+      if (!prev) return;
+      const nextScores = { ...prev.scores };
+      prev.playerTags.forEach((_t, p) => {
+        const row = [...(nextScores[p] ?? Array(HOLE_COUNT).fill(null))];
+        row[hole] = randomStrokes(course.pars[hole]);
+        nextScores[p] = row;
+      });
+      const next: LocalRound = { ...prev, scores: nextScores };
+      void putRound(next);
+      setRound(next);
+      if (hole < HOLE_COUNT - 1) {
+        setHole((h) => h + 1);
+      } else {
+        setAutoPlaying(false); // reached the end
+      }
+    }, AUTO_PLAY_MS);
+    return () => window.clearTimeout(id);
+    // `round`/`course` intentionally excluded: identity churns as we fill, and
+    // `hole` advancing already re-arms the timer for the next hole.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPlaying, hole]);
 
   if (notFound) {
     return (
@@ -186,7 +232,7 @@ export default function Scorecard() {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => bump(p, -1)}
-                    disabled={strokes == null || strokes <= 1}
+                    disabled={autoPlaying || strokes == null || strokes <= 1}
                     className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 active:bg-fairway-800 disabled:opacity-30"
                     aria-label={`Decrease strokes for ${tag}`}
                   >
@@ -199,7 +245,9 @@ export default function Scorecard() {
                   </div>
                   <button
                     onClick={() => bump(p, +1)}
-                    disabled={STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP}
+                    disabled={
+                      autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
+                    }
                     className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 active:bg-fairway-800 disabled:opacity-30"
                     aria-label={`Increase strokes for ${tag}`}
                   >
@@ -221,7 +269,7 @@ export default function Scorecard() {
           <Button
             variant="ghost"
             onClick={() => setHole((h) => Math.max(0, h - 1))}
-            disabled={hole === 0}
+            disabled={hole === 0 || autoPlaying}
           >
             ‹ Prev
           </Button>
@@ -229,14 +277,34 @@ export default function Scorecard() {
             <Button
               variant="ghost"
               onClick={() => setHole((h) => Math.min(HOLE_COUNT - 1, h + 1))}
-              disabled={!currentHoleScored}
+              disabled={!currentHoleScored || autoPlaying}
             >
               Next ›
             </Button>
           ) : (
-            <Button onClick={() => navigate(`/play/${clientId}/summary`)} disabled={!complete}>
+            <Button
+              onClick={() => navigate(`/play/${clientId}/summary`)}
+              disabled={!complete || autoPlaying}
+            >
               Finish
             </Button>
+          )}
+        </div>
+
+        {/* Auto-play (testing) — walk the course, randomly scoring each hole,
+            with a pause to stop mid-course. */}
+        <div className="mt-3">
+          <Button
+            variant={autoPlaying ? 'danger' : 'ghost'}
+            onClick={() => setAutoPlaying((v) => !v)}
+            disabled={complete && !autoPlaying}
+          >
+            {autoPlaying ? '⏸ Pause auto-play' : '▶ Auto play (test)'}
+          </Button>
+          {autoPlaying && (
+            <p className="mt-2 text-center text-xs text-fairway-100/50">
+              Auto-playing hole {hole + 1} of {HOLE_COUNT}…
+            </p>
           )}
         </div>
 
