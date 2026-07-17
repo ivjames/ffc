@@ -24,7 +24,18 @@ import {
 type ItemState =
   | { kind: 'idle' }
   | { kind: 'verifying' }
-  | { kind: 'result'; verified: boolean; flagged?: boolean; reason?: string };
+  | {
+      kind: 'result';
+      verified: boolean;
+      flagged?: boolean;
+      reason?: string;
+      // The player who actually took this shot, captured at submit time. The
+      // live `selectedPlayer` can change while verification is in flight (the
+      // group hands the phone around), so the congrats line must use this, not
+      // the current selection — otherwise it credits the wrong person.
+      playerTag: string;
+      count?: number;
+    };
 
 // TESTING ONLY — remove before production. When VITE_HUNT_ALLOW_UPLOAD is
 // 'true' at build time, we drop the `capture` hint on the file input so the
@@ -141,7 +152,11 @@ export default function Hunt() {
     e.target.value = ''; // allow re-picking the same file
     const itemId = captureItemId.current;
     captureItemId.current = null;
-    if (!file || !itemId || !round || !roundClientId || !selectedPlayer) return;
+    // Snapshot who's playing NOW — this is the finder for this shot. The
+    // selection can change before the async verify returns; the server is told
+    // this tag, so the UI result must report the same one.
+    const playerTag = selectedPlayer;
+    if (!file || !itemId || !round || !roundClientId || !playerTag) return;
 
     setItemStates((s) => ({ ...s, [itemId]: { kind: 'verifying' } }));
     try {
@@ -149,7 +164,7 @@ export default function Hunt() {
       const result = await verifyFind({
         itemId,
         courseId: round.courseId,
-        playerTag: selectedPlayer,
+        playerTag,
         roundClientId,
         imageBase64: base64,
         mediaType,
@@ -161,6 +176,8 @@ export default function Hunt() {
           verified: result.verified,
           flagged: result.flagged,
           reason: result.alreadyFound ? 'Already found.' : result.reason,
+          playerTag,
+          count: result.count,
         },
       }));
       if (result.verified) void refreshProgress();
@@ -171,6 +188,7 @@ export default function Hunt() {
           kind: 'result',
           verified: false,
           reason: err instanceof Error ? err.message : 'Verification failed',
+          playerTag,
         },
       }));
     }
@@ -347,8 +365,8 @@ export default function Hunt() {
                   >
                     {state.verified
                       ? item.countable
-                        ? `Nice — that's ${myCount} for ${selectedPlayer}!`
-                        : `Nice — ${selectedPlayer} found it!`
+                        ? `Nice — that's ${state.count ?? myCount} for ${state.playerTag}!`
+                        : `Nice — ${state.playerTag} found it!`
                       : state.flagged
                         ? "That looks like a photo of a screen — take a real one."
                         : state.reason || 'Not quite — try again.'}
