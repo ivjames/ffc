@@ -9,6 +9,7 @@ import {
   geoPermissionState,
   detectNearestLocation,
 } from '../../lib/geolocate';
+import { isStandalone } from '../../lib/pwaInstall';
 import type { LocalRound } from '../../types';
 
 // §7 Home — start round, view maps/rules, resume an in-progress game.
@@ -110,6 +111,13 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/tv')}>
             See the leaderboard
           </Button>
+          {/* Only worth showing when we're running in a browser tab, not the
+              already-installed standalone app. */}
+          {!isStandalone() && (
+            <Button variant="ghost" onClick={() => navigate('/install')}>
+              📲 Install app
+            </Button>
+          )}
         </div>
       </Content>
     </Screen>
