@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#131431"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </linearGradient>
+    <linearGradient id="cab" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a2a44"/>
+      <stop offset="100%" stop-color="#0e0e20"/>
+    </linearGradient>
+    <radialGradient id="dark-overlay" cx="50%" cy="60%" r="75%">
+      <stop offset="0%" stop-color="#1a1a2e" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0a0a16" stop-opacity="0.75"/>
+    </radialGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg)"/>
+
+  <!-- neon grid floor -->
+  <g stroke="#EF5113" stroke-width="2" opacity="0.35">
+    <line x1="0" y1="600" x2="330" y2="380"/>
+    <line x1="160" y1="600" x2="390" y2="380"/>
+    <line x1="320" y1="600" x2="450" y2="380"/>
+    <line x1="480" y1="600" x2="500" y2="380"/>
+    <line x1="640" y1="600" x2="550" y2="380"/>
+    <line x1="800" y1="600" x2="600" y2="380"/>
+    <line x1="0" y1="480" x2="800" y2="480" opacity="0.5"/>
+    <line x1="80" y1="600" x2="720" y2="600" opacity="0.5"/>
+  </g>
+
+  <!-- arcade cabinets row -->
+  <g>
+    <g transform="translate(120,300)">
+      <rect x="-45" y="0" width="90" height="160" rx="8" fill="url(#cab)"/>
+      <rect x="-35" y="14" width="70" height="50" rx="4" fill="#EF5113"/>
+      <rect x="-35" y="14" width="70" height="50" rx="4" fill="#EF5113" opacity="0.6"/>
+      <circle cx="-16" cy="100" r="10" fill="#ffffff"/>
+      <circle cx="16" cy="100" r="10" fill="#c2410c"/>
+      <rect x="-45" y="150" width="90" height="10" fill="#EF5113"/>
+    </g>
+    <g transform="translate(260,330)">
+      <rect x="-40" y="0" width="80" height="140" rx="8" fill="url(#cab)"/>
+      <rect x="-30" y="12" width="60" height="44" rx="4" fill="#c2410c"/>
+      <circle cx="-14" cy="88" r="9" fill="#cfd3e6"/>
+      <circle cx="14" cy="88" r="9" fill="#EF5113"/>
+      <rect x="-40" y="130" width="80" height="10" fill="#EF5113"/>
+    </g>
+    <g transform="translate(540,330)">
+      <rect x="-40" y="0" width="80" height="140" rx="8" fill="url(#cab)"/>
+      <rect x="-30" y="12" width="60" height="44" rx="4" fill="#EF5113" opacity="0.8"/>
+      <circle cx="-14" cy="88" r="9" fill="#ffffff"/>
+      <circle cx="14" cy="88" r="9" fill="#cfd3e6"/>
+      <rect x="-40" y="130" width="80" height="10" fill="#EF5113"/>
+    </g>
+    <g transform="translate(680,300)">
+      <rect x="-45" y="0" width="90" height="160" rx="8" fill="url(#cab)"/>
+      <rect x="-35" y="14" width="70" height="50" rx="4" fill="#c2410c"/>
+      <circle cx="-16" cy="100" r="10" fill="#EF5113"/>
+      <circle cx="16" cy="100" r="10" fill="#ffffff"/>
+      <rect x="-45" y="150" width="90" height="10" fill="#EF5113"/>
+    </g>
+  </g>
+
+  <!-- claw machine center -->
+  <g transform="translate(400,260)">
+    <rect x="-55" y="0" width="110" height="200" rx="10" fill="url(#cab)"/>
+    <rect x="-45" y="14" width="90" height="110" rx="6" fill="#131431"/>
+    <g fill="#EF5113"><circle cx="-15" cy="90" r="10"/><circle cx="15" cy="100" r="9"/><circle cx="0" cy="70" r="8"/></g>
+    <path d="M0 14 L0 50 M-16 50 L16 50 M-16 50 L-24 66 M16 50 L24 66" stroke="#cfd3e6" stroke-width="4" fill="none"/>
+    <rect x="-55" y="180" width="110" height="20" fill="#EF5113"/>
+  </g>
+
+  <!-- neon sparkles -->
+  <g fill="#EF5113">
+    <path d="M60 90 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
+    <path d="M740 120 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
+  </g>
+  <g fill="#cfd3e6" opacity="0.8">
+    <circle cx="200" cy="70" r="2"/><circle cx="600" cy="80" r="2"/><circle cx="400" cy="50" r="2.2"/>
+  </g>
+
+  <rect width="800" height="600" fill="url(#dark-overlay)"/>
+</svg>

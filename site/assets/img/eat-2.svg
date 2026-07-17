@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 640" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#131431"/>
+      <stop offset="100%" stop-color="#EF5113"/>
+    </linearGradient>
+    <linearGradient id="wheel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#cfd3e6"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="640" fill="url(#sky)"/>
+  <g fill="#ffffff" opacity="0.8">
+    <circle cx="90" cy="70" r="2.4"/><circle cx="700" cy="90" r="2"/><circle cx="640" cy="50" r="2.2"/>
+  </g>
+
+  <!-- ground -->
+  <rect x="0" y="560" width="800" height="80" fill="#0e0e20"/>
+
+  <!-- ferris wheel -->
+  <g transform="translate(400,340)">
+    <circle r="230" fill="none" stroke="url(#wheel)" stroke-width="10"/>
+    <g stroke="#EF5113" stroke-width="4">
+      <line x1="0" y1="-230" x2="0" y2="230"/>
+      <line x1="-230" y1="0" x2="230" y2="0"/>
+      <line x1="-163" y1="-163" x2="163" y2="163"/>
+      <line x1="-163" y1="163" x2="163" y2="-163"/>
+    </g>
+    <g>
+      <circle cx="0" cy="-230" r="20" fill="#EF5113"/>
+      <circle cx="0" cy="230" r="20" fill="#c2410c"/>
+      <circle cx="-230" cy="0" r="20" fill="#EF5113"/>
+      <circle cx="230" cy="0" r="20" fill="#c2410c"/>
+      <circle cx="-163" cy="-163" r="20" fill="#c2410c"/>
+      <circle cx="163" cy="163" r="20" fill="#EF5113"/>
+      <circle cx="-163" cy="163" r="20" fill="#EF5113"/>
+      <circle cx="163" cy="-163" r="20" fill="#c2410c"/>
+    </g>
+    <circle r="30" fill="#ffffff"/>
+    <rect x="-24" y="230" width="48" height="220" fill="#131431"/>
+  </g>
+
+  <!-- carousel silhouette left -->
+  <g transform="translate(120,470)">
+    <path d="M-90 0 L0 -90 L90 0 Z" fill="#1a1a2e"/>
+    <rect x="-70" y="0" width="140" height="80" fill="#131431"/>
+    <g fill="#EF5113" opacity="0.8">
+      <circle cx="-40" cy="40" r="10"/><circle cx="0" cy="40" r="10"/><circle cx="40" cy="40" r="10"/>
+    </g>
+  </g>
+
+  <!-- swing ride silhouette right -->
+  <g transform="translate(680,470)">
+    <polygon points="-60,80 0,-70 60,80" fill="#1a1a2e"/>
+    <circle cx="0" cy="-70" r="10" fill="#EF5113"/>
+    <line x1="0" y1="-60" x2="-30" y2="30" stroke="#EF5113" stroke-width="2"/>
+    <line x1="0" y1="-60" x2="30" y2="30" stroke="#EF5113" stroke-width="2"/>
+    <line x1="0" y1="-60" x2="0" y2="40" stroke="#EF5113" stroke-width="2"/>
+  </g>
+
+  <g fill="#EF5113">
+    <path d="M60 160 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
+    <path d="M740 200 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
+  </g>
+</svg>

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#131431"/>
+    </linearGradient>
+    <linearGradient id="badgeGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#EF5113"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#bg)"/>
+  <g fill="#cfd3e6" opacity="0.7"><circle cx="80" cy="60" r="2"/><circle cx="520" cy="70" r="1.8"/></g>
+
+  <!-- badge / star burst circle -->
+  <g transform="translate(300,210)">
+    <path d="M0 -150 L20 -95 L78 -100 L38 -58 L58 0 L0 -32 L-58 0 L-38 -58 L-78 -100 L-20 -95 Z" fill="none"/>
+    <circle r="140" fill="url(#badgeGrad)"/>
+    <circle r="140" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.5"/>
+    <circle r="112" fill="#1a1a2e"/>
+
+    <!-- moose head -->
+    <g transform="translate(0,-6)">
+      <ellipse cx="0" cy="24" rx="46" ry="40" fill="#cfd3e6"/>
+      <ellipse cx="0" cy="60" rx="26" ry="18" fill="#ffffff"/>
+      <circle cx="-16" cy="10" r="7" fill="#131431"/>
+      <circle cx="16" cy="10" r="7" fill="#131431"/>
+      <circle cx="-6" cy="60" r="3" fill="#131431"/>
+      <circle cx="6" cy="60" r="3" fill="#131431"/>
+      <!-- antlers -->
+      <path d="M-6 -12 C -30 -20 -46 -46 -40 -68 C -52 -60 -66 -64 -74 -76 M-40 -68 C -48 -52 -64 -50 -74 -58" fill="none" stroke="#EF5113" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M6 -12 C 30 -20 46 -46 40 -68 C 52 -60 66 -64 74 -76 M40 -68 C 48 -52 64 -50 74 -58" fill="none" stroke="#EF5113" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <ellipse cx="-14" cy="-20" rx="10" ry="16" fill="#cfd3e6"/>
+      <ellipse cx="14" cy="-20" rx="10" ry="16" fill="#cfd3e6"/>
+    </g>
+  </g>
+
+  <!-- small stars around badge -->
+  <g fill="#EF5113">
+    <path d="M120 90 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
+    <path d="M480 320 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
+    <path d="M470 100 l2.5 7 7 2.5 -7 2.5 -2.5 7 -2.5 -7 -7 -2.5 7 -2.5 z"/>
+  </g>
+</svg>

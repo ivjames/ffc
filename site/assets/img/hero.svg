@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#131431"/>
+      <stop offset="55%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#2a1a1a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="100%" r="75%">
+      <stop offset="0%" stop-color="#EF5113" stop-opacity="0.55"/>
+      <stop offset="45%" stop-color="#c2410c" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#c2410c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff8e8" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#fff8e8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="silo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#131431"/>
+      <stop offset="100%" stop-color="#0e0e20"/>
+    </linearGradient>
+    <linearGradient id="wheelGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#EF5113"/>
+      <stop offset="100%" stop-color="#c2410c"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#sky)"/>
+
+  <!-- moon -->
+  <circle cx="1300" cy="150" r="140" fill="url(#moonGlow)"/>
+  <circle cx="1300" cy="150" r="52" fill="#fdf6e3" opacity="0.95"/>
+
+  <!-- stars -->
+  <g fill="#cfd3e6">
+    <circle cx="120" cy="90" r="2"/><circle cx="220" cy="150" r="1.6"/><circle cx="340" cy="70" r="2.2"/>
+    <circle cx="480" cy="130" r="1.8"/><circle cx="600" cy="60" r="2"/><circle cx="80" cy="220" r="1.4"/>
+    <circle cx="700" cy="180" r="1.6"/><circle cx="900" cy="90" r="2"/><circle cx="980" cy="200" r="1.5"/>
+    <circle cx="1080" cy="60" r="2"/><circle cx="1500" cy="120" r="2"/><circle cx="1550" cy="230" r="1.6"/>
+    <circle cx="60" cy="330" r="1.4"/><circle cx="1450" cy="300" r="1.6"/>
+  </g>
+  <g fill="#EF5113">
+    <path d="M180 260 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
+    <path d="M1140 190 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3 z"/>
+    <path d="M760 110 l2.5 7 7 2.5 -7 2.5 -2.5 7 -2.5 -7 -7 -2.5 7 -2.5 z"/>
+  </g>
+
+  <!-- ground glow -->
+  <rect x="0" y="600" width="1600" height="300" fill="url(#glow)"/>
+
+  <!-- far arcade building -->
+  <g>
+    <rect x="60" y="520" width="220" height="180" fill="url(#silo)"/>
+    <path d="M60 520 L170 460 L280 520 Z" fill="#0e0e20"/>
+    <rect x="90" y="560" width="34" height="50" fill="#EF5113" opacity="0.8"/>
+    <rect x="140" y="560" width="34" height="50" fill="#EF5113" opacity="0.55"/>
+    <rect x="190" y="560" width="34" height="50" fill="#EF5113" opacity="0.8"/>
+    <rect x="240" y="560" width="24" height="50" fill="#EF5113" opacity="0.55"/>
+    <circle cx="170" cy="460" r="8" fill="#EF5113"/>
+  </g>
+
+  <!-- ferris wheel -->
+  <g transform="translate(430,560)">
+    <circle r="150" fill="none" stroke="url(#wheelGrad)" stroke-width="6" opacity="0.9"/>
+    <circle r="150" fill="none" stroke="#1a1a2e" stroke-width="1"/>
+    <g stroke="#EF5113" stroke-width="3" opacity="0.85">
+      <line x1="0" y1="-150" x2="0" y2="150"/>
+      <line x1="-150" y1="0" x2="150" y2="0"/>
+      <line x1="-106" y1="-106" x2="106" y2="106"/>
+      <line x1="-106" y1="106" x2="106" y2="-106"/>
+    </g>
+    <g fill="#cfd3e6">
+      <circle cx="0" cy="-150" r="9"/><circle cx="0" cy="150" r="9"/>
+      <circle cx="-150" cy="0" r="9"/><circle cx="150" cy="0" r="9"/>
+      <circle cx="-106" cy="-106" r="9"/><circle cx="106" cy="106" r="9"/>
+      <circle cx="-106" cy="106" r="9"/><circle cx="106" cy="-106" r="9"/>
+    </g>
+    <circle r="16" fill="#EF5113"/>
+    <rect x="-16" y="150" width="32" height="130" fill="url(#silo)"/>
+  </g>
+
+  <!-- go-kart track curve -->
+  <g>
+    <path d="M550 800 C 780 680 1000 900 1250 760 L1600 700 L1600 900 L550 900 Z" fill="url(#silo)"/>
+    <path d="M550 800 C 780 680 1000 900 1250 760 L1600 700" fill="none" stroke="#EF5113" stroke-width="6" stroke-dasharray="24 18" opacity="0.7"/>
+    <g fill="#0e0e20">
+      <ellipse cx="900" cy="760" rx="34" ry="16"/>
+      <rect x="880" y="740" width="40" height="22" rx="6"/>
+    </g>
+    <circle cx="900" cy="740" r="6" fill="#EF5113"/>
+  </g>
+
+  <!-- mini golf flag -->
+  <g transform="translate(1020,650)">
+    <ellipse cx="0" cy="70" rx="60" ry="16" fill="#0e0e20"/>
+    <rect x="-3" y="-40" width="6" height="112" fill="#cfd3e6"/>
+    <path d="M3 -40 L48 -26 L3 -12 Z" fill="#EF5113"/>
+  </g>
+
+  <!-- zip line -->
+  <g stroke="#3a3a5c" stroke-width="3" fill="none">
+    <path d="M1120 420 L1560 200"/>
+  </g>
+  <g fill="#131431" stroke="#EF5113" stroke-width="2">
+    <rect x="1240" y="350" width="20" height="28" rx="4"/>
+    <rect x="1360" y="308" width="20" height="28" rx="4"/>
+  </g>
+
+  <!-- silhouetted towers / arcade skyline right -->
+  <g fill="url(#silo)">
+    <rect x="1350" y="600" width="90" height="140"/>
+    <rect x="1450" y="560" width="70" height="180"/>
+    <rect x="1530" y="620" width="70" height="120"/>
+    <polygon points="1450,560 1485,510 1520,560"/>
+  </g>
+  <g fill="#EF5113" opacity="0.75">
+    <rect x="1365" y="630" width="16" height="24"/>
+    <rect x="1400" y="630" width="16" height="24"/>
+    <rect x="1465" y="600" width="14" height="22"/>
+    <rect x="1495" y="600" width="14" height="22"/>
+    <rect x="1545" y="650" width="14" height="22"/>
+  </g>
+
+  <!-- foreground silhouette strip -->
+  <rect x="0" y="860" width="1600" height="40" fill="#0e0e20"/>
+</svg>

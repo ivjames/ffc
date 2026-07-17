@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 640" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c2410c"/>
+      <stop offset="60%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#131431"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="640" fill="url(#bg)"/>
+
+  <!-- confetti -->
+  <g>
+    <rect x="90" y="80" width="14" height="14" fill="#ffffff" transform="rotate(20 97 87)"/>
+    <rect x="700" y="100" width="12" height="12" fill="#cfd3e6" transform="rotate(-15 706 106)"/>
+    <circle cx="200" cy="60" r="7" fill="#ffffff"/>
+    <circle cx="600" cy="70" r="8" fill="#EF5113"/>
+    <rect x="380" y="40" width="12" height="12" fill="#EF5113" transform="rotate(30 386 46)"/>
+    <circle cx="500" cy="130" r="6" fill="#cfd3e6"/>
+    <rect x="150" y="150" width="10" height="10" fill="#EF5113" transform="rotate(10 155 155)"/>
+    <circle cx="660" cy="180" r="6" fill="#ffffff"/>
+    <path d="M320 90 l2.5 7 7 2.5 -7 2.5 -2.5 7 -2.5 -7 -7 -2.5 7 -2.5 z" fill="#ffffff"/>
+    <path d="M460 150 l2.5 7 7 2.5 -7 2.5 -2.5 7 -2.5 -7 -7 -2.5 7 -2.5 z" fill="#EF5113"/>
+  </g>
+
+  <!-- ground -->
+  <rect x="0" y="560" width="800" height="80" fill="#0e0e20"/>
+
+  <!-- group of celebrating silhouettes -->
+  <g fill="#131431">
+    <!-- person 1 arms up -->
+    <g transform="translate(220,560)">
+      <circle cx="0" cy="-190" r="30" fill="#ffffff"/>
+      <path d="M-24 -160 C -24 -80 -24 -20 -24 0 L24 0 C 24 -20 24 -80 24 -160 Z" fill="#ffffff"/>
+      <path d="M-24 -150 L-60 -220" stroke="#ffffff" stroke-width="16" stroke-linecap="round"/>
+      <path d="M24 -150 L60 -220" stroke="#ffffff" stroke-width="16" stroke-linecap="round"/>
+    </g>
+    <!-- person 2 center taller, orange -->
+    <g transform="translate(400,560)">
+      <circle cx="0" cy="-220" r="34" fill="#EF5113"/>
+      <path d="M-28 -186 C -28 -90 -28 -20 -28 0 L28 0 C 28 -20 28 -90 28 -186 Z" fill="#EF5113"/>
+      <path d="M-28 -176 L-70 -110" stroke="#EF5113" stroke-width="18" stroke-linecap="round"/>
+      <path d="M28 -176 L70 -110" stroke="#EF5113" stroke-width="18" stroke-linecap="round"/>
+    </g>
+    <!-- person 3 -->
+    <g transform="translate(580,560)">
+      <circle cx="0" cy="-180" r="28" fill="#cfd3e6"/>
+      <path d="M-22 -152 C -22 -80 -22 -20 -22 0 L22 0 C 22 -20 22 -80 22 -152 Z" fill="#cfd3e6"/>
+      <path d="M-22 -142 L-56 -206" stroke="#cfd3e6" stroke-width="15" stroke-linecap="round"/>
+      <path d="M22 -142 L56 -206" stroke="#cfd3e6" stroke-width="15" stroke-linecap="round"/>
+    </g>
+    <!-- small kid figure -->
+    <g transform="translate(310,560)">
+      <circle cx="0" cy="-130" r="20" fill="#ffffff" opacity="0.85"/>
+      <path d="M-16 -110 C -16 -60 -16 -20 -16 0 L16 0 C 16 -20 16 -60 16 -110 Z" fill="#ffffff" opacity="0.85"/>
+      <path d="M-16 -104 L-40 -150" stroke="#ffffff" stroke-width="11" stroke-linecap="round" opacity="0.85"/>
+      <path d="M16 -104 L40 -150" stroke="#ffffff" stroke-width="11" stroke-linecap="round" opacity="0.85"/>
+    </g>
+  </g>
+
+  <!-- burst rays behind group -->
+  <g stroke="#ffffff" stroke-width="4" opacity="0.25">
+    <line x1="400" y1="340" x2="400" y2="260"/>
+    <line x1="300" y1="360" x2="240" y2="300"/>
+    <line x1="500" y1="360" x2="560" y2="300"/>
+    <line x1="250" y1="420" x2="180" y2="400"/>
+    <line x1="550" y1="420" x2="620" y2="400"/>
+  </g>
+</svg>
