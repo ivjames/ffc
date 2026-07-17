@@ -9,7 +9,6 @@ import {
   geoPermissionState,
   detectNearestLocation,
 } from '../../lib/geolocate';
-import { useDetectLocation } from '../locations/useDetectLocation';
 import type { LocalRound } from '../../types';
 
 // §7 Home — start round, view maps/rules, resume an in-progress game.
@@ -19,7 +18,6 @@ export default function Home() {
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
   const courseCount = coursesByLocation(locationId).length;
-  const { detect, detecting, message } = useDetectLocation();
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
@@ -57,7 +55,8 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Current location — tap to switch sites, or GPS-detect the venue. */}
+        {/* Current location — tap to switch sites (or pick "Use my location"
+            there). GPS still auto-detects the venue silently when permitted. */}
         <div className="mb-4">
           <button
             onClick={() => navigate('/locations')}
@@ -76,18 +75,6 @@ export default function Home() {
             </span>
             <span className="text-sm font-semibold text-fairway-400">Change</span>
           </button>
-
-          {geolocationSupported() && (
-            <button
-              onClick={() => void detect()}
-              disabled={detecting}
-              className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-fairway-400 active:bg-fairway-800/60 disabled:opacity-50"
-            >
-              <span>🧭</span>
-              {detecting ? 'Locating…' : 'Use my location'}
-            </button>
-          )}
-          {message && <p className="mt-1 text-center text-xs text-amber-400">{message}</p>}
         </div>
 
         {resume && resumeCourse && (

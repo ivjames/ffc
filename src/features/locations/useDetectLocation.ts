@@ -1,10 +1,13 @@
 import { useCallback, useState } from 'react';
 import { detectNearestLocation } from '../../lib/geolocate';
+import { kmToMiles } from '../../lib/geo';
 import { setCurrentLocationId } from '../../lib/location';
 
-// Shared "Use my location" behavior: run GPS detection, apply a match to the
-// current-location store (as an auto/unpinned choice), and surface a
-// user-facing message for every non-match outcome. Returns true on a match.
+// Shared "Use my location" behavior: run GPS detection and select the closest
+// venue in the current-location store (as an auto/unpinned choice). When the
+// device is inside a venue's geofence we treat it as an exact match and return
+// true; when it's out of range we still select the nearest site but stay put,
+// noting how far off it is (in miles). Other failures surface a message.
 export function useDetectLocation() {
   const [detecting, setDetecting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -19,8 +22,11 @@ export function useDetectLocation() {
         setCurrentLocationId(res.locationId, 'auto');
         return true;
       case 'nomatch':
+        // Out of range of every geofence, but still land on the closest venue
+        // so the player has a sensible selection; note the distance in miles.
+        setCurrentLocationId(res.nearestId, 'auto');
         setMessage(
-          `No venue within range — the nearest is about ${Math.round(res.distanceKm)} km away. Pick one below.`,
+          `Selected the closest venue — about ${Math.round(kmToMiles(res.distanceKm))} miles away.`,
         );
         return false;
       case 'denied':
