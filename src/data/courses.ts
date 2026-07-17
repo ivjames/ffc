@@ -15,43 +15,45 @@ import type { CourseSeed, LocationSeed } from '../types';
 // be length 18 with every value in 2..4. Hole names in `holeNames` are themed
 // flavor (length 18) and swap out wholesale for the client's real hole names.
 
-// Placeholder site ids — one 'letter' per location, mirroring the numeric
-// course ids. These land in the `location` table 1:1.
-const LOC_RIVERSIDE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const LOC_SUMMIT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const LOC_HARBORWALK = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+// Stable site ids — one 'letter' per location, mirroring the numeric course
+// ids. Opaque keys (kept stable even as names/coords change); they land in the
+// `location` table 1:1.
+const LOC_UPLAND = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const LOC_TUKWILA = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const LOC_WILSONVILLE = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
-// Placeholder venue coordinates — deliberately far apart (different cities) so
-// GPS auto-detect is unambiguous while testing. The client's real venue coords
-// + tighter geofences swap in here.
+// The client's three venues. Coordinates are city-center approximations until
+// exact venue addresses are supplied — the 25 km geofence comfortably covers
+// each city, and the sites are hundreds of km apart so there is no overlap.
+// Tighten geofenceKm (~1 km) once precise venue coords land (§11).
 export const LOCATIONS: LocationSeed[] = [
   {
-    id: LOC_RIVERSIDE,
-    name: 'Riverside',
-    slug: 'riverside',
+    id: LOC_UPLAND,
+    name: 'Upland',
+    slug: 'upland',
     accent: '#38bdf8',
-    lat: 40.7128,
-    lng: -74.006,
+    lat: 34.0975,
+    lng: -117.6484,
     geofenceKm: 25,
     sortOrder: 10,
   },
   {
-    id: LOC_SUMMIT,
-    name: 'Summit',
-    slug: 'summit',
+    id: LOC_TUKWILA,
+    name: 'Tukwila',
+    slug: 'tukwila',
     accent: '#f472b6',
-    lat: 34.0522,
-    lng: -118.2437,
+    lat: 47.4739,
+    lng: -122.2612,
     geofenceKm: 25,
     sortOrder: 20,
   },
   {
-    id: LOC_HARBORWALK,
-    name: 'Harborwalk',
-    slug: 'harborwalk',
+    id: LOC_WILSONVILLE,
+    name: 'Wilsonville',
+    slug: 'wilsonville',
     accent: '#facc15',
-    lat: 41.8781,
-    lng: -87.6298,
+    lat: 45.3132,
+    lng: -122.7737,
     geofenceKm: 25,
     sortOrder: 30,
   },
@@ -60,7 +62,7 @@ export const LOCATIONS: LocationSeed[] = [
 export const COURSES: CourseSeed[] = [
   {
     id: '11111111-1111-4111-8111-111111111111',
-    locationId: LOC_RIVERSIDE,
+    locationId: LOC_UPLAND,
     name: 'Jungle Run',
     theme: 'jungle',
     holeCount: 18,
@@ -94,7 +96,7 @@ export const COURSES: CourseSeed[] = [
   },
   {
     id: '22222222-2222-4222-8222-222222222222',
-    locationId: LOC_RIVERSIDE,
+    locationId: LOC_UPLAND,
     name: "Pirate's Cove",
     theme: 'pirate',
     holeCount: 18,
@@ -128,7 +130,7 @@ export const COURSES: CourseSeed[] = [
   },
   {
     id: '33333333-3333-4333-8333-333333333333',
-    locationId: LOC_SUMMIT,
+    locationId: LOC_TUKWILA,
     name: 'Space Odyssey',
     theme: 'space',
     holeCount: 18,
@@ -162,7 +164,7 @@ export const COURSES: CourseSeed[] = [
   },
   {
     id: '44444444-4444-4444-8444-444444444444',
-    locationId: LOC_HARBORWALK,
+    locationId: LOC_WILSONVILLE,
     name: 'Haunted Manor',
     theme: 'haunted',
     holeCount: 18,

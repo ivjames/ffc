@@ -108,19 +108,24 @@ create unique index if not exists hunt_find_verified_unique
   on hunt_find (round_client_id, player_tag, item_id)
   where verified;
 
--- Placeholder locations for the first client (three sites). Idempotent on id;
--- ids + coords mirror src/data/courses.ts. Coords are placeholders in far-apart
--- cities so GPS detect is unambiguous while testing; the client's real venues
--- swap in here. The conflict clause backfills coords onto rows that predate the
--- GPS columns (coalesce) without clobbering any real values already set.
+-- The client's three venues. Idempotent on id; ids + coords mirror
+-- src/data/courses.ts. Coords are city-center approximations until exact venue
+-- addresses land (the 25 km geofence covers each city; sites are hundreds of km
+-- apart, so no overlap). schema.sql is the sole source of truth for location
+-- rows (there is no separate location seed API), so the conflict clause syncs
+-- every field authoritatively — that's how existing DBs pick up name/coord
+-- changes on the next migrate.
 insert into location (id, name, slug, lat, lng, geofence_km, sort_order) values
-  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Riverside',  'riverside',  40.7128,  -74.0060, 25, 10),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Summit',     'summit',     34.0522, -118.2437, 25, 20),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Harborwalk', 'harborwalk', 41.8781,  -87.6298, 25, 30)
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Upland',      'upland',      34.0975, -117.6484, 25, 10),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Tukwila',     'tukwila',     47.4739, -122.2612, 25, 20),
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Wilsonville', 'wilsonville', 45.3132, -122.7737, 25, 30)
 on conflict (id) do update
-  set lat         = coalesce(location.lat, excluded.lat),
-      lng         = coalesce(location.lng, excluded.lng),
-      geofence_km = coalesce(location.geofence_km, excluded.geofence_km);
+  set name        = excluded.name,
+      slug        = excluded.slug,
+      lat         = excluded.lat,
+      lng         = excluded.lng,
+      geofence_km = excluded.geofence_km,
+      sort_order  = excluded.sort_order;
 
 -- Ensure the four courses exist so the hunt seed's course FK resolves even on a
 -- fresh `npm run migrate` (before `ffc seed` loads them via the API). Idempotent
