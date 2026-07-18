@@ -312,11 +312,12 @@ export default function Scorecard() {
                     +
                   </button>
                 </div>
-                {strokes == null && (
-                  <p className="mt-2 text-center text-xs text-fairway-100/40">
-                    Tap + to score this hole
-                  </p>
-                )}
+                {/* Fixed-height slot so the card doesn't shrink when this hint
+                    disappears on scoring — reserve the row whether or not the
+                    text is showing. */}
+                <p className="mt-2 h-4 text-center text-xs leading-4 text-fairway-100/40">
+                  {strokes == null ? 'Tap + to score this hole' : ''}
+                </p>
               </div>
             );
           })}
