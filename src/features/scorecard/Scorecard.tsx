@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
+import { accentInk } from '../../lib/theme';
 import { courseById } from '../../data/courses';
 import { getRound, putRound } from '../../db';
 import type { LocalRound } from '../../types';
@@ -124,6 +125,7 @@ export default function Scorecard() {
   if (!round || !course) return null;
 
   const par = course.pars[hole];
+  const ink = accentInk(course.theme);
   const holeName = course.holeNames?.[hole];
   const complete = isRoundComplete(round.scores, round.playerTags.length);
   // Every player must have a score on the current hole before advancing, so a
@@ -223,7 +225,7 @@ export default function Scorecard() {
                 }}
                 className={`rounded-lg py-2 text-sm font-bold ${
                   h === hole
-                    ? 'bg-fairway-500 text-fairway-950'
+                    ? 'bg-fairway-700 text-fairway-50'
                     : done
                       ? 'bg-fairway-800 text-fairway-200'
                       : 'border border-fairway-700 text-fairway-300'
@@ -260,7 +262,7 @@ export default function Scorecard() {
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
               Par
             </div>
-            <div className="text-4xl font-black" style={{ color: course.accent }}>
+            <div className="text-4xl font-black" style={{ color: ink }}>
               {par}
             </div>
           </div>
@@ -278,7 +280,7 @@ export default function Scorecard() {
                 <div className="mb-2 flex items-center justify-between">
                   <span
                     className="font-arcade text-xl font-bold"
-                    style={{ color: course.accent }}
+                    style={{ color: ink }}
                   >
                     {tag}
                   </span>

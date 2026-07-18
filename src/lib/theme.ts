@@ -146,6 +146,29 @@ export function themeBackdrop(theme: string): string {
   return rampFor(theme)[950];
 }
 
+// Contrast-safe accent for TEXT on a themed surface (tags, par, rules headings).
+// The raw course `accent` is a mid-tone brand hex that, on the lightened themed
+// backgrounds, drops below WCAG AA (Western is ~2:1); these are lifted so accent
+// text clears 4.5:1 on both the page background and the slightly lighter cards.
+// For the hue-matched themes this is just the ramp's light step; Dragon keeps a
+// warm orange (its highlight is orange, not its leafy-green ramp).
+const ACCENT_INK: Record<string, string> = {
+  green: '#85e0a5',
+  blue: '#b1c3d8',
+  red: '#d7a49e',
+  western: '#dcc396',
+  dragon: '#fdba74',
+};
+
+/**
+ * Accent color to use for text on a themed surface — WCAG-AA legible, unlike the
+ * raw course `accent` (which stays for decorative fills/glows). Unknown themes
+ * fall back to the venue-green light step.
+ */
+export function accentInk(theme: string): string {
+  return ACCENT_INK[theme] ?? '#86efac';
+}
+
 /** Emoji marker for a course theme (shared by every course tile/placeholder). */
 export function themeEmoji(theme: string): string {
   switch (theme) {

@@ -1,6 +1,7 @@
 import { Screen, TopBar, Content } from '../../ui/components';
 import { coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
+import { accentInk } from '../../lib/theme';
 import { STROKE_CAP } from '../../lib/scoring';
 
 // §5.3 Rules — general rules + optional per-course notes. Static bundled
@@ -44,13 +45,13 @@ export default function Rules() {
                   key={c.id}
                   className="rounded-2xl border border-fairway-800 bg-fairway-900/40 p-4"
                 >
-                  <div className="mb-2 font-bold" style={{ color: c.accent }}>
+                  <div className="mb-2 font-bold" style={{ color: accentInk(c.theme) }}>
                     {c.name}
                   </div>
                   <ul className="space-y-2">
                     {c.rules!.map((r, i) => (
                       <li key={i} className="flex gap-2 text-sm text-fairway-100/80">
-                        <span style={{ color: c.accent }}>•</span>
+                        <span style={{ color: accentInk(c.theme) }}>•</span>
                         <span>{r}</span>
                       </li>
                     ))}

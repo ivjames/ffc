@@ -63,7 +63,7 @@ export default function TvLeaderboard() {
               onClick={() => setPeriod(p)}
               className={`rounded-lg py-2 text-sm font-semibold capitalize ${
                 period === p
-                  ? 'bg-fairway-500 text-fairway-950'
+                  ? 'bg-fairway-700 text-fairway-50'
                   : 'border border-fairway-700 text-fairway-200'
               }`}
             >

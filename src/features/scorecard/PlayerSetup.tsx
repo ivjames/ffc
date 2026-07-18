@@ -66,7 +66,7 @@ export default function PlayerSetup() {
               onClick={() => setCount(n)}
               className={`rounded-xl py-4 text-lg font-bold transition ${
                 count === n
-                  ? 'bg-fairway-500 text-fairway-950'
+                  ? 'bg-fairway-700 text-fairway-50'
                   : 'border border-fairway-700 bg-fairway-900/40 text-fairway-100'
               }`}
             >

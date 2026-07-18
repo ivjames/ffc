@@ -339,7 +339,7 @@ export default function Hunt() {
                   <button
                     onClick={() => onSnapClick(item.id)}
                     disabled={state.kind === 'verifying' || !canSnap}
-                    className="shrink-0 rounded-xl bg-fairway-500 px-4 py-2 text-sm font-semibold text-fairway-950 transition active:scale-[0.98] active:bg-fairway-400 disabled:opacity-40 disabled:active:scale-100"
+                    className="shrink-0 rounded-xl bg-fairway-700 px-4 py-2 text-sm font-semibold text-fairway-50 transition active:scale-[0.98] active:bg-fairway-800 disabled:opacity-40 disabled:active:scale-100"
                   >
                     {state.kind === 'verifying'
                       ? 'Checking…'
