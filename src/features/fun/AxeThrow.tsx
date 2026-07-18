@@ -52,7 +52,9 @@ function triWave(now: number, period: number): number {
 function scoreAt(x: number, y: number): number {
   for (const c of CLUTCH) if (dist(x, y, c.x, c.y) <= CLUTCH_R) return CLUTCH_PTS;
   const d = dist(x, y, CENTER.x, CENTER.y);
-  for (const ring of RINGS) if (d <= ring.r) return ring.pts;
+  // RINGS is ordered outer→inner, so scan from the innermost (highest value)
+  // outward and take the first ring the point falls inside.
+  for (let i = RINGS.length - 1; i >= 0; i--) if (d <= RINGS[i].r) return RINGS[i].pts;
   return 0;
 }
 

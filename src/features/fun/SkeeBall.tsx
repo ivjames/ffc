@@ -78,7 +78,9 @@ function scoreAt(p: { x: number; y: number } | null): number {
   for (const c of CORNERS) if (Math.hypot(p.x - c.x, p.y - c.y) <= CORNER_R) return CORNER_PTS;
   if (p.y < TOP_GUARD) return 0; // over the back
   const d = Math.hypot(p.x - CENTER.x, p.y - CENTER.y);
-  for (const ring of RINGS) if (d <= ring.r) return ring.pts;
+  // RINGS is ordered outer→inner, so scan from the innermost (highest value)
+  // outward and take the first ring the point falls inside.
+  for (let i = RINGS.length - 1; i >= 0; i--) if (d <= RINGS[i].r) return RINGS[i].pts;
   return 0; // short / wide → gutter
 }
 

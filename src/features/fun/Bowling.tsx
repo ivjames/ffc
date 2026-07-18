@@ -30,7 +30,9 @@ const MAX_V = 9;
 const MAX_DRAG = 260;
 const HOOK = 0.006; // lateral curve per step, in the aim's x direction
 const DOWN_DIST = 6; // a pin moved this far from its spot is knocked down
-const MAX_ROLL_MS = 3600; // hard stop for a roll's simulation
+const MAX_ROLL_MS = 2200; // hard stop for a roll's simulation
+const SWEEP_MS = 950; // pause showing the fallen pins before the sweep clears them
+const REST_SPEED = 0.5; // below this a ball/pin is parked so micro-jitter can't stall settle
 
 type Pin = { x: number; y: number; vx: number; vy: number; ox: number; oy: number; down: boolean };
 type Ball = { x: number; y: number; vx: number; vy: number; gutter: boolean; rolling: boolean };
@@ -79,7 +81,7 @@ function computeScore(rolls: number[]): number {
   return score;
 }
 
-type Phase = 'aim' | 'rolling' | 'done';
+type Phase = 'aim' | 'rolling' | 'sweep' | 'done';
 type Drag = { active: boolean; sx: number; sy: number; dx: number; dy: number };
 type GS = {
   phase: Phase;
@@ -92,6 +94,8 @@ type GS = {
   standing: number; // pins up at the start of the current ball
   rollStart: number;
   note: string;
+  sweepAt: number; // when the current sweep pause began
+  afterSweep: 'rack' | 'clear' | 'done'; // what the sweep resolves to
 };
 
 function freshBall(): Ball {
@@ -110,6 +114,8 @@ function freshGS(): GS {
     standing: 10,
     rollStart: 0,
     note: '',
+    sweepAt: 0,
+    afterSweep: 'rack',
   };
 }
 
@@ -126,6 +132,12 @@ function step(gs: GS) {
   ball.vy *= BALL_FRICTION;
   ball.x += ball.vx;
   ball.y += ball.vy;
+  // Once the ball has almost stopped (e.g. nestled among the pins) park it, so
+  // it doesn't keep nudging the pins and stall the settle check.
+  if (Math.hypot(ball.vx, ball.vy) < REST_SPEED) {
+    ball.vx = 0;
+    ball.vy = 0;
+  }
 
   // Gutters: once past the lane edge the ball drops in and can't hit pins.
   if (!ball.gutter) {
@@ -149,6 +161,11 @@ function step(gs: GS) {
       p.y += p.vy;
       p.x = Math.max(LANE_L + PIN_R, Math.min(LANE_R - PIN_R, p.x));
       if (Math.hypot(p.x - p.ox, p.y - p.oy) > DOWN_DIST) p.down = true;
+      // Park a nearly-stopped pin so lingering micro-jitter doesn't stall settle.
+      if (Math.hypot(p.vx, p.vy) < REST_SPEED) {
+        p.vx = 0;
+        p.vy = 0;
+      }
     }
   }
 
@@ -227,13 +244,27 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.lineTo(LANE_R, H - 70);
   ctx.stroke();
 
-  // Pins (standing bright, down faded).
+  // Pins: standing ones are bright upright circles; knocked-down ones lie flat
+  // (a faded ellipse) so you can see the rack fall before the sweep clears it.
   for (const p of gs.pins) {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, PIN_R, 0, Math.PI * 2);
-    ctx.fillStyle = p.down ? 'rgba(255,255,255,0.15)' : '#f8fafc';
-    ctx.fill();
-    if (!p.down) {
+    if (p.down) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      // Lie the pin along its travel direction (or sideways if it barely moved).
+      ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, PIN_R + 3, PIN_R - 3, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(226,232,240,0.5)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(148,163,184,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, PIN_R, 0, Math.PI * 2);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fill();
       ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -281,6 +312,8 @@ export default function Bowling() {
   const playing = phase !== 'done';
 
   /** Advance frame/deck state after a roll settles. */
+  // A roll has stopped: score it and decide what happens next, but DEFER the
+  // deck change — the fallen pins stay on screen through a sweep pause first.
   const settleRoll = useCallback(() => {
     const gs = gsRef.current;
     const after = standingCount(gs.pins);
@@ -290,19 +323,16 @@ export default function Bowling() {
     if (after === 0) playCup(); // cleared the deck (strike / spare / clean-up)
     else if (pinfall === 0) playUndo(); // whiff or gutter
 
-    const resetDeck = () => {
-      gs.pins = makePins();
-      gs.standing = 10;
-    };
-    const nextBallSameDeck = () => {
-      gs.standing = after;
-    };
+    // 'rack' = fresh ten after the sweep; 'clear' = sweep the downed pins and
+    // leave the standing ones for the next ball; 'done' = game over.
+    let afterSweep: 'rack' | 'clear' | 'done' = 'rack';
+    let note = '';
     const endFrame = (label: string) => {
       gs.frame += 1;
       gs.rollInFrame = 0;
-      resetDeck();
       setFrame(gs.frame);
-      gs.note = label;
+      afterSweep = 'rack';
+      note = label;
     };
 
     if (gs.frame < 9) {
@@ -311,44 +341,61 @@ export default function Bowling() {
           endFrame('Strike! 🎳');
         } else {
           gs.rollInFrame = 1;
-          nextBallSameDeck();
-          gs.note = pinfall === 0 ? 'Gutter — one more ball.' : `${pinfall} down — one more.`;
+          afterSweep = 'clear';
+          note = pinfall === 0 ? 'Gutter — one more ball.' : `${pinfall} down — one more.`;
         }
       } else {
         const first = gs.rolls[gs.rolls.length - 2] ?? 0;
         endFrame(first + pinfall === 10 ? 'Spare! ✅' : 'Nice frame.');
       }
     } else {
-      // 10th frame: up to three balls, resetting the deck whenever it clears.
+      // 10th frame: up to three balls, racking a fresh deck whenever it clears.
       gs.rollInFrame += 1;
       const tenth = gs.rolls.slice(gs.rolls.length - gs.rollInFrame);
       const b1 = tenth[0] ?? 0;
       const b2 = tenth[1] ?? 0;
       if (gs.rollInFrame === 1) {
-        if (pinfall === 10) resetDeck();
-        else nextBallSameDeck();
-        gs.note = pinfall === 10 ? 'Strike! One more.' : `${pinfall} down — one more.`;
+        afterSweep = pinfall === 10 ? 'rack' : 'clear';
+        note = pinfall === 10 ? 'Strike! One more.' : `${pinfall} down — one more.`;
       } else if (gs.rollInFrame === 2) {
         const thirdBall = b1 === 10 || b1 + b2 === 10;
         if (thirdBall) {
-          if (after === 0) resetDeck();
-          else nextBallSameDeck();
-          gs.note = 'Bonus ball!';
+          afterSweep = after === 0 ? 'rack' : 'clear';
+          note = 'Bonus ball!';
         } else {
-          gs.phase = 'done';
-          setPhase('done');
-          playFanfare();
-          return;
+          afterSweep = 'done';
+          note = '';
         }
       } else {
-        gs.phase = 'done';
-        setPhase('done');
-        playFanfare();
-        return;
+        afterSweep = 'done';
+        note = '';
       }
     }
 
-    setNote(gs.note);
+    gs.afterSweep = afterSweep;
+    gs.note = note;
+    setNote(note);
+    gs.phase = 'sweep';
+    gs.sweepAt = performance.now();
+  }, []);
+
+  // The sweep pause elapsed: clear the downed pins (or rack a fresh ten) and
+  // hand the next ball to the player.
+  const applySweep = useCallback(() => {
+    const gs = gsRef.current;
+    if (gs.afterSweep === 'done') {
+      gs.phase = 'done';
+      setPhase('done');
+      playFanfare();
+      return;
+    }
+    if (gs.afterSweep === 'rack') {
+      gs.pins = makePins();
+      gs.standing = 10;
+    } else {
+      gs.pins = gs.pins.filter((p) => !p.down); // sweep the fallen pins away
+      gs.standing = gs.pins.length;
+    }
     gs.ball = freshBall();
     gs.phase = 'aim';
     setPhase('aim');
@@ -392,6 +439,8 @@ export default function Bowling() {
         if ((ballDone && !pinsMoving) || now - gs.rollStart > MAX_ROLL_MS) {
           settleRoll();
         }
+      } else if (gs.phase === 'sweep' && now - gs.sweepAt > SWEEP_MS) {
+        applySweep();
       }
 
       draw(ctx, gs);
@@ -399,7 +448,7 @@ export default function Bowling() {
     };
     raf = requestAnimationFrame(frameLoop);
     return () => cancelAnimationFrame(raf);
-  }, [playing, settleRoll]);
+  }, [playing, settleRoll, applySweep]);
 
   const toField = useCallback((e: React.PointerEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
