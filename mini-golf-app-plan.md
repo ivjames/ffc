@@ -302,9 +302,14 @@ games themed to the real attractions, playable one-handed while waiting.
   descent from absolute timestamps for framerate-exact timing; bat swings on
   contact, ball flies off the bat.
 
+- **Bowling** (`/fun/bowling`) — **shipped.** Swipe up the lane to roll (angle =
+  aim, length = power, an angled shot hooks); real ball↔pin↔pin collision physics
+  knock the rack down, scored with standard 10-frame rules (strikes, spares,
+  10th-frame fill balls). Settlement waits for the pins to finish toppling so a
+  fast strike scores correctly.
+
 Remaining, roughly increasing build cost:
 
-- **Bowling** — aim + spin a roll down a lane at pins.
 - **Go-karts** — lap-time time-trial on a simple track.
 
 Each is a self-contained `src/features/<game>/` route wired into the `/fun` hub

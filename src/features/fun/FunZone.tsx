@@ -72,6 +72,13 @@ const TILES: Tile[] = [
     blurb: 'Time your swing — crush it for a home run.',
     accent: '#ef4444',
   },
+  {
+    to: '/fun/bowling',
+    emoji: '🎳',
+    title: 'Bowling',
+    blurb: 'Roll a full 10-frame game — go for the strike.',
+    accent: '#a855f7',
+  },
 ];
 
 export default function FunZone() {
