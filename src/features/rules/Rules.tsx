@@ -1,7 +1,8 @@
 import { Screen, TopBar, Content } from '../../ui/components';
 import { coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
-import { accentInk } from '../../lib/theme';
+import { accentInk, rampFor, themeVars, themeEmoji } from '../../lib/theme';
+import type { CSSProperties } from 'react';
 import { STROKE_CAP } from '../../lib/scoring';
 
 // §5.3 Rules — general rules + optional per-course notes. Static bundled
@@ -40,24 +41,43 @@ export default function Rules() {
               Course notes
             </h2>
             <div className="space-y-4">
-              {noted.map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded-2xl border border-fairway-800 bg-fairway-900/40 p-4"
-                >
-                  <div className="mb-2 font-bold" style={{ color: accentInk(c.theme) }}>
-                    {c.name}
+              {noted.map((c) => {
+                const ink = accentInk(c.theme);
+                // Recolor the card to the course's own theme: overriding the
+                // `--color-fairway-*` vars re-points every fairway-* utility
+                // inside, and a themed-900 surface with an accent glow lifts it
+                // off the venue-green page. Contrast is AA-verified per theme.
+                const cardStyle: CSSProperties = {
+                  ...(themeVars(c.theme) as CSSProperties),
+                  background: `radial-gradient(120% 80% at 0% 0%, ${c.accent}1f, transparent 60%), ${rampFor(c.theme)[900]}`,
+                };
+                return (
+                  <div
+                    key={c.id}
+                    style={cardStyle}
+                    className="rounded-2xl border border-fairway-700/60 p-4"
+                  >
+                    <div className="mb-3 flex items-center gap-2">
+                      <span aria-hidden className="text-lg">
+                        {themeEmoji(c.theme)}
+                      </span>
+                      <span className="font-bold" style={{ color: ink }}>
+                        {c.name}
+                      </span>
+                    </div>
+                    <ul className="space-y-2">
+                      {c.rules!.map((r, i) => (
+                        <li key={i} className="flex gap-2 text-sm text-fairway-100/85">
+                          <span aria-hidden style={{ color: ink }}>
+                            •
+                          </span>
+                          <span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-2">
-                    {c.rules!.map((r, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-fairway-100/80">
-                        <span style={{ color: accentInk(c.theme) }}>•</span>
-                        <span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
