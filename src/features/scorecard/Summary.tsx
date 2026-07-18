@@ -195,7 +195,18 @@ function NineGrid({
   const ink = accentInk(course.theme);
   return (
     <div className="overflow-hidden rounded-xl border border-fairway-800">
-      <table className="w-full border-collapse text-center text-sm">
+      {/* Fixed layout so columns are sized by these widths, not their content.
+          Otherwise the back nine's two-digit hole numbers (10–18) and varying
+          scores make its columns wider than the front nine's, so the two tables
+          don't line up. The label column is a fixed width and the nine hole
+          columns split the rest evenly and identically across both nines. */}
+      <table className="w-full table-fixed border-collapse text-center text-sm">
+        <colgroup>
+          <col className="w-16" />
+          {holes.map((h) => (
+            <col key={h} />
+          ))}
+        </colgroup>
         <thead>
           <tr className="bg-fairway-900/60 text-fairway-100/70">
             <th className="px-2 py-2 text-left font-semibold">{label}</th>
