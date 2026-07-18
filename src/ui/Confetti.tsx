@@ -62,8 +62,16 @@ export default function Confetti({ fire = true }: { fire?: boolean }) {
     const resize = () => {
       W = window.innerWidth;
       H = window.innerHeight;
+      // Buffer is sized in device pixels for crispness…
       canvas.width = W * dpr;
       canvas.height = H * dpr;
+      // …but <canvas> is a replaced element: with only `fixed inset-0` and no
+      // explicit CSS size it renders at its INTRINSIC (buffer) size, so on a
+      // high-DPI phone (devicePixelRatio ≥ 2 — every iPhone) it displayed at 2×
+      // the viewport and the corner bursts fired off-screen. Pin the CSS size to
+      // the viewport so display px stay decoupled from the buffer.
+      canvas.style.width = `${W}px`;
+      canvas.style.height = `${H}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
