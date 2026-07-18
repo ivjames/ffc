@@ -3,47 +3,54 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playStroke, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 
 // §12 Skee-Ball — the first attraction mini-game. Swipe up the lane to roll a
-// ball into the target: nail the center for 50, thread the top corners for 100,
-// or come up short for a gutter zero. Nine balls a game.
+// ball into the target: each scoring ring has a hole the ball drops into. Thread
+// the top corners for 100, nail the small center ring for 50, or come up short
+// for a gutter zero. Nine balls a game.
 //
-// The landing is fully deterministic from the swipe (no RNG) and a live reticle
-// previews exactly where the ball will drop, so it's pure skill — the same
-// "feels fair in the hand" bar as Arcade Putt. Everything is client-side canvas;
-// works offline.
+// The landing is deterministic from the swipe, but the aim trail FADES OUT before
+// the target — you commit to a line and power without a pinpoint preview, so
+// judging the roll is the skill. All client-side canvas; works offline.
 
 // —— Field + physics (logical units; the canvas scales to fit) ———————————————
 const W = 360;
 const H = 560;
 const BALL_R = 12;
 const START = { x: W / 2, y: 500 };
-const CENTER = { x: W / 2, y: 150 };
 
-// Concentric scoring rings (outer radius → points).
-const RINGS: Array<{ r: number; pts: number; fill: string }> = [
-  { r: 140, pts: 10, fill: '#1e3a5f' },
-  { r: 104, pts: 20, fill: '#2563eb' },
-  { r: 74, pts: 30, fill: '#7c3aed' },
-  { r: 48, pts: 40, fill: '#db2777' },
-  { r: 24, pts: 50, fill: '#f59e0b' },
+// Scoring targets: each is a ring (rim radius R) with a hole at its bottom that
+// the ball rolls down into. Laid out as a center column (higher value = further
+// up the lane = more power) with the two hard 100 holes in the top corners.
+type Hole = { cx: number; cy: number; R: number; pts: number; color: string };
+const HOLES: Hole[] = [
+  { cx: 88, cy: 74, R: 18, pts: 100, color: '#22c55e' },
+  { cx: W - 88, cy: 74, R: 18, pts: 100, color: '#22c55e' },
+  { cx: W / 2, cy: 96, R: 26, pts: 50, color: '#f59e0b' },
+  { cx: W / 2, cy: 160, R: 30, pts: 40, color: '#ec4899' },
+  { cx: W / 2, cy: 226, R: 32, pts: 30, color: '#a855f7' },
+  { cx: W / 2, cy: 292, R: 34, pts: 20, color: '#3b82f6' },
+  { cx: W / 2, cy: 358, R: 36, pts: 10, color: '#38bdf8' },
 ];
-// The two high-value corner holes.
-const CORNERS = [
-  { x: 72, y: 70 },
-  { x: W - 72, y: 70 },
-];
-const CORNER_R = 22;
-const CORNER_PTS = 100;
-const TOP_GUARD = 34; // an apex above this flew off the back → 0
+const HOLE_R = 8; // the drop hole at the bottom of each ring
+const FUNNEL = 12; // lands within R + FUNNEL of a ring get funneled in
 
 const GRAV = 0.5;
 const MIN_V = 11;
 const MAX_V = 25;
 const MAX_DRAG = 300;
 const BALLS = 9;
-const FLIGHT_MS = 620; // roll animation duration
+const FLIGHT_MS = 560; // arc-to-landing animation
+const SINK_MS = 320; // roll-down-into-the-hole animation
 const NEXT_DELAY_MS = 850; // pause on the result before the next ball
+const FADE_END_Y = 350; // the aim trail is fully faded above this y (before the target)
 
 type Vel = { vx0: number; vy0: number };
+
+const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+
+/** The drop hole at the bottom-inside of a ring. */
+function holeDrop(h: Hole): { x: number; y: number } {
+  return { x: h.cx, y: h.cy + h.R - HOLE_R - 4 };
+}
 
 /** Map a swipe (drag delta) to a launch velocity, or null if it isn't a valid
  *  upward roll. */
@@ -72,26 +79,38 @@ function landingPoint(v: Vel): { x: number; y: number } | null {
   return trajectory(v, apexTime(v));
 }
 
-/** Points scored for a landing point. Corners first, then rings by radius. */
-function scoreAt(p: { x: number; y: number } | null): number {
-  if (!p) return 0;
-  for (const c of CORNERS) if (Math.hypot(p.x - c.x, p.y - c.y) <= CORNER_R) return CORNER_PTS;
-  if (p.y < TOP_GUARD) return 0; // over the back
-  const d = Math.hypot(p.x - CENTER.x, p.y - CENTER.y);
-  // RINGS is ordered outer→inner, so scan from the innermost (highest value)
-  // outward and take the first ring the point falls inside.
-  for (let i = RINGS.length - 1; i >= 0; i--) if (d <= RINGS[i].r) return RINGS[i].pts;
-  return 0; // short / wide → gutter
+/** The ring/hole a landing point drops into (nearest that captures it), or null
+ *  for a gutter miss. */
+function holeAt(p: { x: number; y: number } | null): Hole | null {
+  if (!p) return null;
+  let best: Hole | null = null;
+  let bestD = Infinity;
+  for (const h of HOLES) {
+    const d = Math.hypot(p.x - h.cx, p.y - h.cy);
+    if (d <= h.R + FUNNEL && d < bestD) {
+      best = h;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
-type Phase = 'aim' | 'rolling' | 'scored' | 'done';
-type Shot = { v: Vel; land: { x: number; y: number }; score: number; startedAt: number };
+type Phase = 'aim' | 'flight' | 'sink' | 'scored' | 'done';
+type Shot = {
+  v: Vel;
+  land: { x: number; y: number };
+  hole: Hole | null;
+  score: number;
+  startedAt: number;
+  sinkAt: number;
+};
 type Drag = { active: boolean; sx: number; sy: number; dx: number; dy: number };
 type GS = {
   phase: Phase;
   ballNo: number; // 0-based index of the current ball
   total: number;
   ball: { x: number; y: number };
+  ballR: number; // shrinks as the ball drops into a hole
   drag: Drag;
   shot: Shot | null;
   lastPts: number | null;
@@ -103,6 +122,7 @@ function freshGS(): GS {
     ballNo: 0,
     total: 0,
     ball: { ...START },
+    ballR: BALL_R,
     drag: { active: false, sx: 0, sy: 0, dx: 0, dy: 0 },
     shot: null,
     lastPts: null,
@@ -122,97 +142,81 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.lineWidth = 2;
   ctx.strokeRect(24, 0, W - 48, H);
 
-  // Target rings, outer → inner, each labeled with its value.
-  for (const ring of RINGS) {
+  // Target rings + their drop holes. Draw lower (bigger) rings first so the
+  // upper rings layer cleanly on top where they touch.
+  const ordered = [...HOLES].sort((a, b) => b.cy - a.cy);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const h of ordered) {
+    // Funnel dish.
     ctx.beginPath();
-    ctx.arc(CENTER.x, CENTER.y, ring.r, 0, Math.PI * 2);
-    ctx.fillStyle = ring.fill;
+    ctx.arc(h.cx, h.cy, h.R, 0, Math.PI * 2);
+    ctx.fillStyle = h.color + '26';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = h.color;
+    ctx.stroke();
+    // Value label near the top of the ring.
+    ctx.fillStyle = '#e5edf7';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillText(String(h.pts), h.cx, h.cy - h.R * 0.42);
+    // The hole at the bottom of the ring.
+    const dp = holeDrop(h);
+    ctx.beginPath();
+    ctx.arc(dp.x, dp.y, HOLE_R, 0, Math.PI * 2);
+    ctx.fillStyle = '#05070d';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.font = 'bold 12px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  // Ring value labels along the top edge of each band.
-  for (const ring of RINGS) {
-    const inner = RINGS.find((r) => r.r < ring.r)?.r ?? 0;
-    const y = CENTER.y - (ring.r + inner) / 2;
-    ctx.fillText(String(ring.pts), CENTER.x, y);
-  }
 
-  // Corner 100 holes.
-  for (const c of CORNERS) {
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, CORNER_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#0b1220';
-    ctx.fill();
-    ctx.strokeStyle = '#22c55e';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    ctx.fillStyle = '#4ade80';
-    ctx.font = 'bold 11px system-ui, sans-serif';
-    ctx.fillText('100', c.x, c.y);
-  }
-
-  // Aim guide + landing reticle while dragging a valid shot.
+  // Aim trail while dragging — dots that FADE OUT before reaching the target, so
+  // the landing spot isn't given away. Neutral color (never reveals the score).
   if (gs.phase === 'aim' && gs.drag.active) {
     const v = launchVelocity(gs.drag.dx, gs.drag.dy);
-    const land = v && landingPoint(v);
-    if (v && land) {
-      const pts = scoreAt(land);
-      const color = pts >= 100 ? '#4ade80' : pts > 0 ? '#fbbf24' : '#64748b';
-      // Dotted parabola from ball to landing.
+    if (v && v.vy0 < 0) {
       const tStar = apexTime(v);
-      ctx.setLineDash([5, 6]);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let i = 0; i <= 24; i++) {
-        const p = trajectory(v, (i / 24) * tStar);
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
+      ctx.fillStyle = '#cbd5e1';
+      for (let i = 1; i <= 30; i++) {
+        const p = trajectory(v, (i / 30) * tStar);
+        // Fade from the ball (full) to nothing at FADE_END_Y (below the target).
+        const a = clamp((p.y - FADE_END_Y) / (START.y - FADE_END_Y), 0, 1);
+        if (a <= 0.03) continue;
+        ctx.globalAlpha = a * a * 0.7;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2);
+        ctx.fill();
       }
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Reticle at the predicted landing.
-      ctx.beginPath();
-      ctx.arc(land.x, land.y, 10, 0, Math.PI * 2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
   }
 
   // The ball.
-  ctx.beginPath();
-  ctx.arc(gs.ball.x, gs.ball.y, BALL_R, 0, Math.PI * 2);
-  const grad = ctx.createRadialGradient(
-    gs.ball.x - 4,
-    gs.ball.y - 4,
-    2,
-    gs.ball.x,
-    gs.ball.y,
-    BALL_R,
-  );
-  grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(1, '#c7d2e0');
-  ctx.fillStyle = grad;
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  if (gs.ballR > 0.5) {
+    ctx.beginPath();
+    ctx.arc(gs.ball.x, gs.ball.y, gs.ballR, 0, Math.PI * 2);
+    const grad = ctx.createRadialGradient(gs.ball.x - 4, gs.ball.y - 4, 2, gs.ball.x, gs.ball.y, gs.ballR);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(1, '#c7d2e0');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 
   // Floating "+N" once the ball has settled.
   if (gs.phase === 'scored' && gs.shot && gs.lastPts !== null) {
-    const { x, y } = gs.shot.land;
+    const at = gs.shot.hole ? holeDrop(gs.shot.hole) : gs.shot.land;
     ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.textAlign = 'center';
     ctx.fillStyle = gs.lastPts >= 100 ? '#4ade80' : gs.lastPts > 0 ? '#fbbf24' : '#94a3b8';
-    ctx.fillText(gs.lastPts > 0 ? `+${gs.lastPts}` : 'MISS', x, Math.max(y - 22, 20));
+    ctx.fillText(gs.lastPts > 0 ? `+${gs.lastPts}` : 'MISS', at.x, Math.max(at.y - 24, 20));
   }
 }
+
+const easeOut = (t: number) => 1 - (1 - t) * (1 - t) * (1 - t);
 
 export default function SkeeBall() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -236,6 +240,7 @@ export default function SkeeBall() {
     }
     gs.ballNo += 1;
     gs.ball = { ...START };
+    gs.ballR = BALL_R;
     gs.shot = null;
     gs.lastPts = null;
     gs.phase = 'aim';
@@ -244,8 +249,25 @@ export default function SkeeBall() {
     setPhase('aim');
   }, []);
 
-  // Render + roll-animation loop. The canvas only exists on the play view, so
-  // this re-initializes whenever it mounts.
+  // Score the current shot, then queue the next ball.
+  const finalize = useCallback(() => {
+    const gs = gsRef.current;
+    const shot = gs.shot;
+    if (!shot) return;
+    gs.total += shot.score;
+    gs.lastPts = shot.score;
+    gs.phase = 'scored';
+    setTotal(gs.total);
+    setLastPts(shot.score);
+    setPhase('scored');
+    if (shot.score >= 100) playFanfare();
+    else if (shot.score > 0) (shot.score >= 40 ? playCup : playDing)();
+    else playUndo();
+    nextTimer.current = window.setTimeout(loadNextBall, NEXT_DELAY_MS);
+  }, [loadNextBall]);
+
+  // Render + animation loop. The canvas only exists on the play view, so this
+  // re-initializes whenever it mounts.
   useEffect(() => {
     if (!playing) return;
     const canvas = canvasRef.current;
@@ -261,32 +283,42 @@ export default function SkeeBall() {
     let lastFrame = performance.now();
     const frame = (now: number) => {
       const gs = gsRef.current;
-      // Pause the flight clock while the tab/app is backgrounded so a resumed
-      // game doesn't teleport the ball (matches the PWA/Capacitor lifecycle).
+      // Pause the animation clock while backgrounded so a resumed game doesn't
+      // teleport the ball (PWA/Capacitor lifecycle).
       if (document.hidden) {
-        if (gs.shot) gs.shot.startedAt += now - lastFrame;
+        if (gs.shot) {
+          gs.shot.startedAt += now - lastFrame;
+          gs.shot.sinkAt += now - lastFrame;
+        }
         lastFrame = now;
         raf = requestAnimationFrame(frame);
         return;
       }
       lastFrame = now;
 
-      if (gs.phase === 'rolling' && gs.shot) {
+      if (gs.phase === 'flight' && gs.shot) {
         const p = Math.min((now - gs.shot.startedAt) / FLIGHT_MS, 1);
         gs.ball = trajectory(gs.shot.v, p * apexTime(gs.shot.v));
         if (p >= 1) {
           gs.ball = { ...gs.shot.land };
-          gs.total += gs.shot.score;
-          gs.lastPts = gs.shot.score;
-          gs.phase = 'scored';
-          setTotal(gs.total);
-          setLastPts(gs.shot.score);
-          setPhase('scored');
-          if (gs.shot.score >= 100) playFanfare();
-          else if (gs.shot.score > 0) (gs.shot.score >= 40 ? playCup : playDing)();
-          else playUndo();
-          nextTimer.current = window.setTimeout(loadNextBall, NEXT_DELAY_MS);
+          if (gs.shot.hole) {
+            gs.phase = 'sink';
+            gs.shot.sinkAt = now;
+          } else {
+            finalize(); // gutter — nothing to drop into
+          }
         }
+      } else if (gs.phase === 'sink' && gs.shot && gs.shot.hole) {
+        const q = Math.min((now - gs.shot.sinkAt) / SINK_MS, 1);
+        const e = easeOut(q);
+        const dp = holeDrop(gs.shot.hole);
+        gs.ball = {
+          x: gs.shot.land.x + (dp.x - gs.shot.land.x) * e,
+          y: gs.shot.land.y + (dp.y - gs.shot.land.y) * e,
+        };
+        // Shrink into the hole over the last part of the roll.
+        gs.ballR = BALL_R * (1 - 0.85 * clamp((q - 0.55) / 0.45, 0, 1));
+        if (q >= 1) finalize();
       }
 
       draw(ctx, gs);
@@ -294,7 +326,7 @@ export default function SkeeBall() {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [playing, loadNextBall]);
+  }, [playing, finalize]);
 
   // Clear a pending "next ball" timer if we leave the screen mid-result.
   useEffect(() => {
@@ -340,9 +372,11 @@ export default function SkeeBall() {
     const v = launchVelocity(gs.drag.dx, gs.drag.dy);
     const land = v && landingPoint(v);
     if (!v || !land) return; // not a valid roll — ball not consumed
-    gs.shot = { v, land, score: scoreAt(land), startedAt: performance.now() };
-    gs.phase = 'rolling';
-    setPhase('rolling');
+    const hole = holeAt(land);
+    gs.shot = { v, land, hole, score: hole ? hole.pts : 0, startedAt: performance.now(), sinkAt: 0 };
+    gs.ballR = BALL_R;
+    gs.phase = 'flight';
+    setPhase('flight');
     playStroke();
   }, []);
 
@@ -385,7 +419,7 @@ export default function SkeeBall() {
           ? `Nice — +${lastPts}! Line up the next one.`
           : 'Gutter! Line up the next one.'
         : 'Swipe up the lane to roll — aim the corners for 100.'
-      : phase === 'rolling'
+      : phase === 'flight' || phase === 'sink'
         ? 'Rolling…'
         : lastPts && lastPts > 0
           ? `+${lastPts}!`
