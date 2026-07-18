@@ -4,25 +4,32 @@ import { playStroke, playCup, playFanfare } from '../../lib/sound';
 
 // §12 Go-Karts — the seventh attraction mini-game. A top-down 3-lap time trial
 // on a procedural closed circuit. One-touch control: press to accelerate, and
-// press left/right of center to steer that way (release to coast). Leave the
-// asphalt and the grass grabs you. Fixed-timestep physics, client-side, offline.
+// press left/right of center to steer that way (release to coast). Solid walls
+// line both edges of the asphalt: run wide and you scrape the barrier and slide
+// along it instead of flying off across the grass. Fixed-timestep physics,
+// client-side, offline.
 
 // —— Track + physics (logical units; the canvas scales to fit) ————————————————
 const W = 340;
 const H = 560;
 const TRACK_W = 62; // asphalt width
+const WALL = 6; // barrier thickness drawn outside each asphalt edge
+const KART_R = 7; // kart collision radius (half its body width)
 const LAPS = 3;
 
 const FIXED = 1000 / 120;
 const ACCEL = 0.06; // gentler pickup
 const MAX_SPEED = 2.3; // calmer top speed (was twitchy-fast)
-const OFF_MAX = 1.0; // top speed on grass
-const OFF_DRAG = 0.9; // extra per-step drag off track
 const COAST = 0.985; // decel when not on the gas
+const WALL_SLIDE = 0.55; // speed kept when scraping along a barrier
 const TURN = 0.042; // rad/step at full lock
 const TURN_SPEED = 1.35; // speed needed for full steering authority
 const STEER_SMOOTH = 0.22; // how fast the effective steer eases toward the input
 const COUNTDOWN_MS = 2600;
+
+// The wall sits half the kart's width in from the asphalt edge, so the kart body
+// rests against the barrier rather than half-buried in it.
+const WALL_DIST = TRACK_W / 2 - KART_R;
 
 /** Procedural closed circuit — an oval with an S-kink, sampled as a polyline. */
 function buildTrack() {
@@ -49,10 +56,13 @@ function buildTrack() {
 }
 const TRACK = buildTrack();
 
-/** Nearest point on the track centerline → distance + arc-length fraction. */
-function project(x: number, y: number): { dist: number; f: number } {
+/** Nearest point on the track centerline → distance, arc-length fraction, and
+ * that nearest point (so callers can build the wall normal from kart → center). */
+function project(x: number, y: number): { dist: number; f: number; px: number; py: number } {
   let best = Infinity;
   let bestS = 0;
+  let bestX = x;
+  let bestY = y;
   for (let i = 0; i < TRACK.N; i++) {
     const p = TRACK.pts[i];
     const q = TRACK.pts[(i + 1) % TRACK.N];
@@ -67,9 +77,11 @@ function project(x: number, y: number): { dist: number; f: number } {
     if (d < best) {
       best = d;
       bestS = TRACK.cum[i] + u * Math.hypot(dx, dy);
+      bestX = px;
+      bestY = py;
     }
   }
-  return { dist: best, f: bestS / TRACK.total };
+  return { dist: best, f: bestS / TRACK.total, px: bestX, py: bestY };
 }
 
 type Phase = 'countdown' | 'race' | 'done';
@@ -115,15 +127,13 @@ const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi 
 /** One physics substep. Returns true when a lap was just completed. */
 function step(gs: GS): boolean {
   const k = gs.kart;
-  const onTrack = project(k.x, k.y).dist <= TRACK_W / 2;
 
   if (gs.touch.active) {
     k.speed += ACCEL;
   } else {
     k.speed *= COAST;
   }
-  if (!onTrack) k.speed *= OFF_DRAG;
-  k.speed = clamp(k.speed, 0, onTrack ? MAX_SPEED : OFF_MAX);
+  k.speed = clamp(k.speed, 0, MAX_SPEED);
 
   // Steering: press left/right of center; authority scales with speed. The
   // effective steer eases toward the input (and back to center on release) so
@@ -134,9 +144,29 @@ function step(gs: GS): boolean {
 
   k.x += Math.cos(k.heading) * k.speed;
   k.y += Math.sin(k.heading) * k.speed;
-  // Keep the kart on the canvas.
-  k.x = clamp(k.x, 6, W - 6);
-  k.y = clamp(k.y, 6, H - 6);
+
+  // Barriers line both edges of the asphalt. If the kart's center drifts past the
+  // wall distance from the centerline, shove it back to the barrier and cancel
+  // the velocity heading into the wall — the leftover along-wall motion (bled by
+  // WALL_SLIDE) lets the kart scrape and slide instead of stopping dead or
+  // flying off across the grass.
+  const pr = project(k.x, k.y);
+  if (pr.dist > WALL_DIST) {
+    // Outward normal: from the nearest centerline point toward the kart.
+    const nx = (k.x - pr.px) / (pr.dist || 1);
+    const ny = (k.y - pr.py) / (pr.dist || 1);
+    k.x = pr.px + nx * WALL_DIST;
+    k.y = pr.py + ny * WALL_DIST;
+    const vx = Math.cos(k.heading) * k.speed;
+    const vy = Math.sin(k.heading) * k.speed;
+    const vn = vx * nx + vy * ny; // component driving into the wall
+    if (vn > 0) {
+      const tx = vx - vn * nx; // slide component tangent to the wall
+      const ty = vy - vn * ny;
+      k.speed = Math.hypot(tx, ty) * WALL_SLIDE;
+      if (k.speed > 0.001) k.heading = Math.atan2(ty, tx);
+    }
+  }
 
   // Lap progress — count a forward wrap past start/finish, once past halfway.
   const f = project(k.x, k.y).f;
@@ -175,6 +205,17 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   };
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+  // Barriers: a solid band the full track width plus a wall on each edge, drawn
+  // under the asphalt so the asphalt masks the middle and leaves a wall ring.
+  trace();
+  ctx.strokeStyle = '#0b0f14';
+  ctx.lineWidth = TRACK_W + WALL * 2 + 2;
+  ctx.stroke();
+  trace();
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = TRACK_W + WALL * 2;
+  ctx.stroke();
+  // Asphalt on top, leaving the wall ring exposed on both edges.
   trace();
   ctx.strokeStyle = '#3f4650';
   ctx.lineWidth = TRACK_W;
@@ -426,7 +467,7 @@ export default function GoKarts() {
         <p className="mt-3 min-h-[2.5rem] text-center text-sm text-fairway-100/80">
           {phase === 'countdown'
             ? 'Get ready…'
-            : 'Press to go — press left or right of center to steer. Stay on the asphalt!'}
+            : 'Press to go — press left or right of center to steer. Keep off the walls!'}
         </p>
       </Content>
     </Screen>
