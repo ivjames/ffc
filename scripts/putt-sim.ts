@@ -15,11 +15,18 @@ function freeAt(x: number, y: number, h: Hole): boolean {
   return true;
 }
 
-// A hazard blob must sit fully inside the surface, or the surface clip chops it
-// into a crescent when drawn.
+// Contract (also for procedural holes): a hazard blob must sit fully inside the
+// surface, with a small margin, so it renders as a whole blob rather than a
+// crescent cut off at the rail. Hazards are drawn with no clip, so this is the
+// only thing keeping them from spilling into the rough.
+const HAZARD_MARGIN = 2;
 function insideSurface(segs: Seg[] | undefined, h: Hole): boolean {
   if (!segs) return true;
-  return segs.every((s) => sdSurface(s.ax, s.ay, h) <= -s.r && sdSurface(s.bx, s.by, h) <= -s.r);
+  return segs.every(
+    (s) =>
+      sdSurface(s.ax, s.ay, h) <= -(s.r + HAZARD_MARGIN) &&
+      sdSurface(s.bx, s.by, h) <= -(s.r + HAZARD_MARGIN),
+  );
 }
 
 // BFS over free cells: is the cup reachable from the tee through the green,
