@@ -11,6 +11,8 @@ import {
   ROUGH_BAND,
   HOLES,
   stepPhysics,
+  sdBlob,
+  sdSurface,
   type Seg,
   type Ball,
   type Hole,
@@ -31,8 +33,11 @@ import { generateHole } from './generate';
 // is input, the rAF loop, and rendering.
 
 type Mode = 'course' | 'endless';
-type Phase = 'aim' | 'rolling' | 'sunk' | 'done';
+type Phase = 'aim' | 'rolling' | 'splash' | 'sunk' | 'done';
 type Drag = { active: boolean; sx: number; sy: number; dx: number; dy: number };
+// A splash-and-sink animation: the ball sinks at (sx,sy), ripples spread, then it
+// re-drops (grows back in) at (dx,dy) just outside the pool. `p` runs 0→1.
+type Splash = { sx: number; sy: number; dx: number; dy: number; p: number };
 type GS = {
   holes: Hole[];
   mode: Mode;
@@ -42,10 +47,14 @@ type GS = {
   holeIndex: number;
   strokes: number;
   drag: Drag;
+  splash: Splash | null;
 };
 
 // Distinct derived seeds per hole so an endless run is reproducible.
 const SEED_SALT = 0x9e3779b1;
+
+// How long the splash-and-sink plays before the ball is live again (ms).
+const SPLASH_MS = 950;
 
 // After sinking, linger on the result so the score reads clearly, then advance
 // on its own so a round flows without a tap between every hole. The "Next hole"
@@ -107,6 +116,146 @@ function fillCapsule(ctx: CanvasRenderingContext2D, s: Seg, extra: number) {
   }
 }
 
+// --- filleted hazard/rough blobs --------------------------------------------
+// Hazards and rough are clusters of overlapping discs. Filling them as separate
+// capsules (fillCapsule) unions them, but the union keeps a sharp concave waist
+// at every disc crossing, so a chain reads as a bunch of grapes. Instead we
+// rasterize each cluster from its *smooth* field (sdBlob, the same one collision
+// uses): colour each pixel by its signed distance so the outline — and every
+// junction — is a filleted blob. Layers (rim → fill → shimmer) fall straight out
+// of distance bands. All of it is clipped to the surface, so a patch or a blob
+// that rounds out toward the rail is trimmed cleanly at it rather than spilling
+// onto the off-surface background.
+//
+// This is per-pixel, so it's built once per hole into an offscreen canvas and
+// cached; the frame loop just blits it. SS supersamples for a crisp edge.
+const SS = 2;
+const hazardCache = new Map<Hole, HTMLCanvasElement | null>();
+
+type RGB = [number, number, number];
+// Two-value hash of integer pixel coords → [0,1), for a stable rough fleck.
+function fleck(x: number, y: number): number {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function buildHazardLayer(hole: Hole): HTMLCanvasElement | null {
+  if (!hole.rough && !hole.water && !hole.pits) return null;
+  const cv = document.createElement('canvas');
+  cv.width = W * SS;
+  cv.height = H * SS;
+  const c = cv.getContext('2d');
+  if (!c) return null;
+  const img = c.createImageData(cv.width, cv.height);
+  const d = img.data;
+  const set = (o: number, col: RGB, a = 255) => {
+    d[o] = col[0];
+    d[o + 1] = col[1];
+    d[o + 2] = col[2];
+    d[o + 3] = a;
+  };
+  for (let iy = 0; iy < cv.height; iy++) {
+    const py = iy / SS;
+    for (let ix = 0; ix < cv.width; ix++) {
+      const px = ix / SS;
+      const o = (iy * cv.width + ix) * 4;
+      // Everything here is clipped to the surface: the smooth (sdBlob) contour can
+      // round out a hair past the rail near a junction, so gating on the surface
+      // trims it at the rail instead of letting it spill onto the off-surface
+      // background (and matches the on-surface splash gate in the physics).
+      const onSurface = sdSurface(px, py, hole) < 0;
+      // Rough patches (bottom layer). A darker lip rings the patch; a sparse fleck
+      // breaks up the fill so it reads as longer grass.
+      if (hole.rough && onSurface) {
+        const sd = sdBlob(px, py, hole.rough);
+        if (sd < 0) {
+          if (sd > -3) set(o, [30, 84, 48]);
+          else set(o, fleck(ix, iy) > 0.86 ? [52, 122, 70] : [40, 104, 58]);
+        }
+      }
+      // Water — deep rim, water, then a lighter shimmer in the middle.
+      if (hole.water && onSurface) {
+        const sd = sdBlob(px, py, hole.water);
+        if (sd < -6) set(o, [120, 190, 235]);
+        else if (sd < 0) set(o, [42, 151, 220]);
+        else if (sd < 2) set(o, [21, 101, 168]);
+      }
+      // Sand bunkers — darker sand rim, then the sand surface.
+      if (hole.pits && onSurface) {
+        const sd = sdBlob(px, py, hole.pits);
+        if (sd < 0) set(o, [227, 205, 140]);
+        else if (sd < 2) set(o, [184, 153, 92]);
+      }
+    }
+  }
+  c.putImageData(img, 0, 0);
+  return cv;
+}
+
+function hazardLayer(hole: Hole): HTMLCanvasElement | null {
+  if (!hazardCache.has(hole)) {
+    // Endless appends fresh holes forever; cap the cache (Map keeps insertion
+    // order) so we don't retain a canvas per hole for the whole run.
+    if (hazardCache.size >= 12) hazardCache.delete(hazardCache.keys().next().value!);
+    hazardCache.set(hole, buildHazardLayer(hole));
+  }
+  return hazardCache.get(hole) ?? null;
+}
+
+// The splash-and-sink, driven by progress s.p (0→1): ripples spread from where
+// the ball went under, the ball shrinks away as it sinks, then it grows back in
+// at the re-drop spot (already computed clear of the pool) with a landing ripple.
+function drawSplash(ctx: CanvasRenderingContext2D, s: Splash) {
+  const p = s.p;
+
+  // Ripples from the entry point — a few staggered rings expanding and fading.
+  const RINGS = 3;
+  for (let i = 0; i < RINGS; i++) {
+    const rp = p * 1.5 - i * 0.22;
+    if (rp <= 0 || rp >= 1) continue;
+    ctx.strokeStyle = `rgba(210,235,255,${0.55 * (1 - rp)})`;
+    ctx.lineWidth = 2 * (1 - rp) + 0.6;
+    ctx.beginPath();
+    ctx.arc(s.sx, s.sy, BALL_R * (0.5 + rp * 2.6), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // The ball sinking: shrinks and dims, gone by ~55% of the way through.
+  const sinkP = Math.min(p / 0.55, 1);
+  if (sinkP < 1) {
+    ctx.save();
+    ctx.globalAlpha = 1 - sinkP * 0.5;
+    ctx.fillStyle = '#eef2f6';
+    ctx.beginPath();
+    ctx.arc(s.sx, s.sy + sinkP * 2, BALL_R * (1 - sinkP), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Re-drop: the ball grows back in just outside the pool over the last third,
+  // with a small landing ripple so it reads as reappearing clear of the water.
+  const dropP = Math.max(0, (p - 0.68) / 0.32);
+  if (dropP > 0) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(s.dx, s.dy, BALL_R * Math.min(1, dropP), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    if (dropP < 1) {
+      ctx.strokeStyle = `rgba(240,253,244,${0.5 * (1 - dropP)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(s.dx, s.dy, BALL_R + 4 + dropP * 6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+}
+
 function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   const hole = gs.holes[gs.holeIndex];
   if (!hole) return;
@@ -132,27 +281,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillStyle = '#37c06d';
   for (const s of hole.green) fillCapsule(ctx, s, -ROUGH_BAND);
 
-  // Hazards are authored fully inside the surface (the sim enforces it), so
-  // they're drawn straight on top — no clipping, which is what previously
-  // chopped valid blobs into crescents.
-
-  // Water hazards — deep rim, water, and a lighter shimmer.
-  if (hole.water) {
-    ctx.fillStyle = '#1565a8';
-    for (const s of hole.water) fillCapsule(ctx, s, 2);
-    ctx.fillStyle = '#2a97dc';
-    for (const s of hole.water) fillCapsule(ctx, s, 0);
-    ctx.fillStyle = 'rgba(186,230,253,0.45)';
-    for (const s of hole.water) fillCapsule(ctx, s, -6);
-  }
-
-  // Sand bunkers — darker sand rim, then the sand surface.
-  if (hole.pits) {
-    ctx.fillStyle = '#b8995c';
-    for (const s of hole.pits) fillCapsule(ctx, s, 2);
-    ctx.fillStyle = '#e3cd8c';
-    for (const s of hole.pits) fillCapsule(ctx, s, 0);
-  }
+  // Rough patches, water and sand — rasterized once per hole from their smooth
+  // fields (sdBlob) into an offscreen layer so every cluster is a filleted blob,
+  // not a bunch of grapes — then blitted here over the surface. Rough is under
+  // the hazards; walls (below) stay on top.
+  const layer = hazardLayer(hole);
+  if (layer) ctx.drawImage(layer, 0, 0, W, H);
 
   // Walls — bright candy-colored rails/bumpers, one hue per barrier, with a
   // dark rim and a light top highlight so they read as raised and non-green.
@@ -190,6 +324,13 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.lineTo(cup.x, cup.y - 24);
   ctx.closePath();
   ctx.fill();
+
+  // While a splash plays it owns the ball's presentation — draw the sink/re-drop
+  // and nothing else (no resting ball, no aim UI).
+  if (gs.phase === 'splash' && gs.splash) {
+    drawSplash(ctx, gs.splash);
+    return;
+  }
 
   const b = gs.ball;
 
@@ -272,6 +413,7 @@ export default function PuttGolf() {
     holeIndex: 0,
     strokes: 0,
     drag: { active: false, sx: 0, sy: 0, dx: 0, dy: 0 },
+    splash: null,
   });
 
   const [mode, setMode] = useState<Mode | null>(null);
@@ -291,6 +433,7 @@ export default function PuttGolf() {
     gs.holeIndex = index;
     gs.strokes = 0;
     gs.drag.active = false;
+    gs.splash = null;
     setPhase('aim');
     setHoleIndex(index);
     setStrokes(0);
@@ -346,10 +489,14 @@ export default function PuttGolf() {
     ctx.scale(dpr, dpr);
 
     let raf = 0;
-    const frame = () => {
+    let last = 0;
+    const splashInfo = { splashX: 0, splashY: 0 };
+    const frame = (ts: number) => {
+      const dt = last ? ts - last : 16;
+      last = ts;
       const gs = gsRef.current;
       if (gs.phase === 'rolling') {
-        const res = stepPhysics(gs.ball, gs.holes[gs.holeIndex]);
+        const res = stepPhysics(gs.ball, gs.holes[gs.holeIndex], splashInfo);
         if (res === 'sunk') {
           gs.phase = 'sunk';
           const next = [...scoresRef.current];
@@ -370,12 +517,29 @@ export default function PuttGolf() {
             }, 0);
           }
         } else if (res === 'water') {
-          gs.strokes += 1; // penalty; ball already dropped near the entry point
-          gs.phase = 'aim';
+          // Penalty now; the ball is already sitting at its safe re-drop spot.
+          // Play the splash-and-sink (sink at the entry point → re-drop grows
+          // back in) before handing control back to the player.
+          gs.strokes += 1;
+          gs.splash = {
+            sx: splashInfo.splashX,
+            sy: splashInfo.splashY,
+            dx: gs.ball.x,
+            dy: gs.ball.y,
+            p: 0,
+          };
+          gs.phase = 'splash';
           setStrokes(gs.strokes);
-          setPhase('aim');
+          setPhase('splash');
           setNote('💦 Splash! +1 penalty — dropped by the water');
         } else if (res === 'stopped') {
+          gs.phase = 'aim';
+          setPhase('aim');
+        }
+      } else if (gs.phase === 'splash' && gs.splash) {
+        gs.splash.p += dt / SPLASH_MS;
+        if (gs.splash.p >= 1) {
+          gs.splash = null;
           gs.phase = 'aim';
           setPhase('aim');
         }
@@ -494,9 +658,11 @@ export default function PuttGolf() {
       ? note || 'Pull back from the ball to aim — the arrow shows your shot — and release to putt.'
       : phase === 'rolling'
         ? 'Rolling…'
-        : phase === 'sunk'
-          ? `${result?.emoji} ${result?.label} — ${strokes} on par ${hole?.par}`
-          : '';
+        : phase === 'splash'
+          ? '💦 Splash! +1 penalty'
+          : phase === 'sunk'
+            ? `${result?.emoji} ${result?.label} — ${strokes} on par ${hole?.par}`
+            : '';
 
   // Mode picker — the entry screen.
   if (mode === null) {
@@ -573,11 +739,15 @@ export default function PuttGolf() {
                 </Button>
               )}
               {phase !== 'sunk' && (
-                <Button variant="ghost" onClick={resetHole} disabled={phase === 'rolling'}>
+                <Button
+                  variant="ghost"
+                  onClick={resetHole}
+                  disabled={phase === 'rolling' || phase === 'splash'}
+                >
                   Reset hole
                 </Button>
               )}
-              {isEndless && phase !== 'rolling' && (
+              {isEndless && phase !== 'rolling' && phase !== 'splash' && (
                 <Button variant="ghost" onClick={endRun}>
                   End run
                 </Button>
