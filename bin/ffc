@@ -45,10 +45,14 @@ die(){ printf '%serror:%s %s\n' "$c_r" "$c_o" "$*" >&2; exit 1; }
 
 # Install deps in $1. Prefer reproducible `npm ci` when a lockfile is present,
 # fall back to `npm install` if one is missing (npm ci hard-fails without it).
+# Quiet npm's noise (deprecation `npm warn`s, funding/audit nags) — we're not
+# acting on them, so they're just clutter in the deploy readout. `--loglevel=error`
+# keeps real failures visible; --no-fund/--no-audit drop the trailing nags.
+NPM_QUIET=(--loglevel=error --no-fund --no-audit)
 npm_install(){
   local dir="$1"; shift
-  if [ -f "$dir/package-lock.json" ]; then ( cd "$dir" && npm ci "$@" )
-  else log "no lockfile in $dir — using npm install"; ( cd "$dir" && npm install "$@" ); fi
+  if [ -f "$dir/package-lock.json" ]; then ( cd "$dir" && npm ci "${NPM_QUIET[@]}" "$@" )
+  else log "no lockfile in $dir — using npm install"; ( cd "$dir" && npm install "${NPM_QUIET[@]}" "$@" ); fi
 }
 
 # Build into a fresh release dir and swap the `current` symlink atomically
@@ -142,9 +146,21 @@ cmd_deploy(){
   # pre-pull version). FFC_REEXEC guards against an infinite re-exec loop.
   if [ -z "${FFC_REEXEC:-}" ]; then
     log "Fetching origin/$BRANCH"
+    local before after
+    before="$(git rev-parse HEAD 2>/dev/null || true)"
     git fetch --quiet origin "$BRANCH"
     git checkout --quiet "$BRANCH"
     git reset --hard --quiet "origin/$BRANCH"
+    after="$(git rev-parse HEAD 2>/dev/null || true)"
+    # Readout of what this deploy is actually shipping: the files that changed
+    # between the previously-deployed commit and the freshly-pulled HEAD, so you
+    # can see at a glance what moved while watching the deploy.
+    if [ -n "$before" ] && [ "$before" != "$after" ]; then
+      log "Changes since ${before:0:7} -> ${after:0:7}:"
+      git --no-pager diff --stat "$before" "$after"
+    elif [ "$before" = "$after" ]; then
+      log "Already up to date (${after:0:7}) — nothing new to pull."
+    fi
     log "Re-exec updated deploy script"
     FFC_REEXEC=1 exec "$SELF" deploy
   fi
