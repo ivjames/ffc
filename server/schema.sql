@@ -11,6 +11,10 @@ create table if not exists location (
   lat         double precision,        -- venue latitude (WGS84), for GPS detect
   lng         double precision,        -- venue longitude
   geofence_km double precision,        -- "you're here" radius; null -> app default
+  tz          text,                    -- IANA timezone, e.g. 'America/Los_Angeles';
+                                        -- the leaderboard's calendar day/week/month
+                                        -- windows are computed in this venue's zone.
+                                        -- Null -> API's VENUE_TZ fallback.
   sort_order  int  not null default 0
 );
 
@@ -18,6 +22,8 @@ create table if not exists location (
 alter table location add column if not exists lat         double precision;
 alter table location add column if not exists lng         double precision;
 alter table location add column if not exists geofence_km double precision;
+-- Per-venue timezone (venues can span regions, so this is NOT one global zone).
+alter table location add column if not exists tz          text;
 
 create table if not exists course (
   id          uuid primary key default gen_random_uuid(),
@@ -131,16 +137,20 @@ create unique index if not exists hunt_find_verified_unique
 -- authoritatively — that's how existing DBs pick up name/coord changes on the
 -- next migrate. Addresses: Upland 1560 W 7th St 91786; Tukwila 7300 Fun Center
 -- Way 98188; Wilsonville 29111 SW Town Center Loop W 97070.
-insert into location (id, name, slug, lat, lng, geofence_km, sort_order) values
-  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Upland',      'upland',      34.08867, -117.67946, 2, 10),
-  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Tukwila',     'tukwila',     47.46562, -122.24302, 2, 20),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Wilsonville', 'wilsonville', 45.30969, -122.76680, 2, 30)
+-- `tz` is each venue's IANA timezone. Today's three venues happen to all be
+-- Pacific, but that's incidental — a venue elsewhere carries its own zone here,
+-- and the leaderboard reads it per round (never one global assumption).
+insert into location (id, name, slug, lat, lng, geofence_km, tz, sort_order) values
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Upland',      'upland',      34.08867, -117.67946, 2, 'America/Los_Angeles', 10),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Tukwila',     'tukwila',     47.46562, -122.24302, 2, 'America/Los_Angeles', 20),
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Wilsonville', 'wilsonville', 45.30969, -122.76680, 2, 'America/Los_Angeles', 30)
 on conflict (id) do update
   set name        = excluded.name,
       slug        = excluded.slug,
       lat         = excluded.lat,
       lng         = excluded.lng,
       geofence_km = excluded.geofence_km,
+      tz          = excluded.tz,
       sort_order  = excluded.sort_order;
 
 -- The client's nine courses across the three venues (Upland x4, Tukwila x3,

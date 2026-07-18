@@ -8,6 +8,7 @@ import "dotenv/config";
 import { router as roundsRouter } from "./routes/rounds.js";
 import { router as leaderboardRouter } from "./routes/leaderboard.js";
 import { router as seedRouter } from "./routes/seed.js";
+import { router as locationsRouter } from "./routes/locations.js";
 import { router as huntRouter } from "./routes/hunt.js";
 
 const app = express();
@@ -56,6 +57,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/rounds", roundsRouter);
 app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/seed", seedRouter);
+app.use("/api/locations", locationsRouter);
 // The hunt's /verify endpoint installs its own larger body parser for base64
 // images; the rest of the app keeps the 256kb global cap above.
 app.use("/api/hunt", huntRouter);

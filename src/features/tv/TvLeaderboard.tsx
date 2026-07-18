@@ -27,6 +27,7 @@ export default function TvLeaderboard() {
   const highlightSet = new Set((highlightScores ?? []).map((s) => `${s.tag}:${s.total}`));
   const isHighlighted = (r: LeaderboardRow) =>
     r.courseId === highlightCourseId && highlightSet.has(`${r.tag}:${r.total}`);
+  const hasHighlight = (highlightScores ?? []).length > 0;
 
   const [period, setPeriod] = useState<Period>('all');
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
@@ -64,6 +65,20 @@ export default function TvLeaderboard() {
     };
   }, [period]);
 
+  // Board position is the rank in the full ascending-by-total standings. When we
+  // arrive from a final scorecard, pin the just-played rows to the TOP of the
+  // list so the players see their scores and positions immediately — but keep
+  // each row's real rank number, so a highlighted row still reads "5th" even
+  // though it's shown first. Everyone else stays in standings order below.
+  const rankedRows = (rows ?? []).map((row, i) => ({ row, rank: i + 1 }));
+  const orderedRows = hasHighlight
+    ? [...rankedRows].sort((a, b) => {
+        const am = isHighlighted(a.row) ? 0 : 1;
+        const bm = isHighlighted(b.row) ? 0 : 1;
+        return am - bm || a.rank - b.rank; // mine first, then by real rank
+      })
+    : rankedRows;
+
   return (
     <Screen>
       <Confetti fire={celebrate} />
@@ -99,11 +114,11 @@ export default function TvLeaderboard() {
 
         {!error && rows && rows.length > 0 && (
           <ol className="space-y-2">
-            {rows.map((r, i) => {
+            {orderedRows.map(({ row: r, rank }, i) => {
               const mine = isHighlighted(r);
               return (
                 <li
-                  key={`${r.tag}-${r.courseId}-${i}`}
+                  key={`${r.tag}-${r.courseId}-${rank}`}
                   style={{ '--i': Math.min(i, 12) } as CSSProperties}
                   className={`animate-rise-in flex items-center justify-between rounded-xl border px-4 py-3 ${
                     mine
@@ -113,7 +128,7 @@ export default function TvLeaderboard() {
                 >
                   <div className="flex items-center gap-3">
                     <span className="w-6 text-center font-mono text-sm text-fairway-100/70">
-                      {i + 1}
+                      {rank}
                     </span>
                     <span className="font-arcade text-2xl font-bold text-fairway-50">{r.tag}</span>
                     <span className="text-xs text-fairway-100/70">{r.courseName}</span>

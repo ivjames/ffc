@@ -8,27 +8,42 @@ import { pool } from "../db.js";
 
 export const router = Router();
 
-// Map period -> Postgres interval. "all" means no time filter.
-const PERIODS = {
-  day: "1 day",
-  week: "7 days",
-  month: "30 days",
+// Fallback timezone for the leaderboard's calendar windows, used only when a
+// venue has no `location.tz` set. The real zone is per venue (venues can span
+// regions), read from each round's location below — this is just the default.
+const VENUE_TZ = process.env.VENUE_TZ || "America/Los_Angeles";
+
+// Map period -> the date_trunc unit that defines its *calendar* window in venue
+// time. "day" means today (since local midnight), not the most recent 24 hours;
+// "week"/"month" are the current calendar week/month. "all" means no time filter.
+const PERIOD_UNITS = {
+  day: "day",
+  week: "week",
+  month: "month",
   all: null,
 };
 
 router.get("/", async (req, res) => {
   const period = typeof req.query.period === "string" ? req.query.period : "all";
-  if (!(period in PERIODS)) {
+  if (!(period in PERIOD_UNITS)) {
     return res.status(400).json({ ok: false, error: "period must be day|week|month|all" });
   }
-  const interval = PERIODS[period];
+  const unit = PERIOD_UNITS[period];
 
-  // The period interval is passed as a bound parameter — never string-concatenated.
+  // Calendar window in each venue's local time. Per round we resolve the zone as
+  // coalesce(location.tz, VENUE_TZ), truncate "now" to the start of the current
+  // day/week/month *in that zone*, then convert that local wall clock back to an
+  // absolute instant to compare against completed_at (stored as timestamptz). So
+  // a round played yesterday evening no longer counts as "today" just because
+  // it's within 24 hours — and a venue in another region uses its OWN calendar
+  // day, not a single global zone. Zone and unit are bound parameters — never
+  // string-concatenated. `loc.tz` (joined below) supplies the per-venue zone.
   const params = [];
   let timeFilter = "";
-  if (interval !== null) {
-    params.push(interval);
-    timeFilter = `and r.completed_at >= now() - $${params.length}::interval`;
+  if (unit !== null) {
+    params.push(VENUE_TZ, unit); // $1 = fallback zone, $2 = unit (referenced below)
+    const zone = `coalesce(loc.tz, $1)`;
+    timeFilter = `and r.completed_at >= timezone(${zone}, date_trunc($2, timezone(${zone}, now())))`;
   }
 
   // Query walkthrough:
@@ -50,6 +65,7 @@ router.get("/", async (req, res) => {
         sum(s.strokes) as total
       from round r
       join course c on c.id = r.course_id
+      left join location loc on loc.id = c.location_id
       cross join lateral unnest(r.player_tags) with ordinality as pt(tag, ord)
       join score s
         on s.round_id = r.id
