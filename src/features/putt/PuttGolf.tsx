@@ -140,7 +140,21 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillStyle = '#37c06d';
   for (const s of hole.green) fillCapsule(ctx, s, -ROUGH_BAND);
 
-  // Sand bunkers — clipped to the surface so they never break the rail.
+  // Water hazards — deep rim, water, and a lighter shimmer. Clipped to the
+  // surface as a safety net (they're authored fully inside it).
+  if (hole.water) {
+    ctx.save();
+    ctx.clip(unionPath(surface, 0));
+    ctx.fillStyle = '#1565a8';
+    for (const s of hole.water) fillCapsule(ctx, s, 2);
+    ctx.fillStyle = '#2a97dc';
+    for (const s of hole.water) fillCapsule(ctx, s, 0);
+    ctx.fillStyle = 'rgba(186,230,253,0.45)';
+    for (const s of hole.water) fillCapsule(ctx, s, -6);
+    ctx.restore();
+  }
+
+  // Sand bunkers — clipped to the surface as a safety net (authored inside it).
   if (hole.pits) {
     ctx.save();
     ctx.clip(unionPath(surface, 0));
@@ -196,7 +210,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
     const len = Math.hypot(dx, dy);
     if (len > 4) {
       const power = Math.min(len / MAX_DRAG, 1);
-      const a = Math.atan2(dy, dx);
+      // Slingshot: the shot goes opposite the drag, so the arrow points away
+      // from the finger and stays visible.
+      const a = Math.atan2(-dy, -dx);
       const reach = 24 + power * 74;
       const ex = b.x + Math.cos(a) * reach;
       const ey = b.y + Math.sin(a) * reach;
@@ -264,6 +280,7 @@ export default function PuttGolf() {
   const [holeIndex, setHoleIndex] = useState(0);
   const [strokes, setStrokes] = useState(0);
   const [scores, setScores] = useState<number[]>([]);
+  const [note, setNote] = useState('');
   const scoresRef = useRef<number[]>([]);
 
   const startHole = useCallback((index: number) => {
@@ -277,10 +294,17 @@ export default function PuttGolf() {
     setPhase('aim');
     setHoleIndex(index);
     setStrokes(0);
+    setNote('');
   }, []);
+
+  // The canvas only exists while the play view is shown (it unmounts on the
+  // finished-round screen), so the render/physics loop must re-initialize each
+  // time that view mounts — including after "Play again" remounts a fresh canvas.
+  const playing = phase !== 'done';
 
   // Render + physics loop.
   useEffect(() => {
+    if (!playing) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -302,6 +326,12 @@ export default function PuttGolf() {
           scoresRef.current = next;
           setScores(next);
           setPhase('sunk');
+        } else if (res === 'water') {
+          gs.strokes += 1; // penalty; ball already dropped near the entry point
+          gs.phase = 'aim';
+          setStrokes(gs.strokes);
+          setPhase('aim');
+          setNote('💦 Splash! +1 penalty — dropped by the water');
         } else if (res === 'stopped') {
           gs.phase = 'aim';
           setPhase('aim');
@@ -312,7 +342,7 @@ export default function PuttGolf() {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [playing]);
 
   // Convert a pointer event to field coordinates.
   const toField = useCallback((e: React.PointerEvent) => {
@@ -353,7 +383,7 @@ export default function PuttGolf() {
     const len = Math.hypot(dx, dy);
     if (len < 8) return; // deadzone tap — no stroke wasted
     const power = Math.min(len / MAX_DRAG, 1);
-    const a = Math.atan2(dy, dx);
+    const a = Math.atan2(-dy, -dx); // slingshot: launch opposite the drag
     const speed = MIN_SHOT + power * (MAX_SHOT - MIN_SHOT);
     gs.ball.vx = Math.cos(a) * speed;
     gs.ball.vy = Math.sin(a) * speed;
@@ -361,6 +391,7 @@ export default function PuttGolf() {
     gs.strokes += 1;
     setStrokes(gs.strokes);
     setPhase('rolling');
+    setNote('');
   }, []);
 
   const advance = useCallback(() => {
@@ -388,7 +419,7 @@ export default function PuttGolf() {
 
   const hint =
     phase === 'aim'
-      ? 'Drag from the ball to aim — farther = harder — and release to putt.'
+      ? note || 'Pull back from the ball to aim — the arrow shows your shot — and release to putt.'
       : phase === 'rolling'
         ? 'Rolling…'
         : phase === 'sunk'
@@ -423,7 +454,11 @@ export default function PuttGolf() {
               style={{ aspectRatio: `${W} / ${H}` }}
             />
 
-            <p className="mt-3 min-h-[2.5rem] text-center text-sm text-fairway-100/80">
+            <p
+              className={`mt-3 min-h-[2.5rem] text-center text-sm ${
+                note && phase === 'aim' ? 'font-semibold text-sky-300' : 'text-fairway-100/80'
+              }`}
+            >
               {hint}
             </p>
 

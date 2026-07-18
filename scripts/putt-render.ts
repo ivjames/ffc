@@ -26,6 +26,7 @@ const WALL_PALETTE: RGB[] = [
   [20, 184, 166], // teal
 ];
 const SAND: RGB = [227, 205, 140];
+const WATER: RGB = [42, 151, 220];
 const CUP: RGB = [4, 22, 12];
 const MARK: RGB = [248, 250, 252];
 
@@ -54,7 +55,8 @@ for (let hi = 0; hi < HOLES.length; hi++) {
       else if (sdG < 0) col = sdF < 0 ? FAIRWAY : COLLAR;
       else if (sdF < 0) col = FAIRWAY;
       if (col !== OFF) {
-        // sand only where on the surface → chopped at the rail
+        // hazards only where on the surface → chopped at the rail
+        if (h.water && sdUnion(fx, fy, h.water) < 0) col = WATER;
         if (h.pits && sdUnion(fx, fy, h.pits) < 0) col = SAND;
         if (h.walls) {
           for (let wi = 0; wi < h.walls.length; wi++) {

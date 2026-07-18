@@ -2,15 +2,24 @@
 // Checks each hole is geometrically sane and actually completable.
 import {
   W, H, BALL_R, HOLE_R, MIN_SHOT, MAX_SHOT,
-  HOLES, sdUnion, sdSurface, stepPhysics, type Hole, type Ball, type Outcome,
+  HOLES, sdUnion, sdSurface, stepPhysics, type Hole, type Ball, type Seg, type Outcome,
 } from '../src/features/putt/world.ts';
 
-// A cell the ball could rest in: on the playable surface, clear of walls. Sand
+// A cell the ball could rest in: on the playable surface, clear of walls, and
+// not in the water (water sinks the ball, so a route must go around it). Sand
 // is passable (just draggy), so it doesn't block the route.
 function freeAt(x: number, y: number, h: Hole): boolean {
   if (sdSurface(x, y, h) > -BALL_R) return false;
   if (h.walls && h.walls.length && sdUnion(x, y, h.walls) < BALL_R) return false;
+  if (h.water && h.water.length && sdUnion(x, y, h.water) < 0) return false;
   return true;
+}
+
+// A hazard blob must sit fully inside the surface, or the surface clip chops it
+// into a crescent when drawn.
+function insideSurface(segs: Seg[] | undefined, h: Hole): boolean {
+  if (!segs) return true;
+  return segs.every((s) => sdSurface(s.ax, s.ay, h) <= -s.r && sdSurface(s.bx, s.by, h) <= -s.r);
 }
 
 // BFS over free cells: is the cup reachable from the tee through the green,
@@ -73,8 +82,14 @@ for (let i = 0; i < HOLES.length; i++) {
   if (sdUnion(h.cup.x, h.cup.y, h.green) > -(HOLE_R + 2)) fail('cup not safely inside the green');
   if (h.walls && sdUnion(h.cup.x, h.cup.y, h.walls) < HOLE_R) fail('cup overlaps a wall');
   if (h.pits && sdUnion(h.cup.x, h.cup.y, h.pits) < 0) fail('cup sits in the sand');
+  if (h.water && sdUnion(h.cup.x, h.cup.y, h.water) < 0) fail('cup sits in the water');
   if (h.walls && sdUnion(h.tee.x, h.tee.y, h.walls) < BALL_R) fail('tee overlaps a wall');
   if (h.pits && sdUnion(h.tee.x, h.tee.y, h.pits) < 0) fail('tee starts in the sand');
+  if (h.water && sdUnion(h.tee.x, h.tee.y, h.water) < 0) fail('tee starts in the water');
+  if (!insideSurface(h.pits, h)) fail('a bunker spills past the surface (would be chopped)');
+  if (!insideSurface(h.water, h)) fail('a water hazard spills past the surface (would be chopped)');
+  if (h.water && h.walls && h.water.some((s) => sdUnion(s.ax, s.ay, h.walls!) < s.r))
+    fail('a water hazard overlaps a wall');
   for (const s of [...h.fairway, ...h.green]) {
     const minX = Math.min(s.ax, s.bx) - s.r;
     const maxX = Math.max(s.ax, s.bx) + s.r;
@@ -88,6 +103,7 @@ for (let i = 0; i < HOLES.length; i++) {
 
   // Shot-space stability + progress from the tee.
   let sunk1 = 0;
+  let waters = 0;
   let timeouts = 0;
   let nans = 0;
   let bestDist = Infinity;
@@ -99,6 +115,14 @@ for (let i = 0; i < HOLES.length; i++) {
       if (out === 'nan') { nans++; continue; }
       if (out === 'timeout') { timeouts++; continue; }
       if (out === 'sunk') { sunk1++; bestDist = 0; continue; }
+      if (out === 'water') {
+        waters++;
+        // the drop point must be on the surface and clear of walls (near the
+        // rail is fine); it's the entry edge, so it may touch the water.
+        if (sdSurface(b.x, b.y, h) > 0) fail('a water drop lands off the surface');
+        if (h.walls && sdUnion(b.x, b.y, h.walls) < 0) fail('a water drop lands in a wall');
+        continue;
+      }
       bestDist = Math.min(bestDist, Math.hypot(b.x - h.cup.x, b.y - h.cup.y));
     }
   }
@@ -106,7 +130,8 @@ for (let i = 0; i < HOLES.length; i++) {
   if (timeouts) fail(`${timeouts} shots never came to rest`);
   if (bestDist > 120 && sunk1 === 0) fail(`no tee shot gets near the cup (best ${bestDist.toFixed(0)}px)`);
 
-  console.log(`  ✓ path ok · ${sunk1} one-shot sinks · best approach ${bestDist.toFixed(0)}px`);
+  const waterNote = h.water ? ` · ${waters} splashes` : '';
+  console.log(`  ✓ path ok · ${sunk1} one-shot sinks · best approach ${bestDist.toFixed(0)}px${waterNote}`);
 }
 
 console.log(failures === 0 ? '\nALL HOLES VALID ✓' : `\n${failures} PROBLEM(S) ✗`);
