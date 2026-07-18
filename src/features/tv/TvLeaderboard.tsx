@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Screen, TopBar, Content } from '../../ui/components';
+import { TopBar } from '../../ui/components';
 import Confetti from '../../ui/Confetti';
 import { fetchLeaderboard, type LeaderboardRow } from '../../sync';
 
@@ -79,12 +79,47 @@ export default function TvLeaderboard() {
       })
     : rankedRows;
 
+  // Split the just-played rows out of the standings so they can be pinned above
+  // the scroll region, while everyone else fills the scrollable list below.
+  const yourRows = orderedRows.filter(({ row }) => isHighlighted(row));
+  const restRows = orderedRows.filter(({ row }) => !isHighlighted(row));
+
+  const renderRow = ({ row: r, rank }: { row: LeaderboardRow; rank: number }, i: number) => {
+    const mine = isHighlighted(r);
+    return (
+      <li
+        key={`${r.tag}-${r.courseId}-${rank}`}
+        style={{ '--i': Math.min(i, 12) } as CSSProperties}
+        className={`animate-rise-in flex items-center justify-between rounded-xl border px-4 py-3 ${
+          mine
+            ? 'border-fairway-400 bg-fairway-500/15 ring-1 ring-fairway-400/60'
+            : 'border-fairway-800 bg-fairway-900/40'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <span className="w-6 text-center font-mono text-sm text-fairway-100/70">{rank}</span>
+          <span className="font-arcade text-2xl font-bold text-fairway-50">{r.tag}</span>
+          <span className="text-xs text-fairway-100/70">{r.courseName}</span>
+          {mine && (
+            <span className="rounded-full bg-fairway-500/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fairway-300">
+              You
+            </span>
+          )}
+        </div>
+        <span className="text-2xl font-black text-fairway-50">{r.total}</span>
+      </li>
+    );
+  };
+
   return (
-    <Screen>
+    // Fixed-height column (h-full = viewport minus the body's safe-area padding):
+    // header + tabs + pinned scores stay put and only the standings list scrolls,
+    // so the board never grows past the screen.
+    <div className="mx-auto flex h-full w-full max-w-md flex-col">
       <Confetti fire={celebrate} />
       <TopBar title="Leaderboard" back="/" />
-      <Content>
-        <div className="mb-4 grid grid-cols-4 gap-2">
+      <main className="animate-page-in flex min-h-0 flex-1 flex-col px-4 py-4">
+        <div className="mb-4 grid shrink-0 grid-cols-4 gap-2">
           {PERIODS.map((p) => (
             <button
               key={p}
@@ -112,41 +147,30 @@ export default function TvLeaderboard() {
           </p>
         )}
 
-        {!error && rows && rows.length > 0 && (
-          <ol className="space-y-2">
-            {orderedRows.map(({ row: r, rank }, i) => {
-              const mine = isHighlighted(r);
-              return (
-                <li
-                  key={`${r.tag}-${r.courseId}-${rank}`}
-                  style={{ '--i': Math.min(i, 12) } as CSSProperties}
-                  className={`animate-rise-in flex items-center justify-between rounded-xl border px-4 py-3 ${
-                    mine
-                      ? 'border-fairway-400 bg-fairway-500/15 ring-1 ring-fairway-400/60'
-                      : 'border-fairway-800 bg-fairway-900/40'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 text-center font-mono text-sm text-fairway-100/70">
-                      {rank}
-                    </span>
-                    <span className="font-arcade text-2xl font-bold text-fairway-50">{r.tag}</span>
-                    <span className="text-xs text-fairway-100/70">{r.courseName}</span>
-                    {mine && (
-                      <span className="rounded-full bg-fairway-500/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fairway-300">
-                        You
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-2xl font-black text-fairway-50">{r.total}</span>
-                </li>
-              );
-            })}
+        {/* Just-played scores pinned above the standings. Capped at a fraction
+            of the viewport with its own scroll so a full four-player highlight
+            can't eat the whole column on short/landscape screens — every score
+            stays reachable and the fixed-height layout never overflows. */}
+        {!error && yourRows.length > 0 && (
+          <div className="mb-3 shrink-0">
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
+              Your last round
+            </div>
+            <ol className="-mx-1 max-h-[38vh] space-y-2 overflow-y-auto px-1">
+              {yourRows.map((row, i) => renderRow(row, i))}
+            </ol>
+          </div>
+        )}
+
+        {/* The rest of the standings — this is the only part that scrolls. */}
+        {!error && restRows.length > 0 && (
+          <ol className="-mx-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-1 pb-2">
+            {restRows.map((row, i) => renderRow(row, i))}
           </ol>
         )}
 
         {!error && !rows && <p className="py-8 text-center text-fairway-100/70">Loading…</p>}
-      </Content>
-    </Screen>
+      </main>
+    </div>
   );
 }

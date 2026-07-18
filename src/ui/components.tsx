@@ -32,7 +32,14 @@ export function TopBar({
 }) {
   const navigate = useNavigate();
   return (
-    <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-fairway-800/60 bg-fairway-950/90 px-3 py-3 backdrop-blur">
+    // Sticky, but pinned to the safe-area top rather than the raw viewport edge.
+    // With `top-0` the bar slid up behind the iPhone status bar / camera on
+    // scroll; offsetting by env(safe-area-inset-top) locks it just below the
+    // notch. The area above stays covered by the body's safe-area padding.
+    <header
+      style={{ top: 'env(safe-area-inset-top)' }}
+      className="sticky z-10 flex items-center gap-2 border-b border-fairway-800/60 bg-fairway-950/90 px-3 py-3 backdrop-blur"
+    >
       {back !== undefined && (
         <button
           onClick={() => (typeof back === 'number' ? navigate(back) : navigate(back))}
