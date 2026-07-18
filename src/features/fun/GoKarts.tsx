@@ -132,6 +132,14 @@ const TRACKS: Track[] = [
     x: CX + 92 * Math.cos(t) + 26 * Math.sin(3 * t),
     y: CY + 198 * Math.sin(t),
   })),
+  buildTrack('grand-prix', 'Grand Prix', 'The long lap — corner after corner', (t) => ({
+    x: CX + 116 * Math.cos(t) + 16 * Math.sin(3 * t),
+    y: CY + 220 * Math.sin(t) + 16 * Math.sin(2 * t),
+  })),
+  buildTrack('serpent', 'Serpent', 'Long, snaking esses — stay smooth', (t) => ({
+    x: CX + 104 * Math.cos(t) + 20 * Math.sin(3 * t),
+    y: CY + 218 * Math.sin(t),
+  })),
   buildTrack(
     'crossover',
     'Crossover',
