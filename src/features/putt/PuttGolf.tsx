@@ -1,83 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import {
+  W,
+  H,
+  BALL_R,
+  HOLE_R,
+  MIN_SHOT,
+  MAX_SHOT,
+  MAX_DRAG,
+  HOLES,
+  stepPhysics,
+  type Seg,
+  type Ball,
+} from './world';
 
-// Arcade Putt — a tiny playable mini-golf minigame (the real thing, not code
-// golf). Two taps per shot: lock the sweeping aim arrow, then tap again to fire
-// on the oscillating power meter. The ball rolls with friction, bounces off the
-// rails and obstacles, and drops if it reaches the cup slowly enough. Count the
-// strokes across a short course. Entirely client-side — no API, works offline.
+// Arcade Putt — a playable mini-golf minigame. Drag from the ball to aim (the
+// drag direction sets the line, its length sets power) and release to putt. The
+// green is a smooth shaped surface (rounded lanes, circular greens fed by narrow
+// channels); curved walls deflect the ball and blobby pits swallow a slow one
+// for a penalty. Nine holes, stroke play. All client-side — works offline.
+//
+// Physics + geometry live in ./world (shared with the validation sim). This file
+// is input, the rAF loop, and rendering.
 
-// --- playfield geometry (fixed internal resolution, scaled to fit) ----------
-const W = 360;
-const H = 540;
-const MARGIN = 16; // rail inset
-const BALL_R = 8;
-const HOLE_R = 13;
-
-// --- physics tuning ---------------------------------------------------------
-const FRICTION = 0.985; // per-frame velocity retention on the green
-const WALL_REST = 0.68; // energy kept on a bounce
-const STOP_SPEED = 0.16; // below this the ball is "at rest"
-const MIN_SHOT = 3.2; // px/frame at 0% power
-const MAX_SHOT = 14.5; // px/frame at 100% power
-const CAPTURE_SPEED = 5.8; // fast balls lip out instead of dropping
-
-// --- sweep speeds (radians / ms and cycles) ---------------------------------
-const AIM_SPEED = 0.0016; // full rotation ≈ 3.9s
-const POWER_SPEED = 0.005; // power cycle ≈ 1.3s
-const START_ANGLE = -Math.PI / 2; // aim begins pointing up the green
-
-type Rect = { x: number; y: number; w: number; h: number };
-type Hole = {
-  par: number;
-  tee: { x: number; y: number };
-  cup: { x: number; y: number };
-  walls: Rect[];
-};
-
-const HOLES: Hole[] = [
-  {
-    par: 2,
-    tee: { x: 180, y: 470 },
-    cup: { x: 180, y: 90 },
-    walls: [],
-  },
-  {
-    par: 3,
-    tee: { x: 90, y: 470 },
-    cup: { x: 270, y: 110 },
-    walls: [{ x: 40, y: 260, w: 210, h: 22 }],
-  },
-  {
-    par: 3,
-    tee: { x: 180, y: 480 },
-    cup: { x: 290, y: 120 },
-    walls: [
-      { x: 60, y: 340, w: 160, h: 22 },
-      { x: 180, y: 190, w: 140, h: 22 },
-    ],
-  },
-];
-
-type Phase = 'aim' | 'power' | 'rolling' | 'sunk' | 'done';
-
-type Ball = { x: number; y: number; vx: number; vy: number };
+type Phase = 'aim' | 'rolling' | 'sunk' | 'done';
+type Drag = { active: boolean; sx: number; sy: number; dx: number; dy: number };
 type GS = {
   ball: Ball;
-  aim: number; // radians (drawn each frame)
-  power: number; // 0..1 (drawn each frame)
   phase: Phase;
   holeIndex: number;
   strokes: number;
-  tAim: number; // ms timestamp the aim sweep started
-  tPower: number; // ms timestamp the power sweep started
-  now: number;
+  shotStart: { x: number; y: number };
+  drag: Drag;
 };
-
-function toParText(diff: number): string {
-  if (diff === 0) return 'even par';
-  return diff < 0 ? `${-diff} under` : `${diff} over`;
-}
 
 function holeResult(strokes: number, par: number): { label: string; emoji: string } {
   const d = strokes - par;
@@ -89,141 +44,83 @@ function holeResult(strokes: number, par: number): { label: string; emoji: strin
   return { label: `+${d}`, emoji: '😵' };
 }
 
-// Circle-vs-axis-aligned-rectangle collision: push the ball out of the rail and
-// reflect its velocity along the contact normal.
-function collideRect(b: Ball, r: Rect) {
-  const nx = Math.max(r.x, Math.min(b.x, r.x + r.w));
-  const ny = Math.max(r.y, Math.min(b.y, r.y + r.h));
-  const dx = b.x - nx;
-  const dy = b.y - ny;
-  const d2 = dx * dx + dy * dy;
-  if (d2 > BALL_R * BALL_R) return;
-
-  if (d2 === 0) {
-    // Center is inside the rect — eject along the shallowest side.
-    const left = b.x - r.x;
-    const right = r.x + r.w - b.x;
-    const top = b.y - r.y;
-    const bottom = r.y + r.h - b.y;
-    const m = Math.min(left, right, top, bottom);
-    if (m === left) {
-      b.x = r.x - BALL_R;
-      b.vx = -Math.abs(b.vx) * WALL_REST;
-    } else if (m === right) {
-      b.x = r.x + r.w + BALL_R;
-      b.vx = Math.abs(b.vx) * WALL_REST;
-    } else if (m === top) {
-      b.y = r.y - BALL_R;
-      b.vy = -Math.abs(b.vy) * WALL_REST;
-    } else {
-      b.y = r.y + r.h + BALL_R;
-      b.vy = Math.abs(b.vy) * WALL_REST;
-    }
-    return;
-  }
-
-  const d = Math.sqrt(d2);
-  const ux = dx / d;
-  const uy = dy / d;
-  b.x += ux * (BALL_R - d);
-  b.y += uy * (BALL_R - d);
-  const vdot = b.vx * ux + b.vy * uy;
-  b.vx = (b.vx - 2 * vdot * ux) * WALL_REST;
-  b.vy = (b.vy - 2 * vdot * uy) * WALL_REST;
-}
-
-// Advance the ball one frame. Sub-steps keep a fast ball from tunnelling
-// through a thin rail. Returns the outcome for this frame.
-function stepPhysics(b: Ball, hole: Hole): 'rolling' | 'stopped' | 'sunk' {
-  const speed = Math.hypot(b.vx, b.vy);
-  const steps = Math.max(1, Math.ceil(speed / (BALL_R * 0.5)));
-  for (let i = 0; i < steps; i++) {
-    b.x += b.vx / steps;
-    b.y += b.vy / steps;
-
-    // Rails.
-    if (b.x < MARGIN + BALL_R) {
-      b.x = MARGIN + BALL_R;
-      b.vx = -b.vx * WALL_REST;
-    } else if (b.x > W - MARGIN - BALL_R) {
-      b.x = W - MARGIN - BALL_R;
-      b.vx = -b.vx * WALL_REST;
-    }
-    if (b.y < MARGIN + BALL_R) {
-      b.y = MARGIN + BALL_R;
-      b.vy = -b.vy * WALL_REST;
-    } else if (b.y > H - MARGIN - BALL_R) {
-      b.y = H - MARGIN - BALL_R;
-      b.vy = -b.vy * WALL_REST;
-    }
-
-    for (const r of hole.walls) collideRect(b, r);
-
-    // Cup: a slow ball near the center drops; near-misses get a gentle nudge
-    // toward the hole so a good lag putt curls in satisfyingly.
-    const dx = hole.cup.x - b.x;
-    const dy = hole.cup.y - b.y;
-    const d = Math.hypot(dx, dy);
-    const s = Math.hypot(b.vx, b.vy);
-    if (d < HOLE_R && s < CAPTURE_SPEED) {
-      b.x = hole.cup.x;
-      b.y = hole.cup.y;
-      b.vx = 0;
-      b.vy = 0;
-      return 'sunk';
-    }
-    if (d < HOLE_R * 2 && s < CAPTURE_SPEED) {
-      b.vx += (dx / d) * 0.22;
-      b.vy += (dy / d) * 0.22;
-    }
-  }
-
-  b.vx *= FRICTION;
-  b.vy *= FRICTION;
-  if (Math.hypot(b.vx, b.vy) < STOP_SPEED) {
-    b.vx = 0;
-    b.vy = 0;
-    return 'stopped';
-  }
-  return 'rolling';
+function toParText(diff: number): string {
+  if (diff === 0) return 'even par';
+  return diff < 0 ? `${-diff} under par` : `${diff} over par`;
 }
 
 // --- drawing ----------------------------------------------------------------
-function draw(ctx: CanvasRenderingContext2D, gs: GS, hole: Hole) {
-  ctx.clearRect(0, 0, W, H);
-
-  // Green with mowed stripes.
-  ctx.fillStyle = '#14532d';
-  roundRect(ctx, MARGIN, MARGIN, W - 2 * MARGIN, H - 2 * MARGIN, 14);
+// Fill the stadium (capsule) of radius s.r+extra. Filling overlapping same-color
+// capsules unions them with no visible internal seams, which is how the smooth
+// green / walls / pit blobs are rendered.
+function fillCapsule(ctx: CanvasRenderingContext2D, s: Seg, extra: number) {
+  const r = s.r + extra;
+  if (r <= 0) return;
+  ctx.beginPath();
+  ctx.arc(s.ax, s.ay, r, 0, Math.PI * 2);
   ctx.fill();
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = 'rgba(255,255,255,0.035)';
-  for (let y = MARGIN; y < H - MARGIN; y += 44) {
-    if (((y - MARGIN) / 44) % 2 === 0) ctx.fillRect(MARGIN, y, W - 2 * MARGIN, 22);
-  }
-  ctx.restore();
-
-  // Rail.
-  ctx.strokeStyle = '#0b3b22';
-  ctx.lineWidth = 3;
-  roundRect(ctx, MARGIN, MARGIN, W - 2 * MARGIN, H - 2 * MARGIN, 14);
-  ctx.stroke();
-
-  // Obstacles.
-  for (const r of hole.walls) {
-    ctx.fillStyle = '#0b3b22';
-    roundRect(ctx, r.x, r.y, r.w, r.h, 6);
+  if (s.ax !== s.bx || s.ay !== s.by) {
+    ctx.beginPath();
+    ctx.arc(s.bx, s.by, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    const dx = s.bx - s.ax;
+    const dy = s.by - s.ay;
+    const l = Math.hypot(dx, dy);
+    const px = (-dy / l) * r;
+    const py = (dx / l) * r;
+    ctx.beginPath();
+    ctx.moveTo(s.ax + px, s.ay + py);
+    ctx.lineTo(s.bx + px, s.by + py);
+    ctx.lineTo(s.bx - px, s.by - py);
+    ctx.lineTo(s.ax - px, s.ay - py);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS) {
+  const hole = HOLES[gs.holeIndex];
+
+  // Rough (off-green).
+  ctx.fillStyle = '#0a2417';
+  ctx.fillRect(0, 0, W, H);
+
+  // Green: dark rim pass, then the surface on top → a clean rounded edge.
+  ctx.fillStyle = '#0b3b22';
+  for (const s of hole.green) fillCapsule(ctx, s, 5);
+  ctx.fillStyle = '#15803d';
+  for (const s of hole.green) fillCapsule(ctx, s, 0);
+  ctx.fillStyle = '#17924a';
+  for (const s of hole.green) fillCapsule(ctx, s, -7);
+
+  // Pits — dark blobs with a hazard ring.
+  if (hole.pits) {
+    ctx.fillStyle = '#06140c';
+    for (const s of hole.pits) fillCapsule(ctx, s, 0);
+    ctx.strokeStyle = 'rgba(251,191,36,0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    for (const s of hole.pits) {
+      ctx.beginPath();
+      ctx.arc(s.ax, s.ay, s.r - 1, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  // Walls — raised bars/bumpers with a lighter top.
+  if (hole.walls) {
+    ctx.fillStyle = '#0b3b22';
+    for (const s of hole.walls) fillCapsule(ctx, s, 1);
+    ctx.fillStyle = '#1e6b3f';
+    for (const s of hole.walls) fillCapsule(ctx, s, -3);
   }
 
   // Cup + flag.
+  const cup = hole.cup;
   ctx.fillStyle = '#04160c';
   ctx.beginPath();
-  ctx.arc(hole.cup.x, hole.cup.y, HOLE_R, 0, Math.PI * 2);
+  ctx.arc(cup.x, cup.y, HOLE_R, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = 'rgba(0,0,0,0.5)';
   ctx.lineWidth = 2;
@@ -231,129 +128,113 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, hole: Hole) {
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(hole.cup.x, hole.cup.y - 2);
-  ctx.lineTo(hole.cup.x, hole.cup.y - 34);
+  ctx.moveTo(cup.x, cup.y - 2);
+  ctx.lineTo(cup.x, cup.y - 34);
   ctx.stroke();
   ctx.fillStyle = '#ef4444';
   ctx.beginPath();
-  ctx.moveTo(hole.cup.x, hole.cup.y - 34);
-  ctx.lineTo(hole.cup.x + 16, hole.cup.y - 29);
-  ctx.lineTo(hole.cup.x, hole.cup.y - 24);
+  ctx.moveTo(cup.x, cup.y - 34);
+  ctx.lineTo(cup.x + 16, cup.y - 29);
+  ctx.lineTo(cup.x, cup.y - 24);
   ctx.closePath();
   ctx.fill();
 
-  // Aim line while aiming or setting power.
-  if (gs.phase === 'aim' || gs.phase === 'power') {
-    const len = 34 + (gs.phase === 'power' ? gs.power * 46 : 24);
-    const ex = gs.ball.x + Math.cos(gs.aim) * len;
-    const ey = gs.ball.y + Math.sin(gs.aim) * len;
-    ctx.strokeStyle = gs.phase === 'power' ? '#fbbf24' : 'rgba(240,253,244,0.85)';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([6, 5]);
+  const b = gs.ball;
+
+  // Aim line while dragging.
+  if (gs.phase === 'aim' && gs.drag.active) {
+    const { dx, dy } = gs.drag;
+    const len = Math.hypot(dx, dy);
+    if (len > 4) {
+      const power = Math.min(len / MAX_DRAG, 1);
+      const a = Math.atan2(dy, dx);
+      const reach = 24 + power * 74;
+      const ex = b.x + Math.cos(a) * reach;
+      const ey = b.y + Math.sin(a) * reach;
+      // green → red as power climbs
+      const col = power < 0.5 ? '#4ade80' : power < 0.8 ? '#fbbf24' : '#ef4444';
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - Math.cos(a - 0.4) * 11, ey - Math.sin(a - 0.4) * 11);
+      ctx.lineTo(ex - Math.cos(a + 0.4) * 11, ey - Math.sin(a + 0.4) * 11);
+      ctx.closePath();
+      ctx.fill();
+
+      // Power meter.
+      const mx = 14;
+      const my = H - 26;
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(mx, my, 120, 12);
+      ctx.fillStyle = col;
+      ctx.fillRect(mx, my, 120 * power, 12);
+      ctx.fillStyle = '#f0fdf4';
+      ctx.font = 'bold 10px system-ui, sans-serif';
+      ctx.fillText(`POWER ${Math.round(power * 100)}%`, mx, my - 5);
+    }
+  } else if (gs.phase === 'aim') {
+    // Idle hint ring around the ball — "grab me".
+    ctx.strokeStyle = 'rgba(240,253,244,0.35)';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(gs.ball.x, gs.ball.y);
-    ctx.lineTo(ex, ey);
+    ctx.arc(b.x, b.y, BALL_R + 6, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.setLineDash([]);
-    // Arrowhead.
-    const a = gs.aim;
-    ctx.fillStyle = gs.phase === 'power' ? '#fbbf24' : '#f0fdf4';
-    ctx.beginPath();
-    ctx.moveTo(ex, ey);
-    ctx.lineTo(ex - Math.cos(a - 0.4) * 10, ey - Math.sin(a - 0.4) * 10);
-    ctx.lineTo(ex - Math.cos(a + 0.4) * 10, ey - Math.sin(a + 0.4) * 10);
-    ctx.closePath();
-    ctx.fill();
   }
 
   // Ball.
   ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.4)';
+  ctx.shadowColor = 'rgba(0,0,0,0.45)';
   ctx.shadowBlur = 6;
   ctx.shadowOffsetY = 2;
   ctx.fillStyle = '#f8fafc';
   ctx.beginPath();
-  ctx.arc(gs.ball.x, gs.ball.y, BALL_R, 0, Math.PI * 2);
+  ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-
-  // Power meter (bottom-left) during the power phase.
-  if (gs.phase === 'power') {
-    const mx = MARGIN + 10;
-    const my = H - MARGIN - 22;
-    const mw = 120;
-    const mh = 12;
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    roundRect(ctx, mx, my, mw, mh, 6);
-    ctx.fill();
-    const grad = ctx.createLinearGradient(mx, 0, mx + mw, 0);
-    grad.addColorStop(0, '#4ade80');
-    grad.addColorStop(0.6, '#fbbf24');
-    grad.addColorStop(1, '#ef4444');
-    ctx.fillStyle = grad;
-    roundRect(ctx, mx, my, mw * gs.power, mh, 6);
-    ctx.fill();
-    ctx.fillStyle = '#f0fdf4';
-    ctx.font = 'bold 10px system-ui, sans-serif';
-    ctx.fillText('POWER', mx, my - 5);
-  }
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
 
 export default function PuttGolf() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>({
     ball: { x: HOLES[0].tee.x, y: HOLES[0].tee.y, vx: 0, vy: 0 },
-    aim: START_ANGLE,
-    power: 0,
     phase: 'aim',
     holeIndex: 0,
     strokes: 0,
-    tAim: 0,
-    tPower: 0,
-    now: 0,
+    shotStart: { x: HOLES[0].tee.x, y: HOLES[0].tee.y },
+    drag: { active: false, sx: 0, sy: 0, dx: 0, dy: 0 },
   });
-  const scoresRef = useRef<number[]>([]);
 
-  // React state mirrors only what the UI chrome needs (labels update rarely).
   const [phase, setPhase] = useState<Phase>('aim');
   const [holeIndex, setHoleIndex] = useState(0);
   const [strokes, setStrokes] = useState(0);
   const [scores, setScores] = useState<number[]>([]);
+  const [note, setNote] = useState('');
+  const scoresRef = useRef<number[]>([]);
 
   const startHole = useCallback((index: number) => {
     const gs = gsRef.current;
     const hole = HOLES[index];
     gs.ball = { x: hole.tee.x, y: hole.tee.y, vx: 0, vy: 0 };
-    gs.aim = START_ANGLE;
-    gs.power = 0;
+    gs.shotStart = { x: hole.tee.x, y: hole.tee.y };
     gs.phase = 'aim';
     gs.holeIndex = index;
     gs.strokes = 0;
-    gs.tAim = performance.now();
+    gs.drag.active = false;
     setPhase('aim');
     setHoleIndex(index);
     setStrokes(0);
+    setNote('');
   }, []);
 
-  // Single rAF loop. Behavior is driven by gs.phase (in the ref), so the loop
-  // is created once and never needs re-binding.
+  // Render + physics loop.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -365,17 +246,10 @@ export default function PuttGolf() {
     ctx.scale(dpr, dpr);
 
     let raf = 0;
-    const frame = (ts: number) => {
+    const frame = () => {
       const gs = gsRef.current;
-      gs.now = ts;
-      const hole = HOLES[gs.holeIndex];
-
-      if (gs.phase === 'aim') {
-        gs.aim = START_ANGLE + (ts - gs.tAim) * AIM_SPEED;
-      } else if (gs.phase === 'power') {
-        gs.power = (Math.sin((ts - gs.tPower) * POWER_SPEED) + 1) / 2;
-      } else if (gs.phase === 'rolling') {
-        const res = stepPhysics(gs.ball, hole);
+      if (gs.phase === 'rolling') {
+        const res = stepPhysics(gs.ball, HOLES[gs.holeIndex]);
         if (res === 'sunk') {
           gs.phase = 'sunk';
           const next = [...scoresRef.current];
@@ -383,36 +257,79 @@ export default function PuttGolf() {
           scoresRef.current = next;
           setScores(next);
           setPhase('sunk');
+        } else if (res === 'pit') {
+          gs.strokes += 1; // penalty stroke
+          gs.ball = { x: gs.shotStart.x, y: gs.shotStart.y, vx: 0, vy: 0 };
+          gs.phase = 'aim';
+          setStrokes(gs.strokes);
+          setPhase('aim');
+          setNote('💦 In the pit — +1 penalty, replay the shot');
         } else if (res === 'stopped') {
           gs.phase = 'aim';
-          gs.tAim = ts;
           setPhase('aim');
         }
       }
-
-      draw(ctx, gs, hole);
+      draw(ctx, gs);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const onAction = useCallback(() => {
+  // Convert a pointer event to field coordinates.
+  const toField = useCallback((e: React.PointerEvent) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * W,
+      y: ((e.clientY - rect.top) / rect.height) * H,
+    };
+  }, []);
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      const gs = gsRef.current;
+      if (gs.phase !== 'aim') return;
+      const p = toField(e);
+      gs.drag = { active: true, sx: p.x, sy: p.y, dx: 0, dy: 0 };
+      canvasRef.current?.setPointerCapture(e.pointerId);
+    },
+    [toField],
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      const gs = gsRef.current;
+      if (!gs.drag.active) return;
+      const p = toField(e);
+      gs.drag.dx = p.x - gs.drag.sx;
+      gs.drag.dy = p.y - gs.drag.sy;
+    },
+    [toField],
+  );
+
+  const onPointerUp = useCallback(() => {
     const gs = gsRef.current;
-    if (gs.phase === 'aim') {
-      gs.phase = 'power';
-      gs.power = 0;
-      gs.tPower = performance.now();
-      setPhase('power');
-    } else if (gs.phase === 'power') {
-      const speed = MIN_SHOT + gs.power * (MAX_SHOT - MIN_SHOT);
-      gs.ball.vx = Math.cos(gs.aim) * speed;
-      gs.ball.vy = Math.sin(gs.aim) * speed;
-      gs.phase = 'rolling';
-      gs.strokes += 1;
-      setStrokes(gs.strokes);
-      setPhase('rolling');
-    } else if (gs.phase === 'sunk') {
+    if (!gs.drag.active) return;
+    const { dx, dy } = gs.drag;
+    gs.drag.active = false;
+    const len = Math.hypot(dx, dy);
+    if (len < 8) return; // deadzone tap — no stroke wasted
+    const power = Math.min(len / MAX_DRAG, 1);
+    const a = Math.atan2(dy, dx);
+    const speed = MIN_SHOT + power * (MAX_SHOT - MIN_SHOT);
+    gs.shotStart = { x: gs.ball.x, y: gs.ball.y };
+    gs.ball.vx = Math.cos(a) * speed;
+    gs.ball.vy = Math.sin(a) * speed;
+    gs.phase = 'rolling';
+    gs.strokes += 1;
+    setStrokes(gs.strokes);
+    setPhase('rolling');
+    setNote('');
+  }, []);
+
+  const advance = useCallback(() => {
+    const gs = gsRef.current;
+    if (gs.phase === 'sunk') {
       if (gs.holeIndex + 1 >= HOLES.length) {
         gs.phase = 'done';
         setPhase('done');
@@ -428,46 +345,19 @@ export default function PuttGolf() {
 
   const resetHole = useCallback(() => startHole(gsRef.current.holeIndex), [startHole]);
 
-  // Keyboard + tap-canvas shortcuts for the primary action.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault();
-        onAction();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onAction]);
-
   const hole = HOLES[holeIndex];
   const totalStrokes = scores.reduce((a, b) => a + (b ?? 0), 0);
   const totalPar = HOLES.reduce((a, h) => a + h.par, 0);
   const result = phase === 'sunk' ? holeResult(strokes, hole.par) : null;
 
-  const actionLabel =
-    phase === 'aim'
-      ? 'Lock aim →'
-      : phase === 'power'
-        ? 'Shoot! 🏌️'
-        : phase === 'rolling'
-          ? '…'
-          : phase === 'sunk'
-            ? holeIndex + 1 >= HOLES.length
-              ? 'See scorecard →'
-              : 'Next hole →'
-            : 'Play again';
-
   const hint =
     phase === 'aim'
-      ? 'Tap when the arrow points where you want.'
-      : phase === 'power'
-        ? 'Tap to shoot — the meter sets your power.'
-        : phase === 'rolling'
-          ? 'Rolling…'
-          : phase === 'sunk'
-            ? `${result?.emoji} ${result?.label}`
-            : 'Nice round.';
+      ? note || 'Drag from the ball to aim — farther = harder — and release to putt.'
+      : phase === 'rolling'
+        ? 'Rolling…'
+        : phase === 'sunk'
+          ? `${result?.emoji} ${result?.label} — ${strokes} on par ${hole.par}`
+          : '';
 
   return (
     <Screen>
@@ -487,26 +377,30 @@ export default function PuttGolf() {
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={onAction}
-              disabled={phase === 'rolling'}
-              className="block w-full overflow-hidden rounded-2xl border border-fairway-800"
-              aria-label="Tap to lock aim, then tap to shoot"
+            <canvas
+              ref={canvasRef}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              className="block w-full touch-none rounded-2xl border border-fairway-800"
+              style={{ aspectRatio: `${W} / ${H}` }}
+            />
+
+            <p
+              className={`mt-3 min-h-[2.5rem] text-center text-sm ${
+                note ? 'font-semibold text-amber-200' : 'text-fairway-100/80'
+              }`}
             >
-              <canvas
-                ref={canvasRef}
-                className="block w-full"
-                style={{ aspectRatio: `${W} / ${H}`, touchAction: 'manipulation' }}
-              />
-            </button>
+              {hint}
+            </p>
 
-            <p className="mt-3 text-center text-sm text-fairway-100/80">{hint}</p>
-
-            <div className="mt-3 space-y-2">
-              <Button onClick={onAction} disabled={phase === 'rolling'}>
-                {actionLabel}
-              </Button>
+            <div className="space-y-2">
+              {phase === 'sunk' && (
+                <Button onClick={advance}>
+                  {holeIndex + 1 >= HOLES.length ? 'See scorecard →' : 'Next hole →'}
+                </Button>
+              )}
               {phase !== 'sunk' && (
                 <Button variant="ghost" onClick={resetHole} disabled={phase === 'rolling'}>
                   Reset hole
@@ -530,9 +424,9 @@ export default function PuttGolf() {
                 return (
                   <div
                     key={i}
-                    className="flex items-center justify-between border-b border-fairway-800/60 bg-fairway-900/40 px-4 py-3 last:border-0"
+                    className="flex items-center justify-between border-b border-fairway-800/60 bg-fairway-900/40 px-4 py-2.5 last:border-0"
                   >
-                    <span className="font-bold text-fairway-100">Hole {i + 1}</span>
+                    <span className="w-16 font-bold text-fairway-100">Hole {i + 1}</span>
                     <span className="text-sm text-fairway-400">par {h.par}</span>
                     <span className="font-mono font-bold text-fairway-50">{scores[i] ?? '—'}</span>
                     <span className="w-24 text-right text-sm text-fairway-300">
@@ -544,7 +438,7 @@ export default function PuttGolf() {
             </div>
 
             <div className="mt-4">
-              <Button onClick={onAction}>Play again</Button>
+              <Button onClick={advance}>Play again</Button>
             </div>
           </div>
         )}

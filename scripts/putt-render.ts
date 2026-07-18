@@ -1,0 +1,93 @@
+// Dev-only: rasterize every hole straight from the shared world geometry into a
+// single PNG montage, so the course layout can be eyeballed without a browser.
+import { deflateSync } from 'node:zlib';
+import { writeFileSync } from 'node:fs';
+import { W, H, HOLE_R, BALL_R, HOLES, sdUnion } from '../src/features/putt/world.ts';
+
+const SCALE = 3; // field px per image px
+const CW = W / SCALE; // cell width  (120)
+const CH = H / SCALE; // cell height (180)
+const COLS = 3;
+const ROWS = 3;
+const IW = COLS * CW;
+const IH = ROWS * CH;
+
+type RGB = [number, number, number];
+const ROUGH: RGB = [10, 36, 23];
+const GREEN: RGB = [23, 146, 74];
+const WALL: RGB = [30, 107, 63];
+const PIT: RGB = [6, 20, 12];
+const CUP: RGB = [4, 22, 12];
+const MARK: RGB = [248, 250, 252];
+const HAZARD: RGB = [251, 191, 36];
+
+const img = Buffer.alloc(IW * IH * 3);
+const put = (x: number, y: number, c: RGB) => {
+  const o = (y * IW + x) * 3;
+  img[o] = c[0];
+  img[o + 1] = c[1];
+  img[o + 2] = c[2];
+};
+
+for (let hi = 0; hi < HOLES.length; hi++) {
+  const h = HOLES[hi];
+  const ox = (hi % COLS) * CW;
+  const oy = Math.floor(hi / COLS) * CH;
+  for (let cy = 0; cy < CH; cy++) {
+    for (let cx = 0; cx < CW; cx++) {
+      const fx = cx * SCALE;
+      const fy = cy * SCALE;
+      let col: RGB = ROUGH;
+      if (sdUnion(fx, fy, h.green) < 0) col = GREEN;
+      if (h.walls && sdUnion(fx, fy, h.walls) < 0) col = WALL;
+      if (h.pits) {
+        const q = sdUnion(fx, fy, h.pits);
+        if (q < 0) col = PIT;
+        else if (q < 2) col = HAZARD;
+      }
+      if (Math.hypot(fx - h.cup.x, fy - h.cup.y) < HOLE_R) col = CUP;
+      if (Math.hypot(fx - h.tee.x, fy - h.tee.y) < BALL_R) col = MARK;
+      // cell border
+      if (cx === 0 || cy === 0) col = [30, 41, 37];
+      put(ox + cx, oy + cy, col);
+    }
+  }
+}
+
+// --- minimal truecolor PNG encoder -----------------------------------------
+function crc32(buf: Buffer): number {
+  let c = ~0;
+  for (let i = 0; i < buf.length; i++) {
+    c ^= buf[i];
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+  }
+  return ~c >>> 0;
+}
+function chunk(type: string, data: Buffer): Buffer {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length, 0);
+  const typeBuf = Buffer.from(type, 'ascii');
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
+  return Buffer.concat([len, typeBuf, data, crc]);
+}
+const raw = Buffer.alloc(IH * (1 + IW * 3));
+for (let y = 0; y < IH; y++) {
+  raw[y * (1 + IW * 3)] = 0; // filter: none
+  img.copy(raw, y * (1 + IW * 3) + 1, y * IW * 3, (y + 1) * IW * 3);
+}
+const ihdr = Buffer.alloc(13);
+ihdr.writeUInt32BE(IW, 0);
+ihdr.writeUInt32BE(IH, 4);
+ihdr[8] = 8; // bit depth
+ihdr[9] = 2; // color type: truecolor
+const png = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  chunk('IHDR', ihdr),
+  chunk('IDAT', deflateSync(raw)),
+  chunk('IEND', Buffer.alloc(0)),
+]);
+
+const out = process.argv[2] || 'holes.png';
+writeFileSync(out, png);
+console.log(`wrote ${out} (${IW}x${IH})`);
