@@ -1,0 +1,86 @@
+import { useNavigate } from 'react-router-dom';
+import type { CSSProperties } from 'react';
+import { Screen, TopBar, Content } from '../../ui/components';
+import { playClick } from '../../lib/sound';
+
+// §12 "While You Wait" — a small hub of offline line-entertainment: rotating
+// fun facts, a quick trivia round, and a challenge spinner. Reached from Home;
+// each tile routes to its own screen. All content is bundled (works offline).
+
+type Tile = {
+  to: string;
+  emoji: string;
+  title: string;
+  blurb: string;
+  accent: string;
+};
+
+const TILES: Tile[] = [
+  {
+    to: '/fun/facts',
+    emoji: '💡',
+    title: 'Fun Facts',
+    blurb: 'Bite-size facts about the games you love.',
+    accent: '#f59e0b',
+  },
+  {
+    to: '/fun/trivia',
+    emoji: '🧠',
+    title: 'Trivia',
+    blurb: 'Ten quick questions — how many can you get?',
+    accent: '#3b82f6',
+  },
+  {
+    to: '/fun/spinner',
+    emoji: '🎡',
+    title: 'Challenge Spinner',
+    blurb: 'Spin for a silly dare while you wait your turn.',
+    accent: '#ec4899',
+  },
+];
+
+export default function FunZone() {
+  const navigate = useNavigate();
+
+  return (
+    <Screen>
+      <TopBar title="While You Wait" back="/" />
+      <Content>
+        <p className="mb-4 text-center text-sm text-fairway-100/70">
+          Waiting for a lane, a kart, or the next hole? Pass the time.
+        </p>
+
+        <div className="space-y-3">
+          {TILES.map((t, i) => (
+            <button
+              key={t.to}
+              onClick={() => {
+                playClick();
+                navigate(t.to);
+              }}
+              className="animate-rise-in flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left transition active:scale-[0.98]"
+              style={
+                {
+                  '--i': i,
+                  background: `${t.accent}1a`,
+                  borderColor: `${t.accent}66`,
+                } as CSSProperties
+              }
+            >
+              <span
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl"
+                style={{ background: `${t.accent}33` }}
+              >
+                {t.emoji}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-lg font-bold text-fairway-50">{t.title}</span>
+                <span className="block text-sm text-fairway-100/70">{t.blurb}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </Content>
+    </Screen>
+  );
+}

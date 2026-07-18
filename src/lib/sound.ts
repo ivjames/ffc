@@ -146,6 +146,22 @@ export function playCup(): void {
   noise({ dur: 0.05, gain: 0.05, freq: 1200, start: 0.15 });
 }
 
+/** Bright rising two-note "ding" for a correct answer. */
+export function playDing(): void {
+  tone({ type: 'triangle', freq: 784, dur: 0.09, gain: 0.16 });
+  tone({ type: 'triangle', freq: 1046.5, dur: 0.16, gain: 0.16, start: 0.08 });
+}
+
+/** Low descending "buzz" for a wrong answer (soft, not harsh). */
+export function playBuzz(): void {
+  tone({ type: 'sawtooth', freq: 220, freqEnd: 150, dur: 0.22, gain: 0.09 });
+}
+
+/** Short percussive tick — one click of a spinning wheel passing a peg. */
+export function playTick(): void {
+  noise({ dur: 0.02, gain: 0.06, freq: 3200 });
+}
+
 /** Triumphant little fanfare for the final scorecard. */
 export function playFanfare(): void {
   // Ascending arpeggio into a held chord — C5 E5 G5 C6, then C-major triad.

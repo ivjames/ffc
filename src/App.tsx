@@ -11,6 +11,10 @@ import Rules from './features/rules/Rules';
 import TvLeaderboard from './features/tv/TvLeaderboard';
 import Hunt from './features/hunt/Hunt';
 import PuttGolf from './features/putt/PuttGolf';
+import FunZone from './features/fun/FunZone';
+import FunFacts from './features/fun/FunFacts';
+import Trivia from './features/fun/Trivia';
+import Spinner from './features/fun/Spinner';
 import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
@@ -37,6 +41,11 @@ export default function App() {
         <Route path="/hunt" element={<Hunt />} />
         {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
         <Route path="/putt" element={<PuttGolf />} />
+        {/* §12 "While You Wait" content — fun facts, trivia, challenge spinner. */}
+        <Route path="/fun" element={<FunZone />} />
+        <Route path="/fun/facts" element={<FunFacts />} />
+        <Route path="/fun/trivia" element={<Trivia />} />
+        <Route path="/fun/spinner" element={<Spinner />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         <Route path="*" element={<Home />} />
