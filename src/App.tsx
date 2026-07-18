@@ -19,6 +19,7 @@ import SkeeBall from './features/fun/SkeeBall';
 import AirHockey from './features/fun/AirHockey';
 import BumperCars from './features/fun/BumperCars';
 import AxeThrow from './features/fun/AxeThrow';
+import BattingCages from './features/fun/BattingCages';
 import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/fun/airhockey" element={<AirHockey />} />
         <Route path="/fun/bumper" element={<BumperCars />} />
         <Route path="/fun/axe" element={<AxeThrow />} />
+        <Route path="/fun/batting" element={<BattingCages />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         <Route path="*" element={<Home />} />

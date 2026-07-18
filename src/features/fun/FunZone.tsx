@@ -65,6 +65,13 @@ const TILES: Tile[] = [
     blurb: 'Time your throw — stick the bullseye or a clutch.',
     accent: '#eab308',
   },
+  {
+    to: '/fun/batting',
+    emoji: '⚾️',
+    title: 'Batting Cages',
+    blurb: 'Time your swing — crush it for a home run.',
+    accent: '#ef4444',
+  },
 ];
 
 export default function FunZone() {
