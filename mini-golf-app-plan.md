@@ -284,11 +284,13 @@ games themed to the real attractions, playable one-handed while waiting.
   the loop paused when backgrounded. Kept portrait, so no orientation-lock work is
   needed for it.
 
-- **Bumper cars** (`/fun/bumper`) — **shipped.** Floating-joystick top-down
-  driving; ram the AI cars for the most bumps in 30 seconds. Equal-mass elastic
-  car-car collisions on the fixed-timestep accumulator (background-paused); a bump
-  only scores when you drive into another car hard enough. Bumper boats is the
-  same mechanic reskinned (swap arena art/emoji) if we want the variant.
+- **Bumper cars** (`/fun/bumper`) + **Bumper boats** (`/fun/boats`) — **shipped.**
+  Floating-joystick top-down driving; ram the AI units for the most bumps in 30
+  seconds. Equal-mass elastic collisions on the fixed-timestep accumulator
+  (background-paused); a bump only scores when you drive into another unit hard
+  enough. Both share one engine (`BumperArena`) parameterized by a `BumperTheme`:
+  cars are grippy on a rink, boats are floatier (less damping, gentler thrust)
+  on a rippling-water arena with wakes.
 
 - **Axe throwing** (`/fun/axe`) — **shipped.** A two-tap timing game: a vertical
   guide sweeps to set aim, a horizontal guide sweeps to set height, then the axe

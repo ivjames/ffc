@@ -59,6 +59,13 @@ const TILES: Tile[] = [
     accent: '#f97316',
   },
   {
+    to: '/fun/boats',
+    emoji: '🚤',
+    title: 'Bumper Boats',
+    blurb: 'Bumper cars on water — floatier, driftier bumps.',
+    accent: '#0ea5e9',
+  },
+  {
     to: '/fun/axe',
     emoji: '🪓',
     title: 'Axe Throwing',

@@ -18,6 +18,7 @@ import Spinner from './features/fun/Spinner';
 import SkeeBall from './features/fun/SkeeBall';
 import AirHockey from './features/fun/AirHockey';
 import BumperCars from './features/fun/BumperCars';
+import BumperBoats from './features/fun/BumperBoats';
 import AxeThrow from './features/fun/AxeThrow';
 import BattingCages from './features/fun/BattingCages';
 import Bowling from './features/fun/Bowling';
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/fun/skeeball" element={<SkeeBall />} />
         <Route path="/fun/airhockey" element={<AirHockey />} />
         <Route path="/fun/bumper" element={<BumperCars />} />
+        <Route path="/fun/boats" element={<BumperBoats />} />
         <Route path="/fun/axe" element={<AxeThrow />} />
         <Route path="/fun/batting" element={<BattingCages />} />
         <Route path="/fun/bowling" element={<Bowling />} />
