@@ -32,66 +32,69 @@ const GREEN: Ramp = {
   950: '#052e16',
 };
 
-// Muted steel/slate blue — reads as blue without the vivid electric edge.
+// Muted steel/slate blue — reads as blue without the vivid electric edge,
+// kept light so the screen never sinks into a dark navy wash.
 const BLUE: Ramp = {
-  50: '#eef2f7',
-  100: '#dbe3ee',
-  200: '#bccbdd',
-  300: '#97afc9',
-  400: '#7091b0',
-  500: '#5578a0',
-  600: '#45638a',
-  700: '#3a5273',
-  800: '#324459',
-  900: '#26344a',
-  950: '#141d2b',
+  50: '#f1f5f9',
+  100: '#e3eaf1',
+  200: '#cdd9e6',
+  300: '#b1c3d8',
+  400: '#90a8c5',
+  500: '#6f8bad',
+  600: '#5f7a9e',
+  700: '#506585',
+  800: '#415471',
+  900: '#334259',
+  950: '#232f40',
 };
 
-// Muted clay/brick rose — softened well back from a bold primary red.
+// Muted clay/brick rose — softened well back from a bold primary red, and
+// lifted to a warm, light clay rather than a dark maroon.
 const RED: Ramp = {
-  50: '#f8ecea',
-  100: '#f0d6d3',
-  200: '#e3b5b0',
-  300: '#d1908a',
-  400: '#bd6f68',
-  500: '#a95850',
-  600: '#8f463f',
-  700: '#763833',
-  800: '#5e2d29',
-  900: '#472220',
-  950: '#2a1614',
+  50: '#faeeec',
+  100: '#f3ddda',
+  200: '#e8c4c0',
+  300: '#d7a49e',
+  400: '#c5847d',
+  500: '#b0655e',
+  600: '#98544e',
+  700: '#814440',
+  800: '#6b3833',
+  900: '#542c29',
+  950: '#3d211e',
 };
 
-// Dragon's Hollow — a lush, leafy forest green. The orange course accent
-// (par / tags / top glow) rides on top as the fiery highlight.
+// Dragon's Hollow — a lush, leafy forest green (kept airy, not a dark pine).
+// The orange course accent (par / tags / top glow) rides on top as the fiery
+// highlight.
 const DRAGON: Ramp = {
-  50: '#edf7f1',
-  100: '#cfece0',
-  200: '#a3d9bf',
-  300: '#74c69d',
-  400: '#52b788',
-  500: '#40916c',
-  600: '#2d6a4f',
-  700: '#245741',
-  800: '#1b4332',
-  900: '#123024',
-  950: '#0a1f14',
+  50: '#eef8f2',
+  100: '#d3ede1',
+  200: '#aedcc4',
+  300: '#86cca8',
+  400: '#63b78e',
+  500: '#4d9a75',
+  600: '#3f8163',
+  700: '#326b50',
+  800: '#26543f',
+  900: '#1d4230',
+  950: '#14311f',
 };
 
-// Western — sun-bleached leather and tan; a warm, light dust-brown, not the
-// near-black saddle it started as.
+// Western — sun-bleached leather and tan; a warm, light dust-brown, well clear
+// of the near-black saddle it started as.
 const WESTERN: Ramp = {
-  50: '#faf6ec',
-  100: '#f2e8d2',
-  200: '#e6d5b0',
-  300: '#d7bd87',
-  400: '#c4a266',
-  500: '#b08752',
-  600: '#97703f',
-  700: '#7c5d38',
-  800: '#634a2d',
-  900: '#4c3924',
-  950: '#352819',
+  50: '#fbf7ee',
+  100: '#f5ecd6',
+  200: '#ebdcb8',
+  300: '#dcc396',
+  400: '#cba97a',
+  500: '#b89563',
+  600: '#9c8052',
+  700: '#856b45',
+  800: '#6f583a',
+  900: '#5c4830',
+  950: '#4a3925',
 };
 
 const RAMPS: Record<string, Ramp> = {
