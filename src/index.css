@@ -44,3 +44,70 @@ button {
   font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
   letter-spacing: 0.15em;
 }
+
+/* —— Motion ——————————————————————————————————————————————————————————— */
+
+/* Page-load entrance: content fades and rises into place. Applied to the main
+   content region of each screen so route changes feel alive. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-page-in {
+  animation: page-in 0.32s ease-out both;
+}
+
+/* A quick pop, used when a stroke value changes so the number acknowledges the
+   tap. Re-triggered by toggling the class via a `key`. */
+@keyframes score-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-score-pop {
+  animation: score-pop 0.26s ease-out;
+}
+
+/* The winner trophy gets a celebratory bounce on the final scorecard. */
+@keyframes trophy-pop {
+  0% {
+    transform: scale(0) rotate(-25deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.25) rotate(8deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.animate-trophy-pop {
+  animation: trophy-pop 0.6s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+
+/* Honor the OS "reduce motion" setting — disable all entrance/celebration
+   animations. (Confetti checks the same flag in JS and skips rendering.) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-page-in,
+  .animate-score-pop,
+  .animate-trophy-pop {
+    animation: none;
+  }
+}

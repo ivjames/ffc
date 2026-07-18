@@ -11,6 +11,7 @@ import {
   clampStrokes,
   isRoundComplete,
 } from '../../lib/scoring';
+import { playClick, playStroke, playUndo, playCup } from '../../lib/sound';
 
 // Testing aid — how long the auto-player pauses on each hole before advancing.
 const AUTO_PLAY_MS = 450;
@@ -131,10 +132,25 @@ export default function Scorecard() {
     // No auto-fill: an empty hole starts blank. First + registers 1; − does
     // nothing until there's a value to decrement.
     if (current == null) {
-      if (delta > 0) void setStroke(playerIndex, 1);
+      if (delta > 0) {
+        playStroke();
+        void setStroke(playerIndex, 1);
+      }
       return;
     }
-    void setStroke(playerIndex, clampStrokes(current + delta));
+    const next = clampStrokes(current + delta);
+    // Only sound an actual change (a bump that hits the cap/floor is a no-op).
+    if (next !== current) {
+      if (delta > 0) playStroke();
+      else playUndo();
+    }
+    void setStroke(playerIndex, next);
+  }
+
+  // Advance to the next hole with the satisfying "into the cup" sound.
+  function goNext() {
+    playCup();
+    setHole((h) => Math.min(HOLE_COUNT - 1, h + 1));
   }
 
   return (
@@ -155,7 +171,10 @@ export default function Scorecard() {
               🔍
             </button>
             <button
-              onClick={() => setShowJump((v) => !v)}
+              onClick={() => {
+                playClick();
+                setShowJump((v) => !v);
+              }}
               className="rounded-lg px-3 py-2 text-sm font-semibold text-fairway-300 active:bg-fairway-800"
             >
               Holes
@@ -172,6 +191,7 @@ export default function Scorecard() {
               <button
                 key={h}
                 onClick={() => {
+                  playClick();
                   setHole(h);
                   setShowJump(false);
                 }}
@@ -247,7 +267,12 @@ export default function Scorecard() {
                     −
                   </button>
                   <div className="flex-1 text-center">
-                    <span className="text-4xl font-black text-fairway-50">
+                    {/* Keyed on the value so it re-mounts and re-runs the pop
+                        animation each time the stroke count changes. */}
+                    <span
+                      key={strokes ?? 'empty'}
+                      className="inline-block text-4xl font-black text-fairway-50 animate-score-pop"
+                    >
                       {strokes ?? '–'}
                     </span>
                   </div>
@@ -284,13 +309,15 @@ export default function Scorecard() {
           {hole < HOLE_COUNT - 1 ? (
             <Button
               variant="ghost"
-              onClick={() => setHole((h) => Math.min(HOLE_COUNT - 1, h + 1))}
+              sound="none"
+              onClick={goNext}
               disabled={!currentHoleScored || autoPlaying}
             >
               Next ›
             </Button>
           ) : (
             <Button
+              sound="cup"
               onClick={() => navigate(`/play/${clientId}/summary`)}
               disabled={!complete || autoPlaying}
             >
