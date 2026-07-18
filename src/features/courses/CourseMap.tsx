@@ -27,13 +27,15 @@ export default function CourseMap() {
 
   return (
     <CourseTheme theme={course.theme} accent={course.accent}>
-    {/* Anchored to the viewport (min-h-dvh) rather than the shared <Screen>: the
-        "tap anywhere to begin" button below fills this column via flex-1, and
+    {/* Anchored to the viewport rather than the shared <Screen>: the "tap
+        anywhere to begin" button below fills this column via flex-1, and
         Screen's `min-h-full` doesn't resolve to a real height under CourseTheme,
         which would collapse the button to its content and leave the lower area
         an unresponsive dead zone. Local to this screen so other pages are
-        untouched. */}
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
+        untouched. Subtract the safe-area insets the body already pads with, so
+        on notched iPhones the column doesn't exceed the visible area and push
+        the bottom prompt/tap zone below the fold. */}
+    <div className="mx-auto flex min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title={course.name} back="/" />
       {/* Tap anywhere on the opening screen to begin the round. */}
       <button

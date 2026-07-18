@@ -77,12 +77,17 @@ export function subscribeMode(cb: () => void): () => void {
 // Follow live OS changes, but only while the user hasn't made an explicit
 // choice — once they toggle, their preference is persisted and wins.
 if (typeof window !== 'undefined' && window.matchMedia) {
-  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+  const mq = window.matchMedia('(prefers-color-scheme: light)');
+  const onOsChange = (e: MediaQueryListEvent | MediaQueryList) => {
     if (storedMode() !== null) return;
     current = e.matches ? 'light' : 'dark';
     apply(current);
     listeners.forEach((l) => l());
-  });
+  };
+  // Older iOS/Safari expose only the deprecated addListener; using
+  // addEventListener unconditionally throws there and blanks the installed PWA.
+  if (mq.addEventListener) mq.addEventListener('change', onOsChange);
+  else if (mq.addListener) mq.addListener(onOsChange);
 }
 
 // Sync the meta color to the mode the inline script already applied.

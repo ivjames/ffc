@@ -189,7 +189,11 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
 
 export default function BattingCages() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const gsRef = useRef<GS>(freshGS(0));
+  // Anchor the first pitch to the real clock. Creating this with t=0 would make
+  // the opening frame treat the ball as already past the plate and instantly
+  // record a strike, losing the first of the ten pitches on every normal visit.
+  const gsRef = useRef<GS>(null!);
+  if (!gsRef.current) gsRef.current = freshGS(performance.now());
 
   const [phase, setPhase] = useState<Phase>('pitch');
   const [pitchNo, setPitchNo] = useState(0);
@@ -211,23 +215,32 @@ export default function BattingCages() {
 
     let raf = 0;
     let last = performance.now();
-    let pausedAt = 0;
-    const frame = (now: number) => {
-      const gs = gsRef.current;
+    // Pause via visibilitychange, not a hidden-rAF branch: mobile browsers
+    // suspend requestAnimationFrame while backgrounded, so a hidden frame may
+    // never run to record the pause. Shift the absolute timers by the away span
+    // on resume so nothing jumps (a held pitch isn't retroactively struck).
+    let hiddenAt = 0;
+    const onVisibility = () => {
       if (document.hidden) {
-        if (!pausedAt) pausedAt = now;
-        last = now;
-        raf = requestAnimationFrame(frame);
-        return;
-      }
-      if (pausedAt) {
-        // Shift absolute timers by the paused span so nothing jumps.
-        const gap = now - pausedAt;
+        if (!hiddenAt) hiddenAt = performance.now();
+      } else if (hiddenAt) {
+        const gap = performance.now() - hiddenAt;
+        const gs = gsRef.current;
         gs.pitchStart += gap;
         gs.resultAt += gap;
         gs.swingAt += gap;
         gs.loadAt += gap;
-        pausedAt = 0;
+        hiddenAt = 0;
+        last = performance.now();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    const frame = (now: number) => {
+      const gs = gsRef.current;
+      if (document.hidden) {
+        last = now;
+        raf = requestAnimationFrame(frame);
+        return;
       }
       const dt = Math.min(now - last, 100);
       last = now;
@@ -272,13 +285,19 @@ export default function BattingCages() {
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [playing]);
 
   // Press to load: the batter winds the bat back and holds, ready to swing.
-  const onPress = useCallback(() => {
+  const onPress = useCallback((e: React.PointerEvent) => {
     const gs = gsRef.current;
     if (gs.phase !== 'pitch' || gs.swung || gs.loaded) return;
+    // Capture the pointer so the release is delivered even if the finger drags
+    // off the canvas — otherwise `loaded` sticks and later pitches are ignored.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
     gs.loaded = true;
     gs.loadAt = performance.now();
   }, []);

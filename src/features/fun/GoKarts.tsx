@@ -232,7 +232,11 @@ const fmt = (ms: number) => (ms / 1000).toFixed(2);
 
 export default function GoKarts() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const gsRef = useRef<GS>(freshGS(0));
+  // Anchor the countdown to the real clock. Creating this with t=0 would make
+  // the opening frame see the countdown as already elapsed and drop the player
+  // straight into the race, skipping the advertised countdown.
+  const gsRef = useRef<GS>(null!);
+  if (!gsRef.current) gsRef.current = freshGS(performance.now());
 
   const [phase, setPhase] = useState<Phase>('countdown');
   const [lap, setLap] = useState(0);
@@ -255,20 +259,30 @@ export default function GoKarts() {
     let raf = 0;
     let last = performance.now();
     let acc = 0;
-    let pausedAt = 0;
     let pushedLap = -1;
     let pushedTime = -1;
+    // Pause via visibilitychange, not a hidden-rAF branch: mobile browsers
+    // suspend requestAnimationFrame while backgrounded, so a hidden frame may
+    // never run. Shift the countdown by the away span on resume so the elapsed
+    // hidden time can't complete the countdown (the race clock is dt-driven and
+    // resumes naturally once `last` is reset).
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (!hiddenAt) hiddenAt = performance.now();
+      } else if (hiddenAt) {
+        gsRef.current.countStart += performance.now() - hiddenAt;
+        hiddenAt = 0;
+        last = performance.now();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     const loop = (now: number) => {
       const gs = gsRef.current;
       if (document.hidden) {
-        if (!pausedAt) pausedAt = now;
         last = now;
         raf = requestAnimationFrame(loop);
         return;
-      }
-      if (pausedAt) {
-        gs.countStart += now - pausedAt;
-        pausedAt = 0;
       }
       const dt = Math.min(now - last, 100);
       last = now;
@@ -317,7 +331,10 @@ export default function GoKarts() {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [playing]);
 
   const toField = useCallback((e: React.PointerEvent) => {

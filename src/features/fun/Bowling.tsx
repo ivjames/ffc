@@ -415,6 +415,25 @@ export default function Bowling() {
     let raf = 0;
     let last = performance.now();
     let acc = 0;
+    // Pause via visibilitychange, not a hidden-rAF branch: mobile browsers
+    // suspend requestAnimationFrame while backgrounded, so a hidden frame may
+    // never run. Shift the roll/sweep deadlines by the away span on resume so a
+    // roll backgrounded past MAX_ROLL_MS isn't settled (as a gutter) on return.
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (!hiddenAt) hiddenAt = performance.now();
+      } else if (hiddenAt) {
+        const gap = performance.now() - hiddenAt;
+        const gs = gsRef.current;
+        gs.rollStart += gap;
+        gs.sweepAt += gap;
+        hiddenAt = 0;
+        last = performance.now();
+        acc = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     const frameLoop = (now: number) => {
       const gs = gsRef.current;
       if (document.hidden) {
@@ -447,7 +466,10 @@ export default function Bowling() {
       raf = requestAnimationFrame(frameLoop);
     };
     raf = requestAnimationFrame(frameLoop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [playing, settleRoll, applySweep]);
 
   const toField = useCallback((e: React.PointerEvent) => {

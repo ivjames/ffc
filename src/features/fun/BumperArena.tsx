@@ -206,6 +206,11 @@ function step(gs: GS, now: number, theme: BumperTheme) {
       if (dist >= min) continue;
       const nx = dx / dist;
       const ny = dy / dist;
+      // Player's approach speed toward this unit, captured BEFORE the impulse
+      // below cancels it out. For an equal-mass hit the impulse reduces the
+      // player's normal velocity to a fraction of its incoming value, so a
+      // post-impulse test would never register an ordinary player-driven ram.
+      const playerIntoAi = a.vx * nx + a.vy * ny;
       // Separate equally.
       const overlap = min - dist;
       a.x -= nx * overlap * 0.5;
@@ -229,7 +234,6 @@ function step(gs: GS, now: number, theme: BumperTheme) {
       // Scoring: player (index 0) drives into an AI hard enough.
       if (i === 0 && closing > theme.bumpSpeed) {
         const aiIdx = j;
-        const playerIntoAi = a.vx * nx + a.vy * ny; // player velocity toward b
         if (playerIntoAi > 0.4 && now - gs.lastBump[aiIdx] > BUMP_COOLDOWN) {
           gs.score += 1;
           gs.lastBump[aiIdx] = now;
