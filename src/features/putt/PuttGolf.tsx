@@ -297,8 +297,14 @@ export default function PuttGolf() {
     setNote('');
   }, []);
 
+  // The canvas only exists while the play view is shown (it unmounts on the
+  // finished-round screen), so the render/physics loop must re-initialize each
+  // time that view mounts — including after "Play again" remounts a fresh canvas.
+  const playing = phase !== 'done';
+
   // Render + physics loop.
   useEffect(() => {
+    if (!playing) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -336,7 +342,7 @@ export default function PuttGolf() {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [playing]);
 
   // Convert a pointer event to field coordinates.
   const toField = useCallback((e: React.PointerEvent) => {
