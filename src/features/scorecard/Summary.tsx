@@ -229,8 +229,13 @@ function NineGrid({
                 return (
                   <td
                     key={h}
+                    // Score coloring is a functional signal, so it keeps its own
+                    // hues (green under / amber over) independent of the neutral
+                    // environment ramp — `text-emerald-400` rather than a
+                    // `fairway-*` shade, which is now grayscale. Par stays a
+                    // neutral near-white.
                     className={`px-1 py-2 ${
-                      under ? 'text-fairway-400' : over ? 'text-amber-400' : 'text-fairway-100'
+                      under ? 'text-emerald-400' : over ? 'text-amber-400' : 'text-fairway-100'
                     }`}
                   >
                     {s ?? '·'}
