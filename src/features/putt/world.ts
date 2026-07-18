@@ -40,9 +40,10 @@ export type Hole = {
   fairway: Seg[]; // approach lanes/channels — no rough
   green: Seg[]; // putting surface around the cup — has a rough collar at its edge
   walls?: Seg[]; // solid obstacles, incl. curved ones (bounce off)
-  pits?: Seg[]; // sand bunkers (heavy drag) — clipped to the surface when drawn
+  pits?: Seg[]; // sand bunkers (heavy drag) — kept fully inside the surface
+  water?: Seg[]; // water hazards — ball sinks, reappears near entry with a penalty
 };
-export type Outcome = 'rolling' | 'stopped' | 'sunk';
+export type Outcome = 'rolling' | 'stopped' | 'sunk' | 'water';
 
 /** Capsule from A to B with radius r. */
 export function cap(ax: number, ay: number, bx: number, by: number, r: number): Seg {
@@ -109,8 +110,9 @@ function reflect(b: Ball, nx: number, ny: number) {
 }
 
 // Resolve the ball against one substep of motion. Returns 'sunk' if it dropped
-// this substep, else null. (Surface friction is applied per-frame, not here.)
-function resolve(b: Ball, hole: Hole): 'sunk' | null {
+// or 'water' if it splashed this substep, else null. (Surface friction is
+// applied per-frame, not here.)
+function resolve(b: Ball, hole: Hole): 'sunk' | 'water' | null {
   // Hard field-edge rail — a safety net so the ball can never end up off-screen
   // even where a surface's rounded end meets the field boundary.
   if (b.x < BALL_R) {
@@ -150,7 +152,15 @@ function resolve(b: Ball, hole: Hole): 'sunk' | null {
     }
   }
 
-  // Cup: a slow ball near the center drops; near-misses get a gentle magnet nudge.
+  // Water: signal a splash once the ball's center is over the water. The caller
+  // drops the ball back at the point it entered from (on the surface) and adds
+  // the penalty stroke.
+  if (hole.water && hole.water.length && sdUnion(b.x, b.y, hole.water) < 0) {
+    return 'water';
+  }
+
+  // Cup: a slow ball near the center drops; a near-miss gets a small magnet nudge
+  // — deliberately tight so it rewards an accurate putt rather than a lucky one.
   const dxc = hole.cup.x - b.x;
   const dyc = hole.cup.y - b.y;
   const dc = Math.hypot(dxc, dyc);
@@ -162,9 +172,9 @@ function resolve(b: Ball, hole: Hole): 'sunk' | null {
     b.vy = 0;
     return 'sunk';
   }
-  if (dc < HOLE_R * 2 && s < CAPTURE_SPEED) {
-    b.vx += (dxc / dc) * 0.22;
-    b.vy += (dyc / dc) * 0.22;
+  if (dc < HOLE_R * 1.4 && s < CAPTURE_SPEED * 0.85) {
+    b.vx += (dxc / dc) * 0.12;
+    b.vy += (dyc / dc) * 0.12;
   }
   return null;
 }
@@ -182,9 +192,19 @@ export function stepPhysics(b: Ball, hole: Hole): Outcome {
   const speed = Math.hypot(b.vx, b.vy);
   const steps = Math.max(1, Math.ceil(speed / (BALL_R * 0.5)));
   for (let i = 0; i < steps; i++) {
+    const px = b.x;
+    const py = b.y;
     b.x += b.vx / steps;
     b.y += b.vy / steps;
     const outcome = resolve(b, hole);
+    if (outcome === 'water') {
+      // Drop back where it went in — the last spot before it touched water.
+      b.x = px;
+      b.y = py;
+      b.vx = 0;
+      b.vy = 0;
+      return 'water';
+    }
     if (outcome) return outcome;
   }
   // Surface friction: fairway/green normally, the rough collar around the green
@@ -245,15 +265,16 @@ export const HOLES: Hole[] = [
     cup: { x: 180, y: 120 },
     fairway: [cap(180, 484, 180, 158, 52)],
     green: [disc(180, 120, 52)],
-    pits: [disc(150, 300, 26), disc(152, 334, 22), disc(150, 268, 20)],
+    pits: [disc(156, 300, 24), disc(158, 332, 20), disc(156, 270, 18)],
   },
-  // 6 — long S-curve fairway into a circular green.
+  // 6 — a pond guards the left approach; skirt it on the way to the green.
   {
-    par: 4,
-    tee: { x: 100, y: 480 },
-    cup: { x: 256, y: 150 },
-    fairway: [cap(100, 500, 112, 366, 38), cap(112, 366, 250, 306, 38), cap(250, 306, 256, 200, 38)],
-    green: [disc(256, 150, 50)],
+    par: 3,
+    tee: { x: 180, y: 470 },
+    cup: { x: 180, y: 120 },
+    fairway: [cap(180, 480, 180, 168, 58)],
+    green: [disc(180, 120, 52)],
+    water: [disc(150, 322, 24), disc(152, 352, 20)],
   },
   // 7 — channel into a circular green with a bumper to curl around.
   {
@@ -264,7 +285,7 @@ export const HOLES: Hole[] = [
     green: [disc(180, 150, 76)],
     walls: [disc(150, 172, 18)],
   },
-  // 8 — wide fairway: a curved wall pushes you right, toward a bunker.
+  // 8 — wide fairway: a curved wall pushes you right, toward a pond.
   {
     par: 4,
     tee: { x: 180, y: 450 },
@@ -272,7 +293,7 @@ export const HOLES: Hole[] = [
     fairway: [cap(180, 456, 180, 178, 80)],
     green: [disc(168, 132, 56)],
     walls: [cap(96, 344, 196, 322, 12)],
-    pits: [disc(236, 244, 24), disc(238, 214, 20)],
+    water: [disc(228, 242, 26), disc(230, 212, 20)],
   },
   // 9 — finale: dogleg fairway, a bunker to skirt, a bumper, into a round green.
   {
@@ -282,6 +303,6 @@ export const HOLES: Hole[] = [
     fairway: [cap(92, 500, 104, 360, 36), cap(104, 360, 250, 300, 36), cap(250, 300, 278, 226, 36)],
     green: [disc(280, 172, 68)],
     walls: [disc(252, 236, 15)],
-    pits: [disc(120, 408, 22), disc(122, 378, 18)],
+    pits: [disc(110, 406, 22), disc(118, 378, 18)],
   },
 ];
