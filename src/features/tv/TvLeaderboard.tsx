@@ -79,7 +79,7 @@ export default function TvLeaderboard() {
         )}
 
         {!error && rows && rows.length === 0 && (
-          <p className="py-8 text-center text-fairway-100/50">
+          <p className="py-8 text-center text-fairway-100/70">
             No scores yet — finish a round to get on the board.
           </p>
         )}
@@ -98,11 +98,11 @@ export default function TvLeaderboard() {
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="w-6 text-center font-mono text-sm text-fairway-100/50">
+                    <span className="w-6 text-center font-mono text-sm text-fairway-100/70">
                       {i + 1}
                     </span>
                     <span className="font-arcade text-2xl font-bold text-fairway-50">{r.tag}</span>
-                    <span className="text-xs text-fairway-100/50">{r.courseName}</span>
+                    <span className="text-xs text-fairway-100/70">{r.courseName}</span>
                     {mine && (
                       <span className="rounded-full bg-fairway-500/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fairway-300">
                         You
@@ -116,7 +116,7 @@ export default function TvLeaderboard() {
           </ol>
         )}
 
-        {!error && !rows && <p className="py-8 text-center text-fairway-100/40">Loading…</p>}
+        {!error && !rows && <p className="py-8 text-center text-fairway-100/70">Loading…</p>}
       </Content>
     </Screen>
   );

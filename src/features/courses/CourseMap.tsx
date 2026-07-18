@@ -65,7 +65,7 @@ export default function CourseMap() {
           <div className="animate-pulse text-2xl font-black uppercase tracking-wide text-fairway-50">
             Tap anywhere to begin
           </div>
-          <div className="mt-1 text-sm text-fairway-100/60">
+          <div className="mt-1 text-sm text-fairway-100/70">
             {course.holeCount} holes · {course.name}
           </div>
         </div>

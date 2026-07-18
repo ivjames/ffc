@@ -6,25 +6,38 @@
 // the PWA status-bar color in step); the CSS does the actual recoloring, so no
 // component has to re-render to change theme.
 //
-// The initial attribute is set by a tiny inline script in index.html BEFORE
-// first paint, so there's no flash of the wrong theme; this module reads it
-// back and stays the source of truth from then on.
+// With no explicit choice the app follows the OS preference (and keeps
+// following live OS changes until the user picks a mode). The initial attribute
+// is set by a tiny inline script in index.html BEFORE first paint, so there's
+// no flash of the wrong theme; this module reads it back and takes over.
 
 export type Mode = 'light' | 'dark';
 
 const KEY = 'ffc-theme';
 const THEME_COLOR: Record<Mode, string> = { dark: '#2f2f2f', light: '#eaeaea' };
 
+// The user's saved choice, or null if they've never toggled (→ follow the OS).
+function storedMode(): Mode | null {
+  try {
+    const s = localStorage.getItem(KEY);
+    return s === 'light' || s === 'dark' ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+function osMode(): Mode {
+  return typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(prefers-color-scheme: light)').matches
+    ? 'light'
+    : 'dark';
+}
+
 function readInitial(): Mode {
   const attr = document.documentElement.dataset.theme;
   if (attr === 'light' || attr === 'dark') return attr;
-  try {
-    const stored = localStorage.getItem(KEY);
-    if (stored === 'light' || stored === 'dark') return stored;
-  } catch {
-    /* localStorage unavailable (private mode) — fall through to default */
-  }
-  return 'dark';
+  return storedMode() ?? osMode();
 }
 
 let current: Mode = readInitial();
@@ -59,6 +72,17 @@ export function toggleMode(): void {
 export function subscribeMode(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
+}
+
+// Follow live OS changes, but only while the user hasn't made an explicit
+// choice — once they toggle, their preference is persisted and wins.
+if (typeof window !== 'undefined' && window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+    if (storedMode() !== null) return;
+    current = e.matches ? 'light' : 'dark';
+    apply(current);
+    listeners.forEach((l) => l());
+  });
 }
 
 // Sync the meta color to the mode the inline script already applied.

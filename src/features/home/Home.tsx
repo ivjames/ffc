@@ -103,7 +103,7 @@ export default function Home() {
             tap begins the round. (Artwork will eventually replace the emoji
             placeholders.) */}
         {courses.length === 0 ? (
-          <p className="mb-6 text-center text-sm text-fairway-100/60">
+          <p className="mb-6 text-center text-sm text-fairway-100/70">
             No courses at this location yet.
           </p>
         ) : (

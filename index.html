@@ -17,12 +17,20 @@
          the wrong mode. The app (src/lib/mode.ts) takes over from here. -->
     <script>
       (function () {
+        var m;
         try {
-          var m = localStorage.getItem('ffc-theme');
-          document.documentElement.dataset.theme = m === 'light' ? 'light' : 'dark';
+          m = localStorage.getItem('ffc-theme');
         } catch (e) {
-          document.documentElement.dataset.theme = 'dark';
+          m = null;
         }
+        if (m !== 'light' && m !== 'dark') {
+          // No explicit choice yet — follow the OS preference.
+          m =
+            window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
+        }
+        document.documentElement.dataset.theme = m;
       })();
     </script>
   </head>

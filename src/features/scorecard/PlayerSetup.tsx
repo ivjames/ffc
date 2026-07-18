@@ -76,14 +76,14 @@ export default function PlayerSetup() {
         </div>
 
         <label className="mb-2 block text-sm font-semibold text-fairway-100/80">
-          Tags <span className="font-normal text-fairway-100/50">(3 letters/numbers, arcade style)</span>
+          Tags <span className="font-normal text-fairway-100/70">(3 letters/numbers, arcade style)</span>
         </label>
         <div className="space-y-3">
           {activeTags.map((tag, i) => {
             const err = tag.length === TAG_LENGTH ? tagError(tag) : null;
             return (
               <div key={i} className="flex items-center gap-3">
-                <span className="w-6 text-right font-mono text-sm text-fairway-100/50">
+                <span className="w-6 text-right font-mono text-sm text-fairway-100/70">
                   {i + 1}
                 </span>
                 <input

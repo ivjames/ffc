@@ -29,7 +29,7 @@ export default function Rules() {
         <ul className="space-y-3">
           {GENERAL_RULES.map((r, i) => (
             <li key={i} className="flex gap-3 text-fairway-100/90">
-              <span className="font-mono text-sm text-fairway-500">{i + 1}.</span>
+              <span className="font-mono text-sm text-fairway-400">{i + 1}.</span>
               <span>{r}</span>
             </li>
           ))}
