@@ -51,6 +51,13 @@ const TILES: Tile[] = [
     blurb: 'Face the CPU — first to seven goals wins.',
     accent: '#38bdf8',
   },
+  {
+    to: '/fun/bumper',
+    emoji: '🚗',
+    title: 'Bumper Cars',
+    blurb: 'Ram the pack — most bumps in 30 seconds.',
+    accent: '#f97316',
+  },
 ];
 
 export default function FunZone() {
