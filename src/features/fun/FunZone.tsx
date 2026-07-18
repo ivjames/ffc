@@ -79,6 +79,13 @@ const TILES: Tile[] = [
     blurb: 'Roll a full 10-frame game — go for the strike.',
     accent: '#a855f7',
   },
+  {
+    to: '/fun/karts',
+    emoji: '🏁',
+    title: 'Go-Karts',
+    blurb: 'Three-lap time trial — set your best lap.',
+    accent: '#06b6d4',
+  },
 ];
 
 export default function FunZone() {

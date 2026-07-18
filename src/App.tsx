@@ -21,6 +21,7 @@ import BumperCars from './features/fun/BumperCars';
 import AxeThrow from './features/fun/AxeThrow';
 import BattingCages from './features/fun/BattingCages';
 import Bowling from './features/fun/Bowling';
+import GoKarts from './features/fun/GoKarts';
 import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/fun/axe" element={<AxeThrow />} />
         <Route path="/fun/batting" element={<BattingCages />} />
         <Route path="/fun/bowling" element={<Bowling />} />
+        <Route path="/fun/karts" element={<GoKarts />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         <Route path="*" element={<Home />} />
