@@ -24,6 +24,14 @@ export const FRICTION = 0.985; // velocity retained each frame on fairway/green
 export const FRICTION_ROUGH = 0.955; // the rough collar around the green's edge
 export const FRICTION_SAND = 0.87; // a bunker bogs the ball down significantly
 export const ROUGH_BAND = 12; // width of the rough collar inside the green edge
+// Blend radius (px) for the smooth union that fillets hazard/rough junctions.
+// A plain min-union of overlapping discs leaves a sharp concave "waist" at every
+// crossing — a chain reads as a bunch of grapes. Smoothing the union rounds each
+// waist into a fillet so a cluster renders (and plays) as one continuous blob.
+// A blob's field grows by at most ~BLOB_K/4 px, and only along the interior ridge
+// between two discs — the capsule endpoints the validator checks for containment
+// don't move — so this rounds the waists without pushing a hazard past the rail.
+export const BLOB_K = 9;
 export const WALL_REST = 0.66; // energy kept on a bounce off a rail/wall
 export const STOP_SPEED = 0.16; // below this the ball is "at rest"
 export const MIN_SHOT = 3.0; // px/frame at 0% power
@@ -43,6 +51,7 @@ export type Hole = {
   walls?: Seg[]; // solid obstacles, incl. curved ones (bounce off)
   pits?: Seg[]; // sand bunkers (heavy drag) — kept fully inside the surface
   water?: Seg[]; // water hazards — ball sinks, reappears near entry with a penalty
+  rough?: Seg[]; // patches of authored rough on the surface — slow, like the collar
 };
 export type Outcome = 'rolling' | 'stopped' | 'sunk' | 'water';
 
@@ -76,6 +85,26 @@ export function sdUnion(px: number, py: number, segs: Seg[]): number {
   for (const s of segs) {
     const ds = sdSeg(px, py, s);
     if (ds < d) d = ds;
+  }
+  return d;
+}
+
+/** Polynomial smooth-min: a min that rounds the crease where the two fields
+ *  meet, with blend width k. Reduces to Math.min as the inputs pull apart. */
+function smin(a: number, b: number, k: number): number {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+}
+
+/** Signed distance to a *smooth* union of capsules — a min-union with every
+ *  concave junction filleted (blend width BLOB_K). This is what turns a chain of
+ *  overlapping discs from a bunch of grapes into a single blob, used for both the
+ *  hazard/rough rendering and the collision that matches it. */
+export function sdBlob(px: number, py: number, segs: Seg[]): number {
+  let d = Infinity;
+  for (const s of segs) {
+    const ds = sdSeg(px, py, s);
+    d = d === Infinity ? ds : smin(d, ds, BLOB_K);
   }
   return d;
 }
@@ -156,7 +185,7 @@ function resolve(b: Ball, hole: Hole): 'sunk' | 'water' | null {
   // Water: signal a splash once the ball's center is over the water. The caller
   // drops the ball back at the point it entered from (on the surface) and adds
   // the penalty stroke.
-  if (hole.water && hole.water.length && sdUnion(b.x, b.y, hole.water) < 0) {
+  if (hole.water && hole.water.length && sdBlob(b.x, b.y, hole.water) < 0) {
     return 'water';
   }
 
@@ -222,10 +251,12 @@ export function stepPhysics(b: Ball, hole: Hole): Outcome {
     }
     if (outcome) return outcome;
   }
-  // Surface friction: fairway/green normally, the rough collar around the green
-  // edge, or — draggiest of all — a sand bunker.
-  let fr = inRough(b.x, b.y, hole) ? FRICTION_ROUGH : FRICTION;
-  if (hole.pits && hole.pits.length && sdUnion(b.x, b.y, hole.pits) < 0) fr = FRICTION_SAND;
+  // Surface friction: fairway/green normally, the rough (the green's collar or an
+  // authored rough patch), or — draggiest of all — a sand bunker.
+  let fr = FRICTION;
+  if (inRough(b.x, b.y, hole)) fr = FRICTION_ROUGH;
+  else if (hole.rough && hole.rough.length && sdBlob(b.x, b.y, hole.rough) < 0) fr = FRICTION_ROUGH;
+  if (hole.pits && hole.pits.length && sdBlob(b.x, b.y, hole.pits) < 0) fr = FRICTION_SAND;
   b.vx *= fr;
   b.vy *= fr;
   if (Math.hypot(b.vx, b.vy) < STOP_SPEED) {
@@ -238,7 +269,10 @@ export function stepPhysics(b: Ball, hole: Hole): Outcome {
 
 // --- The course: nine holes ------------------------------------------------
 // Each hole is a fairway (approach) feeding a green (putting surface) around the
-// cup. Curved walls and blobby sand add variety. Validated by putt-sim.
+// cup. Curved walls, blobby sand/water and patches of rough down the edges add
+// variety. Hazards and rough are smooth-unioned (sdBlob) so a cluster of discs
+// renders and plays as one filleted blob, never a bunch of grapes. Validated by
+// putt-sim.
 export const HOLES: Hole[] = [
   // 1 — warm-up: straight fairway into a round green.
   {
@@ -256,15 +290,18 @@ export const HOLES: Hole[] = [
     fairway: [cap(180, 500, 180, 205, 26)],
     green: [disc(180, 140, 74)],
   },
-  // 3 — dogleg right: two fairway lanes curving into a circular green.
+  // 3 — dogleg right: two fairway lanes curving into a circular green, with a
+  // strip of rough hugging the inside (left) edge of the approach.
   {
     par: 3,
     tee: { x: 92, y: 468 },
     cup: { x: 286, y: 168 },
     fairway: [cap(92, 498, 104, 268, 40), cap(104, 268, 286, 190, 40)],
     green: [disc(286, 168, 52)],
+    rough: [disc(66, 430, 18), disc(70, 392, 18), disc(74, 356, 18)],
   },
-  // 4 — wide fairway with a curved-wall chicane, into a round green.
+  // 4 — wide fairway with a curved-wall chicane, into a round green; patches of
+  // rough tuck into the lower corners so the widest lines get punished.
   {
     par: 3,
     tee: { x: 180, y: 444 },
@@ -272,6 +309,7 @@ export const HOLES: Hole[] = [
     fairway: [cap(180, 452, 180, 196, 82)],
     green: [disc(180, 138, 60)],
     walls: [cap(94, 352, 176, 336, 12), cap(184, 258, 268, 244, 12)],
+    rough: [disc(120, 430, 22), disc(118, 400, 20), disc(244, 410, 20), disc(242, 382, 18)],
   },
   // 5 — fairway with a blobby bunker hugging the left; veer right onto the green.
   {
@@ -309,6 +347,7 @@ export const HOLES: Hole[] = [
     green: [disc(168, 132, 56)],
     walls: [cap(96, 344, 196, 322, 12)],
     water: [disc(228, 242, 26), disc(230, 212, 20)],
+    rough: [disc(118, 430, 22), disc(116, 400, 20)],
   },
   // 9 — finale: dogleg fairway, a bunker to skirt, a bumper, into a round green.
   {

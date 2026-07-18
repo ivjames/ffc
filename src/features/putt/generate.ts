@@ -120,6 +120,23 @@ function sample(r: Rng): Hole {
     }
   }
 
+  // Optional rough patch hugging one edge of the lane (passable, so it never
+  // blocks the route). It rides the rail — spilling a touch past it — and the
+  // renderer clips it to the surface, so it reads as a strip of rough down the
+  // side. sdBlob fillets the discs into one patch.
+  if (chance(r, 0.4)) {
+    const rr = rnd(r, 14, 20);
+    const side = chance(r, 0.5) ? 1 : -1;
+    const off = (rf - rr * 0.4) * side;
+    const rough: Seg[] = [];
+    const m = 2 + Math.floor(r() * 2);
+    for (let i = 0; i < m; i++) {
+      const s = (i - (m - 1) / 2) * rr * 1.2;
+      rough.push(disc(mid.x + perp.x * off + (dx / len) * s, mid.y + perp.y * off + (dy / len) * s, rr));
+    }
+    hole.rough = rough;
+  }
+
   hole.par = derivePar(hole, spine);
   return hole;
 }

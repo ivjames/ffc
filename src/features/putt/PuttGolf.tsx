@@ -11,6 +11,8 @@ import {
   ROUGH_BAND,
   HOLES,
   stepPhysics,
+  sdBlob,
+  sdSurface,
   type Seg,
   type Ball,
   type Hole,
@@ -107,6 +109,88 @@ function fillCapsule(ctx: CanvasRenderingContext2D, s: Seg, extra: number) {
   }
 }
 
+// --- filleted hazard/rough blobs --------------------------------------------
+// Hazards and rough are clusters of overlapping discs. Filling them as separate
+// capsules (fillCapsule) unions them, but the union keeps a sharp concave waist
+// at every disc crossing, so a chain reads as a bunch of grapes. Instead we
+// rasterize each cluster from its *smooth* field (sdBlob, the same one collision
+// uses): colour each pixel by its signed distance so the outline — and every
+// junction — is a filleted blob. Layers (rim → fill → shimmer) fall straight out
+// of distance bands. Rough is clipped to the surface so an edge patch is trimmed
+// cleanly by the rail rather than spilling into the rough off-green.
+//
+// This is per-pixel, so it's built once per hole into an offscreen canvas and
+// cached; the frame loop just blits it. SS supersamples for a crisp edge.
+const SS = 2;
+const hazardCache = new Map<Hole, HTMLCanvasElement | null>();
+
+type RGB = [number, number, number];
+// Two-value hash of integer pixel coords → [0,1), for a stable rough fleck.
+function fleck(x: number, y: number): number {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function buildHazardLayer(hole: Hole): HTMLCanvasElement | null {
+  if (!hole.rough && !hole.water && !hole.pits) return null;
+  const cv = document.createElement('canvas');
+  cv.width = W * SS;
+  cv.height = H * SS;
+  const c = cv.getContext('2d');
+  if (!c) return null;
+  const img = c.createImageData(cv.width, cv.height);
+  const d = img.data;
+  const set = (o: number, col: RGB, a = 255) => {
+    d[o] = col[0];
+    d[o + 1] = col[1];
+    d[o + 2] = col[2];
+    d[o + 3] = a;
+  };
+  for (let iy = 0; iy < cv.height; iy++) {
+    const py = iy / SS;
+    for (let ix = 0; ix < cv.width; ix++) {
+      const px = ix / SS;
+      const o = (iy * cv.width + ix) * 4;
+      // Rough patches (bottom layer) — only where they sit on the surface, so an
+      // edge patch is clipped to the rail. A darker lip rings the patch; a sparse
+      // fleck breaks up the fill so it reads as longer grass.
+      if (hole.rough && sdSurface(px, py, hole) < 0) {
+        const sd = sdBlob(px, py, hole.rough);
+        if (sd < 0) {
+          if (sd > -3) set(o, [30, 84, 48]);
+          else set(o, fleck(ix, iy) > 0.86 ? [52, 122, 70] : [40, 104, 58]);
+        }
+      }
+      // Water — deep rim, water, then a lighter shimmer in the middle.
+      if (hole.water) {
+        const sd = sdBlob(px, py, hole.water);
+        if (sd < -6) set(o, [120, 190, 235]);
+        else if (sd < 0) set(o, [42, 151, 220]);
+        else if (sd < 2) set(o, [21, 101, 168]);
+      }
+      // Sand bunkers — darker sand rim, then the sand surface.
+      if (hole.pits) {
+        const sd = sdBlob(px, py, hole.pits);
+        if (sd < 0) set(o, [227, 205, 140]);
+        else if (sd < 2) set(o, [184, 153, 92]);
+      }
+    }
+  }
+  c.putImageData(img, 0, 0);
+  return cv;
+}
+
+function hazardLayer(hole: Hole): HTMLCanvasElement | null {
+  if (!hazardCache.has(hole)) {
+    // Endless appends fresh holes forever; cap the cache (Map keeps insertion
+    // order) so we don't retain a canvas per hole for the whole run.
+    if (hazardCache.size >= 12) hazardCache.delete(hazardCache.keys().next().value!);
+    hazardCache.set(hole, buildHazardLayer(hole));
+  }
+  return hazardCache.get(hole) ?? null;
+}
+
 function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   const hole = gs.holes[gs.holeIndex];
   if (!hole) return;
@@ -132,27 +216,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillStyle = '#37c06d';
   for (const s of hole.green) fillCapsule(ctx, s, -ROUGH_BAND);
 
-  // Hazards are authored fully inside the surface (the sim enforces it), so
-  // they're drawn straight on top — no clipping, which is what previously
-  // chopped valid blobs into crescents.
-
-  // Water hazards — deep rim, water, and a lighter shimmer.
-  if (hole.water) {
-    ctx.fillStyle = '#1565a8';
-    for (const s of hole.water) fillCapsule(ctx, s, 2);
-    ctx.fillStyle = '#2a97dc';
-    for (const s of hole.water) fillCapsule(ctx, s, 0);
-    ctx.fillStyle = 'rgba(186,230,253,0.45)';
-    for (const s of hole.water) fillCapsule(ctx, s, -6);
-  }
-
-  // Sand bunkers — darker sand rim, then the sand surface.
-  if (hole.pits) {
-    ctx.fillStyle = '#b8995c';
-    for (const s of hole.pits) fillCapsule(ctx, s, 2);
-    ctx.fillStyle = '#e3cd8c';
-    for (const s of hole.pits) fillCapsule(ctx, s, 0);
-  }
+  // Rough patches, water and sand — rasterized once per hole from their smooth
+  // fields (sdBlob) into an offscreen layer so every cluster is a filleted blob,
+  // not a bunch of grapes — then blitted here over the surface. Rough is under
+  // the hazards; walls (below) stay on top.
+  const layer = hazardLayer(hole);
+  if (layer) ctx.drawImage(layer, 0, 0, W, H);
 
   // Walls — bright candy-colored rails/bumpers, one hue per barrier, with a
   // dark rim and a light top highlight so they read as raised and non-green.

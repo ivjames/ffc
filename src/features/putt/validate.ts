@@ -12,6 +12,7 @@ import {
   MIN_SHOT,
   MAX_SHOT,
   sdUnion,
+  sdBlob,
   sdSurface,
   stepPhysics,
   type Hole,
@@ -38,7 +39,9 @@ export type Validation = { ok: boolean; errors: string[]; stats: HoleStats };
 function freeAt(x: number, y: number, h: Hole): boolean {
   if (sdSurface(x, y, h) > -BALL_R) return false;
   if (h.walls && h.walls.length && sdUnion(x, y, h.walls) < BALL_R) return false;
-  if (h.water && h.water.length && sdUnion(x, y, h.water) < 0) return false;
+  // Water uses the smooth field the physics splashes on, so the routed-around
+  // region matches the blob the ball actually sinks in.
+  if (h.water && h.water.length && sdBlob(x, y, h.water) < 0) return false;
   return true;
 }
 
@@ -111,11 +114,11 @@ export function validateHole(h: Hole): Validation {
   if (sdSurface(h.tee.x, h.tee.y, h) > -(BALL_R + 2)) fail('tee not safely on the surface');
   if (sdUnion(h.cup.x, h.cup.y, h.green) > -(HOLE_R + 2)) fail('cup not safely inside the green');
   if (h.walls && sdUnion(h.cup.x, h.cup.y, h.walls) < HOLE_R) fail('cup overlaps a wall');
-  if (h.pits && sdUnion(h.cup.x, h.cup.y, h.pits) < 0) fail('cup sits in the sand');
-  if (h.water && sdUnion(h.cup.x, h.cup.y, h.water) < 0) fail('cup sits in the water');
+  if (h.pits && sdBlob(h.cup.x, h.cup.y, h.pits) < 0) fail('cup sits in the sand');
+  if (h.water && sdBlob(h.cup.x, h.cup.y, h.water) < 0) fail('cup sits in the water');
   if (h.walls && sdUnion(h.tee.x, h.tee.y, h.walls) < BALL_R) fail('tee overlaps a wall');
-  if (h.pits && sdUnion(h.tee.x, h.tee.y, h.pits) < 0) fail('tee starts in the sand');
-  if (h.water && sdUnion(h.tee.x, h.tee.y, h.water) < 0) fail('tee starts in the water');
+  if (h.pits && sdBlob(h.tee.x, h.tee.y, h.pits) < 0) fail('tee starts in the sand');
+  if (h.water && sdBlob(h.tee.x, h.tee.y, h.water) < 0) fail('tee starts in the water');
   if (!insideSurface(h.pits, h)) fail('a bunker spills past the surface (would be chopped)');
   if (!insideSurface(h.water, h)) fail('a water hazard spills past the surface (would be chopped)');
   if (h.water && h.walls && h.water.some((s) => sdUnion(s.ax, s.ay, h.walls!) < s.r))

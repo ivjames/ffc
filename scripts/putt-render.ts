@@ -2,7 +2,17 @@
 // single PNG montage, so the course layout can be eyeballed without a browser.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
-import { W, H, HOLE_R, BALL_R, ROUGH_BAND, HOLES, sdUnion } from '../src/features/putt/world.ts';
+import {
+  W,
+  H,
+  HOLE_R,
+  BALL_R,
+  ROUGH_BAND,
+  HOLES,
+  sdUnion,
+  sdBlob,
+  sdSurface,
+} from '../src/features/putt/world.ts';
 
 const SCALE = 3; // field px per image px
 const CW = W / SCALE; // cell width  (120)
@@ -27,6 +37,7 @@ const WALL_PALETTE: RGB[] = [
 ];
 const SAND: RGB = [227, 205, 140];
 const WATER: RGB = [42, 151, 220];
+const ROUGH: RGB = [40, 104, 58]; // authored rough patch on the surface
 const CUP: RGB = [4, 22, 12];
 const MARK: RGB = [248, 250, 252];
 
@@ -55,9 +66,11 @@ for (let hi = 0; hi < HOLES.length; hi++) {
       else if (sdG < 0) col = sdF < 0 ? FAIRWAY : COLLAR;
       else if (sdF < 0) col = FAIRWAY;
       if (col !== OFF) {
-        // hazards only where on the surface → chopped at the rail
-        if (h.water && sdUnion(fx, fy, h.water) < 0) col = WATER;
-        if (h.pits && sdUnion(fx, fy, h.pits) < 0) col = SAND;
+        // rough patches sit under the hazards, clipped to the surface
+        if (h.rough && sdSurface(fx, fy, h) < 0 && sdBlob(fx, fy, h.rough) < 0) col = ROUGH;
+        // hazards are filleted blobs (sdBlob), matching the game renderer
+        if (h.water && sdBlob(fx, fy, h.water) < 0) col = WATER;
+        if (h.pits && sdBlob(fx, fy, h.pits) < 0) col = SAND;
         if (h.walls) {
           for (let wi = 0; wi < h.walls.length; wi++) {
             if (sdUnion(fx, fy, [h.walls[wi]]) < 0) {

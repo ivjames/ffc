@@ -29,6 +29,15 @@ corners, no internal seams, nothing for the ball to snag on. This is the whole
 reason the game feels clean. **Do not introduce any other primitive.** Curves
 are a *chain* of overlapping capsules along an arc; blobs are overlapping discs.
 
+**Hazards and rough use a smooth union, `sdBlob`.** A plain `min` union of discs
+still leaves a sharp concave *waist* at every crossing, so a chain of differently
+sized discs reads as a bunch of grapes. `sdBlob` is `sdUnion` with each junction
+filleted (blend width `BLOB_K`), turning a cluster into one continuous blob. It is
+used for both the collision (`water` splash, `pits`/`rough` friction) and the
+rendering, so what you see is still exactly what the ball rolls on. The fillet
+grows a blob by at most `~BLOB_K/4` px at a junction — inside the
+`HAZARD_MARGIN` the validator already demands, so containment still holds.
+
 Because rendering fills the same capsules that collision uses, what you see is
 exactly what the ball rolls on. Keep overlaps generous (each capsule should
 overlap its neighbour by more than the ball's diameter, `2·BALL_R`) or a thin
@@ -36,7 +45,7 @@ waist can pinch the ball off the surface.
 
 ---
 
-## 2. A hole has four kinds of geometry
+## 2. A hole has these kinds of geometry
 
 | Field | Role | Rough collar? |
 |---|---|---|
@@ -45,9 +54,17 @@ waist can pinch the ball off the surface.
 | `walls` | solid obstacles — bounce off (incl. curved chains, bumpers) | — |
 | `pits` | sand bunkers — heavy drag, but passable | — |
 | `water` | ponds — the ball sinks, re-drops at entry, +1 stroke | — |
+| `rough` | patches of longer grass on the surface — slow, like the collar | — |
 
 The **playable surface is `fairway ∪ green`**. The ball may travel anywhere the
 union is negative (inside). Everything else is off-surface and acts as a rail.
+
+`rough` patches are cosmetic-plus-friction: they slow the ball (`FRICTION_ROUGH`,
+the same drag as the green's collar) wherever it sits on the surface *and* inside
+the patch. Unlike a hazard they don't need to be tucked fully inside — an
+edge/corner patch may ride the rail, and both the collision (on-surface only) and
+the renderer (clipped to the surface) trim it to the playable area. They're
+passable, so they never block the tee→cup path.
 
 Layering intent: draw the green's rough collar first, then the fairway over it,
 so the approach lane cuts a clean, rough-free entrance into the green. Author the
@@ -108,6 +125,9 @@ geometry, not luck.
   lazy line, but keep them passable (they never block the BFS).
 - **Water** (`water`) — a hard hazard (+1 and a re-drop). Guard an approach with
   it, but make sure the drop point (the entry edge) lands back on clean surface.
+- **Rough** (`rough`) — patches of longer grass down an edge or in a corner. They
+  bleed pace off the greedy line without blocking it; use them to make the wide
+  side of a fairway cost something, or to pinch the ideal line toward a hazard.
 
 Widen the fairway for a forgiving hole; narrow it to a channel for a precise one.
 The rough collar around the green already punishes an approach that drifts wide.
