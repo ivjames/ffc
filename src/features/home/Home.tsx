@@ -10,6 +10,7 @@ import {
   detectNearestLocation,
 } from '../../lib/geolocate';
 import { isStandalone } from '../../lib/pwaInstall';
+import { themeEmoji } from '../../lib/theme';
 import type { LocalRound } from '../../types';
 
 // §7 Home — start round, view maps/rules, resume an in-progress game.
@@ -153,30 +154,4 @@ export default function Home() {
       </Content>
     </Screen>
   );
-}
-
-function themeEmoji(theme: string): string {
-  switch (theme) {
-    case 'blue':
-      return '🔵';
-    case 'green':
-      return '🟢';
-    case 'red':
-      return '🔴';
-    case 'dragon':
-      return '🐉';
-    case 'western':
-      return '🤠';
-    // Retained for any legacy themed courses.
-    case 'jungle':
-      return '🌴';
-    case 'pirate':
-      return '🏴‍☠️';
-    case 'space':
-      return '🚀';
-    case 'haunted':
-      return '👻';
-    default:
-      return '⛳️';
-  }
 }

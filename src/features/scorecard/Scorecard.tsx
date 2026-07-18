@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import CourseTheme from '../../ui/CourseTheme';
 import { courseById } from '../../data/courses';
 import { getRound, putRound } from '../../db';
 import type { LocalRound } from '../../types';
@@ -178,6 +179,7 @@ export default function Scorecard() {
   }
 
   return (
+    <CourseTheme theme={course.theme} accent={course.accent}>
     <Screen>
       <TopBar
         title={course.name}
@@ -417,5 +419,6 @@ export default function Scorecard() {
         )}
       </Content>
     </Screen>
+    </CourseTheme>
   );
 }

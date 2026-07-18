@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import CourseTheme from '../../ui/CourseTheme';
 import { courseById } from '../../data/courses';
 import { sanitizeTagInput, tagError, validateRoster, TAG_LENGTH } from '../../lib/sanitize';
 import { createLocalRound, putRound } from '../../db';
@@ -53,6 +54,7 @@ export default function PlayerSetup() {
   }
 
   return (
+    <CourseTheme theme={course.theme} accent={course.accent}>
     <Screen>
       <TopBar title={course.name} back={`/courses/${courseId}/map`} />
       <Content>
@@ -112,5 +114,6 @@ export default function PlayerSetup() {
         </div>
       </Content>
     </Screen>
+    </CourseTheme>
   );
 }

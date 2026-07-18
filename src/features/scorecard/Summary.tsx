@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import CourseTheme from '../../ui/CourseTheme';
 import Confetti from '../../ui/Confetti';
 import { courseById } from '../../data/courses';
 import { getRound, putRound } from '../../db';
@@ -84,6 +85,7 @@ export default function Summary() {
     .sort((a, b) => a.total - b.total);
 
   return (
+    <CourseTheme theme={course.theme} accent={course.accent}>
     <Screen>
       <Confetti />
       <TopBar title="Final scorecard" back="/" />
@@ -168,6 +170,7 @@ export default function Summary() {
         </div>
       </Content>
     </Screen>
+    </CourseTheme>
   );
 }
 

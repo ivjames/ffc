@@ -3,6 +3,7 @@ import { Screen, TopBar, Content } from '../../ui/components';
 import { coursesByLocation, locationById } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
 import { coursePar } from '../../lib/scoring';
+import { themeEmoji } from '../../lib/theme';
 
 // §5.1 step 1 — pick a course at the current location (one round = one course).
 export default function CoursePicker() {
@@ -57,30 +58,4 @@ export default function CoursePicker() {
       </Content>
     </Screen>
   );
-}
-
-function themeEmoji(theme: string): string {
-  switch (theme) {
-    case 'blue':
-      return '🔵';
-    case 'green':
-      return '🟢';
-    case 'red':
-      return '🔴';
-    case 'dragon':
-      return '🐉';
-    case 'western':
-      return '🤠';
-    // Retained for any legacy themed courses.
-    case 'jungle':
-      return '🌴';
-    case 'pirate':
-      return '🏴‍☠️';
-    case 'space':
-      return '🚀';
-    case 'haunted':
-      return '👻';
-    default:
-      return '⛳️';
-  }
 }

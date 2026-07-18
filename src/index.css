@@ -1,9 +1,18 @@
 @import 'tailwindcss';
 
-/* Design tokens — fairway greens + arcade accents */
+/* Design tokens — the `fairway` ramp. Base values are the venue greens, but
+   these are the SAME custom properties a course theme overrides on a wrapper
+   (see src/lib/theme.ts + src/ui/CourseTheme.tsx): every `fairway-*` utility
+   compiles to `var(--color-fairway-N)`, so re-pointing the variables recolors a
+   whole screen to the course being played without touching any markup. The full
+   50→950 ramp is declared here so every shade the UI uses (incl. 200/300/400)
+   generates a utility that a theme can then re-point. */
 @theme {
   --color-fairway-50: #f0fdf4;
   --color-fairway-100: #dcfce7;
+  --color-fairway-200: #bbf7d0;
+  --color-fairway-300: #86efac;
+  --color-fairway-400: #4ade80;
   --color-fairway-500: #22c55e;
   --color-fairway-600: #16a34a;
   --color-fairway-700: #15803d;
