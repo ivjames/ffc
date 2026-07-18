@@ -33,8 +33,11 @@ import { generateHole } from './generate';
 // is input, the rAF loop, and rendering.
 
 type Mode = 'course' | 'endless';
-type Phase = 'aim' | 'rolling' | 'sunk' | 'done';
+type Phase = 'aim' | 'rolling' | 'splash' | 'sunk' | 'done';
 type Drag = { active: boolean; sx: number; sy: number; dx: number; dy: number };
+// A splash-and-sink animation: the ball sinks at (sx,sy), ripples spread, then it
+// re-drops (grows back in) at (dx,dy) just outside the pool. `p` runs 0→1.
+type Splash = { sx: number; sy: number; dx: number; dy: number; p: number };
 type GS = {
   holes: Hole[];
   mode: Mode;
@@ -44,10 +47,14 @@ type GS = {
   holeIndex: number;
   strokes: number;
   drag: Drag;
+  splash: Splash | null;
 };
 
 // Distinct derived seeds per hole so an endless run is reproducible.
 const SEED_SALT = 0x9e3779b1;
+
+// How long the splash-and-sink plays before the ball is live again (ms).
+const SPLASH_MS = 950;
 
 // After sinking, linger on the result so the score reads clearly, then advance
 // on its own so a round flows without a tap between every hole. The "Next hole"
@@ -191,6 +198,59 @@ function hazardLayer(hole: Hole): HTMLCanvasElement | null {
   return hazardCache.get(hole) ?? null;
 }
 
+// The splash-and-sink, driven by progress s.p (0→1): ripples spread from where
+// the ball went under, the ball shrinks away as it sinks, then it grows back in
+// at the re-drop spot (already computed clear of the pool) with a landing ripple.
+function drawSplash(ctx: CanvasRenderingContext2D, s: Splash) {
+  const p = s.p;
+
+  // Ripples from the entry point — a few staggered rings expanding and fading.
+  const RINGS = 3;
+  for (let i = 0; i < RINGS; i++) {
+    const rp = p * 1.5 - i * 0.22;
+    if (rp <= 0 || rp >= 1) continue;
+    ctx.strokeStyle = `rgba(210,235,255,${0.55 * (1 - rp)})`;
+    ctx.lineWidth = 2 * (1 - rp) + 0.6;
+    ctx.beginPath();
+    ctx.arc(s.sx, s.sy, BALL_R * (0.5 + rp * 2.6), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // The ball sinking: shrinks and dims, gone by ~55% of the way through.
+  const sinkP = Math.min(p / 0.55, 1);
+  if (sinkP < 1) {
+    ctx.save();
+    ctx.globalAlpha = 1 - sinkP * 0.5;
+    ctx.fillStyle = '#eef2f6';
+    ctx.beginPath();
+    ctx.arc(s.sx, s.sy + sinkP * 2, BALL_R * (1 - sinkP), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Re-drop: the ball grows back in just outside the pool over the last third,
+  // with a small landing ripple so it reads as reappearing clear of the water.
+  const dropP = Math.max(0, (p - 0.68) / 0.32);
+  if (dropP > 0) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(s.dx, s.dy, BALL_R * Math.min(1, dropP), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    if (dropP < 1) {
+      ctx.strokeStyle = `rgba(240,253,244,${0.5 * (1 - dropP)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(s.dx, s.dy, BALL_R + 4 + dropP * 6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+}
+
 function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   const hole = gs.holes[gs.holeIndex];
   if (!hole) return;
@@ -259,6 +319,13 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.lineTo(cup.x, cup.y - 24);
   ctx.closePath();
   ctx.fill();
+
+  // While a splash plays it owns the ball's presentation — draw the sink/re-drop
+  // and nothing else (no resting ball, no aim UI).
+  if (gs.phase === 'splash' && gs.splash) {
+    drawSplash(ctx, gs.splash);
+    return;
+  }
 
   const b = gs.ball;
 
@@ -341,6 +408,7 @@ export default function PuttGolf() {
     holeIndex: 0,
     strokes: 0,
     drag: { active: false, sx: 0, sy: 0, dx: 0, dy: 0 },
+    splash: null,
   });
 
   const [mode, setMode] = useState<Mode | null>(null);
@@ -360,6 +428,7 @@ export default function PuttGolf() {
     gs.holeIndex = index;
     gs.strokes = 0;
     gs.drag.active = false;
+    gs.splash = null;
     setPhase('aim');
     setHoleIndex(index);
     setStrokes(0);
@@ -415,10 +484,14 @@ export default function PuttGolf() {
     ctx.scale(dpr, dpr);
 
     let raf = 0;
-    const frame = () => {
+    let last = 0;
+    const splashInfo = { splashX: 0, splashY: 0 };
+    const frame = (ts: number) => {
+      const dt = last ? ts - last : 16;
+      last = ts;
       const gs = gsRef.current;
       if (gs.phase === 'rolling') {
-        const res = stepPhysics(gs.ball, gs.holes[gs.holeIndex]);
+        const res = stepPhysics(gs.ball, gs.holes[gs.holeIndex], splashInfo);
         if (res === 'sunk') {
           gs.phase = 'sunk';
           const next = [...scoresRef.current];
@@ -439,12 +512,29 @@ export default function PuttGolf() {
             }, 0);
           }
         } else if (res === 'water') {
-          gs.strokes += 1; // penalty; ball already dropped near the entry point
-          gs.phase = 'aim';
+          // Penalty now; the ball is already sitting at its safe re-drop spot.
+          // Play the splash-and-sink (sink at the entry point → re-drop grows
+          // back in) before handing control back to the player.
+          gs.strokes += 1;
+          gs.splash = {
+            sx: splashInfo.splashX,
+            sy: splashInfo.splashY,
+            dx: gs.ball.x,
+            dy: gs.ball.y,
+            p: 0,
+          };
+          gs.phase = 'splash';
           setStrokes(gs.strokes);
-          setPhase('aim');
+          setPhase('splash');
           setNote('💦 Splash! +1 penalty — dropped by the water');
         } else if (res === 'stopped') {
+          gs.phase = 'aim';
+          setPhase('aim');
+        }
+      } else if (gs.phase === 'splash' && gs.splash) {
+        gs.splash.p += dt / SPLASH_MS;
+        if (gs.splash.p >= 1) {
+          gs.splash = null;
           gs.phase = 'aim';
           setPhase('aim');
         }
@@ -563,9 +653,11 @@ export default function PuttGolf() {
       ? note || 'Pull back from the ball to aim — the arrow shows your shot — and release to putt.'
       : phase === 'rolling'
         ? 'Rolling…'
-        : phase === 'sunk'
-          ? `${result?.emoji} ${result?.label} — ${strokes} on par ${hole?.par}`
-          : '';
+        : phase === 'splash'
+          ? '💦 Splash! +1 penalty'
+          : phase === 'sunk'
+            ? `${result?.emoji} ${result?.label} — ${strokes} on par ${hole?.par}`
+            : '';
 
   // Mode picker — the entry screen.
   if (mode === null) {
@@ -642,11 +734,15 @@ export default function PuttGolf() {
                 </Button>
               )}
               {phase !== 'sunk' && (
-                <Button variant="ghost" onClick={resetHole} disabled={phase === 'rolling'}>
+                <Button
+                  variant="ghost"
+                  onClick={resetHole}
+                  disabled={phase === 'rolling' || phase === 'splash'}
+                >
                   Reset hole
                 </Button>
               )}
-              {isEndless && phase !== 'rolling' && (
+              {isEndless && phase !== 'rolling' && phase !== 'splash' && (
                 <Button variant="ghost" onClick={endRun}>
                   End run
                 </Button>

@@ -39,6 +39,7 @@ export const MAX_SHOT = 14.5; // px/frame at 100% power
 export const CAPTURE_SPEED = 5.8; // dead-centre drop speed; the capture radius shrinks to 0 at this speed
 export const RIM_REST = 0.5; // energy kept when the ball catches the lip and rings out
 export const MAX_DRAG = 132; // drag length (field units) that maps to full power
+export const DROP_CLEAR = 4; // gap (px) left between the re-dropped ball and the pool edge
 
 export type Seg = { ax: number; ay: number; bx: number; by: number; r: number };
 export type Ball = { x: number; y: number; vx: number; vy: number };
@@ -231,20 +232,53 @@ export function inRough(x: number, y: number, h: Hole): boolean {
   return sdG < 0 && sdG > -ROUGH_BAND && sdUnion(x, y, h.fairway) >= 0;
 }
 
-/** Advance the ball one frame. Sub-steps keep fast shots from tunnelling. */
-export function stepPhysics(b: Ball, hole: Hole): Outcome {
+/** Where a splashed ball re-drops: the nearest spot to the splash (sx,sy) that
+ *  is on the surface, clear of walls, and fully outside the pool (by DROP_CLEAR,
+ *  so the ball isn't touching the water). Spiral outward and take the first hit,
+ *  which — since the radius only grows — is the closest such spot. Falls back to
+ *  the nearest merely-outside-the-pool point, then to the splash itself. */
+function waterDropPoint(hole: Hole, sx: number, sy: number): { x: number; y: number } {
+  let nearestOutside: { x: number; y: number } | null = null;
+  for (let rad = BALL_R; rad <= 80; rad += 3) {
+    for (let a = 0; a < 18; a++) {
+      const ang = (a / 18) * Math.PI * 2 + rad * 0.7; // twist per ring: no axis bias
+      const x = sx + Math.cos(ang) * rad;
+      const y = sy + Math.sin(ang) * rad;
+      if (x < BALL_R || x > W - BALL_R || y < BALL_R || y > H - BALL_R) continue;
+      if (sdSurface(x, y, hole) > -BALL_R) continue; // whole ball must sit on the surface
+      if (hole.walls && hole.walls.length && sdUnion(x, y, hole.walls) < BALL_R) continue;
+      if (hole.water && sdBlob(x, y, hole.water) < 0) continue; // never re-drop inside the pool
+      if (!hole.water || sdBlob(x, y, hole.water) >= BALL_R + DROP_CLEAR) return { x, y };
+      if (!nearestOutside) nearestOutside = { x, y };
+    }
+  }
+  return nearestOutside ?? { x: sx, y: sy };
+}
+
+/** Advance the ball one frame. Sub-steps keep fast shots from tunnelling. On a
+ *  splash, `info` (if given) receives the splash point — where the ball went
+ *  under — while the ball itself is left at the safe re-drop spot. */
+export function stepPhysics(
+  b: Ball,
+  hole: Hole,
+  info?: { splashX: number; splashY: number },
+): Outcome {
   const speed = Math.hypot(b.vx, b.vy);
   const steps = Math.max(1, Math.ceil(speed / (BALL_R * 0.5)));
   for (let i = 0; i < steps; i++) {
-    const px = b.x;
-    const py = b.y;
     b.x += b.vx / steps;
     b.y += b.vy / steps;
     const outcome = resolve(b, hole);
     if (outcome === 'water') {
-      // Drop back where it went in — the last spot before it touched water.
-      b.x = px;
-      b.y = py;
+      // The ball's centre is over the water here — that's the splash point. Sink
+      // it there (for the animation), then re-drop it clear of the pool.
+      if (info) {
+        info.splashX = b.x;
+        info.splashY = b.y;
+      }
+      const drop = waterDropPoint(hole, b.x, b.y);
+      b.x = drop.x;
+      b.y = drop.y;
       b.vx = 0;
       b.vy = 0;
       return 'water';
