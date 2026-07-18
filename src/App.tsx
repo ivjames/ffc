@@ -15,6 +15,7 @@ import FunZone from './features/fun/FunZone';
 import FunFacts from './features/fun/FunFacts';
 import Trivia from './features/fun/Trivia';
 import Spinner from './features/fun/Spinner';
+import SkeeBall from './features/fun/SkeeBall';
 import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/fun/facts" element={<FunFacts />} />
         <Route path="/fun/trivia" element={<Trivia />} />
         <Route path="/fun/spinner" element={<Spinner />} />
+        <Route path="/fun/skeeball" element={<SkeeBall />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         <Route path="*" element={<Home />} />

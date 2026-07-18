@@ -37,6 +37,13 @@ const TILES: Tile[] = [
     blurb: 'Spin for a silly dare while you wait your turn.',
     accent: '#ec4899',
   },
+  {
+    to: '/fun/skeeball',
+    emoji: '🎳',
+    title: 'Skee-Ball',
+    blurb: 'Roll the lane — nail the corners for 100.',
+    accent: '#22c55e',
+  },
 ];
 
 export default function FunZone() {

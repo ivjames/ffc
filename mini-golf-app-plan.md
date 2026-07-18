@@ -268,12 +268,18 @@ bowling, karts, axe throwing…); themed spinner decks; a "daily" fact; optional
 localize trivia difficulty for younger players. All additive edits to
 `funContent.ts`.
 
-**Later — attraction mini-games (each its own feature, like Arcade Putt).** Small
-arcade games themed to the real attractions, playable one-handed while waiting.
-Roughly increasing build cost:
+**Attraction mini-games (each its own feature, like Arcade Putt).** Small arcade
+games themed to the real attractions, playable one-handed while waiting.
 
-- **Skee-ball** — flick to roll up a ramp into scoring rings. (Closest to Putt;
-  good first candidate.)
+- **Skee-ball** (`/fun/skeeball`) — **shipped.** Swipe up the lane to roll into
+  concentric scoring rings (10–50) or the top corner 100 holes; nine balls a
+  game. Landing is deterministic from the swipe with a live landing reticle — no
+  RNG, pure skill — and the roll clock pauses when the tab/app is backgrounded.
+  Physics/scoring are pure functions (`launchVelocity`/`landingPoint`/`scoreAt`)
+  so they stay tunable and testable.
+
+Remaining, roughly increasing build cost:
+
 - **Air hockey** — drag a paddle, 1-player vs. a simple AI or 2-player pass-the-phone.
 - **Bumper cars / bumper boats** — top-down bump-the-others arena; shared physics.
 - **Axe throwing** — timing/aim flick at a target; scoring rings like darts.
@@ -282,7 +288,24 @@ Roughly increasing build cost:
 - **Go-karts** — lap-time time-trial on a simple track.
 
 Each is a self-contained `src/features/<game>/` route wired into the `/fun` hub
-(or its own "Arcade" hub), following the Arcade Putt pattern: canvas/SVG render,
-a small physics/geometry module, client-side only. Build one at a time and get it
-"feeling right in the hand" before starting the next — the same rule as the
-scorecard core loop.
+(or its own "Arcade" hub), following the Arcade Putt / Skee-Ball pattern:
+canvas/SVG render, a small pure physics/geometry module, client-side only. Build
+one at a time and get it "feeling right in the hand" before starting the next —
+the same rule as the scorecard core loop.
+
+**Native-wrap notes (Capacitor) for the games that want them.** None of these
+block a PWA build; they're where a web API falls short and the Capacitor plugin
+is the answer:
+
+- **Orientation lock** (go-karts, air hockey may want landscape): the manifest
+  forces `portrait`, and iOS Safari/PWA can't lock orientation via web API at
+  all — use the Capacitor `ScreenOrientation` plugin. Skee-ball and the current
+  content are portrait, so unaffected.
+- **Tilt / motion steering**: iOS needs an explicit `DeviceMotionEvent`
+  permission prompt from a user gesture (HTTPS-only, flaky in standalone PWAs).
+  Prefer touch controls, or use the Capacitor `Motion` plugin. Not used today.
+- **Haptics** (bumper/axe impact feel): little/no vibration on iOS Safari — use
+  the Capacitor `Haptics` plugin. Not used today.
+- **Game loops**: pause `requestAnimationFrame`/timers on `visibilitychange` so a
+  backgrounded game doesn't burn battery or jump state — Skee-Ball already does
+  this; carry the pattern into each new game.
