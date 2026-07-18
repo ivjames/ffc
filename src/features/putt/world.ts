@@ -169,11 +169,12 @@ function resolve(b: Ball, hole: Hole): 'sunk' | null {
   return null;
 }
 
-/** True when (x,y) is on the rough collar: inside the green, near its edge.
- *  The collar rings the whole green (the green sits on top of the fairway). */
+/** True when (x,y) is on the rough collar: inside the green, near its edge, and
+ *  not on the fairway — so the approach lane stays clear of rough where it
+ *  meets the green. */
 export function inRough(x: number, y: number, h: Hole): boolean {
   const sdG = sdUnion(x, y, h.green);
-  return sdG < 0 && sdG > -ROUGH_BAND;
+  return sdG < 0 && sdG > -ROUGH_BAND && sdUnion(x, y, h.fairway) >= 0;
 }
 
 /** Advance the ball one frame. Sub-steps keep fast shots from tunnelling. */

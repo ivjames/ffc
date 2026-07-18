@@ -118,14 +118,14 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillStyle = '#0b3b22';
   for (const s of surface) fillCapsule(ctx, s, 5);
 
-  // Fairway first…
-  ctx.fillStyle = '#1a8f4a';
-  for (const s of hole.fairway) fillCapsule(ctx, s, 0);
-
-  // …then the green on top: its rough collar, then the brighter putting surface
-  // inset by the collar width — a fringe of rough ringing the whole green.
+  // The green's rough collar first, then the fairway lane over it (so the
+  // approach cuts through the collar and stays clear of rough), then the
+  // brighter putting surface on top — a clean green disc with a collar that
+  // rings it everywhere except where the fairway enters.
   ctx.fillStyle = '#2b7a43';
   for (const s of hole.green) fillCapsule(ctx, s, 0);
+  ctx.fillStyle = '#1a8f4a';
+  for (const s of hole.fairway) fillCapsule(ctx, s, 0);
   ctx.fillStyle = '#37c06d';
   for (const s of hole.green) fillCapsule(ctx, s, -ROUGH_BAND);
 
