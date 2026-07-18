@@ -32,62 +32,66 @@ const GREEN: Ramp = {
   950: '#052e16',
 };
 
+// Muted steel/slate blue — reads as blue without the vivid electric edge.
 const BLUE: Ramp = {
-  50: '#eff6ff',
-  100: '#dbeafe',
-  200: '#bfdbfe',
-  300: '#93c5fd',
-  400: '#60a5fa',
-  500: '#3b82f6',
-  600: '#2563eb',
-  700: '#1d4ed8',
-  800: '#1e40af',
-  900: '#172554',
-  950: '#0b1533',
+  50: '#eef2f7',
+  100: '#dbe3ee',
+  200: '#bccbdd',
+  300: '#97afc9',
+  400: '#7091b0',
+  500: '#5578a0',
+  600: '#45638a',
+  700: '#3a5273',
+  800: '#324459',
+  900: '#26344a',
+  950: '#141d2b',
 };
 
+// Muted clay/brick rose — softened well back from a bold primary red.
 const RED: Ramp = {
-  50: '#fef2f2',
-  100: '#fee2e2',
-  200: '#fecaca',
-  300: '#fca5a5',
-  400: '#f87171',
-  500: '#ef4444',
-  600: '#dc2626',
-  700: '#b91c1c',
-  800: '#991b1b',
-  900: '#7f1d1d',
-  950: '#340606',
+  50: '#f8ecea',
+  100: '#f0d6d3',
+  200: '#e3b5b0',
+  300: '#d1908a',
+  400: '#bd6f68',
+  500: '#a95850',
+  600: '#8f463f',
+  700: '#763833',
+  800: '#5e2d29',
+  900: '#472220',
+  950: '#2a1614',
 };
 
-// Dragon's Hollow — fiery embers, deep charred background.
+// Dragon's Hollow — a lush, leafy forest green. The orange course accent
+// (par / tags / top glow) rides on top as the fiery highlight.
 const DRAGON: Ramp = {
-  50: '#fff7ed',
-  100: '#ffedd5',
-  200: '#fed7aa',
-  300: '#fdba74',
-  400: '#fb923c',
-  500: '#f97316',
-  600: '#ea580c',
-  700: '#c2410c',
-  800: '#9a3412',
-  900: '#7c2d12',
-  950: '#26120a',
+  50: '#edf7f1',
+  100: '#cfece0',
+  200: '#a3d9bf',
+  300: '#74c69d',
+  400: '#52b788',
+  500: '#40916c',
+  600: '#2d6a4f',
+  700: '#245741',
+  800: '#1b4332',
+  900: '#123024',
+  950: '#0a1f14',
 };
 
-// Western — warm leather, desert amber, dark saddle-brown background.
+// Western — sun-bleached leather and tan; a warm, light dust-brown, not the
+// near-black saddle it started as.
 const WESTERN: Ramp = {
-  50: '#fffbeb',
-  100: '#fef3c7',
-  200: '#fde68a',
-  300: '#fcd34d',
-  400: '#fbbf24',
-  500: '#f59e0b',
-  600: '#d97706',
-  700: '#b45309',
-  800: '#92400e',
-  900: '#78350f',
-  950: '#2a1404',
+  50: '#faf6ec',
+  100: '#f2e8d2',
+  200: '#e6d5b0',
+  300: '#d7bd87',
+  400: '#c4a266',
+  500: '#b08752',
+  600: '#97703f',
+  700: '#7c5d38',
+  800: '#634a2d',
+  900: '#4c3924',
+  950: '#352819',
 };
 
 const RAMPS: Record<string, Ramp> = {
