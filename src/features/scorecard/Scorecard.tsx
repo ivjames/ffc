@@ -41,6 +41,10 @@ export default function Scorecard() {
   // `fastForward` runs the same hole-by-hole walk with no delay between holes.
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [fastForward, setFastForward] = useState(false);
+  // Per-player nonce that only advances on an actual stroke edit. The score
+  // number is keyed on it so the pop animation re-runs on a bump but NOT when
+  // navigating between holes (which merely changes the displayed value).
+  const [pops, setPops] = useState<Record<number, number>>({});
 
   useEffect(() => {
     void getRound(clientId).then((r) => {
@@ -127,6 +131,11 @@ export default function Scorecard() {
     });
   }
 
+  // Re-run the score-pop animation for one player after a real stroke edit.
+  function popScore(playerIndex: number) {
+    setPops((prev) => ({ ...prev, [playerIndex]: (prev[playerIndex] ?? 0) + 1 }));
+  }
+
   function bump(playerIndex: number, delta: number) {
     const current = round!.scores[playerIndex]?.[hole] ?? null;
     // No auto-fill: an empty hole starts blank. First + registers 1; − does
@@ -134,15 +143,17 @@ export default function Scorecard() {
     if (current == null) {
       if (delta > 0) {
         playStroke();
+        popScore(playerIndex);
         void setStroke(playerIndex, 1);
       }
       return;
     }
     const next = clampStrokes(current + delta);
-    // Only sound an actual change (a bump that hits the cap/floor is a no-op).
+    // Only sound/animate an actual change (a bump at the cap/floor is a no-op).
     if (next !== current) {
       if (delta > 0) playStroke();
       else playUndo();
+      popScore(playerIndex);
     }
     void setStroke(playerIndex, next);
   }
@@ -267,10 +278,11 @@ export default function Scorecard() {
                     −
                   </button>
                   <div className="flex-1 text-center">
-                    {/* Keyed on the value so it re-mounts and re-runs the pop
-                        animation each time the stroke count changes. */}
+                    {/* Keyed on a per-player nonce that only changes on a real
+                        stroke edit, so the pop fires on +/− but not when
+                        navigating between holes. */}
                     <span
-                      key={strokes ?? 'empty'}
+                      key={pops[p] ?? 0}
                       className="inline-block text-4xl font-black text-fairway-50 animate-score-pop"
                     >
                       {strokes ?? '–'}
