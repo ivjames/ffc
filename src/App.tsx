@@ -16,6 +16,7 @@ import FunFacts from './features/fun/FunFacts';
 import Trivia from './features/fun/Trivia';
 import Spinner from './features/fun/Spinner';
 import SkeeBall from './features/fun/SkeeBall';
+import AirHockey from './features/fun/AirHockey';
 import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/fun/trivia" element={<Trivia />} />
         <Route path="/fun/spinner" element={<Spinner />} />
         <Route path="/fun/skeeball" element={<SkeeBall />} />
+        <Route path="/fun/airhockey" element={<AirHockey />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         <Route path="*" element={<Home />} />

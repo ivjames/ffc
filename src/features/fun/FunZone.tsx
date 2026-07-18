@@ -44,6 +44,13 @@ const TILES: Tile[] = [
     blurb: 'Roll the lane — nail the corners for 100.',
     accent: '#22c55e',
   },
+  {
+    to: '/fun/airhockey',
+    emoji: '🏒',
+    title: 'Air Hockey',
+    blurb: 'Face the CPU — first to seven goals wins.',
+    accent: '#38bdf8',
+  },
 ];
 
 export default function FunZone() {
