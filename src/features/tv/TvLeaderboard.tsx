@@ -109,7 +109,7 @@ export default function TvLeaderboard() {
                       </span>
                     )}
                   </div>
-                  <span className="text-2xl font-black text-fairway-400">{r.total}</span>
+                  <span className="text-2xl font-black text-fairway-50">{r.total}</span>
                 </li>
               );
             })}
