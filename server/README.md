@@ -31,6 +31,7 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `DATABASE_URL`      | Postgres connection string (server-side creds).           |
 | `PORT`              | Listen port (default 8060).                               |
 | `APP_TOKEN`         | Shared token guarding `POST /api/seed`. Unset = allow (dev). |
+| `VENUE_TZ`          | **Fallback** IANA timezone for leaderboard calendar windows, used only for a venue whose `location.tz` is unset. The real zone is per venue (see "Venue timezones" below). Default `America/Los_Angeles`. |
 | `ANTHROPIC_API_KEY` | Vision key for the scavenger hunt (`POST /api/hunt/verify`). Unset = hunt verification returns `503`; the rest of the API is unaffected. |
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
 
@@ -80,6 +81,11 @@ completed round per course and keeps that tag's best (lowest) total per course.
 ]
 ```
 `period` filters by `completed_at` (default `all`). Invalid period → `400`.
+`day`/`week`/`month` are **calendar** windows in each venue's local time (since
+local midnight / start of the local week / start of the local month), **not** a
+rolling 24h/7d/30d. The zone is resolved per round as `coalesce(location.tz,
+VENUE_TZ)`, so a venue in another region uses its own calendar day — see "Venue
+timezones" below.
 
 ### `POST /api/seed`
 Dev helper. Upserts courses. Requires header `x-app-token: $APP_TOKEN` when
@@ -158,6 +164,28 @@ Responses:
 - `200 { "ok": true, "verified": true, "alreadyFound": true, "reason": "…" }` — dedupe.
 - `400` — validation failure. `429` — per-IP cap (20/min). `503` — `ANTHROPIC_API_KEY` unset.
 
+## Venue timezones
+
+The leaderboard buckets rounds by **calendar** day/week/month in each venue's
+local time, so every venue carries an IANA zone in `location.tz` (e.g.
+`America/Los_Angeles`). We store the IANA name, never a 3-letter abbreviation:
+`PST` is a *fixed* UTC−8 offset that ignores daylight time (it would bucket
+summer rounds an hour off local midnight) and abbreviations are ambiguous (`CST`
+= US Central / China / Cuba). IANA names carry the DST rules and are unique.
+
+Humans never type these. `lib/timezone.js` is the contract:
+
+| function | use | example |
+| -------- | --- | ------- |
+| `tzFromCoords(lat, lng)` | **Onboarding** derives the zone from the venue's coordinates (already captured on `location`) and writes it to `location.tz`. | `(34.089, -117.679)` → `"America/Los_Angeles"` |
+| `isValidTz(tz)` | Validate before writing — rejects typos **and** fixed-offset abbreviations (`"PST"`), so a bad value can't reach the query. | `"PST"` → `false`; `"America/Los_Angeles"` → `true` |
+| `friendlyTzLabel(tz)` | **Admin UIs** render a human label from the stored IANA name (season-independent). | `"America/Los_Angeles"` → `"Pacific Time (PT)"` |
+
+Coordinate → zone lookup uses `tz-lookup` (offline, no network). If a venue's
+`location.tz` is somehow unset, the query falls back to the `VENUE_TZ` env var.
+The three seeded venues are all `America/Los_Angeles`, but that's incidental —
+nothing assumes one global zone.
+
 ## Files
 
 - `index.js` — Express app, middleware, route mounting, listen.
@@ -167,6 +195,8 @@ Responses:
 - `migrate.js` — applies `schema.sql`.
 - `lib/sanitize.js` — tag validation + offensive-word blocklist (`isValidTag`,
   `validateTags`, `BLOCKLIST`). Mirrors the client's rules exactly.
+- `lib/timezone.js` — venue timezone contract (`tzFromCoords`, `isValidTz`,
+  `friendlyTzLabel`); see "Venue timezones" above.
 - `routes/rounds.js` — `POST /api/rounds` (idempotent sync, per-IP rate limit).
 - `routes/leaderboard.js` — `GET /api/leaderboard`.
 - `routes/seed.js` — `POST /api/seed`.
