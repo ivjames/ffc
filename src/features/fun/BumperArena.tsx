@@ -22,9 +22,15 @@ const FIXED = 1000 / 120; // physics substep (ms)
 const WALL_E = 0.6; // wall bounce restitution
 const UNIT_E = 0.92; // unit-unit restitution
 const JOY_MAX = 60; // joystick travel (field units) for full throttle
-const BUMP_SPEED = 2.0; // closing speed that counts as a solid bump
 const BUMP_COOLDOWN = 450; // ms before the same unit can be bumped again
 const GAME_MS = 30000;
+
+// Boat-only water FX.
+const RIPPLE_INTERVAL = 85; // ms between wake ripples dropped by a moving boat
+const RIPPLE_LIFE = 1300; // ms a wake ripple lingers (long trail)
+const RIPPLE_MIN_SPEED = 0.8; // boat must be moving this fast to leave a wake
+const SPLASH_LIFE = 560; // ms a splash droplet lives
+const SPLASH_MIN_GAP = 55; // ms throttle between splash bursts
 
 /** Per-game skin + handling. Everything that differs between cars and boats. */
 export type BumperTheme = {
@@ -41,6 +47,7 @@ export type BumperTheme = {
   maxSpeed: number;
   aiAccel: number;
   aiMax: number;
+  bumpSpeed: number; // closing speed that counts as a solid bump (lower = easier)
 };
 
 type Unit = {
@@ -52,7 +59,10 @@ type Unit = {
   tx: number; // AI wander target (unused for the player)
   ty: number;
   retargetAt: number;
+  lastRipple: number; // last time this unit dropped a wake ripple
 };
+type Ripple = { x: number; y: number; born: number }; // expanding wake ring
+type Splash = { x: number; y: number; vx: number; vy: number; born: number }; // droplet
 type Joystick = { active: boolean; ox: number; oy: number; kx: number; ky: number };
 type Phase = 'play' | 'done';
 type GS = {
@@ -63,13 +73,16 @@ type GS = {
   joy: Joystick;
   lastBump: number[]; // per-AI-index cooldown timestamps
   lastSound: number;
+  ripples: Ripple[]; // boat wake trail
+  splashes: Splash[]; // droplets thrown up by a bump
+  lastSplash: number; // throttle for splash bursts
 };
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 const rnd = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
 function freshGS(theme: BumperTheme): GS {
-  const player: Unit = { x: W / 2, y: H - 90, vx: 0, vy: 0, color: theme.playerColor, tx: 0, ty: 0, retargetAt: 0 };
+  const player: Unit = { x: W / 2, y: H - 90, vx: 0, vy: 0, color: theme.playerColor, tx: 0, ty: 0, retargetAt: 0, lastRipple: 0 };
   const units: Unit[] = [player];
   // Space the AI units across the upper arena so they don't start overlapping.
   const spots = [
@@ -88,6 +101,7 @@ function freshGS(theme: BumperTheme): GS {
       tx: rnd(UNIT_R, W - UNIT_R),
       ty: rnd(UNIT_R, H - UNIT_R),
       retargetAt: 0,
+      lastRipple: 0,
     });
   }
   return {
@@ -98,6 +112,9 @@ function freshGS(theme: BumperTheme): GS {
     joy: { active: false, ox: 0, oy: 0, kx: 0, ky: 0 },
     lastBump: new Array(N_AI + 1).fill(-1e9),
     lastSound: -1e9,
+    ripples: [],
+    splashes: [],
+    lastSplash: -1e9,
   };
 }
 
@@ -167,6 +184,14 @@ function step(gs: GS, now: number, theme: BumperTheme) {
     c.x += c.vx;
     c.y += c.vy;
     wallBounce(c);
+    // Boats leave a wake: drop an expanding ripple behind the stern while moving.
+    if (theme.kind === 'boat') {
+      const sp = Math.hypot(c.vx, c.vy);
+      if (sp > RIPPLE_MIN_SPEED && now - c.lastRipple > RIPPLE_INTERVAL) {
+        c.lastRipple = now;
+        gs.ripples.push({ x: c.x - (c.vx / sp) * (UNIT_R - 4), y: c.y - (c.vy / sp) * (UNIT_R - 4), born: now });
+      }
+    }
   }
 
   // Unit-unit collisions (equal mass, elastic with restitution).
@@ -196,8 +221,13 @@ function step(gs: GS, now: number, theme: BumperTheme) {
         b.vx += jimp * nx;
         b.vy += jimp * ny;
       }
+      // A hard enough hit throws up a splash at the contact point (boats only).
+      if (theme.kind === 'boat' && closing > theme.bumpSpeed && now - gs.lastSplash > SPLASH_MIN_GAP) {
+        gs.lastSplash = now;
+        spawnSplash(gs, a.x + nx * UNIT_R, a.y + ny * UNIT_R, now, closing);
+      }
       // Scoring: player (index 0) drives into an AI hard enough.
-      if (i === 0 && closing > BUMP_SPEED) {
+      if (i === 0 && closing > theme.bumpSpeed) {
         const aiIdx = j;
         const playerIntoAi = a.vx * nx + a.vy * ny; // player velocity toward b
         if (playerIntoAi > 0.4 && now - gs.lastBump[aiIdx] > BUMP_COOLDOWN) {
@@ -213,22 +243,24 @@ function step(gs: GS, now: number, theme: BumperTheme) {
   }
 }
 
+/** Throw a ring of droplets outward from a bump's contact point. */
+function spawnSplash(gs: GS, x: number, y: number, now: number, closing: number) {
+  const n = 8;
+  const power = 0.7 + Math.min(closing, 6) * 0.16;
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + Math.random() * 0.5;
+    const spd = power * (0.7 + Math.random() * 0.8);
+    gs.splashes.push({ x, y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, born: now });
+  }
+  // Keep the pool bounded even under heavy contact.
+  if (gs.splashes.length > 200) gs.splashes.splice(0, gs.splashes.length - 200);
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
 function drawUnit(ctx: CanvasRenderingContext2D, c: Unit, isPlayer: boolean, theme: BumperTheme) {
   const speed = Math.hypot(c.vx, c.vy);
   const nx = speed > 0.3 ? c.vx / speed : 0;
   const ny = speed > 0.3 ? c.vy / speed : 0;
-
-  // Wake ripples behind a moving boat.
-  if (theme.kind === 'boat' && speed > 0.6) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 2;
-    for (let k = 1; k <= 2; k++) {
-      ctx.beginPath();
-      ctx.arc(c.x - nx * (UNIT_R + k * 6), c.y - ny * (UNIT_R + k * 6), UNIT_R - 6, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
 
   // Bumper ring (rubber tube for a boat, fender for a car).
   ctx.beginPath();
@@ -261,7 +293,7 @@ function drawUnit(ctx: CanvasRenderingContext2D, c: Unit, isPlayer: boolean, the
   }
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme) {
+function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: number) {
   ctx.clearRect(0, 0, W, H);
 
   if (theme.kind === 'boat') {
@@ -305,7 +337,38 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme) {
     }
   }
 
+  // Wake trail: fading, expanding rings drawn under the boats.
+  if (theme.kind === 'boat') {
+    ctx.strokeStyle = '#dbeafe';
+    ctx.lineWidth = 2;
+    for (const rp of gs.ripples) {
+      const age = now - rp.born;
+      if (age < 0 || age > RIPPLE_LIFE) continue;
+      const t = age / RIPPLE_LIFE;
+      ctx.globalAlpha = (1 - t) * 0.3;
+      ctx.beginPath();
+      ctx.arc(rp.x, rp.y, 5 + t * 22, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   for (let i = gs.units.length - 1; i >= 0; i--) drawUnit(ctx, gs.units[i], i === 0, theme);
+
+  // Splash droplets thrown up by bumps, drawn over the boats.
+  if (theme.kind === 'boat') {
+    ctx.fillStyle = '#eff6ff';
+    for (const s of gs.splashes) {
+      const age = now - s.born;
+      if (age < 0 || age > SPLASH_LIFE) continue;
+      const t = age / SPLASH_LIFE;
+      ctx.globalAlpha = 1 - t;
+      ctx.beginPath();
+      ctx.arc(s.x + s.vx * age * 0.05, s.y + s.vy * age * 0.05, 3 * (1 - t) + 0.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
 
   // Joystick.
   if (gs.joy.active) {
@@ -366,6 +429,12 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
         acc -= FIXED;
       }
 
+      // Age out water FX so the pools stay small.
+      if (theme.kind === 'boat') {
+        if (gs.ripples.length) gs.ripples = gs.ripples.filter((r) => now - r.born <= RIPPLE_LIFE);
+        if (gs.splashes.length) gs.splashes = gs.splashes.filter((s) => now - s.born <= SPLASH_LIFE);
+      }
+
       if (gs.score !== pushedScore) {
         pushedScore = gs.score;
         setScore(gs.score);
@@ -382,7 +451,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
         playFanfare();
       }
 
-      draw(ctx, gs, theme);
+      draw(ctx, gs, theme, now);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
