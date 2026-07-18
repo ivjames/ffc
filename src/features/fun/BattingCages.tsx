@@ -35,6 +35,8 @@ type GS = {
   total: number;
   pitchStart: number;
   travelMs: number;
+  loaded: boolean; // batter is holding, bat wound back
+  loadAt: number;
   swung: boolean;
   swingAt: number;
   ball: Ball;
@@ -49,6 +51,8 @@ function newPitch(gs: GS, now: number) {
   gs.phase = 'pitch';
   gs.pitchStart = now;
   gs.travelMs = rnd(TRAVEL_MIN, TRAVEL_MAX);
+  gs.loaded = false;
+  gs.loadAt = 0;
   gs.swung = false;
   gs.swingAt = 0;
   gs.outcome = null;
@@ -62,6 +66,8 @@ function freshGS(now: number): GS {
     total: 0,
     pitchStart: now,
     travelMs: TRAVEL_MIN,
+    loaded: false,
+    loadAt: 0,
     swung: false,
     swingAt: 0,
     ball: { x: W / 2, y: MOUND_Y, vx: 0, vy: 0 },
@@ -133,20 +139,26 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   ctx.closePath();
   ctx.fill();
 
-  // Bat — swings from ready to follow-through on contact.
-  const ready = -0.7;
-  const swung = 1.15;
-  let angle = ready;
-  if (gs.swung) angle = ready + (swung - ready) * clamp((now - gs.swingAt) / 150, 0, 1);
+  // Bat — held cocked back over the shoulder (READY), wound further back while
+  // loading, then swept across the zone to follow-through on the swing.
+  const READY = 0.5; // up-and-back over the batter's shoulder
+  const COCK = 0.95; // wound back further while holding
+  const SWING = -1.2; // follow-through across the plate
+  let angle = READY;
+  if (gs.swung) {
+    angle = COCK + (SWING - COCK) * clamp((now - gs.swingAt) / 160, 0, 1);
+  } else if (gs.phase === 'pitch' && gs.loaded) {
+    angle = READY + (COCK - READY) * clamp((now - gs.loadAt) / 220, 0, 1);
+  }
   ctx.save();
-  ctx.translate(W / 2 + 30, PLATE_Y + 30);
+  ctx.translate(W / 2 + 30, PLATE_Y + 26);
   ctx.rotate(angle);
   ctx.strokeStyle = '#d4a24e';
   ctx.lineWidth = 6;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(0, -54);
+  ctx.lineTo(0, -56);
   ctx.stroke();
   ctx.restore();
 
@@ -214,6 +226,7 @@ export default function BattingCages() {
         gs.pitchStart += gap;
         gs.resultAt += gap;
         gs.swingAt += gap;
+        gs.loadAt += gap;
         pausedAt = 0;
       }
       const dt = Math.min(now - last, 100);
@@ -223,8 +236,10 @@ export default function BattingCages() {
         // Kinematic descent from absolute time so timing stays framerate-exact.
         const p = (now - gs.pitchStart) / gs.travelMs;
         gs.ball.y = MOUND_Y + (PLATE_Y - MOUND_Y) * p;
-        // No swing and the ball has passed the plate → strike.
+        // No swing and the ball has passed the plate → strike (watched or held
+        // too long without releasing).
         if (!gs.swung && now - (gs.pitchStart + gs.travelMs) > LATE_CUTOFF) {
+          gs.loaded = false;
           gs.outcome = { label: 'Strike!', pts: 0, kind: 'miss' };
           gs.ball.vx = 0;
           gs.ball.vy = 7;
@@ -260,10 +275,20 @@ export default function BattingCages() {
     return () => cancelAnimationFrame(raf);
   }, [playing]);
 
-  const onSwing = useCallback(() => {
+  // Press to load: the batter winds the bat back and holds, ready to swing.
+  const onPress = useCallback(() => {
     const gs = gsRef.current;
-    if (gs.phase !== 'pitch' || gs.swung) return;
+    if (gs.phase !== 'pitch' || gs.swung || gs.loaded) return;
+    gs.loaded = true;
+    gs.loadAt = performance.now();
+  }, []);
+
+  // Release to swing: contact timing is the moment the batter lets go.
+  const onRelease = useCallback(() => {
+    const gs = gsRef.current;
+    if (gs.phase !== 'pitch' || gs.swung || !gs.loaded) return;
     const now = performance.now();
+    gs.loaded = false;
     gs.swung = true;
     gs.swingAt = now;
     const dt = now - (gs.pitchStart + gs.travelMs); // <0 early, >0 late
@@ -319,7 +344,7 @@ export default function BattingCages() {
       ? outcome.pts > 0
         ? `${outcome.label} +${outcome.pts}`
         : outcome.label
-      : 'Tap to swing — time it at the plate.';
+      : 'Hold to load up, release to swing as the ball reaches the plate.';
 
   return (
     <Screen>
@@ -337,7 +362,9 @@ export default function BattingCages() {
 
         <canvas
           ref={canvasRef}
-          onPointerDown={onSwing}
+          onPointerDown={onPress}
+          onPointerUp={onRelease}
+          onPointerCancel={onRelease}
           className="block w-full touch-none rounded-2xl border border-fairway-800"
           style={{ aspectRatio: `${W} / ${H}` }}
         />

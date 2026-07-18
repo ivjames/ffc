@@ -300,11 +300,11 @@ games themed to the real attractions, playable one-handed while waiting.
   rings to 1, corner clutches 7). Distinct timing-skill mechanic vs. the
   swipe/physics games; sweeps pause when backgrounded.
 
-- **Batting cages** (`/fun/batting`) — **shipped.** Tap-to-swing timing game;
-  balls pitch down the cage at varying speeds and you time contact at the plate
-  (perfect = home run, near = base hit, off = foul/strike). Ten pitches. Ball
-  descent from absolute timestamps for framerate-exact timing; bat swings on
-  contact, ball flies off the bat.
+- **Batting cages** (`/fun/batting`) — **shipped.** Hold to load the bat back,
+  release to swing — contact timing is the moment you let go (perfect = home run,
+  near = base hit, off = foul/strike). Ten pitches at varying speeds. Ball descent
+  from absolute timestamps for framerate-exact timing; the bat cocks on the load
+  and sweeps through the zone on release.
 
 - **Bowling** (`/fun/bowling`) — **shipped.** Swipe up the lane to roll (angle =
   aim, length = power, an angled shot hooks); real ball↔pin↔pin collision physics

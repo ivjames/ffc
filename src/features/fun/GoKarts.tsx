@@ -14,13 +14,14 @@ const TRACK_W = 62; // asphalt width
 const LAPS = 3;
 
 const FIXED = 1000 / 120;
-const ACCEL = 0.12;
-const MAX_SPEED = 3.4;
-const OFF_MAX = 1.2; // top speed on grass
+const ACCEL = 0.06; // gentler pickup
+const MAX_SPEED = 2.3; // calmer top speed (was twitchy-fast)
+const OFF_MAX = 1.0; // top speed on grass
 const OFF_DRAG = 0.9; // extra per-step drag off track
 const COAST = 0.985; // decel when not on the gas
-const TURN = 0.05; // rad/step at full lock
-const TURN_SPEED = 1.4; // speed needed for full steering authority
+const TURN = 0.042; // rad/step at full lock
+const TURN_SPEED = 1.35; // speed needed for full steering authority
+const STEER_SMOOTH = 0.22; // how fast the effective steer eases toward the input
 const COUNTDOWN_MS = 2600;
 
 /** Procedural closed circuit — an oval with an S-kink, sampled as a polyline. */
@@ -72,7 +73,7 @@ function project(x: number, y: number): { dist: number; f: number } {
 }
 
 type Phase = 'countdown' | 'race' | 'done';
-type Kart = { x: number; y: number; heading: number; speed: number };
+type Kart = { x: number; y: number; heading: number; speed: number; steer: number };
 type GS = {
   phase: Phase;
   kart: Kart;
@@ -90,7 +91,7 @@ type GS = {
 function startKart(): Kart {
   const p0 = TRACK.pts[0];
   const p1 = TRACK.pts[1];
-  return { x: p0.x, y: p0.y, heading: Math.atan2(p1.y - p0.y, p1.x - p0.x), speed: 0 };
+  return { x: p0.x, y: p0.y, heading: Math.atan2(p1.y - p0.y, p1.x - p0.x), speed: 0, steer: 0 };
 }
 
 function freshGS(now: number): GS {
@@ -124,9 +125,12 @@ function step(gs: GS): boolean {
   if (!onTrack) k.speed *= OFF_DRAG;
   k.speed = clamp(k.speed, 0, onTrack ? MAX_SPEED : OFF_MAX);
 
-  // Steering: press left/right of center; authority scales with speed.
-  const steer = clamp((gs.touch.x - W / 2) / (W / 2), -1, 1);
-  if (gs.touch.active) k.heading += TURN * steer * clamp(k.speed / TURN_SPEED, 0, 1);
+  // Steering: press left/right of center; authority scales with speed. The
+  // effective steer eases toward the input (and back to center on release) so
+  // sudden taps don't snap the kart around — less twitchy to control.
+  const target = gs.touch.active ? clamp((gs.touch.x - W / 2) / (W / 2), -1, 1) : 0;
+  k.steer += (target - k.steer) * STEER_SMOOTH;
+  k.heading += TURN * k.steer * clamp(k.speed / TURN_SPEED, 0, 1);
 
   k.x += Math.cos(k.heading) * k.speed;
   k.y += Math.sin(k.heading) * k.speed;
