@@ -38,6 +38,13 @@ const TILES: Tile[] = [
     accent: '#ec4899',
   },
   {
+    to: '/putt',
+    emoji: '⛳️',
+    title: 'Arcade Putt',
+    blurb: 'Mini-golf — sink it in as few strokes as you can.',
+    accent: '#16a34a',
+  },
+  {
     to: '/fun/skeeball',
     emoji: '🎳',
     title: 'Skee-Ball',
