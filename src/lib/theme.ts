@@ -17,19 +17,21 @@ export type Ramp = Record<
 
 // The neutral grayscale environment — identical to the @theme defaults in
 // index.css. Every theme resolves to this ramp; only the accent ink/glow
-// differ per course.
+// differ per course. Each step's gray matches the LIGHTNESS of the old venue-
+// green step it replaced, so the UI keeps its former depth (e.g. 950 is a dark
+// gray page, not near-black) — just desaturated.
 const GRAY: Ramp = {
-  50: '#fafafa',
-  100: '#f5f5f5',
-  200: '#e5e5e5',
-  300: '#d4d4d4',
-  400: '#a3a3a3',
-  500: '#737373',
-  600: '#525252',
-  700: '#404040',
-  800: '#262626',
-  900: '#171717',
-  950: '#0a0a0a',
+  50: '#f7f7f7',
+  100: '#ececec',
+  200: '#d9d9d9',
+  300: '#bbbbbb',
+  400: '#949494',
+  500: '#747474',
+  600: '#5d5d5d',
+  700: '#4b4b4b',
+  800: '#3e3e3e',
+  900: '#343434',
+  950: '#1a1a1a',
 };
 
 /** The environment ramp — neutral grayscale for every theme. */

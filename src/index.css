@@ -11,17 +11,17 @@
    ramp is declared here so every shade the UI uses (incl. 200/300/400)
    generates a utility that a theme can then re-point. */
 @theme {
-  --color-fairway-50: #fafafa;
-  --color-fairway-100: #f5f5f5;
-  --color-fairway-200: #e5e5e5;
-  --color-fairway-300: #d4d4d4;
-  --color-fairway-400: #a3a3a3;
-  --color-fairway-500: #737373;
-  --color-fairway-600: #525252;
-  --color-fairway-700: #404040;
-  --color-fairway-800: #262626;
-  --color-fairway-900: #171717;
-  --color-fairway-950: #0a0a0a;
+  --color-fairway-50: #f7f7f7;
+  --color-fairway-100: #ececec;
+  --color-fairway-200: #d9d9d9;
+  --color-fairway-300: #bbbbbb;
+  --color-fairway-400: #949494;
+  --color-fairway-500: #747474;
+  --color-fairway-600: #5d5d5d;
+  --color-fairway-700: #4b4b4b;
+  --color-fairway-800: #3e3e3e;
+  --color-fairway-900: #343434;
+  --color-fairway-950: #1a1a1a;
 }
 
 :root {
