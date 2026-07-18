@@ -27,7 +27,13 @@ export default function CourseMap() {
 
   return (
     <CourseTheme theme={course.theme} accent={course.accent}>
-    <Screen>
+    {/* Anchored to the viewport (min-h-dvh) rather than the shared <Screen>: the
+        "tap anywhere to begin" button below fills this column via flex-1, and
+        Screen's `min-h-full` doesn't resolve to a real height under CourseTheme,
+        which would collapse the button to its content and leave the lower area
+        an unresponsive dead zone. Local to this screen so other pages are
+        untouched. */}
+    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
       <TopBar title={course.name} back="/" />
       {/* Tap anywhere on the opening screen to begin the round. */}
       <button
@@ -64,7 +70,7 @@ export default function CourseMap() {
           </div>
         </div>
       </button>
-    </Screen>
+    </div>
     </CourseTheme>
   );
 }
