@@ -13,11 +13,11 @@ import {
 } from '../../lib/scoring';
 import { playClick, playStroke, playUndo, playCup } from '../../lib/sound';
 
-// Testing aid — how long the auto-player pauses on each hole before advancing.
-const AUTO_PLAY_MS = 450;
-// Fast-forward still visits every hole, but with only a brief, still-visible
-// pause so the walk stays watchable while running much faster than auto-play.
-const FAST_FORWARD_MS = 80;
+// Testing aid — the gap between simulated button taps. The auto-player drives
+// the real +/Next handlers one tap per tick, so each tap fires its sound; the
+// pace is how far apart those taps (and their sounds) land.
+const AUTO_PLAY_MS = 500; // slow pace — half a second per tap
+const FAST_FORWARD_MS = 125; // fast pace — an eighth of a second per tap
 
 // A plausible-but-random stroke count for a hole, biased toward its par and
 // kept inside the sane/cap range. Used only by the auto-play testing tool.
@@ -61,41 +61,54 @@ export default function Scorecard() {
 
   const course = round ? courseById(round.courseId) : undefined;
 
-  // Keep the latest scores reachable from the timer callback without making
-  // `round` an effect dependency (which would restart the timer on every fill).
+  // Latest scores, readable from the timer callback.
   const roundRef = useRef(round);
   roundRef.current = round;
 
-  // Auto-play tick: score the current hole for every player, then advance —
-  // one hole per interval — until the last hole is filled or the user pauses.
-  // Fast-forward still visits every hole, but with only a brief pause between.
+  // Per-hole random stroke goals for the auto-player. Regenerated whenever it
+  // arrives at a new hole so each hole gets a fresh random score per player.
+  const targetsRef = useRef<{ hole: number; targets: number[] }>({ hole: -1, targets: [] });
+
+  // Auto-play tick — ONE simulated tap per interval, so every tap plays its
+  // real sound. Each tick taps "+" for the next player still short of their
+  // random goal; once all players are there it taps "Next" (or stops at the
+  // end). Re-arms on every stroke (`round`) and hole change, so taps keep
+  // flowing; the delay between them is the chosen pace.
   useEffect(() => {
     if (!autoPlaying || !round || !course) return;
     const delay = fastForward ? FAST_FORWARD_MS : AUTO_PLAY_MS;
     const id = window.setTimeout(() => {
       const prev = roundRef.current;
       if (!prev) return;
-      const nextScores = { ...prev.scores };
-      prev.playerTags.forEach((_t, p) => {
-        const row = [...(nextScores[p] ?? Array(HOLE_COUNT).fill(null))];
-        row[hole] = randomStrokes(course.pars[hole]);
-        nextScores[p] = row;
-      });
-      const next: LocalRound = { ...prev, scores: nextScores };
-      void putRound(next);
-      setRound(next);
+      // Fresh random goals when we land on a new hole.
+      if (targetsRef.current.hole !== hole) {
+        targetsRef.current = {
+          hole,
+          targets: prev.playerTags.map(() => randomStrokes(course.pars[hole])),
+        };
+      }
+      const { targets } = targetsRef.current;
+      // The next player still below their goal gets one "+" tap.
+      const p = prev.playerTags.findIndex(
+        (_t, i) => (prev.scores[i]?.[hole] ?? 0) < targets[i],
+      );
+      if (p !== -1) {
+        bump(p, +1); // real "+": plays the stroke sound, pops, persists
+        return;
+      }
+      // Every player has reached their score → tap through to the next hole.
       if (hole < HOLE_COUNT - 1) {
-        setHole((h) => h + 1);
+        goNext(); // real "Next": plays the cup sound and advances
       } else {
         setAutoPlaying(false); // reached the end
         setFastForward(false);
       }
     }, delay);
     return () => window.clearTimeout(id);
-    // `round`/`course` intentionally excluded: identity churns as we fill, and
-    // `hole` advancing already re-arms the timer for the next hole.
+    // `course` excluded (stable per round); `bump`/`goNext` are stable enough
+    // for this testing loop and re-created each render with fresh state anyway.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlaying, fastForward, hole]);
+  }, [autoPlaying, fastForward, hole, round]);
 
   if (notFound) {
     return (
@@ -338,9 +351,10 @@ export default function Scorecard() {
           )}
         </div>
 
-        {/* Auto-play (testing) — walk the course, randomly scoring each hole.
-            Play adds a delay per hole; fast-forward visits every hole with just
-            a brief pause. Either way, Pause stops mid-course. */}
+        {/* Auto-play (testing) — taps the real +/Next buttons across the whole
+            course so their sounds fire in sequence. Play taps every half
+            second; fast forward taps every eighth of a second. Either way,
+            Pause stops mid-course. */}
         <div className="mt-3">
           {autoPlaying ? (
             <Button
