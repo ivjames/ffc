@@ -49,20 +49,20 @@ export default function Home() {
   return (
     <Screen>
       <Content>
-        <div className="mb-6 mt-6 text-center">
-          <div className="text-5xl">⛳️</div>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-fairway-50">Mini Golf</h1>
-          <p className="mt-1 text-sm text-fairway-100/70">
+        <div className="mb-4 mt-3 text-center">
+          <div className="text-4xl">⛳️</div>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-fairway-50">Mini Golf</h1>
+          <p className="mt-0.5 text-sm text-fairway-100/70">
             {courseCount} {courseCount === 1 ? 'course' : 'courses'} · eighteen holes each
           </p>
         </div>
 
         {/* Current location — tap to switch sites (or pick "Use my location"
             there). GPS still auto-detects the venue silently when permitted. */}
-        <div className="mb-4">
+        <div className="mb-3">
           <button
             onClick={() => navigate('/locations')}
-            className="flex w-full items-center justify-between rounded-2xl border border-fairway-800 bg-fairway-900/40 px-4 py-3 text-left active:bg-fairway-800/60"
+            className="flex w-full items-center justify-between rounded-2xl border border-fairway-800 bg-fairway-900/40 px-4 py-2.5 text-left active:bg-fairway-800/60"
           >
             <span className="flex items-center gap-2">
               <span className="text-lg">📍</span>
@@ -82,7 +82,7 @@ export default function Home() {
         {resume && resumeCourse && (
           <button
             onClick={() => navigate(`/play/${resume.clientId}`)}
-            className="mb-4 w-full rounded-2xl border border-fairway-500/40 bg-fairway-900/60 p-4 text-left active:bg-fairway-800/60"
+            className="mb-3 w-full rounded-2xl border border-fairway-500/40 bg-fairway-900/60 p-3 text-left active:bg-fairway-800/60"
           >
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
               Resume round
@@ -106,30 +106,30 @@ export default function Home() {
             No courses at this location yet.
           </p>
         ) : (
-          <div className="mb-6 grid grid-cols-2 gap-3">
+          <div className="mb-4 grid grid-cols-2 gap-2">
             {courses.map((c) => (
               <button
                 key={c.id}
                 onClick={() => navigate(`/courses/${c.id}/map`)}
-                className="flex aspect-square flex-col items-center justify-center gap-3 rounded-2xl border p-4 text-center transition active:scale-[0.98]"
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition active:scale-[0.98]"
                 style={{
                   background: `${c.accent}22`,
                   borderColor: `${c.accent}66`,
                 }}
               >
                 <span
-                  className="flex h-16 w-16 items-center justify-center rounded-2xl text-4xl"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl text-2xl"
                   style={{ background: `${c.accent}33` }}
                 >
                   {themeEmoji(c.theme)}
                 </span>
-                <span className="text-base font-bold leading-tight text-fairway-50">{c.name}</span>
+                <span className="text-sm font-bold leading-tight text-fairway-50">{c.name}</span>
               </button>
             ))}
           </div>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           <Button variant="ghost" onClick={() => navigate('/hunt')}>
             Scavenger hunt
           </Button>

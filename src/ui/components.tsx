@@ -73,7 +73,7 @@ export function Button({
   sound = 'click',
 }: ButtonProps) {
   const base =
-    'flex w-full items-center justify-center rounded-xl px-4 py-4 text-base font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100';
+    'flex w-full items-center justify-center rounded-xl px-4 py-3 text-base font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100';
   const variants = {
     primary: 'bg-fairway-500 text-fairway-950 active:bg-fairway-400',
     ghost: 'border border-fairway-700 bg-fairway-900/40 text-fairway-50 active:bg-fairway-800',
