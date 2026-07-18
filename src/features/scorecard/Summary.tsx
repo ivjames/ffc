@@ -6,9 +6,8 @@ import { courseById } from '../../data/courses';
 import { getRound, putRound } from '../../db';
 import { syncPending } from '../../sync';
 import { playFanfare } from '../../lib/sound';
-import type { LocalRound } from '../../types';
+import type { CourseSeed, LocalRound } from '../../types';
 import {
-  HOLE_COUNT,
   coursePar,
   playerTotal,
   formatOverUnder,
@@ -135,55 +134,12 @@ export default function Summary() {
           })}
         </div>
 
-        {/* Hole-by-hole grid */}
-        <div className="mb-6 overflow-x-auto rounded-xl border border-fairway-800">
-          <table className="w-full border-collapse text-center text-sm">
-            <thead>
-              <tr className="bg-fairway-900/60 text-fairway-100/60">
-                <th className="px-2 py-2 text-left font-semibold">Hole</th>
-                {Array.from({ length: HOLE_COUNT }, (_, h) => (
-                  <th key={h} className="px-2 py-2 font-normal">
-                    {h + 1}
-                  </th>
-                ))}
-              </tr>
-              <tr className="bg-fairway-950 text-fairway-100/40">
-                <th className="px-2 py-1 text-left font-normal">Par</th>
-                {course.pars.map((p, h) => (
-                  <td key={h} className="px-2 py-1">
-                    {p}
-                  </td>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {round.playerTags.map((tag, p) => (
-                <tr key={p} className="border-t border-fairway-800">
-                  <td
-                    className="font-arcade px-2 py-2 text-left font-bold"
-                    style={{ color: course.accent }}
-                  >
-                    {tag}
-                  </td>
-                  {Array.from({ length: HOLE_COUNT }, (_, h) => {
-                    const s = round.scores[p]?.[h];
-                    const under = s != null && s < course.pars[h];
-                    const over = s != null && s > course.pars[h];
-                    return (
-                      <td
-                        key={h}
-                        className={`px-2 py-2 ${
-                          under ? 'text-fairway-400' : over ? 'text-amber-400' : 'text-fairway-100'
-                        }`}
-                      >
-                        {s ?? '·'}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* Hole-by-hole grid — split into front/back nines so 18 columns don't
+            overflow and scroll on a phone. Each nine is 9 holes + a label
+            column = 10 columns, which fits the width. */}
+        <div className="mb-6 space-y-3">
+          <NineGrid round={round} course={course} label="Front" start={0} />
+          <NineGrid round={round} course={course} label="Back" start={9} />
         </div>
 
         <SyncNote state={round.syncState} failed={syncFailed} />
@@ -212,6 +168,74 @@ export default function Summary() {
         </div>
       </Content>
     </Screen>
+  );
+}
+
+// One nine of the hole-by-hole grid (9 holes starting at `start`). Splitting the
+// 18 holes into two of these keeps each table to 10 columns so it fits a phone
+// without horizontal scrolling.
+function NineGrid({
+  round,
+  course,
+  label,
+  start,
+}: {
+  round: LocalRound;
+  course: CourseSeed;
+  label: string;
+  start: number;
+}) {
+  const holes = Array.from({ length: 9 }, (_, i) => start + i);
+  return (
+    <div className="overflow-hidden rounded-xl border border-fairway-800">
+      <table className="w-full border-collapse text-center text-sm">
+        <thead>
+          <tr className="bg-fairway-900/60 text-fairway-100/60">
+            <th className="px-2 py-2 text-left font-semibold">{label}</th>
+            {holes.map((h) => (
+              <th key={h} className="px-1 py-2 font-normal">
+                {h + 1}
+              </th>
+            ))}
+          </tr>
+          <tr className="bg-fairway-950 text-fairway-100/40">
+            <th className="px-2 py-1 text-left font-normal">Par</th>
+            {holes.map((h) => (
+              <td key={h} className="px-1 py-1">
+                {course.pars[h]}
+              </td>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {round.playerTags.map((tag, p) => (
+            <tr key={p} className="border-t border-fairway-800">
+              <td
+                className="font-arcade px-2 py-2 text-left font-bold"
+                style={{ color: course.accent }}
+              >
+                {tag}
+              </td>
+              {holes.map((h) => {
+                const s = round.scores[p]?.[h];
+                const under = s != null && s < course.pars[h];
+                const over = s != null && s > course.pars[h];
+                return (
+                  <td
+                    key={h}
+                    className={`px-1 py-2 ${
+                      under ? 'text-fairway-400' : over ? 'text-amber-400' : 'text-fairway-100'
+                    }`}
+                  >
+                    {s ?? '·'}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
