@@ -93,19 +93,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillStyle = '#17924a';
   for (const s of hole.green) fillCapsule(ctx, s, -7);
 
-  // Pits — dark blobs with a hazard ring.
+  // Pits — sand bunkers: a darker sand rim, then the sand surface.
   if (hole.pits) {
-    ctx.fillStyle = '#06140c';
+    ctx.fillStyle = '#b8995c';
+    for (const s of hole.pits) fillCapsule(ctx, s, 2);
+    ctx.fillStyle = '#e3cd8c';
     for (const s of hole.pits) fillCapsule(ctx, s, 0);
-    ctx.strokeStyle = 'rgba(251,191,36,0.55)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 4]);
-    for (const s of hole.pits) {
-      ctx.beginPath();
-      ctx.arc(s.ax, s.ay, s.r - 1, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
   }
 
   // Walls — raised bars/bumpers with a lighter top.
@@ -263,7 +256,7 @@ export default function PuttGolf() {
           gs.phase = 'aim';
           setStrokes(gs.strokes);
           setPhase('aim');
-          setNote('💦 In the pit — +1 penalty, replay the shot');
+          setNote('🏖️ In the sand — +1 penalty, replay the shot');
         } else if (res === 'stopped') {
           gs.phase = 'aim';
           setPhase('aim');

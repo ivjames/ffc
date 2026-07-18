@@ -16,10 +16,10 @@ type RGB = [number, number, number];
 const ROUGH: RGB = [10, 36, 23];
 const GREEN: RGB = [23, 146, 74];
 const WALL: RGB = [30, 107, 63];
-const PIT: RGB = [6, 20, 12];
+const PIT: RGB = [227, 205, 140];
 const CUP: RGB = [4, 22, 12];
 const MARK: RGB = [248, 250, 252];
-const HAZARD: RGB = [251, 191, 36];
+const HAZARD: RGB = [184, 153, 92];
 
 const img = Buffer.alloc(IW * IH * 3);
 const put = (x: number, y: number, c: RGB) => {
