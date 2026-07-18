@@ -89,33 +89,6 @@ function fillCapsule(ctx: CanvasRenderingContext2D, s: Seg, extra: number) {
   }
 }
 
-// Union outline of a capsule set as a single Path2D — used to clip sand to the
-// green so a bunker never spills past the rail.
-function unionPath(segs: Seg[], extra: number): Path2D {
-  const p = new Path2D();
-  for (const s of segs) {
-    const r = s.r + extra;
-    if (r <= 0) continue;
-    p.moveTo(s.ax + r, s.ay);
-    p.arc(s.ax, s.ay, r, 0, Math.PI * 2);
-    if (s.ax !== s.bx || s.ay !== s.by) {
-      p.moveTo(s.bx + r, s.by);
-      p.arc(s.bx, s.by, r, 0, Math.PI * 2);
-      const dx = s.bx - s.ax;
-      const dy = s.by - s.ay;
-      const l = Math.hypot(dx, dy);
-      const px = (-dy / l) * r;
-      const py = (dx / l) * r;
-      p.moveTo(s.ax + px, s.ay + py);
-      p.lineTo(s.bx + px, s.by + py);
-      p.lineTo(s.bx - px, s.by - py);
-      p.lineTo(s.ax - px, s.ay - py);
-      p.closePath();
-    }
-  }
-  return p;
-}
-
 function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   const hole = HOLES[gs.holeIndex];
 
@@ -140,29 +113,26 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillStyle = '#37c06d';
   for (const s of hole.green) fillCapsule(ctx, s, -ROUGH_BAND);
 
-  // Water hazards — deep rim, water, and a lighter shimmer. Clipped to the
-  // surface as a safety net (they're authored fully inside it).
+  // Hazards are authored fully inside the surface (the sim enforces it), so
+  // they're drawn straight on top — no clipping, which is what previously
+  // chopped valid blobs into crescents.
+
+  // Water hazards — deep rim, water, and a lighter shimmer.
   if (hole.water) {
-    ctx.save();
-    ctx.clip(unionPath(surface, 0));
     ctx.fillStyle = '#1565a8';
     for (const s of hole.water) fillCapsule(ctx, s, 2);
     ctx.fillStyle = '#2a97dc';
     for (const s of hole.water) fillCapsule(ctx, s, 0);
     ctx.fillStyle = 'rgba(186,230,253,0.45)';
     for (const s of hole.water) fillCapsule(ctx, s, -6);
-    ctx.restore();
   }
 
-  // Sand bunkers — clipped to the surface as a safety net (authored inside it).
+  // Sand bunkers — darker sand rim, then the sand surface.
   if (hole.pits) {
-    ctx.save();
-    ctx.clip(unionPath(surface, 0));
     ctx.fillStyle = '#b8995c';
     for (const s of hole.pits) fillCapsule(ctx, s, 2);
     ctx.fillStyle = '#e3cd8c';
     for (const s of hole.pits) fillCapsule(ctx, s, 0);
-    ctx.restore();
   }
 
   // Walls — bright candy-colored rails/bumpers, one hue per barrier, with a
