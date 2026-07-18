@@ -15,18 +15,22 @@ export default function CourseTheme({
 }: {
   /** Retained for call-site symmetry with the course; no longer used here. */
   theme?: string;
-  /** Course accent hex, used for the soft top glow that gives each course a feel. */
+  /** Course accent hex — feeds the surface tint, the accent glow, and buttons. */
   accent?: string;
   children: ReactNode;
 }) {
-  const style: CSSProperties = {
+  // With an accent, tint the subtree to the course (`.course-tinted` reads
+  // `--course-accent`) and lay the soft glow on top; `--color-fairway-950` is
+  // already the tinted, mode-aware page color.
+  const style = {
+    ...(accent ? { '--course-accent': accent } : {}),
     background: accent
       ? `radial-gradient(120% 55% at 50% -8%, ${accent}2e, transparent 62%), var(--color-fairway-950)`
       : 'var(--color-fairway-950)',
-  };
+  } as CSSProperties;
 
   return (
-    <div style={style} className="min-h-full">
+    <div style={style} className={`min-h-full${accent ? ' course-tinted' : ''}`}>
       {children}
     </div>
   );

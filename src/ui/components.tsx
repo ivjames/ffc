@@ -75,7 +75,7 @@ export function Button({
   const base =
     'flex w-full items-center justify-center rounded-xl px-4 py-3 text-base font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100';
   const variants = {
-    primary: 'bg-fairway-700 text-fairway-50 active:bg-fairway-800',
+    primary: 'btn-accent text-fairway-50',
     ghost: 'border border-fairway-700 bg-fairway-900/40 text-fairway-50 active:bg-fairway-800',
     danger: 'bg-red-500/90 text-white active:bg-red-500',
   };

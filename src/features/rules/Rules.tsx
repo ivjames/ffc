@@ -43,17 +43,18 @@ export default function Rules() {
             <div className="space-y-4">
               {noted.map((c) => {
                 const ink = accentInk(c.theme);
-                // A neutral card surface (mode-aware via the CSS var) with a
-                // soft accent glow in the corner so each course's card carries a
-                // hint of its color without leaving the light/dark chrome.
-                const cardStyle: CSSProperties = {
+                // Tint the card to its course (`.course-tinted` reads
+                // `--course-accent`) and add a soft accent glow in the corner —
+                // the card surface (var(--color-fairway-900)) is already tinted.
+                const cardStyle = {
+                  '--course-accent': c.accent,
                   background: `radial-gradient(120% 80% at 0% 0%, ${c.accent}1f, transparent 60%), var(--color-fairway-900)`,
-                };
+                } as CSSProperties;
                 return (
                   <div
                     key={c.id}
                     style={cardStyle}
-                    className="rounded-2xl border border-fairway-700/60 p-4"
+                    className="course-tinted rounded-2xl border border-fairway-700/60 p-4"
                   >
                     <div className="mb-3 flex items-center gap-2">
                       <span aria-hidden className="text-lg">
