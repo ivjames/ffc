@@ -49,6 +49,17 @@ function toParText(diff: number): string {
   return diff < 0 ? `${-diff} under par` : `${diff} over par`;
 }
 
+// Candy-colored barrier palette (base + a lighter top highlight), cycled per
+// barrier so a hole's rails/bumpers are distinct and clearly non-green.
+const WALL_COLORS = [
+  { base: '#ef4444', light: '#f87171' }, // red
+  { base: '#3b82f6', light: '#60a5fa' }, // blue
+  { base: '#f59e0b', light: '#fbbf24' }, // amber
+  { base: '#a855f7', light: '#c084fc' }, // purple
+  { base: '#ec4899', light: '#f472b6' }, // pink
+  { base: '#14b8a6', light: '#2dd4bf' }, // teal
+];
+
 // --- drawing ----------------------------------------------------------------
 // Fill the stadium (capsule) of radius s.r+extra. Filling overlapping same-color
 // capsules unions them with no visible internal seams, which is how the smooth
@@ -140,12 +151,18 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
     ctx.restore();
   }
 
-  // Walls — raised bars/bumpers with a lighter top.
+  // Walls — bright candy-colored rails/bumpers, one hue per barrier, with a
+  // dark rim and a light top highlight so they read as raised and non-green.
   if (hole.walls) {
-    ctx.fillStyle = '#0b3b22';
-    for (const s of hole.walls) fillCapsule(ctx, s, 1);
-    ctx.fillStyle = '#1e6b3f';
-    for (const s of hole.walls) fillCapsule(ctx, s, -3);
+    hole.walls.forEach((s, i) => {
+      const c = WALL_COLORS[i % WALL_COLORS.length];
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      fillCapsule(ctx, s, 2);
+      ctx.fillStyle = c.base;
+      fillCapsule(ctx, s, 0);
+      ctx.fillStyle = c.light;
+      fillCapsule(ctx, s, -3);
+    });
   }
 
   // Cup + flag.

@@ -17,7 +17,14 @@ const OFF: RGB = [10, 36, 23]; // off the playable surface
 const FAIRWAY: RGB = [26, 143, 74];
 const PUTTING: RGB = [55, 192, 109]; // the green (putting surface)
 const COLLAR: RGB = [43, 122, 67]; // rough fringe at the green's edge
-const WALL: RGB = [30, 107, 63];
+const WALL_PALETTE: RGB[] = [
+  [239, 68, 68], // red
+  [59, 130, 246], // blue
+  [245, 158, 11], // amber
+  [168, 85, 247], // purple
+  [236, 72, 153], // pink
+  [20, 184, 166], // teal
+];
 const SAND: RGB = [227, 205, 140];
 const CUP: RGB = [4, 22, 12];
 const MARK: RGB = [248, 250, 252];
@@ -49,7 +56,14 @@ for (let hi = 0; hi < HOLES.length; hi++) {
       if (col !== OFF) {
         // sand only where on the surface → chopped at the rail
         if (h.pits && sdUnion(fx, fy, h.pits) < 0) col = SAND;
-        if (h.walls && sdUnion(fx, fy, h.walls) < 0) col = WALL;
+        if (h.walls) {
+          for (let wi = 0; wi < h.walls.length; wi++) {
+            if (sdUnion(fx, fy, [h.walls[wi]]) < 0) {
+              col = WALL_PALETTE[wi % WALL_PALETTE.length];
+              break;
+            }
+          }
+        }
       }
       if (Math.hypot(fx - h.cup.x, fy - h.cup.y) < HOLE_R) col = CUP;
       if (Math.hypot(fx - h.tee.x, fy - h.tee.y) < BALL_R) col = MARK;
