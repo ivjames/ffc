@@ -104,6 +104,52 @@ Request: array of seeds
 → `200 { "ok": true, "count": N, "ids": ["<uuid>", ...] }`
 → `401` if the token is required and missing/wrong; `400` on validation failure.
 
+### `GET /api/locations`
+List venues, ordered by `sortOrder` then `name`. Open read (like the leaderboard).
+
+→ `200` array:
+```json
+[
+  { "id": "<uuid>", "name": "Upland", "slug": "upland",
+    "lat": 34.08867, "lng": -117.67946, "geofenceKm": 2,
+    "tz": "America/Los_Angeles", "tzLabel": "Pacific Time (PT)", "sortOrder": 10 }
+]
+```
+`tzLabel` is derived from `tz` for display; it's `null` when `tz` is unset.
+
+### `POST /api/locations`
+Create or update a venue (onboarding). Same `x-app-token` guard as `/api/seed`
+(unset `APP_TOKEN` = allowed in dev). Upserts on `id` when given, else on `slug`
+(idempotent re-post). The **timezone is resolved server-side** — see "Venue
+timezones" below: omit `tz` and it's derived from `lat`/`lng`; send `tz` and it's
+validated (a fixed-offset abbreviation like `"PST"` is rejected).
+
+Request:
+```json
+{
+  "id": "<uuid, optional — omit to create / upsert on slug>",
+  "name": "Boston",
+  "slug": "boston",
+  "lat": 42.36, "lng": -71.06,
+  "geofenceKm": 2,
+  "tz": "America/New_York",
+  "sortOrder": 40
+}
+```
+- `name`: required, 1..200 chars. `slug`: required, lowercase `[a-z0-9-]`, no
+  leading/trailing/double hyphen.
+- `lat`/`lng`: optional but must be sent **together** (−90..90 / −180..180). When
+  present and `tz` is omitted, the zone is derived from them.
+- `tz`: optional IANA name; validated when present. If omitted and no coords are
+  given, it's stored `null` and the leaderboard falls back to `VENUE_TZ`.
+- `geofenceKm`: optional positive number. `sortOrder`: optional integer (default 0).
+
+Responses:
+- `200 { "ok": true, "location": { …, "tz": "…", "tzLabel": "Eastern Time (ET)" } }`
+- `400` — validation failure (bad slug, out-of-range coords, invalid `tz`, …).
+- `401` — token required and missing/wrong.
+- `409` — `slug` already in use by a different location.
+
 ### Scavenger hunt (Phase 3)
 
 Each course has its **own themed list** — four courses, four lists — seeded by
@@ -181,6 +227,10 @@ Humans never type these. `lib/timezone.js` is the contract:
 | `isValidTz(tz)` | Validate before writing — rejects typos **and** fixed-offset abbreviations (`"PST"`), so a bad value can't reach the query. | `"PST"` → `false`; `"America/Los_Angeles"` → `true` |
 | `friendlyTzLabel(tz)` | **Admin UIs** render a human label from the stored IANA name (season-independent). | `"America/Los_Angeles"` → `"Pacific Time (PT)"` |
 
+`POST /api/locations` is the live entry point: it runs `tzFromCoords` /
+`isValidTz` for you, so onboarding just sends `lat`/`lng` (or an explicit `tz`)
+and the endpoint stores the resolved zone and echoes back a `tzLabel`.
+
 Coordinate → zone lookup uses `tz-lookup` (offline, no network). If a venue's
 `location.tz` is somehow unset, the query falls back to the `VENUE_TZ` env var.
 The three seeded venues are all `America/Los_Angeles`, but that's incidental —
@@ -200,6 +250,8 @@ nothing assumes one global zone.
 - `routes/rounds.js` — `POST /api/rounds` (idempotent sync, per-IP rate limit).
 - `routes/leaderboard.js` — `GET /api/leaderboard`.
 - `routes/seed.js` — `POST /api/seed`.
+- `routes/locations.js` — `GET`/`POST /api/locations` (venue onboarding; resolves
+  `location.tz` via `lib/timezone.js`).
 - `routes/hunt.js` — scavenger hunt: `GET /api/hunt/items`, `GET /api/hunt/progress`,
   `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe).
 - `lib/vision.js` — Claude vision proxy (`claude-opus-4-8`, structured JSON verdict).
