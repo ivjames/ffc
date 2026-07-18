@@ -35,8 +35,10 @@ sized discs reads as a bunch of grapes. `sdBlob` is `sdUnion` with each junction
 filleted (blend width `BLOB_K`), turning a cluster into one continuous blob. It is
 used for both the collision (`water` splash, `pits`/`rough` friction) and the
 rendering, so what you see is still exactly what the ball rolls on. The fillet
-grows a blob by at most `~BLOB_K/4` px at a junction — inside the
-`HAZARD_MARGIN` the validator already demands, so containment still holds.
+grows a blob by up to `~BLOB_K/4` px at a junction, which can slightly exceed the
+2px `HAZARD_MARGIN`; the hazard renderer is clipped to the surface and the splash
+test is gated on-surface, so a contour that rounds out toward the rail is trimmed
+at it rather than spilling off the playable area.
 
 Because rendering fills the same capsules that collision uses, what you see is
 exactly what the ball rolls on. Keep overlaps generous (each capsule should

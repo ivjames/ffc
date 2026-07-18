@@ -123,8 +123,9 @@ function fillCapsule(ctx: CanvasRenderingContext2D, s: Seg, extra: number) {
 // rasterize each cluster from its *smooth* field (sdBlob, the same one collision
 // uses): colour each pixel by its signed distance so the outline — and every
 // junction — is a filleted blob. Layers (rim → fill → shimmer) fall straight out
-// of distance bands. Rough is clipped to the surface so an edge patch is trimmed
-// cleanly by the rail rather than spilling into the rough off-green.
+// of distance bands. All of it is clipped to the surface, so a patch or a blob
+// that rounds out toward the rail is trimmed cleanly at it rather than spilling
+// onto the off-surface background.
 //
 // This is per-pixel, so it's built once per hole into an offscreen canvas and
 // cached; the frame loop just blits it. SS supersamples for a crisp edge.
@@ -159,10 +160,14 @@ function buildHazardLayer(hole: Hole): HTMLCanvasElement | null {
     for (let ix = 0; ix < cv.width; ix++) {
       const px = ix / SS;
       const o = (iy * cv.width + ix) * 4;
-      // Rough patches (bottom layer) — only where they sit on the surface, so an
-      // edge patch is clipped to the rail. A darker lip rings the patch; a sparse
-      // fleck breaks up the fill so it reads as longer grass.
-      if (hole.rough && sdSurface(px, py, hole) < 0) {
+      // Everything here is clipped to the surface: the smooth (sdBlob) contour can
+      // round out a hair past the rail near a junction, so gating on the surface
+      // trims it at the rail instead of letting it spill onto the off-surface
+      // background (and matches the on-surface splash gate in the physics).
+      const onSurface = sdSurface(px, py, hole) < 0;
+      // Rough patches (bottom layer). A darker lip rings the patch; a sparse fleck
+      // breaks up the fill so it reads as longer grass.
+      if (hole.rough && onSurface) {
         const sd = sdBlob(px, py, hole.rough);
         if (sd < 0) {
           if (sd > -3) set(o, [30, 84, 48]);
@@ -170,14 +175,14 @@ function buildHazardLayer(hole: Hole): HTMLCanvasElement | null {
         }
       }
       // Water — deep rim, water, then a lighter shimmer in the middle.
-      if (hole.water) {
+      if (hole.water && onSurface) {
         const sd = sdBlob(px, py, hole.water);
         if (sd < -6) set(o, [120, 190, 235]);
         else if (sd < 0) set(o, [42, 151, 220]);
         else if (sd < 2) set(o, [21, 101, 168]);
       }
       // Sand bunkers — darker sand rim, then the sand surface.
-      if (hole.pits) {
+      if (hole.pits && onSurface) {
         const sd = sdBlob(px, py, hole.pits);
         if (sd < 0) set(o, [227, 205, 140]);
         else if (sd < 2) set(o, [184, 153, 92]);

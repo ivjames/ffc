@@ -28,9 +28,11 @@ export const ROUGH_BAND = 12; // width of the rough collar inside the green edge
 // A plain min-union of overlapping discs leaves a sharp concave "waist" at every
 // crossing — a chain reads as a bunch of grapes. Smoothing the union rounds each
 // waist into a fillet so a cluster renders (and plays) as one continuous blob.
-// A blob's field grows by at most ~BLOB_K/4 px, and only along the interior ridge
-// between two discs — the capsule endpoints the validator checks for containment
-// don't move — so this rounds the waists without pushing a hazard past the rail.
+// A blob's field grows by up to ~BLOB_K/4 px at a junction (along the interior
+// ridge between two discs). That can slightly exceed the validator's 2px
+// HAZARD_MARGIN, so a smooth contour may round out a touch toward the rail; the
+// hazard renderer clips to the surface and the splash test is gated on-surface,
+// so such a sliver is trimmed at the rail rather than spilling off the surface.
 export const BLOB_K = 9;
 export const WALL_REST = 0.66; // energy kept on a bounce off a rail/wall
 export const STOP_SPEED = 0.16; // below this the ball is "at rest"
@@ -186,7 +188,15 @@ function resolve(b: Ball, hole: Hole): 'sunk' | 'water' | null {
   // Water: signal a splash once the ball's center is over the water. The caller
   // drops the ball back at the point it entered from (on the surface) and adds
   // the penalty stroke.
-  if (hole.water && hole.water.length && sdBlob(b.x, b.y, hole.water) < 0) {
+  // Gate on being on the surface too: the rendered pool is clipped to the
+  // surface, so a splash can only happen where water is actually drawn — never on
+  // a sliver of the smooth blob that rounds out past the rail.
+  if (
+    hole.water &&
+    hole.water.length &&
+    sdBlob(b.x, b.y, hole.water) < 0 &&
+    sdSurface(b.x, b.y, hole) < 0
+  ) {
     return 'water';
   }
 
