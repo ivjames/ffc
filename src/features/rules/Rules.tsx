@@ -1,7 +1,7 @@
 import { Screen, TopBar, Content } from '../../ui/components';
 import { coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
-import { accentInk, rampFor, themeVars, themeEmoji } from '../../lib/theme';
+import { accentInk, themeEmoji } from '../../lib/theme';
 import type { CSSProperties } from 'react';
 import { STROKE_CAP } from '../../lib/scoring';
 
@@ -29,7 +29,7 @@ export default function Rules() {
         <ul className="space-y-3">
           {GENERAL_RULES.map((r, i) => (
             <li key={i} className="flex gap-3 text-fairway-100/90">
-              <span className="font-mono text-sm text-fairway-500">{i + 1}.</span>
+              <span className="font-mono text-sm text-fairway-400">{i + 1}.</span>
               <span>{r}</span>
             </li>
           ))}
@@ -43,13 +43,11 @@ export default function Rules() {
             <div className="space-y-4">
               {noted.map((c) => {
                 const ink = accentInk(c.theme);
-                // Recolor the card to the course's own theme: overriding the
-                // `--color-fairway-*` vars re-points every fairway-* utility
-                // inside, and a themed-900 surface with an accent glow lifts it
-                // off the venue-green page. Contrast is AA-verified per theme.
+                // A neutral card surface (mode-aware via the CSS var) with a
+                // soft accent glow in the corner so each course's card carries a
+                // hint of its color without leaving the light/dark chrome.
                 const cardStyle: CSSProperties = {
-                  ...(themeVars(c.theme) as CSSProperties),
-                  background: `radial-gradient(120% 80% at 0% 0%, ${c.accent}1f, transparent 60%), ${rampFor(c.theme)[900]}`,
+                  background: `radial-gradient(120% 80% at 0% 0%, ${c.accent}1f, transparent 60%), var(--color-fairway-900)`,
                 };
                 return (
                   <div

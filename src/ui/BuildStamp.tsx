@@ -32,7 +32,7 @@ export function BuildStamp() {
       type="button"
       onClick={copy}
       title={`Built ${__BUILD_TIME__} — tap to copy build info`}
-      className="pointer-events-auto max-w-full select-text truncate rounded bg-fairway-950/60 px-1.5 py-1 text-[10px] leading-none text-fairway-100/40 backdrop-blur-sm active:text-fairway-100/80"
+      className="pointer-events-auto max-w-full select-text truncate rounded bg-fairway-950/60 px-1.5 py-1 text-[10px] leading-none text-fairway-100/70 backdrop-blur-sm active:text-fairway-100/80"
     >
       {copied ? (
         'copied ✓'

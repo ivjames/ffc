@@ -319,7 +319,7 @@ export default function Scorecard() {
                 {/* Fixed-height slot so the card doesn't shrink when this hint
                     disappears on scoring — reserve the row whether or not the
                     text is showing. */}
-                <p className="mt-2 h-4 text-center text-xs leading-4 text-fairway-100/40">
+                <p className="mt-2 h-4 text-center text-xs leading-4 text-fairway-100/70">
                   {strokes == null ? 'Tap + to score this hole' : ''}
                 </p>
               </div>
@@ -396,26 +396,26 @@ export default function Scorecard() {
             </div>
           )}
           {autoPlaying && (
-            <p className="mt-2 text-center text-xs text-fairway-100/50">
+            <p className="mt-2 text-center text-xs text-fairway-100/70">
               {fastForward ? 'Fast-forwarding' : 'Auto-playing'} hole {hole + 1} of {HOLE_COUNT}…
             </p>
           )}
         </div>
 
         {hole < HOLE_COUNT - 1 && !currentHoleScored && (
-          <p className="mt-3 text-center text-xs text-fairway-100/50">
+          <p className="mt-3 text-center text-xs text-fairway-100/70">
             Score every player on this hole to continue.
           </p>
         )}
 
         {hole === HOLE_COUNT - 1 && !complete && (
-          <p className="mt-3 text-center text-xs text-fairway-100/50">
+          <p className="mt-3 text-center text-xs text-fairway-100/70">
             Enter every hole for all players to finish.
           </p>
         )}
 
         {STROKE_CAP_ENABLED && (
-          <p className="mt-6 text-center text-xs text-fairway-100/30">
+          <p className="mt-6 text-center text-xs text-fairway-100/70">
             Max {STROKE_CAP} strokes per hole
           </p>
         )}

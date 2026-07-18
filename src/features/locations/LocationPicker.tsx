@@ -66,7 +66,7 @@ export default function LocationPicker() {
                   <span className="block truncate text-lg font-bold text-fairway-50">
                     {loc.name}
                   </span>
-                  <span className="block text-sm text-fairway-100/60">
+                  <span className="block text-sm text-fairway-100/70">
                     {count} {count === 1 ? 'course' : 'courses'}
                   </span>
                 </span>
@@ -79,7 +79,7 @@ export default function LocationPicker() {
             );
           })}
         </div>
-        <p className="mt-4 text-center text-xs text-fairway-100/40">
+        <p className="mt-4 text-center text-xs text-fairway-100/70">
           Placeholder sites — the client's real locations swap in here.
         </p>
       </Content>

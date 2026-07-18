@@ -205,7 +205,7 @@ export default function Hunt() {
             <h2 className="mt-3 text-xl font-bold text-fairway-50">
               Start a round to play
             </h2>
-            <p className="mx-auto mt-2 max-w-xs text-sm text-fairway-100/60">
+            <p className="mx-auto mt-2 max-w-xs text-sm text-fairway-100/70">
               The scavenger hunt runs alongside your game — begin a round and it'll be
               ready for your group on the course.
             </p>
@@ -273,7 +273,7 @@ export default function Hunt() {
         )}
 
         {!items && !loadError && (
-          <p className="text-sm text-fairway-100/50">Loading…</p>
+          <p className="text-sm text-fairway-100/70">Loading…</p>
         )}
 
         <ul className="space-y-3">
@@ -319,13 +319,13 @@ export default function Hunt() {
                           {hintShown ? 'Hide hint' : '💡 Hint'}
                         </button>
                         {hintShown && (
-                          <div className="mt-1 text-xs text-fairway-100/60">{item.hint}</div>
+                          <div className="mt-1 text-xs text-fairway-100/70">{item.hint}</div>
                         )}
                       </div>
                     )}
                     {finders && finders.size > 0 && (
                       <div className="mt-2 flex flex-wrap items-center gap-1">
-                        <span className="text-[10px] uppercase tracking-wide text-fairway-100/40">
+                        <span className="text-[10px] uppercase tracking-wide text-fairway-100/70">
                           Found by
                         </span>
                         {[...finders].map((t) => (

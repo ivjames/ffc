@@ -27,7 +27,7 @@ export default function CoursePicker() {
         </Link>
 
         {courses.length === 0 && (
-          <p className="mt-6 text-center text-sm text-fairway-100/60">
+          <p className="mt-6 text-center text-sm text-fairway-100/70">
             No courses at this location yet.
           </p>
         )}
@@ -47,7 +47,7 @@ export default function CoursePicker() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-lg font-bold text-fairway-50">{c.name}</span>
-                <span className="block text-sm text-fairway-100/60">
+                <span className="block text-sm text-fairway-100/70">
                   {c.holeCount} holes · par {coursePar(c.pars)}
                 </span>
               </span>

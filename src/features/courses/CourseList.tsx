@@ -25,7 +25,7 @@ export default function CourseList() {
         </Link>
 
         {courses.length === 0 && (
-          <p className="mt-6 text-center text-sm text-fairway-100/60">
+          <p className="mt-6 text-center text-sm text-fairway-100/70">
             No courses at this location yet.
           </p>
         )}
@@ -39,7 +39,7 @@ export default function CourseList() {
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-lg font-bold text-fairway-50">{c.name}</span>
-                <span className="block text-sm capitalize text-fairway-100/60">
+                <span className="block text-sm capitalize text-fairway-100/70">
                   {c.theme} · {c.holeCount} holes · par {coursePar(c.pars)}
                 </span>
               </span>

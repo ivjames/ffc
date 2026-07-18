@@ -93,8 +93,8 @@ export default function Summary() {
       <TopBar title="Final scorecard" back="/" />
       <Content>
         <div className="mb-4 text-center">
-          <div className="text-sm text-fairway-100/60">{course.name}</div>
-          <div className="mt-1 text-xs text-fairway-100/40">Par {par}</div>
+          <div className="text-sm text-fairway-100/70">{course.name}</div>
+          <div className="mt-1 text-xs text-fairway-100/70">Par {par}</div>
         </div>
 
         {/* Winner banner */}
@@ -122,7 +122,7 @@ export default function Summary() {
                 className="flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-4 py-3"
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-5 text-center font-mono text-sm text-fairway-100/50">
+                  <span className="w-5 text-center font-mono text-sm text-fairway-100/70">
                     {rank + 1}
                   </span>
                   <span className="font-arcade text-xl font-bold" style={{ color: ink }}>
@@ -131,7 +131,7 @@ export default function Summary() {
                 </div>
                 <div className="text-right">
                   <span className="text-xl font-black text-fairway-50">{row.total}</span>
-                  <span className="ml-2 text-sm text-fairway-100/50">{formatOverUnder(diff)}</span>
+                  <span className="ml-2 text-sm text-fairway-100/70">{formatOverUnder(diff)}</span>
                 </div>
               </div>
             );
@@ -196,7 +196,7 @@ function NineGrid({
     <div className="overflow-hidden rounded-xl border border-fairway-800">
       <table className="w-full border-collapse text-center text-sm">
         <thead>
-          <tr className="bg-fairway-900/60 text-fairway-100/60">
+          <tr className="bg-fairway-900/60 text-fairway-100/70">
             <th className="px-2 py-2 text-left font-semibold">{label}</th>
             {holes.map((h) => (
               <th key={h} className="px-1 py-2 font-normal">
@@ -204,7 +204,7 @@ function NineGrid({
               </th>
             ))}
           </tr>
-          <tr className="bg-fairway-950 text-fairway-100/40">
+          <tr className="bg-fairway-950 text-fairway-100/70">
             <th className="px-2 py-1 text-left font-normal">Par</th>
             {holes.map((h) => (
               <td key={h} className="px-1 py-1">
@@ -226,17 +226,17 @@ function NineGrid({
                 const s = round.scores[p]?.[h];
                 const under = s != null && s < course.pars[h];
                 const over = s != null && s > course.pars[h];
+                // Score coloring is a functional signal, so it keeps its own
+                // hues (green under / amber over) independent of the neutral
+                // environment ramp. The hues come from `--score-*` vars that
+                // darken in light mode (index.css) to stay legible; par is a
+                // neutral chrome shade.
+                const signal = under ? 'var(--score-under)' : over ? 'var(--score-over)' : undefined;
                 return (
                   <td
                     key={h}
-                    // Score coloring is a functional signal, so it keeps its own
-                    // hues (green under / amber over) independent of the neutral
-                    // environment ramp — `text-emerald-400` rather than a
-                    // `fairway-*` shade, which is now grayscale. Par stays a
-                    // neutral near-white.
-                    className={`px-1 py-2 ${
-                      under ? 'text-emerald-400' : over ? 'text-amber-400' : 'text-fairway-100'
-                    }`}
+                    className={`px-1 py-2 ${signal ? '' : 'text-fairway-100'}`}
+                    style={signal ? { color: signal } : undefined}
                   >
                     {s ?? '·'}
                   </td>
@@ -252,7 +252,7 @@ function NineGrid({
 
 function SyncNote({ state, failed }: { state: LocalRound['syncState']; failed: boolean }) {
   if (state === 'synced') {
-    return <p className="text-center text-xs text-fairway-100/40">Saved to leaderboard ✓</p>;
+    return <p className="text-center text-xs text-fairway-100/70">Saved to leaderboard ✓</p>;
   }
   if (failed) {
     return (
@@ -264,5 +264,5 @@ function SyncNote({ state, failed }: { state: LocalRound['syncState']; failed: b
   const text = navigator.onLine
     ? 'Saving to leaderboard…'
     : 'Saved on this device — will sync when back online';
-  return <p className="text-center text-xs text-fairway-100/40">{text}</p>;
+  return <p className="text-center text-xs text-fairway-100/70">{text}</p>;
 }

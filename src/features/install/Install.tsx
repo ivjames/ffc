@@ -55,7 +55,7 @@ export default function Install() {
             </p>
             <Button onClick={onInstall}>Install this on my device</Button>
             {result === 'dismissed' && (
-              <p className="mt-3 text-center text-xs text-fairway-100/60">
+              <p className="mt-3 text-center text-xs text-fairway-100/70">
                 No worries — tap the button again whenever you&apos;re ready.
               </p>
             )}
@@ -64,7 +64,7 @@ export default function Install() {
           <GenericInstructions platform={platform} />
         )}
 
-        <p className="mt-6 text-center text-xs text-fairway-100/50">
+        <p className="mt-6 text-center text-xs text-fairway-100/70">
           Nothing to download from a store. It&apos;s the same web app, saved to your device.
         </p>
       </Content>
@@ -101,7 +101,7 @@ function IosInstructions() {
           <span aria-hidden className="mx-0.5 inline-block align-middle text-lg">
             &#x2191;&#xFE0E;
           </span>
-          <span className="text-fairway-100/60"> (the square with an up-arrow, in the toolbar).</span>
+          <span className="text-fairway-100/70"> (the square with an up-arrow, in the toolbar).</span>
         </Step>
         <Step n={2}>
           Scroll down and tap{' '}
@@ -129,14 +129,14 @@ function GenericInstructions({ platform }: { platform: string }) {
       <ol className="space-y-4">
         <Step n={1}>
           Open the browser menu{' '}
-          <span className="text-fairway-100/60">(⋮ or ⋯, usually top-right).</span>
+          <span className="text-fairway-100/70">(⋮ or ⋯, usually top-right).</span>
         </Step>
         <Step n={2}>
           Tap{' '}
           <span className="font-semibold text-fairway-50">
             {platform === 'android' ? 'Add to Home screen' : 'Install app'}
           </span>
-          <span className="text-fairway-100/60"> (also shown as “Install”).</span>
+          <span className="text-fairway-100/70"> (also shown as “Install”).</span>
         </Step>
         <Step n={3}>
           Confirm, and the ⛳️ icon lands on your home screen.
