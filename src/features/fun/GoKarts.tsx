@@ -24,7 +24,8 @@ const FIXED = 1000 / 120;
 const ACCEL = 0.06; // throttle pickup per substep at full lead
 const MAX_SPEED = 2.3; // calmer top speed (was twitchy-fast)
 const COAST = 0.985; // rolling resistance every substep
-const WALL_SLIDE = 0.55; // speed kept when scraping along a barrier
+const WALL_SLIDE = 0.9; // fraction of along-wall speed kept when scraping a barrier
+const WALL_BOUNCE = 0.2; // how much of the into-wall speed is reflected back off it
 const TURN = 0.06; // max heading change per substep, turning toward the finger
 const TURN_SPEED = 1.1; // speed for full turn authority
 const TURN_FLOOR = 0.3; // min turn authority, so a slow kart can still point out of a wall
@@ -181,10 +182,11 @@ function step(gs: GS): boolean {
   k.y += Math.sin(k.heading) * k.speed;
 
   // Barriers line both edges of the asphalt. If the kart's center drifts past the
-  // wall distance from the centerline, shove it back to the barrier and cancel
-  // the velocity heading into the wall — the leftover along-wall motion (bled by
-  // WALL_SLIDE) lets the kart scrape and slide instead of stopping dead or
-  // flying off across the grass.
+  // wall distance from the centerline, shove it back to the barrier and split its
+  // velocity into along-wall and into-wall parts. It keeps most of the along-wall
+  // speed (WALL_SLIDE) so it scrapes and slides, and a little of the into-wall
+  // speed is reflected back out (WALL_BOUNCE) so it deflects off the barrier
+  // rather than grinding to a dead stop against it.
   const pr = project(gs.track, k.x, k.y);
   if (pr.dist > WALL_DIST) {
     const nx = (k.x - pr.px) / (pr.dist || 1);
@@ -197,8 +199,10 @@ function step(gs: GS): boolean {
     if (vn > 0) {
       const tx = vx - vn * nx; // slide component tangent to the wall
       const ty = vy - vn * ny;
-      k.speed = Math.hypot(tx, ty) * WALL_SLIDE;
-      if (k.speed > 0.001) k.heading = Math.atan2(ty, tx);
+      const rvx = tx * WALL_SLIDE - nx * vn * WALL_BOUNCE;
+      const rvy = ty * WALL_SLIDE - ny * vn * WALL_BOUNCE;
+      k.speed = Math.hypot(rvx, rvy);
+      if (k.speed > 0.001) k.heading = Math.atan2(rvy, rvx);
     }
   }
 
