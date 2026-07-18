@@ -47,6 +47,11 @@ type GS = {
 // Distinct derived seeds per hole so an endless run is reproducible.
 const SEED_SALT = 0x9e3779b1;
 
+// After sinking, linger on the result for a beat, then advance on its own so a
+// round flows without a tap between every hole. The "Next hole" button still
+// skips the wait.
+const AUTO_ADVANCE_MS = 1600;
+
 function holeResult(strokes: number, par: number): { label: string; emoji: string } {
   const d = strokes - par;
   if (strokes === 1) return { label: 'Hole in one!', emoji: '🏌️' };
@@ -444,6 +449,30 @@ export default function PuttGolf() {
       }
     }
   }, [startHole, ensureEndlessHole]);
+
+  // Auto-advance a short beat after the ball drops, so the round flows without a
+  // tap between holes. Pauses while the tab/app is backgrounded (the timer is
+  // (re)armed on visibility) so a hidden celebration isn't skipped past, and is
+  // cancelled if the player taps "Next hole" first (advance() also no-ops once
+  // the phase leaves 'sunk', so a late-firing timer can't double-advance).
+  useEffect(() => {
+    if (phase !== 'sunk') return;
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(advance, AUTO_ADVANCE_MS);
+    };
+    const onVisibility = () => {
+      if (document.hidden) window.clearTimeout(timer);
+      else arm();
+    };
+    if (!document.hidden) arm();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [phase, advance]);
 
   // End an endless run early to see the summary of holes played so far.
   const endRun = useCallback(() => {
