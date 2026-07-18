@@ -1,31 +1,70 @@
 @import 'tailwindcss';
 
-/* Design tokens — the `fairway` ramp. This is the app's neutral grayscale
-   environment: every background, card, border, and muted label is drawn from
-   it. These are the SAME custom properties a course theme overrides on a
-   wrapper (see src/lib/theme.ts + src/ui/CourseTheme.tsx): every `fairway-*`
-   utility compiles to `var(--color-fairway-N)`, so re-pointing the variables
-   recolors a whole screen without touching any markup. Per-course identity now
-   rides entirely on the accent ink + glow (colored) layered on top of this
-   neutral chrome — the environment itself stays grayscale. The full 50→950
-   ramp is declared here so every shade the UI uses (incl. 200/300/400)
-   generates a utility that a theme can then re-point. */
+/* Design tokens — the `fairway` ramp. This is the app's neutral environment:
+   every background, card, border, and muted label is drawn from it. Every
+   `fairway-*` utility compiles to `var(--color-fairway-N)`, so the whole app
+   recolors just by re-pointing these variables — which is exactly how light
+   mode works (the `:root[data-theme='light']` block below overrides the ramp).
+   The values here are the DARK (mid-gray) set. Per-course identity rides on the
+   accent ink + glow (colored, see the feature vars below) layered on top of
+   this neutral chrome. The full 50→950 ramp is declared so every shade the UI
+   uses (incl. 200/300/400) generates a utility. */
 @theme {
-  --color-fairway-50: #fafafa;
-  --color-fairway-100: #f5f5f5;
-  --color-fairway-200: #e5e5e5;
-  --color-fairway-300: #d4d4d4;
-  --color-fairway-400: #a3a3a3;
-  --color-fairway-500: #737373;
-  --color-fairway-600: #525252;
-  --color-fairway-700: #404040;
-  --color-fairway-800: #262626;
-  --color-fairway-900: #171717;
-  --color-fairway-950: #0a0a0a;
+  --color-fairway-50: #f5f5f5;
+  --color-fairway-100: #e8e8e8;
+  --color-fairway-200: #cfcfcf;
+  --color-fairway-300: #ababab;
+  --color-fairway-400: #8a8a8a;
+  --color-fairway-500: #6f6f6f;
+  --color-fairway-600: #5b5b5b;
+  --color-fairway-700: #4f4f4f;
+  --color-fairway-800: #464646;
+  --color-fairway-900: #3a3a3a;
+  --color-fairway-950: #2f2f2f;
 }
 
+/* Feature colors — accent inks (per-course identity) and the scorecard's
+   over/under signals. Unlike the neutral environment ramp, these stay colored
+   in both modes; accentInk() and Summary reference them via var(). Dark values
+   here; the light block below darkens them so they stay legible on light. */
 :root {
   color-scheme: dark;
+  --ink-default: #86efac;
+  --ink-green: #85e0a5;
+  --ink-blue: #b1c3d8;
+  --ink-red: #d7a49e;
+  --ink-western: #dcc396;
+  --ink-dragon: #fdba74;
+  --score-under: #34d399;
+  --score-over: #fbbf24;
+}
+
+/* Light mode — a light-grey environment (dark ink on light surfaces). The
+   fairway ramp is re-pointed per role: 950 the light page, 900 near-white
+   cards, 800 visible borders, 50/100 the dark text. Feature colors darken so
+   they clear contrast on light. Switched by the `data-theme` attribute that
+   src/lib/mode.ts sets on <html>. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-fairway-50: #1a1a1a;
+  --color-fairway-100: #2c2c2c;
+  --color-fairway-200: #444444;
+  --color-fairway-300: #5e5e5e;
+  --color-fairway-400: #6f6f6f;
+  --color-fairway-500: #8a8a8a;
+  --color-fairway-600: #a3a3a3;
+  --color-fairway-700: #c2c2c2;
+  --color-fairway-800: #cccccc;
+  --color-fairway-900: #fbfbfb;
+  --color-fairway-950: #eaeaea;
+  --ink-default: #1a7f43;
+  --ink-green: #1a7f43;
+  --ink-blue: #3f5c7a;
+  --ink-red: #9b4a42;
+  --ink-western: #7a5a2e;
+  --ink-dragon: #b45309;
+  --score-under: #0f9d58;
+  --score-over: #b45309;
 }
 
 html,
@@ -37,7 +76,7 @@ body,
 body {
   margin: 0;
   background: var(--color-fairway-950);
-  color: #fafafa;
+  color: var(--color-fairway-50);
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* Respect device safe areas (notches) since we run full-screen as a PWA */
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)

@@ -226,17 +226,17 @@ function NineGrid({
                 const s = round.scores[p]?.[h];
                 const under = s != null && s < course.pars[h];
                 const over = s != null && s > course.pars[h];
+                // Score coloring is a functional signal, so it keeps its own
+                // hues (green under / amber over) independent of the neutral
+                // environment ramp. The hues come from `--score-*` vars that
+                // darken in light mode (index.css) to stay legible; par is a
+                // neutral chrome shade.
+                const signal = under ? 'var(--score-under)' : over ? 'var(--score-over)' : undefined;
                 return (
                   <td
                     key={h}
-                    // Score coloring is a functional signal, so it keeps its own
-                    // hues (green under / amber over) independent of the neutral
-                    // environment ramp — `text-emerald-400` rather than a
-                    // `fairway-*` shade, which is now grayscale. Par stays a
-                    // neutral near-white.
-                    className={`px-1 py-2 ${
-                      under ? 'text-emerald-400' : over ? 'text-amber-400' : 'text-fairway-100'
-                    }`}
+                    className={`px-1 py-2 ${signal ? '' : 'text-fairway-100'}`}
+                    style={signal ? { color: signal } : undefined}
                   >
                     {s ?? '·'}
                   </td>

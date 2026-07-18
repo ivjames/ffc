@@ -1,81 +1,22 @@
 // Per-course visual theming.
 //
-// Every screen in the app is built from the `fairway-*` Tailwind utilities, and
-// Tailwind v4 compiles each of those to `var(--color-fairway-N)`. That means a
-// screen can be recolored wholesale — no markup changes — just by re-pointing
-// the `--color-fairway-*` custom properties on a wrapping element.
-//
-// The environment ramp is neutral grayscale, shared by every screen and every
-// course. Per-course identity is carried entirely by the accent ink + glow
-// (see `accentInk` below and the accent glow in CourseTheme) layered on top of
-// this neutral chrome — the backgrounds/cards/borders themselves stay gray.
+// The environment (backgrounds, cards, borders) is a neutral ramp shared by
+// every screen, defined in index.css with a dark and a light set (see
+// src/lib/mode.ts). Per-course identity is carried entirely by the accent ink +
+// glow layered on top of that neutral chrome.
 
-export type Ramp = Record<
-  50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 950,
-  string
->;
-
-// The neutral grayscale environment — identical to the @theme defaults in
-// index.css. Every theme resolves to this ramp; only the accent ink/glow
-// differ per course.
-const GRAY: Ramp = {
-  50: '#fafafa',
-  100: '#f5f5f5',
-  200: '#e5e5e5',
-  300: '#d4d4d4',
-  400: '#a3a3a3',
-  500: '#737373',
-  600: '#525252',
-  700: '#404040',
-  800: '#262626',
-  900: '#171717',
-  950: '#0a0a0a',
-};
-
-/** The environment ramp — neutral grayscale for every theme. */
-export function rampFor(_theme: string): Ramp {
-  return GRAY;
-}
+// Themes that have a tuned accent ink; anything else uses `default`.
+const INK_THEMES = new Set(['green', 'blue', 'red', 'western', 'dragon']);
 
 /**
- * Inline `--color-fairway-*` overrides for a theme, ready to spread onto a
- * wrapping element's `style`. Descendant `fairway-*` utilities pick these up.
- */
-export function themeVars(theme: string): Record<string, string> {
-  const ramp = rampFor(theme);
-  const vars: Record<string, string> = {};
-  for (const [shade, hex] of Object.entries(ramp)) {
-    vars[`--color-fairway-${shade}`] = hex;
-  }
-  return vars;
-}
-
-/** The darkest ramp step — the page background for a themed screen. */
-export function themeBackdrop(theme: string): string {
-  return rampFor(theme)[950];
-}
-
-// Contrast-safe accent for TEXT on the neutral chrome (tags, par, rules
-// headings) — this is the per-course color identity now that the environment
-// ramp is grayscale. The raw course `accent` is a mid-tone brand hex; these are
-// lifted light steps so accent text clears WCAG AA (4.5:1) on both the near-
-// black page background and the slightly lighter gray cards. Dragon keeps a
-// warm orange to match its fiery highlight.
-const ACCENT_INK: Record<string, string> = {
-  green: '#85e0a5',
-  blue: '#b1c3d8',
-  red: '#d7a49e',
-  western: '#dcc396',
-  dragon: '#fdba74',
-};
-
-/**
- * Accent color to use for text on the neutral chrome — WCAG-AA legible, unlike
- * the raw course `accent` (which stays for decorative fills/glows). Unknown
- * themes fall back to a light green step.
+ * Accent color for TEXT on the neutral chrome (tags, par, rules headings) — the
+ * per-course color identity. Returns a CSS variable (defined per mode in
+ * index.css: `--ink-*`) so the ink automatically darkens in light mode to stay
+ * WCAG-AA legible, without the caller re-rendering on a theme switch. The raw
+ * course `accent` hex is left for decorative fills/glows.
  */
 export function accentInk(theme: string): string {
-  return ACCENT_INK[theme] ?? '#86efac';
+  return `var(--ink-${INK_THEMES.has(theme) ? theme : 'default'})`;
 }
 
 /** Emoji marker for a course theme (shared by every course tile/placeholder). */

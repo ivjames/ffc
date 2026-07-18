@@ -15,6 +15,7 @@ import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
 import SoundToggle from './ui/SoundToggle';
+import ThemeToggle from './ui/ThemeToggle';
 
 // §7 Routes / screens.
 export default function App() {
@@ -50,11 +51,13 @@ export default function App() {
         <BuildStamp />
       </div>
 
-      {/* Always-available mute switch, bottom-left (mirrors the build stamp). */}
+      {/* Always-available controls, bottom-left (mirrors the build stamp):
+          light/dark toggle beside the mute switch. */}
       <div
-        className="fixed bottom-0 left-0 z-50 p-2"
+        className="fixed bottom-0 left-0 z-50 flex items-center gap-2 p-2"
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
       >
+        <ThemeToggle />
         <SoundToggle />
       </div>
 

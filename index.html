@@ -8,11 +8,23 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
     />
-    <meta name="theme-color" content="#15803d" />
+    <meta name="theme-color" content="#2f2f2f" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Mini Golf Scorecard</title>
+    <!-- Apply the saved light/dark theme before first paint to avoid a flash of
+         the wrong mode. The app (src/lib/mode.ts) takes over from here. -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('ffc-theme');
+          document.documentElement.dataset.theme = m === 'light' ? 'light' : 'dark';
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
