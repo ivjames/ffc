@@ -147,13 +147,18 @@ export default function TvLeaderboard() {
           </p>
         )}
 
-        {/* Just-played scores pinned above the scroll region. */}
+        {/* Just-played scores pinned above the standings. Capped at a fraction
+            of the viewport with its own scroll so a full four-player highlight
+            can't eat the whole column on short/landscape screens — every score
+            stays reachable and the fixed-height layout never overflows. */}
         {!error && yourRows.length > 0 && (
           <div className="mb-3 shrink-0">
             <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
               Your last round
             </div>
-            <ol className="space-y-2">{yourRows.map((row, i) => renderRow(row, i))}</ol>
+            <ol className="-mx-1 max-h-[38vh] space-y-2 overflow-y-auto px-1">
+              {yourRows.map((row, i) => renderRow(row, i))}
+            </ol>
           </div>
         )}
 
