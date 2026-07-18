@@ -289,8 +289,10 @@ games themed to the real attractions, playable one-handed while waiting.
   seconds. Equal-mass elastic collisions on the fixed-timestep accumulator
   (background-paused); a bump only scores when you drive into another unit hard
   enough. Both share one engine (`BumperArena`) parameterized by a `BumperTheme`:
-  cars are grippy on a rink, boats are floatier (less damping, gentler thrust)
-  on a rippling-water arena with wakes.
+  cars are grippy on a rink, boats are floatier (less damping) on a water arena
+  with a long fading wake trail and splash droplets thrown up on each bump. Boats
+  use a lower bump threshold so scoring stays on par with the cars despite the
+  floatier handling (tuned via an autopilot sim: ~11 boat bumps vs ~9 car).
 
 - **Axe throwing** (`/fun/axe`) — **shipped.** A two-tap timing game: a vertical
   guide sweeps to set aim, a horizontal guide sweeps to set height, then the axe

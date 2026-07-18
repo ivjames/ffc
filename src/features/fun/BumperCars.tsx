@@ -15,6 +15,7 @@ const CARS: BumperTheme = {
   maxSpeed: 5.5,
   aiAccel: 0.12,
   aiMax: 4.4,
+  bumpSpeed: 2.0,
 };
 
 export default function BumperCars() {
