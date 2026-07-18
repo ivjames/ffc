@@ -296,9 +296,14 @@ games themed to the real attractions, playable one-handed while waiting.
   rings to 1, corner clutches 7). Distinct timing-skill mechanic vs. the
   swipe/physics games; sweeps pause when backgrounded.
 
+- **Batting cages** (`/fun/batting`) — **shipped.** Tap-to-swing timing game;
+  balls pitch down the cage at varying speeds and you time contact at the plate
+  (perfect = home run, near = base hit, off = foul/strike). Ten pitches. Ball
+  descent from absolute timestamps for framerate-exact timing; bat swings on
+  contact, ball flies off the bat.
+
 Remaining, roughly increasing build cost:
 
-- **Batting cages** — tap-to-swing timing game against a pitch.
 - **Bowling** — aim + spin a roll down a lane at pins.
 - **Go-karts** — lap-time time-trial on a simple track.
 
