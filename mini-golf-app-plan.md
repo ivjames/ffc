@@ -308,9 +308,16 @@ games themed to the real attractions, playable one-handed while waiting.
   10th-frame fill balls). Settlement waits for the pins to finish toppling so a
   fast strike scores correctly.
 
-Remaining, roughly increasing build cost:
+- **Go-karts** (`/fun/karts`) — **shipped.** A top-down 3-lap time trial on a
+  procedural closed circuit. One-touch control: press to accelerate, press
+  left/right of center to steer (release to coast); leaving the asphalt for the
+  grass cuts your grip. Nearest-point projection handles on/off-track and lap
+  detection (forward-wrap past start/finish, guarded against reverse farming).
+  Shows current + best lap; background-paused countdown and clock.
 
-- **Go-karts** — lap-time time-trial on a simple track.
+**All seven attraction mini-games are now shipped** — the roadmap list is
+complete. Further work is content/variants (bumper boats reskin, more trivia/fact
+packs, per-attraction leaderboards) rather than new game engines.
 
 Each is a self-contained `src/features/<game>/` route wired into the `/fun` hub
 (or its own "Arcade" hub), following the Arcade Putt / Skee-Ball pattern:
