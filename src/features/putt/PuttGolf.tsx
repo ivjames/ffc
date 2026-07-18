@@ -118,17 +118,16 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillStyle = '#0b3b22';
   for (const s of surface) fillCapsule(ctx, s, 5);
 
-  // Green: the rough collar (whole green), then the brighter putting surface
-  // inset by the collar width — a fringe of rough around the green's edge.
+  // Fairway first…
+  ctx.fillStyle = '#1a8f4a';
+  for (const s of hole.fairway) fillCapsule(ctx, s, 0);
+
+  // …then the green on top: its rough collar, then the brighter putting surface
+  // inset by the collar width — a fringe of rough ringing the whole green.
   ctx.fillStyle = '#2b7a43';
   for (const s of hole.green) fillCapsule(ctx, s, 0);
   ctx.fillStyle = '#37c06d';
   for (const s of hole.green) fillCapsule(ctx, s, -ROUGH_BAND);
-
-  // Fairway on top — covers the throat where it meets the green, so the collar
-  // only rings the green's exposed edge.
-  ctx.fillStyle = '#1a8f4a';
-  for (const s of hole.fairway) fillCapsule(ctx, s, 0);
 
   // Sand bunkers — clipped to the surface so they never break the rail.
   if (hole.pits) {

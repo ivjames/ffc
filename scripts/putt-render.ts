@@ -42,9 +42,9 @@ for (let hi = 0; hi < HOLES.length; hi++) {
       const sdF = sdUnion(fx, fy, h.fairway);
       const sdG = sdUnion(fx, fy, h.green);
       if (sdF < 0 || sdG < 0) {
-        // fairway (incl. the throat) is fast; the green shows a rough collar
-        if (sdF < 0) col = FAIRWAY;
-        else col = sdG > -ROUGH_BAND ? COLLAR : PUTTING;
+        // green sits on top of the fairway, with a rough collar ringing it
+        if (sdG < 0) col = sdG > -ROUGH_BAND ? COLLAR : PUTTING;
+        else col = FAIRWAY;
         // sand only where on the surface → chopped at the rail
         if (h.pits && sdUnion(fx, fy, h.pits) < 0) col = SAND;
         if (h.walls && sdUnion(fx, fy, h.walls) < 0) col = WALL;
