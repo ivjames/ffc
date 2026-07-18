@@ -16,9 +16,10 @@ export type Ramp = Record<
   string
 >;
 
-// The base venue green — identical to the @theme defaults in index.css, so the
-// green courses render exactly as before and it doubles as the fallback ramp.
-const GREEN: Ramp = {
+// The base venue green — identical to the @theme defaults in index.css. It is
+// the fallback ramp, so an unknown theme (and every un-themed hub screen)
+// renders in exactly this palette.
+const VENUE: Ramp = {
   50: '#f0fdf4',
   100: '#dcfce7',
   200: '#bbf7d0',
@@ -30,6 +31,23 @@ const GREEN: Ramp = {
   800: '#166534',
   900: '#14532d',
   950: '#052e16',
+};
+
+// Green Course — a lighter, airy meadow green, lifted like the other course
+// themes so its play screens don't sit in the near-black venue green. Kept
+// grassier/brighter than Dragon's Hollow so the two greens stay distinct.
+const GREEN: Ramp = {
+  50: '#f0fdf4',
+  100: '#dcf7e5',
+  200: '#b7ecc9',
+  300: '#85e0a5',
+  400: '#55cf86',
+  500: '#2bb866',
+  600: '#1f9d55',
+  700: '#24824a',
+  800: '#1d6a3c',
+  900: '#17532f',
+  950: '#103d22',
 };
 
 // Muted steel/slate blue — reads as blue without the vivid electric edge,
@@ -107,7 +125,7 @@ const RAMPS: Record<string, Ramp> = {
 
 /** The color ramp for a course theme; unknown themes fall back to venue green. */
 export function rampFor(theme: string): Ramp {
-  return RAMPS[theme] ?? GREEN;
+  return RAMPS[theme] ?? VENUE;
 }
 
 /**
