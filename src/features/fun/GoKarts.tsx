@@ -3,8 +3,10 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playStroke, playCup, playFanfare } from '../../lib/sound';
 
 // §12 Go-Karts — the seventh attraction mini-game. A top-down 3-lap time trial
-// on a procedural closed circuit. One-touch control: press to accelerate, and
-// press left/right of center to steer that way (release to coast). Solid walls
+// on a procedural closed circuit. Drag control: touch anywhere and the kart
+// chases your finger like a lure — you lead it around the track instead of
+// working a throttle and left/right steering by hand. Throttle scales with how
+// far ahead you drag, so holding still brings it to a gentle stop. Solid walls
 // line both edges of the asphalt: run wide and you scrape the barrier and slide
 // along it instead of flying off across the grass. Fixed-timestep physics,
 // client-side, offline.
@@ -18,13 +20,16 @@ const KART_R = 7; // kart collision radius (half its body width)
 const LAPS = 3;
 
 const FIXED = 1000 / 120;
-const ACCEL = 0.06; // gentler pickup
+const ACCEL = 0.06; // throttle pickup per substep at full lead
 const MAX_SPEED = 2.3; // calmer top speed (was twitchy-fast)
-const COAST = 0.985; // decel when not on the gas
+const COAST = 0.985; // rolling resistance every substep
 const WALL_SLIDE = 0.55; // speed kept when scraping along a barrier
-const TURN = 0.042; // rad/step at full lock
-const TURN_SPEED = 1.35; // speed needed for full steering authority
-const STEER_SMOOTH = 0.22; // how fast the effective steer eases toward the input
+const TURN = 0.06; // max heading change per substep, turning toward the finger
+const TURN_SPEED = 1.1; // speed for full turn authority
+const TURN_FLOOR = 0.3; // min turn authority, so a slow kart can still point out of a wall
+const LEAD = 80; // finger lead distance (px) for full throttle
+const CATCH_R = 18; // within this of the finger, the kart eases to a stop
+const BRAKE = 0.9; // gentle braking once caught up to the finger
 const COUNTDOWN_MS = 2600;
 
 // The wall sits half the kart's width in from the asphalt edge, so the kart body
@@ -85,11 +90,11 @@ function project(x: number, y: number): { dist: number; f: number; px: number; p
 }
 
 type Phase = 'countdown' | 'race' | 'done';
-type Kart = { x: number; y: number; heading: number; speed: number; steer: number };
+type Kart = { x: number; y: number; heading: number; speed: number };
 type GS = {
   phase: Phase;
   kart: Kart;
-  touch: { active: boolean; x: number };
+  touch: { active: boolean; x: number; y: number };
   raceTime: number; // ms of active racing
   lapStart: number;
   laps: number; // completed laps
@@ -103,14 +108,14 @@ type GS = {
 function startKart(): Kart {
   const p0 = TRACK.pts[0];
   const p1 = TRACK.pts[1];
-  return { x: p0.x, y: p0.y, heading: Math.atan2(p1.y - p0.y, p1.x - p0.x), speed: 0, steer: 0 };
+  return { x: p0.x, y: p0.y, heading: Math.atan2(p1.y - p0.y, p1.x - p0.x), speed: 0 };
 }
 
 function freshGS(now: number): GS {
   return {
     phase: 'countdown',
     kart: startKart(),
-    touch: { active: false, x: W / 2 },
+    touch: { active: false, x: W / 2, y: H - 40 },
     raceTime: 0,
     lapStart: 0,
     laps: 0,
@@ -128,19 +133,24 @@ const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi 
 function step(gs: GS): boolean {
   const k = gs.kart;
 
+  // Drag control: the finger is a lure the kart chases. It turns toward the
+  // touch point (rate-limited so it still corners like a vehicle) and its
+  // throttle scales with how far ahead you're dragging — lead it further to go
+  // faster, hold still and it eases to a stop as it catches up.
   if (gs.touch.active) {
-    k.speed += ACCEL;
-  } else {
-    k.speed *= COAST;
+    const dx = gs.touch.x - k.x;
+    const dy = gs.touch.y - k.y;
+    const dist = Math.hypot(dx, dy);
+    // Turn toward the finger by the shortest angle, capped per substep.
+    let dh = Math.atan2(dy, dx) - k.heading;
+    dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+    const maxTurn = TURN * clamp(k.speed / TURN_SPEED, TURN_FLOOR, 1);
+    k.heading += clamp(dh, -maxTurn, maxTurn);
+    k.speed += ACCEL * clamp(dist / LEAD, 0, 1);
+    if (dist < CATCH_R) k.speed *= BRAKE;
   }
+  k.speed *= COAST;
   k.speed = clamp(k.speed, 0, MAX_SPEED);
-
-  // Steering: press left/right of center; authority scales with speed. The
-  // effective steer eases toward the input (and back to center on release) so
-  // sudden taps don't snap the kart around — less twitchy to control.
-  const target = gs.touch.active ? clamp((gs.touch.x - W / 2) / (W / 2), -1, 1) : 0;
-  k.steer += (target - k.steer) * STEER_SMOOTH;
-  k.heading += TURN * k.steer * clamp(k.speed / TURN_SPEED, 0, 1);
 
   k.x += Math.cos(k.heading) * k.speed;
   k.y += Math.sin(k.heading) * k.speed;
@@ -243,6 +253,17 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
     }
   }
   ctx.restore();
+
+  // Lure: while dragging, show where you're leading the kart.
+  if (gs.phase === 'race' && gs.touch.active) {
+    ctx.beginPath();
+    ctx.arc(gs.touch.x, gs.touch.y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(251,191,36,0.30)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(251,191,36,0.85)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
 
   // Kart.
   const k = gs.kart;
@@ -386,7 +407,8 @@ export default function GoKarts() {
   const onDown = useCallback(
     (e: React.PointerEvent) => {
       const gs = gsRef.current;
-      gs.touch = { active: true, x: toField(e).x };
+      const p = toField(e);
+      gs.touch = { active: true, x: p.x, y: p.y };
       canvasRef.current?.setPointerCapture(e.pointerId);
       // First press also kicks the engine sound once we're racing.
       if (gs.phase === 'race') playStroke();
@@ -396,7 +418,11 @@ export default function GoKarts() {
   const onMove = useCallback(
     (e: React.PointerEvent) => {
       const gs = gsRef.current;
-      if (gs.touch.active) gs.touch.x = toField(e).x;
+      if (gs.touch.active) {
+        const p = toField(e);
+        gs.touch.x = p.x;
+        gs.touch.y = p.y;
+      }
     },
     [toField],
   );
@@ -467,7 +493,7 @@ export default function GoKarts() {
         <p className="mt-3 min-h-[2.5rem] text-center text-sm text-fairway-100/80">
           {phase === 'countdown'
             ? 'Get ready…'
-            : 'Press to go — press left or right of center to steer. Keep off the walls!'}
+            : 'Drag to lead the kart — it follows your finger. Keep off the walls!'}
         </p>
       </Content>
     </Screen>
