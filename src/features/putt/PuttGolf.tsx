@@ -108,24 +108,32 @@ function unionPath(segs: Seg[], extra: number): Path2D {
 function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   const hole = HOLES[gs.holeIndex];
 
-  // Rough (off-green).
+  const surface = [...hole.fairway, ...hole.green];
+
+  // Off the playable surface.
   ctx.fillStyle = '#0a2417';
   ctx.fillRect(0, 0, W, H);
 
-  // Green in layers: dark rim, then the rough collar (whole green), then the
-  // brighter fairway inset by the collar width — leaving a fringe of rough
-  // around the edge.
+  // Dark rim around the whole surface.
   ctx.fillStyle = '#0b3b22';
-  for (const s of hole.green) fillCapsule(ctx, s, 5);
-  ctx.fillStyle = '#2e7d46';
+  for (const s of surface) fillCapsule(ctx, s, 5);
+
+  // Green: the rough collar (whole green), then the brighter putting surface
+  // inset by the collar width — a fringe of rough around the green's edge.
+  ctx.fillStyle = '#2b7a43';
   for (const s of hole.green) fillCapsule(ctx, s, 0);
-  ctx.fillStyle = '#18a24f';
+  ctx.fillStyle = '#37c06d';
   for (const s of hole.green) fillCapsule(ctx, s, -ROUGH_BAND);
 
-  // Sand bunkers — clipped to the green so they never break the rail.
+  // Fairway on top — covers the throat where it meets the green, so the collar
+  // only rings the green's exposed edge.
+  ctx.fillStyle = '#1a8f4a';
+  for (const s of hole.fairway) fillCapsule(ctx, s, 0);
+
+  // Sand bunkers — clipped to the surface so they never break the rail.
   if (hole.pits) {
     ctx.save();
-    ctx.clip(unionPath(hole.green, 0));
+    ctx.clip(unionPath(surface, 0));
     ctx.fillStyle = '#b8995c';
     for (const s of hole.pits) fillCapsule(ctx, s, 2);
     ctx.fillStyle = '#e3cd8c';

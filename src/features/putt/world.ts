@@ -8,9 +8,11 @@
 // rounded lanes, circular greens fed by narrow channels, curved walls (a chain
 // of capsules along an arc), and blobby pits — all with no sharp corners.
 //
-// Collision is signed-distance based: sdUnion(p, shapes) is the distance from p
-// to the union's surface, negative inside. We keep the ball inside the GREEN,
-// outside the WALLS, and treat the PITS as hazards.
+// The playable surface has two parts: the FAIRWAY (approach lanes/channels) and
+// the GREEN (the putting surface around the cup). They play the same except at
+// the green's exposed edge, which carries a slow "rough" collar. Collision is
+// signed-distance based: sdSurface keeps the ball on the playable surface,
+// walls bounce it, pits (sand) bog it down.
 
 export const W = 360;
 export const H = 540;
@@ -18,8 +20,8 @@ export const BALL_R = 8;
 export const HOLE_R = 13;
 
 // Physics tuning (per-frame at ~60fps).
-export const FRICTION = 0.985; // velocity retained each frame on the fairway
-export const FRICTION_ROUGH = 0.955; // the fringe/collar just inside the green edge
+export const FRICTION = 0.985; // velocity retained each frame on fairway/green
+export const FRICTION_ROUGH = 0.955; // the rough collar around the green's edge
 export const FRICTION_SAND = 0.87; // a bunker bogs the ball down significantly
 export const ROUGH_BAND = 12; // width of the rough collar inside the green edge
 export const WALL_REST = 0.66; // energy kept on a bounce off a rail/wall
@@ -35,9 +37,10 @@ export type Hole = {
   par: number;
   tee: { x: number; y: number };
   cup: { x: number; y: number };
-  green: Seg[]; // playable surface (union) — the ball must stay inside
+  fairway: Seg[]; // approach lanes/channels — no rough
+  green: Seg[]; // putting surface around the cup — has a rough collar at its edge
   walls?: Seg[]; // solid obstacles, incl. curved ones (bounce off)
-  pits?: Seg[]; // sand bunkers (heavy drag) — clipped to the green when drawn
+  pits?: Seg[]; // sand bunkers (heavy drag) — clipped to the surface when drawn
 };
 export type Outcome = 'rolling' | 'stopped' | 'sunk';
 
@@ -75,7 +78,21 @@ export function sdUnion(px: number, py: number, segs: Seg[]): number {
   return d;
 }
 
-/** Outward-pointing unit normal of the union's field at (px,py). */
+/** Signed distance to the whole playable surface (fairway ∪ green). */
+export function sdSurface(px: number, py: number, h: Hole): number {
+  return Math.min(sdUnion(px, py, h.fairway), sdUnion(px, py, h.green));
+}
+
+/** Outward-pointing unit normal of the playable-surface field. */
+function gradSurface(px: number, py: number, h: Hole): [number, number] {
+  const e = 0.6;
+  const dx = sdSurface(px + e, py, h) - sdSurface(px - e, py, h);
+  const dy = sdSurface(px, py + e, h) - sdSurface(px, py - e, h);
+  const l = Math.hypot(dx, dy) || 1e-6;
+  return [dx / l, dy / l];
+}
+
+/** Outward-pointing unit normal of a capsule-union field. */
 function gradUnion(px: number, py: number, segs: Seg[]): [number, number] {
   const e = 0.6;
   const dx = sdUnion(px + e, py, segs) - sdUnion(px - e, py, segs);
@@ -92,10 +109,10 @@ function reflect(b: Ball, nx: number, ny: number) {
 }
 
 // Resolve the ball against one substep of motion. Returns 'sunk' if it dropped
-// this substep, else null. (Sand is a drag zone handled per-frame, not here.)
+// this substep, else null. (Surface friction is applied per-frame, not here.)
 function resolve(b: Ball, hole: Hole): 'sunk' | null {
   // Hard field-edge rail — a safety net so the ball can never end up off-screen
-  // even where a green's rounded end meets the field boundary.
+  // even where a surface's rounded end meets the field boundary.
   if (b.x < BALL_R) {
     b.x = BALL_R;
     if (b.vx < 0) b.vx = -b.vx * WALL_REST;
@@ -111,10 +128,10 @@ function resolve(b: Ball, hole: Hole): 'sunk' | null {
     if (b.vy > 0) b.vy = -b.vy * WALL_REST;
   }
 
-  // Keep the ball inside the green (its boundary is the rail).
-  const g = sdUnion(b.x, b.y, hole.green);
+  // Keep the ball on the playable surface (its boundary is the rail).
+  const g = sdSurface(b.x, b.y, hole);
   if (g > -BALL_R) {
-    const [nx, ny] = gradUnion(b.x, b.y, hole.green); // points outward
+    const [nx, ny] = gradSurface(b.x, b.y, hole); // points outward
     const pen = g + BALL_R;
     b.x -= nx * pen;
     b.y -= ny * pen;
@@ -152,6 +169,13 @@ function resolve(b: Ball, hole: Hole): 'sunk' | null {
   return null;
 }
 
+/** True when (x,y) is on the rough collar: on the green, near its exposed edge,
+ *  and not on the fairway (so the fairway approach and the throat stay fast). */
+export function inRough(x: number, y: number, h: Hole): boolean {
+  const sdG = sdUnion(x, y, h.green);
+  return sdG < 0 && sdG > -ROUGH_BAND && sdUnion(x, y, h.fairway) >= 0;
+}
+
 /** Advance the ball one frame. Sub-steps keep fast shots from tunnelling. */
 export function stepPhysics(b: Ball, hole: Hole): Outcome {
   const speed = Math.hypot(b.vx, b.vy);
@@ -162,9 +186,9 @@ export function stepPhysics(b: Ball, hole: Hole): Outcome {
     const outcome = resolve(b, hole);
     if (outcome) return outcome;
   }
-  // Surface friction: fairway, the rough collar near the green edge, or — most
-  // draggy of all — a sand bunker.
-  let fr = sdUnion(b.x, b.y, hole.green) > -ROUGH_BAND ? FRICTION_ROUGH : FRICTION;
+  // Surface friction: fairway/green normally, the rough collar around the green
+  // edge, or — draggiest of all — a sand bunker.
+  let fr = inRough(b.x, b.y, hole) ? FRICTION_ROUGH : FRICTION;
   if (hole.pits && hole.pits.length && sdUnion(b.x, b.y, hole.pits) < 0) fr = FRICTION_SAND;
   b.vx *= fr;
   b.vy *= fr;
@@ -177,89 +201,85 @@ export function stepPhysics(b: Ball, hole: Hole): Outcome {
 }
 
 // --- The course: nine holes ------------------------------------------------
-// Smooth greens (rounded lanes, circular greens + channels), curved walls, and
-// blobby pits. Validated by sim.ts before shipping.
+// Each hole is a fairway (approach) feeding a green (putting surface) around the
+// cup. Curved walls and blobby sand add variety. Validated by putt-sim.
 export const HOLES: Hole[] = [
-  // 1 — warm-up: a straight rounded lane.
+  // 1 — warm-up: straight fairway into a round green.
   {
     par: 2,
-    tee: { x: 180, y: 468 },
-    cup: { x: 180, y: 120 },
-    green: [cap(180, 480, 180, 100, 56)],
+    tee: { x: 180, y: 470 },
+    cup: { x: 180, y: 140 },
+    fairway: [cap(180, 486, 180, 176, 34)],
+    green: [disc(180, 140, 56)],
   },
   // 2 — a narrow channel opening onto a circular green (the showcase).
   {
     par: 3,
     tee: { x: 180, y: 475 },
     cup: { x: 180, y: 140 },
-    green: [cap(180, 500, 180, 205, 26), disc(180, 140, 74)],
+    fairway: [cap(180, 500, 180, 205, 26)],
+    green: [disc(180, 140, 74)],
   },
-  // 3 — dogleg right: two lanes curving into a circular green.
+  // 3 — dogleg right: two fairway lanes curving into a circular green.
   {
     par: 3,
     tee: { x: 92, y: 468 },
     cup: { x: 286, y: 168 },
-    green: [cap(92, 498, 104, 268, 40), cap(104, 268, 286, 190, 40), disc(286, 168, 52)],
+    fairway: [cap(92, 498, 104, 268, 40), cap(104, 268, 286, 190, 40)],
+    green: [disc(286, 168, 52)],
   },
-  // 4 — wide green with a curved-wall chicane to weave through.
+  // 4 — wide fairway with a curved-wall chicane, into a round green.
   {
     par: 3,
     tee: { x: 180, y: 444 },
-    cup: { x: 180, y: 130 },
-    green: [cap(180, 452, 180, 140, 82)],
-    walls: [
-      cap(94, 352, 176, 336, 12),
-      cap(184, 258, 268, 244, 12),
-    ],
+    cup: { x: 180, y: 138 },
+    fairway: [cap(180, 452, 180, 196, 82)],
+    green: [disc(180, 138, 60)],
+    walls: [cap(94, 352, 176, 336, 12), cap(184, 258, 268, 244, 12)],
   },
-  // 5 — straight lane with a blobby pit hugging the left; veer right.
+  // 5 — fairway with a blobby bunker hugging the left; veer right onto the green.
   {
     par: 3,
     tee: { x: 180, y: 472 },
     cup: { x: 180, y: 120 },
-    green: [cap(180, 484, 180, 104, 52)],
+    fairway: [cap(180, 484, 180, 158, 52)],
+    green: [disc(180, 120, 52)],
     pits: [disc(150, 300, 26), disc(152, 334, 22), disc(150, 268, 20)],
   },
-  // 6 — long S-curve lane into a circular green.
+  // 6 — long S-curve fairway into a circular green.
   {
     par: 4,
     tee: { x: 100, y: 480 },
     cup: { x: 256, y: 150 },
-    green: [
-      cap(100, 500, 112, 366, 38),
-      cap(112, 366, 250, 306, 38),
-      cap(250, 306, 256, 196, 38),
-      disc(256, 150, 50),
-    ],
+    fairway: [cap(100, 500, 112, 366, 38), cap(112, 366, 250, 306, 38), cap(250, 306, 256, 200, 38)],
+    green: [disc(256, 150, 50)],
   },
   // 7 — channel into a circular green with a bumper to curl around.
   {
     par: 3,
     tee: { x: 180, y: 476 },
     cup: { x: 212, y: 134 },
-    green: [cap(180, 500, 180, 214, 26), disc(180, 150, 76)],
+    fairway: [cap(180, 500, 180, 214, 26)],
+    green: [disc(180, 150, 76)],
     walls: [disc(150, 172, 18)],
   },
-  // 8 — wide green: a curved wall pushes you right into a pit's reach.
+  // 8 — wide fairway: a curved wall pushes you right, toward a bunker.
   {
     par: 4,
-    tee: { x: 180, y: 448 },
+    tee: { x: 180, y: 450 },
     cup: { x: 168, y: 132 },
-    green: [cap(180, 456, 180, 118, 80)],
+    fairway: [cap(180, 456, 180, 178, 80)],
+    green: [disc(168, 132, 56)],
     walls: [cap(96, 344, 196, 322, 12)],
     pits: [disc(236, 244, 24), disc(238, 214, 20)],
   },
-  // 9 — finale: dogleg lane, a pit to skirt, a bumper, into a circular green.
+  // 9 — finale: dogleg fairway, a bunker to skirt, a bumper, into a round green.
   {
     par: 5,
     tee: { x: 92, y: 476 },
-    cup: { x: 280, y: 168 },
-    green: [
-      cap(92, 500, 104, 360, 36),
-      cap(104, 360, 250, 300, 36),
-      cap(250, 300, 278, 222, 36),
-      disc(280, 172, 68),
-    ],
+    cup: { x: 280, y: 172 },
+    fairway: [cap(92, 500, 104, 360, 36), cap(104, 360, 250, 300, 36), cap(250, 300, 278, 226, 36)],
+    green: [disc(280, 172, 68)],
     walls: [disc(252, 236, 15)],
     pits: [disc(120, 408, 22), disc(122, 378, 18)],
   },

@@ -13,9 +13,10 @@ const IW = COLS * CW;
 const IH = ROWS * CH;
 
 type RGB = [number, number, number];
-const ROUGH: RGB = [10, 36, 23]; // off-green
-const COLLAR: RGB = [46, 125, 70]; // rough fringe inside the green edge
-const FAIRWAY: RGB = [24, 162, 79];
+const OFF: RGB = [10, 36, 23]; // off the playable surface
+const FAIRWAY: RGB = [26, 143, 74];
+const PUTTING: RGB = [55, 192, 109]; // the green (putting surface)
+const COLLAR: RGB = [43, 122, 67]; // rough fringe at the green's edge
 const WALL: RGB = [30, 107, 63];
 const SAND: RGB = [227, 205, 140];
 const CUP: RGB = [4, 22, 12];
@@ -37,11 +38,14 @@ for (let hi = 0; hi < HOLES.length; hi++) {
     for (let cx = 0; cx < CW; cx++) {
       const fx = cx * SCALE;
       const fy = cy * SCALE;
-      let col: RGB = ROUGH;
-      const gg = sdUnion(fx, fy, h.green);
-      if (gg < 0) {
-        col = gg > -ROUGH_BAND ? COLLAR : FAIRWAY;
-        // sand only where inside the green → chopped at the rail
+      let col: RGB = OFF;
+      const sdF = sdUnion(fx, fy, h.fairway);
+      const sdG = sdUnion(fx, fy, h.green);
+      if (sdF < 0 || sdG < 0) {
+        // fairway (incl. the throat) is fast; the green shows a rough collar
+        if (sdF < 0) col = FAIRWAY;
+        else col = sdG > -ROUGH_BAND ? COLLAR : PUTTING;
+        // sand only where on the surface → chopped at the rail
         if (h.pits && sdUnion(fx, fy, h.pits) < 0) col = SAND;
         if (h.walls && sdUnion(fx, fy, h.walls) < 0) col = WALL;
       }

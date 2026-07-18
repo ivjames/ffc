@@ -2,13 +2,13 @@
 // Checks each hole is geometrically sane and actually completable.
 import {
   W, H, BALL_R, HOLE_R, MIN_SHOT, MAX_SHOT,
-  HOLES, sdUnion, stepPhysics, type Hole, type Ball, type Outcome,
+  HOLES, sdUnion, sdSurface, stepPhysics, type Hole, type Ball, type Outcome,
 } from '../src/features/putt/world.ts';
 
-// A cell the ball could rest in: inside the green, clear of walls. Sand is
-// passable (just draggy), so it doesn't block the route.
+// A cell the ball could rest in: on the playable surface, clear of walls. Sand
+// is passable (just draggy), so it doesn't block the route.
 function freeAt(x: number, y: number, h: Hole): boolean {
-  if (sdUnion(x, y, h.green) > -BALL_R) return false;
+  if (sdSurface(x, y, h) > -BALL_R) return false;
   if (h.walls && h.walls.length && sdUnion(x, y, h.walls) < BALL_R) return false;
   return true;
 }
@@ -69,18 +69,18 @@ for (let i = 0; i < HOLES.length; i++) {
   console.log(`Hole ${i + 1} (par ${h.par})`);
 
   // Geometry sanity.
-  if (sdUnion(h.tee.x, h.tee.y, h.green) > -(BALL_R + 2)) fail('tee not safely inside green');
-  if (sdUnion(h.cup.x, h.cup.y, h.green) > -(HOLE_R + 2)) fail('cup not safely inside green');
+  if (sdSurface(h.tee.x, h.tee.y, h) > -(BALL_R + 2)) fail('tee not safely on the surface');
+  if (sdUnion(h.cup.x, h.cup.y, h.green) > -(HOLE_R + 2)) fail('cup not safely inside the green');
   if (h.walls && sdUnion(h.cup.x, h.cup.y, h.walls) < HOLE_R) fail('cup overlaps a wall');
   if (h.pits && sdUnion(h.cup.x, h.cup.y, h.pits) < 0) fail('cup sits in the sand');
   if (h.walls && sdUnion(h.tee.x, h.tee.y, h.walls) < BALL_R) fail('tee overlaps a wall');
   if (h.pits && sdUnion(h.tee.x, h.tee.y, h.pits) < 0) fail('tee starts in the sand');
-  for (const s of h.green) {
+  for (const s of [...h.fairway, ...h.green]) {
     const minX = Math.min(s.ax, s.bx) - s.r;
     const maxX = Math.max(s.ax, s.bx) + s.r;
     const minY = Math.min(s.ay, s.by) - s.r;
     const maxY = Math.max(s.ay, s.by) + s.r;
-    if (minX < 2 || minY < 2 || maxX > W - 2 || maxY > H - 2) fail('green segment spills past the field');
+    if (minX < 2 || minY < 2 || maxX > W - 2 || maxY > H - 2) fail('surface segment spills past the field');
   }
 
   // Completability.
