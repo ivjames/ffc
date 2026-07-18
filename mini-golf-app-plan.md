@@ -290,9 +290,14 @@ games themed to the real attractions, playable one-handed while waiting.
   only scores when you drive into another car hard enough. Bumper boats is the
   same mechanic reskinned (swap arena art/emoji) if we want the variant.
 
+- **Axe throwing** (`/fun/axe`) — **shipped.** A two-tap timing game: a vertical
+  guide sweeps to set aim, a horizontal guide sweeps to set height, then the axe
+  flies and sticks where they cross. Five throws; WATL-style target (bullseye 5,
+  rings to 1, corner clutches 7). Distinct timing-skill mechanic vs. the
+  swipe/physics games; sweeps pause when backgrounded.
+
 Remaining, roughly increasing build cost:
 
-- **Axe throwing** — timing/aim flick at a target; scoring rings like darts.
 - **Batting cages** — tap-to-swing timing game against a pitch.
 - **Bowling** — aim + spin a roll down a lane at pins.
 - **Go-karts** — lap-time time-trial on a simple track.
