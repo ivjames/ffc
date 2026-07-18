@@ -64,15 +64,24 @@ export default function Scorecard() {
 
   // Arriving from the setup screen's auto-play button carries a mode in the
   // navigation state; kick off the same walk here so the test runs straight
-  // through from character creation to the final hole. Guarded to fire once.
+  // through from character creation to the final hole. Fires once, and only
+  // after the round has loaded so we can skip an already-finished round.
   const autoStartRef = useRef(false);
   useEffect(() => {
+    if (autoStartRef.current || !round) return;
     const mode = (location.state as { autoPlay?: 'slow' | 'fast' } | null)?.autoPlay;
-    if (!mode || autoStartRef.current) return;
+    if (!mode) return;
     autoStartRef.current = true;
+    // Consume the transient flag so a browser reload or Back — which remounts
+    // this screen against the same history entry — can't relaunch auto-play
+    // (and re-score) a round that's already been played.
+    navigate(location.pathname, { replace: true, state: null });
+    // A reload of an already-finished round lands here with a stale flag; only
+    // walk a round that still has holes left to score.
+    if (isRoundComplete(round.scores, round.playerTags.length)) return;
     setFastForward(mode === 'fast');
     setAutoPlaying(true);
-  }, [location.state]);
+  }, [round, location.state, location.pathname, navigate]);
 
   const course = round ? courseById(round.courseId) : undefined;
 
