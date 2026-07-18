@@ -502,7 +502,7 @@ export default function PuttGolf() {
   if (mode === null) {
     return (
       <Screen>
-        <TopBar title="Arcade Putt" back="/" />
+        <TopBar title="Arcade Putt" back="/fun" />
         <Content>
           <div className="mt-6 text-center">
             <div className="text-5xl">⛳️</div>
@@ -530,7 +530,7 @@ export default function PuttGolf() {
 
   return (
     <Screen>
-      <TopBar title="Arcade Putt" back="/" />
+      <TopBar title="Arcade Putt" back="/fun" />
       <Content>
         {phase !== 'done' ? (
           <>
