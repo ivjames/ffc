@@ -278,9 +278,14 @@ games themed to the real attractions, playable one-handed while waiting.
   Physics/scoring are pure functions (`launchVelocity`/`landingPoint`/`scoreAt`)
   so they stay tunable and testable.
 
+- **Air hockey** (`/fun/airhockey`) — **shipped.** Drag your mallet in the bottom
+  half; a capped-speed CPU defends the top. First to 7. Real-time canvas physics
+  on a fixed-timestep accumulator (framerate-independent, no puck tunneling), with
+  the loop paused when backgrounded. Kept portrait, so no orientation-lock work is
+  needed for it.
+
 Remaining, roughly increasing build cost:
 
-- **Air hockey** — drag a paddle, 1-player vs. a simple AI or 2-player pass-the-phone.
 - **Bumper cars / bumper boats** — top-down bump-the-others arena; shared physics.
 - **Axe throwing** — timing/aim flick at a target; scoring rings like darts.
 - **Batting cages** — tap-to-swing timing game against a pitch.
