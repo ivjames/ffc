@@ -1,5 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content } from '../../ui/components';
+import CourseTheme from '../../ui/CourseTheme';
+import { themeEmoji } from '../../lib/theme';
 import { courseById } from '../../data/courses';
 
 // §5.2 Opening course screen — the map (bundled asset) plus a "tap anywhere to
@@ -24,6 +26,7 @@ export default function CourseMap() {
   const begin = () => navigate(`/new/setup?courseId=${course.id}`);
 
   return (
+    <CourseTheme theme={course.theme} accent={course.accent}>
     <Screen>
       <TopBar title={course.name} back="/" />
       {/* Tap anywhere on the opening screen to begin the round. */}
@@ -62,31 +65,6 @@ export default function CourseMap() {
         </div>
       </button>
     </Screen>
+    </CourseTheme>
   );
-}
-
-function themeEmoji(theme: string): string {
-  switch (theme) {
-    case 'blue':
-      return '🔵';
-    case 'green':
-      return '🟢';
-    case 'red':
-      return '🔴';
-    case 'dragon':
-      return '🐉';
-    case 'western':
-      return '🤠';
-    // Retained for any legacy themed courses.
-    case 'jungle':
-      return '🌴';
-    case 'pirate':
-      return '🏴‍☠️';
-    case 'space':
-      return '🚀';
-    case 'haunted':
-      return '👻';
-    default:
-      return '⛳️';
-  }
 }

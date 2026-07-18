@@ -56,6 +56,38 @@ export const LOCATIONS: LocationSeed[] = [
   },
 ];
 
+// Per-course notes, keyed by theme (a course's `rules` is set from its theme
+// below). Short, themed flavor that reads on the Rules screen; the same theme
+// shares notes across locations since it's the same course concept. Placeholder
+// content until the client supplies real per-course rules (§11).
+const THEME_RULES: Record<string, string[]> = {
+  blue: [
+    'Fast blue felt — the banks run quick, so ease off your backswing.',
+    'Water comes into play on the back nine: fish your ball out and add one stroke.',
+    'Several two-tier greens reward a firm, confident first putt.',
+  ],
+  green: [
+    'Our gentlest layout — a good warm-up and friendly to younger players.',
+    'Hedgerows line the fairways; a ball lost in the greenery is replayed where it entered.',
+    'Time your putt through the windmill — the gate opens on a slow, steady turn.',
+  ],
+  dragon: [
+    'The dragon guards the mid-course — putt through while its jaws are open.',
+    'The cavern holes play in low light; give downhill putts extra room.',
+    'Commit fully to the loop — a timid putt rolls right back to your feet.',
+  ],
+  western: [
+    'The mine-cart tunnel splits three ways — the left track feeds nearest the cup.',
+    'Saloon doors swing shut fast; a ball they block is replayed with no penalty.',
+    'Sand plays as ground here — no penalty, but it will steal your speed.',
+  ],
+  red: [
+    'Our championship layout — tight banks and blind breaks reward a scouting lap.',
+    'The volcano kicks balls out at random; play the rebound where it lies.',
+    'Ridged carpet near the finish makes long putts wander — short and straight wins.',
+  ],
+};
+
 export const COURSES: CourseSeed[] = [
   {
     id: 'a1111111-1111-4111-8111-111111111111',
@@ -65,6 +97,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [3, 2, 3, 2, 3, 4, 2, 3, 2, 3, 3, 2, 4, 3, 2, 3, 2, 3],
     accent: '#3b82f6',
+    rules: THEME_RULES.blue,
   },
   {
     id: 'a2222222-2222-4222-8222-222222222222',
@@ -74,6 +107,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [2, 3, 2, 3, 3, 2, 4, 3, 2, 3, 2, 3, 3, 4, 2, 3, 3, 2],
     accent: '#22c55e',
+    rules: THEME_RULES.green,
   },
   {
     id: 'a3333333-3333-4333-8333-333333333333',
@@ -83,6 +117,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [3, 3, 4, 2, 3, 3, 2, 4, 3, 2, 3, 4, 3, 2, 3, 3, 4, 2],
     accent: '#ea580c',
+    rules: THEME_RULES.dragon,
   },
   {
     id: 'a4444444-4444-4444-8444-444444444444',
@@ -92,6 +127,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [2, 3, 3, 2, 4, 3, 2, 3, 3, 2, 4, 3, 2, 3, 3, 2, 3, 4],
     accent: '#b45309',
+    rules: THEME_RULES.western,
   },
   {
     id: 'b1111111-1111-4111-8111-111111111111',
@@ -101,6 +137,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [3, 2, 2, 3, 3, 2, 3, 4, 2, 3, 3, 2, 3, 2, 4, 3, 2, 3],
     accent: '#3b82f6',
+    rules: THEME_RULES.blue,
   },
   {
     id: 'b2222222-2222-4222-8222-222222222222',
@@ -110,6 +147,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [2, 3, 3, 2, 3, 3, 2, 3, 4, 2, 3, 2, 3, 3, 2, 4, 3, 2],
     accent: '#22c55e',
+    rules: THEME_RULES.green,
   },
   {
     id: 'b3333333-3333-4333-8333-333333333333',
@@ -119,6 +157,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [3, 3, 2, 4, 2, 3, 3, 2, 3, 4, 2, 3, 2, 3, 3, 2, 4, 3],
     accent: '#ef4444',
+    rules: THEME_RULES.red,
   },
   {
     id: 'c1111111-1111-4111-8111-111111111111',
@@ -128,6 +167,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [2, 3, 2, 3, 4, 2, 3, 2, 3, 3, 2, 4, 3, 2, 3, 2, 3, 3],
     accent: '#3b82f6',
+    rules: THEME_RULES.blue,
   },
   {
     id: 'c2222222-2222-4222-8222-222222222222',
@@ -137,6 +177,7 @@ export const COURSES: CourseSeed[] = [
     holeCount: 18,
     pars: [3, 2, 3, 3, 2, 4, 2, 3, 3, 2, 3, 2, 4, 3, 2, 3, 2, 3],
     accent: '#22c55e',
+    rules: THEME_RULES.green,
   },
 ];
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import CourseTheme from '../../ui/CourseTheme';
+import { accentInk } from '../../lib/theme';
 import Confetti from '../../ui/Confetti';
 import { courseById } from '../../data/courses';
 import { getRound, putRound } from '../../db';
@@ -78,12 +80,14 @@ export default function Summary() {
   if (!round || !course) return null;
 
   const par = coursePar(course.pars);
+  const ink = accentInk(course.theme);
   const winnerIdx = winners(round.scores, round.playerTags.length);
   const ranked = round.playerTags
     .map((tag, p) => ({ tag, p, total: playerTotal(round.scores[p] ?? []) }))
     .sort((a, b) => a.total - b.total);
 
   return (
+    <CourseTheme theme={course.theme} accent={course.accent}>
     <Screen>
       <Confetti />
       <TopBar title="Final scorecard" back="/" />
@@ -101,7 +105,7 @@ export default function Summary() {
           <div className="mt-1 flex items-center justify-center gap-2 text-2xl font-black">
             <span className="animate-trophy-pop inline-block">🏆</span>
             {winnerIdx.map((p) => (
-              <span key={p} className="font-arcade" style={{ color: course.accent }}>
+              <span key={p} className="font-arcade" style={{ color: ink }}>
                 {round.playerTags[p]}
               </span>
             ))}
@@ -121,7 +125,7 @@ export default function Summary() {
                   <span className="w-5 text-center font-mono text-sm text-fairway-100/50">
                     {rank + 1}
                   </span>
-                  <span className="font-arcade text-xl font-bold" style={{ color: course.accent }}>
+                  <span className="font-arcade text-xl font-bold" style={{ color: ink }}>
                     {row.tag}
                   </span>
                 </div>
@@ -168,6 +172,7 @@ export default function Summary() {
         </div>
       </Content>
     </Screen>
+    </CourseTheme>
   );
 }
 
@@ -186,6 +191,7 @@ function NineGrid({
   start: number;
 }) {
   const holes = Array.from({ length: 9 }, (_, i) => start + i);
+  const ink = accentInk(course.theme);
   return (
     <div className="overflow-hidden rounded-xl border border-fairway-800">
       <table className="w-full border-collapse text-center text-sm">
@@ -212,7 +218,7 @@ function NineGrid({
             <tr key={p} className="border-t border-fairway-800">
               <td
                 className="font-arcade px-2 py-2 text-left font-bold"
-                style={{ color: course.accent }}
+                style={{ color: ink }}
               >
                 {tag}
               </td>
