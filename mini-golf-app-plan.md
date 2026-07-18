@@ -271,12 +271,13 @@ localize trivia difficulty for younger players. All additive edits to
 **Attraction mini-games (each its own feature, like Arcade Putt).** Small arcade
 games themed to the real attractions, playable one-handed while waiting.
 
-- **Skee-ball** (`/fun/skeeball`) — **shipped.** Swipe up the lane to roll into
-  concentric scoring rings (10–50) or the top corner 100 holes; nine balls a
-  game. Landing is deterministic from the swipe with a live landing reticle — no
-  RNG, pure skill — and the roll clock pauses when the tab/app is backgrounded.
-  Physics/scoring are pure functions (`launchVelocity`/`landingPoint`/`scoreAt`)
-  so they stay tunable and testable.
+- **Skee-ball** (`/fun/skeeball`) — **shipped.** Swipe up the lane to roll into a
+  target of discrete ring-holes (10–50 up the center column, 100 in the two top
+  corners); the ball rolls down into the hole at the bottom of whichever ring it
+  lands in. Nine balls a game. Landing is deterministic from the swipe, but the
+  aim trail fades out before the target so judging the line + power is the skill
+  (no pinpoint reticle). The clock pauses when the tab/app is backgrounded;
+  physics/scoring stay pure functions (`launchVelocity`/`landingPoint`/`holeAt`).
 
 - **Air hockey** (`/fun/airhockey`) — **shipped.** Drag your mallet in the bottom
   half; a capped-speed CPU defends the top. First to 7. Real-time canvas physics
