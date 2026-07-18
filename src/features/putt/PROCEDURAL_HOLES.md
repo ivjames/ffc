@@ -141,6 +141,11 @@ avoid it by accident on an easy one.
 
 ## 6. A procedural recipe (rejection sampling)
 
+> Implemented in `generate.ts` (`generateHole(seed)` / `generateCourse`), which
+> shares the exact contract below via `validate.ts` and feeds the game's
+> **Endless** mode. The validator is extracted to `validate.ts` so the CLI
+> (`putt-sim.ts`) and the generator can't drift on what "valid" means.
+
 The validator is cheap and total, so the robust way to *generate* holes is
 generate-then-validate, retrying on failure:
 
