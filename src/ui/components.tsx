@@ -1,5 +1,18 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { playClick, playStroke, playUndo, playCup } from '../lib/sound';
+
+// Map a button's declared sound to its player. 'none' skips audio entirely
+// (for buttons that trigger their own effect elsewhere).
+const SOUNDS = {
+  click: playClick,
+  stroke: playStroke,
+  undo: playUndo,
+  cup: playCup,
+  none: () => {},
+} as const;
+
+export type ButtonSound = keyof typeof SOUNDS;
 
 // Small shared UI kit. Touch-first: large tap targets, high contrast for
 // outdoor sunlight (§5.1).
@@ -36,7 +49,7 @@ export function TopBar({
 }
 
 export function Content({ children }: { children: ReactNode }) {
-  return <main className="flex-1 px-4 py-4">{children}</main>;
+  return <main className="animate-page-in flex-1 px-4 py-4">{children}</main>;
 }
 
 type ButtonProps = {
@@ -46,6 +59,8 @@ type ButtonProps = {
   variant?: 'primary' | 'ghost' | 'danger';
   type?: 'button' | 'submit';
   className?: string;
+  /** Which UI sound to play on press. Defaults to a mild click. */
+  sound?: ButtonSound;
 };
 
 export function Button({
@@ -55,6 +70,7 @@ export function Button({
   variant = 'primary',
   type = 'button',
   className = '',
+  sound = 'click',
 }: ButtonProps) {
   const base =
     'flex w-full items-center justify-center rounded-xl px-4 py-4 text-base font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100';
@@ -66,7 +82,10 @@ export function Button({
   return (
     <button
       type={type}
-      onClick={onClick}
+      onClick={() => {
+        SOUNDS[sound]();
+        onClick?.();
+      }}
       disabled={disabled}
       className={`${base} ${variants[variant]} ${className}`}
     >

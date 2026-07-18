@@ -14,6 +14,7 @@ import PuttGolf from './features/putt/PuttGolf';
 import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
+import SoundToggle from './ui/SoundToggle';
 
 // §7 Routes / screens.
 export default function App() {
@@ -47,6 +48,14 @@ export default function App() {
         style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
       >
         <BuildStamp />
+      </div>
+
+      {/* Always-available mute switch, bottom-left (mirrors the build stamp). */}
+      <div
+        className="fixed bottom-0 left-0 z-50 p-2"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+      >
+        <SoundToggle />
       </div>
 
       {/* Blocking prompt when a deploy lands while the app is open on a stale

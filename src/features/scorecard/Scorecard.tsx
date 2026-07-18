@@ -11,6 +11,7 @@ import {
   clampStrokes,
   isRoundComplete,
 } from '../../lib/scoring';
+import { playClick, playStroke, playUndo, playCup } from '../../lib/sound';
 
 // Testing aid — how long the auto-player pauses on each hole before advancing.
 const AUTO_PLAY_MS = 450;
@@ -40,6 +41,10 @@ export default function Scorecard() {
   // `fastForward` runs the same hole-by-hole walk with no delay between holes.
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [fastForward, setFastForward] = useState(false);
+  // Per-player nonce that only advances on an actual stroke edit. The score
+  // number is keyed on it so the pop animation re-runs on a bump but NOT when
+  // navigating between holes (which merely changes the displayed value).
+  const [pops, setPops] = useState<Record<number, number>>({});
 
   useEffect(() => {
     void getRound(clientId).then((r) => {
@@ -126,15 +131,37 @@ export default function Scorecard() {
     });
   }
 
+  // Re-run the score-pop animation for one player after a real stroke edit.
+  function popScore(playerIndex: number) {
+    setPops((prev) => ({ ...prev, [playerIndex]: (prev[playerIndex] ?? 0) + 1 }));
+  }
+
   function bump(playerIndex: number, delta: number) {
     const current = round!.scores[playerIndex]?.[hole] ?? null;
     // No auto-fill: an empty hole starts blank. First + registers 1; − does
     // nothing until there's a value to decrement.
     if (current == null) {
-      if (delta > 0) void setStroke(playerIndex, 1);
+      if (delta > 0) {
+        playStroke();
+        popScore(playerIndex);
+        void setStroke(playerIndex, 1);
+      }
       return;
     }
-    void setStroke(playerIndex, clampStrokes(current + delta));
+    const next = clampStrokes(current + delta);
+    // Only sound/animate an actual change (a bump at the cap/floor is a no-op).
+    if (next !== current) {
+      if (delta > 0) playStroke();
+      else playUndo();
+      popScore(playerIndex);
+    }
+    void setStroke(playerIndex, next);
+  }
+
+  // Advance to the next hole with the satisfying "into the cup" sound.
+  function goNext() {
+    playCup();
+    setHole((h) => Math.min(HOLE_COUNT - 1, h + 1));
   }
 
   return (
@@ -155,7 +182,10 @@ export default function Scorecard() {
               🔍
             </button>
             <button
-              onClick={() => setShowJump((v) => !v)}
+              onClick={() => {
+                playClick();
+                setShowJump((v) => !v);
+              }}
               className="rounded-lg px-3 py-2 text-sm font-semibold text-fairway-300 active:bg-fairway-800"
             >
               Holes
@@ -172,6 +202,7 @@ export default function Scorecard() {
               <button
                 key={h}
                 onClick={() => {
+                  playClick();
                   setHole(h);
                   setShowJump(false);
                 }}
@@ -247,7 +278,13 @@ export default function Scorecard() {
                     −
                   </button>
                   <div className="flex-1 text-center">
-                    <span className="text-4xl font-black text-fairway-50">
+                    {/* Keyed on a per-player nonce that only changes on a real
+                        stroke edit, so the pop fires on +/− but not when
+                        navigating between holes. */}
+                    <span
+                      key={pops[p] ?? 0}
+                      className="inline-block text-4xl font-black text-fairway-50 animate-score-pop"
+                    >
                       {strokes ?? '–'}
                     </span>
                   </div>
@@ -284,13 +321,15 @@ export default function Scorecard() {
           {hole < HOLE_COUNT - 1 ? (
             <Button
               variant="ghost"
-              onClick={() => setHole((h) => Math.min(HOLE_COUNT - 1, h + 1))}
+              sound="none"
+              onClick={goNext}
               disabled={!currentHoleScored || autoPlaying}
             >
               Next ›
             </Button>
           ) : (
             <Button
+              sound="cup"
               onClick={() => navigate(`/play/${clientId}/summary`)}
               disabled={!complete || autoPlaying}
             >

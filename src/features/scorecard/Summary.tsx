@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import Confetti from '../../ui/Confetti';
 import { courseById } from '../../data/courses';
 import { getRound, putRound } from '../../db';
 import { syncPending } from '../../sync';
+import { playFanfare } from '../../lib/sound';
 import type { LocalRound } from '../../types';
 import {
   HOLE_COUNT,
@@ -21,6 +23,15 @@ export default function Summary() {
   const [round, setRound] = useState<LocalRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
+  // Celebrate exactly once when the final scorecard first appears.
+  const celebrated = useRef(false);
+
+  useEffect(() => {
+    if (celebrated.current || notFound) return;
+    if (!round) return;
+    celebrated.current = true;
+    playFanfare();
+  }, [round, notFound]);
 
   useEffect(() => {
     let alive = true;
@@ -75,6 +86,7 @@ export default function Summary() {
 
   return (
     <Screen>
+      <Confetti />
       <TopBar title="Final scorecard" back="/" />
       <Content>
         <div className="mb-4 text-center">
@@ -88,7 +100,7 @@ export default function Summary() {
             {winnerIdx.length > 1 ? 'Tied' : 'Winner'}
           </div>
           <div className="mt-1 flex items-center justify-center gap-2 text-2xl font-black">
-            🏆
+            <span className="animate-trophy-pop inline-block">🏆</span>
             {winnerIdx.map((p) => (
               <span key={p} className="font-arcade" style={{ color: course.accent }}>
                 {round.playerTags[p]}
