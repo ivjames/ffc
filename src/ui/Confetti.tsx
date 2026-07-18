@@ -1,8 +1,13 @@
 import { useEffect, useRef } from 'react';
 
 // Full-screen canvas confetti "cannons". Two bursts fire up-and-inward from the
-// bottom corners, then gravity takes over. Self-contained (no dependency) and
-// respects prefers-reduced-motion — nothing renders for users who opt out.
+// bottom corners, then gravity takes over. Self-contained (no dependency).
+//
+// The confetti is a short (~2s), user-triggered celebration (finishing a round,
+// landing on the leaderboard), so it plays for everyone rather than being gated
+// behind prefers-reduced-motion — the ambient, always-on screen-entrance motion
+// is what honors that setting (see index.css). Callers who never want it can
+// simply pass `fire={false}`.
 
 type Particle = {
   x: number;
@@ -46,7 +51,6 @@ export default function Confetti({ fire = true }: { fire?: boolean }) {
 
   useEffect(() => {
     if (!fire) return;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
