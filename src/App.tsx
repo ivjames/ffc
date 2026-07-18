@@ -17,6 +17,7 @@ import Trivia from './features/fun/Trivia';
 import Spinner from './features/fun/Spinner';
 import SkeeBall from './features/fun/SkeeBall';
 import AirHockey from './features/fun/AirHockey';
+import BumperCars from './features/fun/BumperCars';
 import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/fun/spinner" element={<Spinner />} />
         <Route path="/fun/skeeball" element={<SkeeBall />} />
         <Route path="/fun/airhockey" element={<AirHockey />} />
+        <Route path="/fun/bumper" element={<BumperCars />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         <Route path="*" element={<Home />} />

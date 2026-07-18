@@ -284,9 +284,14 @@ games themed to the real attractions, playable one-handed while waiting.
   the loop paused when backgrounded. Kept portrait, so no orientation-lock work is
   needed for it.
 
+- **Bumper cars** (`/fun/bumper`) — **shipped.** Floating-joystick top-down
+  driving; ram the AI cars for the most bumps in 30 seconds. Equal-mass elastic
+  car-car collisions on the fixed-timestep accumulator (background-paused); a bump
+  only scores when you drive into another car hard enough. Bumper boats is the
+  same mechanic reskinned (swap arena art/emoji) if we want the variant.
+
 Remaining, roughly increasing build cost:
 
-- **Bumper cars / bumper boats** — top-down bump-the-others arena; shared physics.
 - **Axe throwing** — timing/aim flick at a target; scoring rings like darts.
 - **Batting cages** — tap-to-swing timing game against a pitch.
 - **Bowling** — aim + spin a roll down a lane at pins.
