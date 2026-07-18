@@ -58,6 +58,13 @@ const TILES: Tile[] = [
     blurb: 'Ram the pack — most bumps in 30 seconds.',
     accent: '#f97316',
   },
+  {
+    to: '/fun/axe',
+    emoji: '🪓',
+    title: 'Axe Throwing',
+    blurb: 'Time your throw — stick the bullseye or a clutch.',
+    accent: '#eab308',
+  },
 ];
 
 export default function FunZone() {
