@@ -38,12 +38,29 @@ const COUNTDOWN_MS = 2600;
 // rests against the barrier rather than half-buried in it.
 const WALL_DIST = TRACK_W / 2 - KART_R;
 
+// The kart is projected onto the centerline using only samples within this many
+// segments of where it currently is along the track — never the global nearest.
+// A local window keeps the two legs of a self-crossing (figure-8) track
+// independent at the bridge, and makes corner-cutting shortcuts impossible on
+// every track (projection can't jump to a far-away leg).
+const WIN = 6;
+
 // —— Track catalogue ——————————————————————————————————————————————————————————
 type Pt = { x: number; y: number };
-type Track = { id: string; name: string; blurb: string; pts: Pt[]; cum: number[]; total: number };
+// A self-crossing track carries its bridge: where the two legs cross, the angle
+// of the leg that passes over, the arc-fraction of the leg that passes under,
+// and a band around it wide enough to hide the kart while it's beneath the deck.
+type Bridge = { x: number; y: number; angle: number; underF: number; bandF: number };
+type Track = { id: string; name: string; blurb: string; pts: Pt[]; cum: number[]; total: number; bridge?: Bridge };
 
 /** Sample a closed parametric curve into a centerline polyline + arc lengths. */
-function buildTrack(id: string, name: string, blurb: string, shape: (t: number) => Pt): Track {
+function buildTrack(
+  id: string,
+  name: string,
+  blurb: string,
+  shape: (t: number) => Pt,
+  opts?: { bridge?: boolean },
+): Track {
   const pts: Pt[] = [];
   for (let i = 0; i < N; i++) pts.push(shape((i / N) * Math.PI * 2));
   const cum: number[] = [0];
@@ -54,15 +71,46 @@ function buildTrack(id: string, name: string, blurb: string, shape: (t: number) 
     total += Math.hypot(q.x - p.x, q.y - p.y);
     cum.push(total);
   }
-  return { id, name, blurb, pts, cum, total };
+
+  let bridge: Bridge | undefined;
+  if (opts?.bridge) {
+    // Locate the self-crossing as the closest pair of non-adjacent samples. The
+    // higher-arc leg passes over; the lower-arc leg passes under.
+    let bestD = Infinity;
+    let ci = 0;
+    let cj = 0;
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const idxGap = Math.min(j - i, N - (j - i));
+        if (idxGap < 4) continue;
+        const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+        if (d < bestD) {
+          bestD = d;
+          ci = i;
+          cj = j;
+        }
+      }
+    }
+    const over = pts[(cj + 1) % N];
+    bridge = {
+      x: (pts[ci].x + pts[cj].x) / 2,
+      y: (pts[ci].y + pts[cj].y) / 2,
+      angle: Math.atan2(over.y - pts[cj].y, over.x - pts[cj].x),
+      underF: ci / N,
+      // Half-width of the arc stretch where the kart hides under the deck —
+      // roughly the deck's half-width (the under-leg crosses it) plus the kart.
+      bandF: (TRACK_W / 2 + WALL + 12) / total,
+    };
+  }
+  return { id, name, blurb, pts, cum, total, bridge };
 }
 
 const CX = W / 2;
 const CY = H / 2 + 6;
-// Every layout is validated offline (scripts/scratchpad) so that no two
-// non-adjacent legs pass within 2·WALL_DIST of each other — otherwise their
-// walled corridors would merge and you could cut the corner. Keep new shapes
-// under that check.
+// Local projection (see WIN) means legs that pass close together are just tight
+// corners, not corridor merges — so shapes are free to pinch or even cross.
+// Every layout is still checked offline (scripts/scratchpad) to fit the canvas
+// and stay drivable end to end.
 const TRACKS: Track[] = [
   buildTrack('speedway', 'Speedway', 'Wide and fast — flat out', (t) => ({
     x: CX + 126 * Math.cos(t),
@@ -84,16 +132,32 @@ const TRACKS: Track[] = [
     x: CX + 92 * Math.cos(t) + 26 * Math.sin(3 * t),
     y: CY + 198 * Math.sin(t),
   })),
+  buildTrack(
+    'crossover',
+    'Crossover',
+    'Over the bridge, then under',
+    (t) => ({ x: CX + 85 * Math.sin(2 * t), y: CY + 160 * Math.cos(t) }),
+    { bridge: true },
+  ),
 ];
 
-/** Nearest point on a track's centerline → distance, arc-length fraction, and
- * that nearest point (so callers can build the wall normal from kart → center). */
-function project(track: Track, x: number, y: number): { dist: number; f: number; px: number; py: number } {
+/** Project a point onto the track's centerline, searching only the segments
+ * within WIN of `seg` (the kart's current segment). Returns the distance, the
+ * arc-length fraction, the nearest point (for the wall normal), and the segment
+ * it landed on (feed back in next step to keep the search local). */
+function project(
+  track: Track,
+  x: number,
+  y: number,
+  seg: number,
+): { dist: number; f: number; px: number; py: number; seg: number } {
   let best = Infinity;
   let bestS = 0;
   let bestX = x;
   let bestY = y;
-  for (let i = 0; i < N; i++) {
+  let bestI = seg;
+  for (let d = -WIN; d <= WIN; d++) {
+    const i = (((seg + d) % N) + N) % N;
     const p = track.pts[i];
     const q = track.pts[(i + 1) % N];
     const dx = q.x - p.x;
@@ -103,19 +167,22 @@ function project(track: Track, x: number, y: number): { dist: number; f: number;
     u = u < 0 ? 0 : u > 1 ? 1 : u;
     const px = p.x + u * dx;
     const py = p.y + u * dy;
-    const d = Math.hypot(x - px, y - py);
-    if (d < best) {
-      best = d;
+    const dd = Math.hypot(x - px, y - py);
+    if (dd < best) {
+      best = dd;
       bestS = track.cum[i] + u * Math.hypot(dx, dy);
       bestX = px;
       bestY = py;
+      bestI = i;
     }
   }
-  return { dist: best, f: bestS / track.total, px: bestX, py: bestY };
+  return { dist: best, f: bestS / track.total, px: bestX, py: bestY, seg: bestI };
 }
 
 type Phase = 'select' | 'countdown' | 'race' | 'done';
-type Kart = { x: number; y: number; heading: number; speed: number };
+// `seg` is the centerline segment the kart is currently on — it anchors the
+// local projection (see project) and keeps the kart on its own leg at a crossing.
+type Kart = { x: number; y: number; heading: number; speed: number; seg: number };
 type GS = {
   phase: Exclude<Phase, 'select'>;
   track: Track;
@@ -134,7 +201,7 @@ type GS = {
 function startKart(track: Track): Kart {
   const p0 = track.pts[0];
   const p1 = track.pts[1];
-  return { x: p0.x, y: p0.y, heading: Math.atan2(p1.y - p0.y, p1.x - p0.x), speed: 0 };
+  return { x: p0.x, y: p0.y, heading: Math.atan2(p1.y - p0.y, p1.x - p0.x), speed: 0, seg: 0 };
 }
 
 function freshGS(now: number, track: Track): GS {
@@ -187,7 +254,8 @@ function step(gs: GS): boolean {
   // speed (WALL_SLIDE) so it scrapes and slides, and a little of the into-wall
   // speed is reflected back out (WALL_BOUNCE) so it deflects off the barrier
   // rather than grinding to a dead stop against it.
-  const pr = project(gs.track, k.x, k.y);
+  const pr = project(gs.track, k.x, k.y, k.seg);
+  k.seg = pr.seg;
   if (pr.dist > WALL_DIST) {
     const nx = (k.x - pr.px) / (pr.dist || 1);
     const ny = (k.y - pr.py) / (pr.dist || 1);
@@ -207,7 +275,8 @@ function step(gs: GS): boolean {
   }
 
   // Lap progress — count a forward wrap past start/finish, once past halfway.
-  const f = project(gs.track, k.x, k.y).f;
+  // The wall push-back above is perpendicular to travel, so pr.f still holds.
+  const f = pr.f;
   if (f > 0.5) gs.halfway = true;
   const df = f - gs.prevF;
   let lapped = false;
@@ -233,6 +302,50 @@ function traceTrack(ctx: CanvasRenderingContext2D, track: Track) {
     ctx.lineTo(p.x, p.y);
   }
   ctx.closePath();
+}
+
+function drawKart(ctx: CanvasRenderingContext2D, k: Kart) {
+  ctx.save();
+  ctx.translate(k.x, k.y);
+  ctx.rotate(k.heading);
+  ctx.fillStyle = '#22c55e';
+  ctx.fillRect(-11, -7, 22, 14);
+  ctx.fillStyle = '#0b0f14';
+  ctx.fillRect(2, -5, 7, 10); // windshield/cockpit toward the front
+  ctx.restore();
+}
+
+/** Draw the crossover bridge deck over the leg that passes on top: a drop
+ * shadow, an asphalt deck with side rails, and plank lines across it. Drawn
+ * after the ribbon so it masks the leg passing underneath. */
+function drawBridge(ctx: CanvasRenderingContext2D, b: Bridge) {
+  const len = TRACK_W + WALL * 2 + 30; // along travel — long enough to span the leg below
+  const wd = TRACK_W + WALL * 2; // across — matches the over-leg's ribbon
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.angle);
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx.fillRect(-len / 2, -wd / 2 + 6, len, wd); // drop shadow
+  ctx.fillStyle = '#3f4650';
+  ctx.fillRect(-len / 2, -wd / 2, len, wd); // deck
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(-len / 2, -wd / 2, len, WALL); // rails
+  ctx.fillRect(-len / 2, wd / 2 - WALL, len, WALL);
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.lineWidth = 2;
+  for (let px = -len / 2 + 8; px < len / 2; px += 12) {
+    ctx.beginPath();
+    ctx.moveTo(px, -wd / 2 + WALL);
+    ctx.lineTo(px, wd / 2 - WALL);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Circular distance between two arc-fractions, in [0, 0.5]. */
+function arcGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % 1;
+  return Math.min(d, 1 - d);
 }
 
 function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
@@ -294,16 +407,15 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
     ctx.stroke();
   }
 
-  // Kart.
+  // Kart, layered against the bridge: when it's on the leg passing under the
+  // deck (near the bridge's under-arc), draw it first so the deck hides it;
+  // otherwise draw the deck first so the kart rides over the top.
   const k = gs.kart;
-  ctx.save();
-  ctx.translate(k.x, k.y);
-  ctx.rotate(k.heading);
-  ctx.fillStyle = '#22c55e';
-  ctx.fillRect(-11, -7, 22, 14);
-  ctx.fillStyle = '#0b0f14';
-  ctx.fillRect(2, -5, 7, 10); // windshield/cockpit toward the front
-  ctx.restore();
+  const b = track.bridge;
+  const underBridge = b !== undefined && arcGap(gs.prevF, b.underF) < b.bandF;
+  if (b && !underBridge) drawBridge(ctx, b);
+  drawKart(ctx, k);
+  if (b && underBridge) drawBridge(ctx, b);
 
   // Countdown.
   if (gs.phase === 'countdown') {
