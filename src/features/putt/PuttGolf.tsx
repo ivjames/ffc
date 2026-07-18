@@ -210,7 +210,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
     const len = Math.hypot(dx, dy);
     if (len > 4) {
       const power = Math.min(len / MAX_DRAG, 1);
-      const a = Math.atan2(dy, dx);
+      // Slingshot: the shot goes opposite the drag, so the arrow points away
+      // from the finger and stays visible.
+      const a = Math.atan2(-dy, -dx);
       const reach = 24 + power * 74;
       const ex = b.x + Math.cos(a) * reach;
       const ey = b.y + Math.sin(a) * reach;
@@ -375,7 +377,7 @@ export default function PuttGolf() {
     const len = Math.hypot(dx, dy);
     if (len < 8) return; // deadzone tap — no stroke wasted
     const power = Math.min(len / MAX_DRAG, 1);
-    const a = Math.atan2(dy, dx);
+    const a = Math.atan2(-dy, -dx); // slingshot: launch opposite the drag
     const speed = MIN_SHOT + power * (MAX_SHOT - MIN_SHOT);
     gs.ball.vx = Math.cos(a) * speed;
     gs.ball.vy = Math.sin(a) * speed;
@@ -411,7 +413,7 @@ export default function PuttGolf() {
 
   const hint =
     phase === 'aim'
-      ? note || 'Drag from the ball to aim — farther = harder — and release to putt.'
+      ? note || 'Pull back from the ball to aim — the arrow shows your shot — and release to putt.'
       : phase === 'rolling'
         ? 'Rolling…'
         : phase === 'sunk'
