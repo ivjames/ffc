@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
 import { getActiveRound } from '../../db';
@@ -108,15 +108,16 @@ export default function Home() {
           </p>
         ) : (
           <div className="mb-4 grid grid-cols-2 gap-2">
-            {courses.map((c) => (
+            {courses.map((c, i) => (
               <button
                 key={c.id}
                 onClick={() => navigate(`/courses/${c.id}/map`)}
-                className="flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition active:scale-[0.98]"
+                className="animate-rise-in flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition active:scale-[0.98]"
                 style={{
+                  '--i': i,
                   background: `${c.accent}22`,
                   borderColor: `${c.accent}66`,
-                }}
+                } as CSSProperties}
               >
                 <span
                   className="flex h-11 w-11 items-center justify-center rounded-xl text-2xl"

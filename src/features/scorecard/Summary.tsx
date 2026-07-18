@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
@@ -119,7 +119,8 @@ export default function Summary() {
             return (
               <div
                 key={row.p}
-                className="flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-4 py-3"
+                style={{ '--i': rank } as CSSProperties}
+                className="animate-rise-in flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-4 py-3"
               >
                 <div className="flex items-center gap-3">
                   <span className="w-5 text-center font-mono text-sm text-fairway-100/70">

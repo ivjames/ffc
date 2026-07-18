@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Screen, TopBar, Content } from '../../ui/components';
+import Confetti from '../../ui/Confetti';
 import { fetchLeaderboard, type LeaderboardRow } from '../../sync';
 
 type Period = 'day' | 'week' | 'month' | 'all';
@@ -30,6 +31,13 @@ export default function TvLeaderboard() {
   const [period, setPeriod] = useState<Period>('all');
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Celebrate exactly once, the first time the board loads with any scores on
+  // it. Firing on first populated load (not only when arriving from a finished
+  // round) means the leaderboard always greets you with confetti — including
+  // when opened straight from Home. Guarded by a ref so the 5s poll never
+  // re-triggers it.
+  const [celebrate, setCelebrate] = useState(false);
+  const celebrated = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -39,6 +47,10 @@ export default function TvLeaderboard() {
         if (alive) {
           setRows(data);
           setError(null);
+          if (!celebrated.current && data.length > 0) {
+            celebrated.current = true;
+            setCelebrate(true);
+          }
         }
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : 'Could not load leaderboard');
@@ -54,6 +66,7 @@ export default function TvLeaderboard() {
 
   return (
     <Screen>
+      <Confetti fire={celebrate} />
       <TopBar title="Leaderboard" back="/" />
       <Content>
         <div className="mb-4 grid grid-cols-4 gap-2">
@@ -91,7 +104,8 @@ export default function TvLeaderboard() {
               return (
                 <li
                   key={`${r.tag}-${r.courseId}-${i}`}
-                  className={`flex items-center justify-between rounded-xl border px-4 py-3 ${
+                  style={{ '--i': Math.min(i, 12) } as CSSProperties}
+                  className={`animate-rise-in flex items-center justify-between rounded-xl border px-4 py-3 ${
                     mine
                       ? 'border-fairway-400 bg-fairway-500/15 ring-1 ring-fairway-400/60'
                       : 'border-fairway-800 bg-fairway-900/40'

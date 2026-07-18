@@ -151,7 +151,27 @@ button {
 }
 
 .animate-page-in {
-  animation: page-in 0.32s ease-out both;
+  animation: page-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Per-item entrance: list rows / tiles rise and fade into place. Combine with an
+   inline `animationDelay` (see the `--stagger` helper) to cascade a list so the
+   screen visibly assembles itself rather than snapping in all at once. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* Each item sets --i (its index); delay = index * 55ms for the cascade. */
+  animation-delay: calc(var(--i, 0) * 55ms);
 }
 
 /* A quick pop, used when a stroke value changes so the number acknowledges the
@@ -192,10 +212,28 @@ button {
   animation: trophy-pop 0.6s cubic-bezier(0.22, 1.2, 0.36, 1) both;
 }
 
-/* Honor the OS "reduce motion" setting — disable all entrance/celebration
-   animations. (Confetti checks the same flag in JS and skips rendering.) */
+/* A plain opacity fade — the motion-free fallback used under "reduce motion". */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Honor the OS "reduce motion" setting. Rather than snapping content in with no
+   feedback at all, entrance animations degrade to a gentle opacity-only fade
+   (no translation/scale, so nothing that could trigger vestibular discomfort).
+   The decorative pop/bounce flourishes have no motion-free equivalent, so they
+   are dropped entirely. (Confetti is a brief, user-triggered celebration and
+   plays regardless — see src/ui/Confetti.tsx.) */
 @media (prefers-reduced-motion: reduce) {
   .animate-page-in,
+  .animate-rise-in {
+    animation: fade-in 0.3s ease-out both;
+    animation-delay: 0ms;
+  }
   .animate-score-pop,
   .animate-trophy-pop {
     animation: none;
