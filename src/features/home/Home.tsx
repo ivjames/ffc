@@ -18,7 +18,8 @@ export default function Home() {
   const [resume, setResume] = useState<LocalRound | null>(null);
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
-  const courseCount = coursesByLocation(locationId).length;
+  const courses = coursesByLocation(locationId);
+  const courseCount = courses.length;
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
@@ -48,20 +49,20 @@ export default function Home() {
   return (
     <Screen>
       <Content>
-        <div className="mb-6 mt-6 text-center">
-          <div className="text-5xl">⛳️</div>
-          <h1 className="mt-3 text-3xl font-black tracking-tight text-fairway-50">Mini Golf</h1>
-          <p className="mt-1 text-sm text-fairway-100/70">
+        <div className="mb-4 mt-3 text-center">
+          <div className="text-4xl">⛳️</div>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-fairway-50">Mini Golf</h1>
+          <p className="mt-0.5 text-sm text-fairway-100/70">
             {courseCount} {courseCount === 1 ? 'course' : 'courses'} · eighteen holes each
           </p>
         </div>
 
         {/* Current location — tap to switch sites (or pick "Use my location"
             there). GPS still auto-detects the venue silently when permitted. */}
-        <div className="mb-4">
+        <div className="mb-3">
           <button
             onClick={() => navigate('/locations')}
-            className="flex w-full items-center justify-between rounded-2xl border border-fairway-800 bg-fairway-900/40 px-4 py-3 text-left active:bg-fairway-800/60"
+            className="flex w-full items-center justify-between rounded-2xl border border-fairway-800 bg-fairway-900/40 px-4 py-2.5 text-left active:bg-fairway-800/60"
           >
             <span className="flex items-center gap-2">
               <span className="text-lg">📍</span>
@@ -81,7 +82,7 @@ export default function Home() {
         {resume && resumeCourse && (
           <button
             onClick={() => navigate(`/play/${resume.clientId}`)}
-            className="mb-4 w-full rounded-2xl border border-fairway-500/40 bg-fairway-900/60 p-4 text-left active:bg-fairway-800/60"
+            className="mb-3 w-full rounded-2xl border border-fairway-500/40 bg-fairway-900/60 p-3 text-left active:bg-fairway-800/60"
           >
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
               Resume round
@@ -97,19 +98,46 @@ export default function Home() {
           </button>
         )}
 
-        <div className="space-y-3">
-          <Button onClick={() => navigate('/new')}>Start new round</Button>
-          <Button variant="ghost" onClick={() => navigate('/courses')}>
-            Courses &amp; maps
-          </Button>
-          <Button variant="ghost" onClick={() => navigate('/rules')}>
-            Rules
-          </Button>
+        {/* Pick a course to play. Each tile opens that course's map, where a
+            tap begins the round. (Artwork will eventually replace the emoji
+            placeholders.) */}
+        {courses.length === 0 ? (
+          <p className="mb-6 text-center text-sm text-fairway-100/60">
+            No courses at this location yet.
+          </p>
+        ) : (
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            {courses.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => navigate(`/courses/${c.id}/map`)}
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition active:scale-[0.98]"
+                style={{
+                  background: `${c.accent}22`,
+                  borderColor: `${c.accent}66`,
+                }}
+              >
+                <span
+                  className="flex h-11 w-11 items-center justify-center rounded-xl text-2xl"
+                  style={{ background: `${c.accent}33` }}
+                >
+                  {themeEmoji(c.theme)}
+                </span>
+                <span className="text-sm font-bold leading-tight text-fairway-50">{c.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-2">
           <Button variant="ghost" onClick={() => navigate('/hunt')}>
             Scavenger hunt
           </Button>
           <Button variant="ghost" onClick={() => navigate('/putt')}>
             🕹️ Arcade Putt
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/rules')}>
+            Rules
           </Button>
           <Button variant="ghost" onClick={() => navigate('/tv')}>
             See the leaderboard
@@ -125,4 +153,30 @@ export default function Home() {
       </Content>
     </Screen>
   );
+}
+
+function themeEmoji(theme: string): string {
+  switch (theme) {
+    case 'blue':
+      return '🔵';
+    case 'green':
+      return '🟢';
+    case 'red':
+      return '🔴';
+    case 'dragon':
+      return '🐉';
+    case 'western':
+      return '🤠';
+    // Retained for any legacy themed courses.
+    case 'jungle':
+      return '🌴';
+    case 'pirate':
+      return '🏴‍☠️';
+    case 'space':
+      return '🚀';
+    case 'haunted':
+      return '👻';
+    default:
+      return '⛳️';
+  }
 }

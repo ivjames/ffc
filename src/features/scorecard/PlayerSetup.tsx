@@ -23,7 +23,7 @@ export default function PlayerSetup() {
   if (!course) {
     return (
       <Screen>
-        <TopBar title="Setup" back="/new" />
+        <TopBar title="Setup" back="/" />
         <Content>
           <p className="text-fairway-100/70">Course not found. Go back and pick a course.</p>
         </Content>
@@ -54,7 +54,7 @@ export default function PlayerSetup() {
 
   return (
     <Screen>
-      <TopBar title={course.name} back="/new" />
+      <TopBar title={course.name} back={`/courses/${courseId}/map`} />
       <Content>
         <label className="mb-2 block text-sm font-semibold text-fairway-100/80">Players</label>
         <div className="mb-6 grid grid-cols-4 gap-2">
