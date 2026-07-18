@@ -28,7 +28,8 @@ export const WALL_REST = 0.66; // energy kept on a bounce off a rail/wall
 export const STOP_SPEED = 0.16; // below this the ball is "at rest"
 export const MIN_SHOT = 3.0; // px/frame at 0% power
 export const MAX_SHOT = 14.5; // px/frame at 100% power
-export const CAPTURE_SPEED = 5.8; // a faster ball lips out of the cup
+export const CAPTURE_SPEED = 5.8; // dead-centre drop speed; the capture radius shrinks to 0 at this speed
+export const RIM_REST = 0.5; // energy kept when the ball catches the lip and rings out
 export const MAX_DRAG = 132; // drag length (field units) that maps to full power
 
 export type Seg = { ax: number; ay: number; bx: number; by: number; r: number };
@@ -159,22 +160,36 @@ function resolve(b: Ball, hole: Hole): 'sunk' | 'water' | null {
     return 'water';
   }
 
-  // Cup: a slow ball near the center drops; a near-miss gets a small magnet nudge
-  // — deliberately tight so it rewards an accurate putt rather than a lucky one.
+  // Cup rim. The hole drops the ball only when its center is inside a capture
+  // radius that shrinks with speed: dead-center it's the full HOLE_R, and it
+  // narrows to nothing at CAPTURE_SPEED. So a centered ball at a crawl falls,
+  // but a fast one — or one whose center only grazes the rim — is not captured.
+  // There is no magnet: nothing draws a near-miss toward the cup.
   const dxc = hole.cup.x - b.x;
   const dyc = hole.cup.y - b.y;
   const dc = Math.hypot(dxc, dyc);
-  const s = Math.hypot(b.vx, b.vy);
-  if (dc < HOLE_R && s < CAPTURE_SPEED) {
-    b.x = hole.cup.x;
-    b.y = hole.cup.y;
-    b.vx = 0;
-    b.vy = 0;
-    return 'sunk';
-  }
-  if (dc < HOLE_R * 1.4 && s < CAPTURE_SPEED * 0.85) {
-    b.vx += (dxc / dc) * 0.12;
-    b.vy += (dyc / dc) * 0.12;
+  if (dc < HOLE_R) {
+    const s = Math.hypot(b.vx, b.vy);
+    const depth = 1 - dc / HOLE_R; // 0 at the rim → 1 dead-center
+    if (s < CAPTURE_SPEED * depth) {
+      b.x = hole.cup.x;
+      b.y = hole.cup.y;
+      b.vx = 0;
+      b.vy = 0;
+      return 'sunk';
+    }
+    // Not captured: the ball catches the FAR lip. The rim reflects the ball's
+    // outward motion back inward as it tries to climb out the far side, while
+    // its sideways motion carries it around — so it rings the rim. A ball with
+    // pace escapes and lips out; a slow one rattles and drops. The near lip is
+    // never reflected, so a gentle centered putt rolls in and falls freely.
+    const ox = dc > 1e-6 ? -dxc / dc : 0; // outward radial (cup → ball)
+    const oy = dc > 1e-6 ? -dyc / dc : 0;
+    const vr = b.vx * ox + b.vy * oy; // > 0 while climbing out the far side
+    if (vr > 0) {
+      b.vx -= (1 + RIM_REST) * vr * ox;
+      b.vy -= (1 + RIM_REST) * vr * oy;
+    }
   }
   return null;
 }
