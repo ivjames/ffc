@@ -173,6 +173,11 @@ Player entry is a **three-character tag** (arcade high-score style). These rende
 | `/rules` | Rules | v1 |
 | `/tv` | TV leaderboard (full-screen, read-only) | P2 |
 | `/hunt` | Scavenger hunt | P3 |
+| `/putt` | Arcade Putt minigame | extra |
+| `/fun` | "While You Wait" content hub | §12 |
+| `/fun/facts` | Fun facts deck | §12 |
+| `/fun/trivia` | Trivia round | §12 |
+| `/fun/spinner` | Challenge spinner | §12 |
 
 ---
 
@@ -232,3 +237,75 @@ Get step 3 feeling right in the hand before wiring the backend — the core loop
 - **Map assets are placeholders** until real course maps exist.
 - **TV display hardware** (smart TV browser vs. Fire Stick vs. mini PC) — decide before P2; does not affect v1.
 - **Anonymous writes** — v1 has no auth. The Node API is the only write path and must rate-limit and fully re-validate input, since anyone can hit the endpoint directly. Consider a simple shared app token + rate limiting to blunt abuse.
+
+---
+
+## 12. "While You Wait" content + mini-games
+
+The venue is a whole family-fun-center (mini golf, bowling, axe throwing,
+go-karts, bumper cars/boats, batting cages, air hockey, skee-ball), so the app
+grows past the scorecard into **line entertainment** — light, offline content to
+pass the wait for a lane or a kart.
+
+**Shipped (this build).** A `/fun` hub of three data-driven, fully-offline
+mechanics — content lives in `src/data/funContent.ts`, so adding more is just
+editing an array:
+
+- **Fun facts** (`/fun/facts`) — a shuffled deck of bite-size, venue-flavored
+  facts; tap to advance.
+- **Trivia** (`/fun/trivia`) — a 10-question multiple-choice round; questions and
+  choices shuffle per game, right/wrong is colored inline, and a final score
+  screen offers a replay.
+- **Challenge spinner** (`/fun/spinner`) — an SVG wheel of quick, kid-safe group
+  dares that decelerates (with ticking) onto a random challenge.
+
+All three reuse the existing UI kit (`Screen`/`TopBar`/`Content`/`Button`), the
+neutral light/dark theme, and the synth sound kit (added `playDing`, `playBuzz`,
+`playTick`). No new dependencies; nothing hits the network.
+
+**Next — content expansion (cheap).** More facts / trivia (per-attraction packs:
+bowling, karts, axe throwing…); themed spinner decks; a "daily" fact; optionally
+localize trivia difficulty for younger players. All additive edits to
+`funContent.ts`.
+
+**Attraction mini-games (each its own feature, like Arcade Putt).** Small arcade
+games themed to the real attractions, playable one-handed while waiting.
+
+- **Skee-ball** (`/fun/skeeball`) — **shipped.** Swipe up the lane to roll into
+  concentric scoring rings (10–50) or the top corner 100 holes; nine balls a
+  game. Landing is deterministic from the swipe with a live landing reticle — no
+  RNG, pure skill — and the roll clock pauses when the tab/app is backgrounded.
+  Physics/scoring are pure functions (`launchVelocity`/`landingPoint`/`scoreAt`)
+  so they stay tunable and testable.
+
+Remaining, roughly increasing build cost:
+
+- **Air hockey** — drag a paddle, 1-player vs. a simple AI or 2-player pass-the-phone.
+- **Bumper cars / bumper boats** — top-down bump-the-others arena; shared physics.
+- **Axe throwing** — timing/aim flick at a target; scoring rings like darts.
+- **Batting cages** — tap-to-swing timing game against a pitch.
+- **Bowling** — aim + spin a roll down a lane at pins.
+- **Go-karts** — lap-time time-trial on a simple track.
+
+Each is a self-contained `src/features/<game>/` route wired into the `/fun` hub
+(or its own "Arcade" hub), following the Arcade Putt / Skee-Ball pattern:
+canvas/SVG render, a small pure physics/geometry module, client-side only. Build
+one at a time and get it "feeling right in the hand" before starting the next —
+the same rule as the scorecard core loop.
+
+**Native-wrap notes (Capacitor) for the games that want them.** None of these
+block a PWA build; they're where a web API falls short and the Capacitor plugin
+is the answer:
+
+- **Orientation lock** (go-karts, air hockey may want landscape): the manifest
+  forces `portrait`, and iOS Safari/PWA can't lock orientation via web API at
+  all — use the Capacitor `ScreenOrientation` plugin. Skee-ball and the current
+  content are portrait, so unaffected.
+- **Tilt / motion steering**: iOS needs an explicit `DeviceMotionEvent`
+  permission prompt from a user gesture (HTTPS-only, flaky in standalone PWAs).
+  Prefer touch controls, or use the Capacitor `Motion` plugin. Not used today.
+- **Haptics** (bumper/axe impact feel): little/no vibration on iOS Safari — use
+  the Capacitor `Haptics` plugin. Not used today.
+- **Game loops**: pause `requestAnimationFrame`/timers on `visibilitychange` so a
+  backgrounded game doesn't burn battery or jump state — Skee-Ball already does
+  this; carry the pattern into each new game.

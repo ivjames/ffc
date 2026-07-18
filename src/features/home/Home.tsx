@@ -138,6 +138,9 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/putt')}>
             🕹️ Arcade Putt
           </Button>
+          <Button variant="ghost" onClick={() => navigate('/fun')}>
+            🎡 While You Wait
+          </Button>
           <Button variant="ghost" onClick={() => navigate('/rules')}>
             Rules
           </Button>
