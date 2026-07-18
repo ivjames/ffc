@@ -101,7 +101,12 @@ export default function Spinner() {
             <g
               style={{
                 transform: `rotate(${rotation}deg)`,
-                transformOrigin: '100px 100px',
+                // Rotate about the group's own center. `fill-box` + `center` is
+                // self-relative and well-supported (incl. iOS WebKit), unlike a
+                // pixel transform-origin on an SVG <g>, whose reference box
+                // differs across engines.
+                transformBox: 'fill-box',
+                transformOrigin: 'center',
                 transition: spinning ? 'transform 4s cubic-bezier(0.17, 0.67, 0.14, 0.99)' : 'none',
               }}
               onTransitionEnd={onSpinEnd}
