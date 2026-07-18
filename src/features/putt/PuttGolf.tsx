@@ -47,10 +47,10 @@ type GS = {
 // Distinct derived seeds per hole so an endless run is reproducible.
 const SEED_SALT = 0x9e3779b1;
 
-// After sinking, linger on the result for a beat, then advance on its own so a
-// round flows without a tap between every hole. The "Next hole" button still
-// skips the wait.
-const AUTO_ADVANCE_MS = 1600;
+// After sinking, linger on the result so the score reads clearly, then advance
+// on its own so a round flows without a tap between every hole. The "Next hole"
+// button still skips the wait.
+const AUTO_ADVANCE_MS = 3000;
 
 function holeResult(strokes: number, par: number): { label: string; emoji: string } {
   const d = strokes - par;
