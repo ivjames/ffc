@@ -3,8 +3,28 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
 import { courseById } from '../../data/courses';
-import { sanitizeTagInput, tagError, validateRoster, TAG_LENGTH } from '../../lib/sanitize';
+import {
+  sanitizeTagInput,
+  tagError,
+  validateRoster,
+  isValidTag,
+  TAG_LENGTH,
+} from '../../lib/sanitize';
 import { createLocalRound, putRound } from '../../db';
+
+// Testing aid — a random valid arcade tag (three A–Z/0–9 chars), retrying the
+// rare blocklisted combo. Feeds the auto-play button so a whole round can be
+// spun up and walked without hand-entering a roster.
+const TAG_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+function randomTag(): string {
+  for (;;) {
+    let t = '';
+    for (let i = 0; i < TAG_LENGTH; i++) {
+      t += TAG_CHARS[Math.floor(Math.random() * TAG_CHARS.length)];
+    }
+    if (isValidTag(t)) return t;
+  }
+}
 
 // §5.1 step 2 — player count (1..4) + three-initial arcade tags (§6 validation).
 export default function PlayerSetup() {
@@ -51,6 +71,19 @@ export default function PlayerSetup() {
     const round = createLocalRound(courseId, activeTags);
     await putRound(round);
     navigate(`/play/${round.clientId}`, { replace: true });
+  }
+
+  // Testing aid — roll a random roster (1..4 players, random tags), start the
+  // round, and hand the scorecard an auto-play mode so it walks the course on
+  // arrival. Skips the roster form entirely.
+  async function autoStart(mode: 'slow' | 'fast') {
+    if (submitting) return;
+    const n = 1 + Math.floor(Math.random() * 4); // 1..4 players
+    const roster = Array.from({ length: n }, () => randomTag());
+    setSubmitting(true);
+    const round = createLocalRound(courseId, roster);
+    await putRound(round);
+    navigate(`/play/${round.clientId}`, { replace: true, state: { autoPlay: mode } });
   }
 
   return (
@@ -110,6 +143,18 @@ export default function PlayerSetup() {
         <div className="mt-8">
           <Button onClick={start} disabled={!rosterValid || submitting}>
             {submitting ? 'Starting…' : 'Start round'}
+          </Button>
+        </div>
+
+        {/* Auto-play (testing) — skip the roster, roll a random one, and walk
+            the whole course automatically. Play paces the taps; fast forward
+            races through. Mirrors the scorecard's own auto-play controls. */}
+        <div className="mt-3 flex gap-3">
+          <Button variant="ghost" onClick={() => void autoStart('slow')} disabled={submitting}>
+            ▶ Auto play (test)
+          </Button>
+          <Button variant="ghost" onClick={() => void autoStart('fast')} disabled={submitting}>
+            ⏭ Fast forward
           </Button>
         </div>
       </Content>

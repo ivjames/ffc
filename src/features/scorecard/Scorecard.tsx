@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
 import { accentInk } from '../../lib/theme';
@@ -19,7 +19,7 @@ import { playClick, playStroke, playUndo, playCup } from '../../lib/sound';
 // the real +/Next handlers one tap per tick, so each tap fires its sound; the
 // pace is how far apart those taps (and their sounds) land.
 const AUTO_PLAY_MS = 500; // slow pace — half a second per tap
-const FAST_FORWARD_MS = 125; // fast pace — an eighth of a second per tap
+const FAST_FORWARD_MS = 62.5; // fast pace — a sixteenth of a second per tap
 
 // A plausible-but-random stroke count for a hole, biased toward its par and
 // kept inside the sane/cap range. Used only by the auto-play testing tool.
@@ -34,6 +34,7 @@ function randomStrokes(par: number): number {
 export default function Scorecard() {
   const { clientId = '' } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [round, setRound] = useState<LocalRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [hole, setHole] = useState(0); // 0-based index
@@ -60,6 +61,27 @@ export default function Scorecard() {
       setHole(firstEmpty === -1 ? 0 : firstEmpty);
     });
   }, [clientId]);
+
+  // Arriving from the setup screen's auto-play button carries a mode in the
+  // navigation state; kick off the same walk here so the test runs straight
+  // through from character creation to the final hole. Fires once, and only
+  // after the round has loaded so we can skip an already-finished round.
+  const autoStartRef = useRef(false);
+  useEffect(() => {
+    if (autoStartRef.current || !round) return;
+    const mode = (location.state as { autoPlay?: 'slow' | 'fast' } | null)?.autoPlay;
+    if (!mode) return;
+    autoStartRef.current = true;
+    // Consume the transient flag so a browser reload or Back — which remounts
+    // this screen against the same history entry — can't relaunch auto-play
+    // (and re-score) a round that's already been played.
+    navigate(location.pathname, { replace: true, state: null });
+    // A reload of an already-finished round lands here with a stale flag; only
+    // walk a round that still has holes left to score.
+    if (isRoundComplete(round.scores, round.playerTags.length)) return;
+    setFastForward(mode === 'fast');
+    setAutoPlaying(true);
+  }, [round, location.state, location.pathname, navigate]);
 
   const course = round ? courseById(round.courseId) : undefined;
 
@@ -358,7 +380,7 @@ export default function Scorecard() {
 
         {/* Auto-play (testing) — taps the real +/Next buttons across the whole
             course so their sounds fire in sequence. Play taps every half
-            second; fast forward taps every eighth of a second. Either way,
+            second; fast forward taps every sixteenth of a second. Either way,
             Pause stops mid-course. */}
         <div className="mt-3">
           {autoPlaying ? (
