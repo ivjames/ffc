@@ -63,14 +63,24 @@ For each open PR, pull its review threads:
 
 - `pull_request_read` with `method: "get_review_comments"` → `review_threads[]`.
 
+Note: this MCP method is GraphQL-backed and returns *threads* — each with `is_resolved`,
+`is_outdated`, and a `PRRT_…` node `id` — not the flat per-comment records of the REST
+review-comments endpoint. That thread shape is exactly what makes the unresolved-filtering
+and the `resolve_review_thread` calls below work.
+
 Codex's line-level findings are what matter here (not its top-level summary review, and
 not its 👍 reaction when it has nothing to add). Keep a thread only if **both**:
 
 - `is_resolved == false`, and
 - its first comment's `author` is `chatgpt-codex-connector`.
 
-A thread that already has a reply from a non-Codex author (i.e. someone already triaged it)
-has been handled — note it and move on rather than re-litigating it.
+A thread may already carry a non-Codex reply — but a reply is not proof the finding was
+handled. A reviewer might have replied to ask a question, or to say "yes, please fix this,"
+while leaving the thread open; skipping on the mere presence of a reply would drop a still-real
+finding forever (and can produce a bogus "all clear"). So verify a replied-to thread against
+the current code like any other (Step 3). Only treat a thread as settled without re-checking
+when a reply explicitly records a completed triage — for instance a prior sweep's own reply
+marking it a false positive.
 
 From each kept thread, capture:
 
@@ -115,7 +125,8 @@ git checkout <branch>
 git pull --ff-only origin <branch>
 # ... make the edit ...
 npm run typecheck && npm run build   # both must pass before you push
-git commit -am "<what you fixed, in one line>"
+git add <the files the fix touched>  # stage edits AND any new files a fix adds — `-am` skips untracked files
+git commit -m "<what you fixed, in one line>"
 git push -u origin <branch>
 ```
 
