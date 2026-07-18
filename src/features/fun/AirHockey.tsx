@@ -41,6 +41,7 @@ type GS = {
   serveAt: number; // timestamp to launch the next serve
   serveDir: number; // -1 up (toward CPU), +1 down (toward you)
   pointer: Vec | null; // latest finger target for the player mallet
+  aiRetreatUntil: number; // after a strike, defend until this time (no re-chase)
 };
 
 const inGoalX = (x: number) => x > GOAL_X0 && x < GOAL_X1;
@@ -61,6 +62,7 @@ function freshGS(now: number): GS {
     serveAt: now + SERVE_DELAY,
     serveDir: -1,
     pointer: null,
+    aiRetreatUntil: 0,
   };
 }
 
@@ -110,25 +112,38 @@ function malletHit(puck: GS['puck'], pad: Pad): boolean {
   return true;
 }
 
-/** One physics substep. Returns 'you' | 'cpu' if a goal was scored, else null.
- *  `hit` is set true (by ref) if the puck struck a mallet this step. */
-function step(gs: GS, hitRef: { v: boolean }): 'you' | 'cpu' | null {
+/** One physics substep at time `now` (ms). Returns 'you' | 'cpu' if a goal was
+ *  scored, else null. `hit` is set true (by ref) if the puck struck a mallet. */
+function step(gs: GS, hitRef: { v: boolean }, now: number): 'you' | 'cpu' | null {
   const p = gs.puck;
 
-  // —— CPU mallet AI: chase the puck when it's in the CPU half, else guard the
-  // goal. Capped speed keeps it beatable.
+  // —— CPU mallet AI. Rather than glue itself to the puck (which reads as
+  // "catching and chasing"), it strikes from BEHIND and then retreats to guard
+  // its goal, giving a natural hit-and-recover rhythm. Home position tracks the
+  // puck's x so it still defends. Capped speed keeps it beatable.
   {
     const ai = gs.ai;
     ai.px = ai.x;
     ai.py = ai.y;
+    const homeX = clamp(W / 2 + (p.x - W / 2) * 0.5, PAD_R, W - PAD_R);
+    const homeY = 66;
+    // Attack only when the puck is on the CPU's side of the rink and isn't
+    // already racing away toward the player's goal.
+    const attackable = p.y < MID - PUCK_R && p.vy < 1.5;
     let tx: number;
     let ty: number;
-    if (p.y < H * 0.55) {
-      tx = p.x;
-      ty = clamp(p.y - 4, PAD_R + 2, MID - PAD_R - 4);
+    if (now < gs.aiRetreatUntil || !attackable) {
+      tx = homeX;
+      ty = homeY;
     } else {
-      tx = W / 2 + (p.x - W / 2) * 0.4; // loosely track the puck's x to guard
-      ty = 70;
+      // Aim just behind the puck (above it, toward the CPU goal) so the mallet
+      // drives DOWN through it toward the player's goal instead of hovering on
+      // top of it. Once it reaches striking range, commit a short retreat.
+      tx = p.x;
+      ty = p.y - (PAD_R + PUCK_R) + 6;
+      if (Math.hypot(ai.x - p.x, ai.y - p.y) < PAD_R + PUCK_R + 8) {
+        gs.aiRetreatUntil = now + 380;
+      }
     }
     const dx = tx - ai.x;
     const dy = ty - ai.y;
@@ -301,7 +316,7 @@ export default function AirHockey() {
       let goal: 'you' | 'cpu' | null = null;
       while (acc >= FIXED) {
         if (gs.phase === 'play') {
-          const r = step(gs, hitRef);
+          const r = step(gs, hitRef, now);
           if (r) {
             goal = r;
             break;
