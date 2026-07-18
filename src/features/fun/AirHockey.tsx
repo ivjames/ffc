@@ -138,12 +138,11 @@ function step(gs: GS, hitRef: { v: boolean }, now: number): 'you' | 'cpu' | null
     } else {
       // Aim just behind the puck (above it, toward the CPU goal) so the mallet
       // drives DOWN through it toward the player's goal instead of hovering on
-      // top of it. Once it reaches striking range, commit a short retreat.
+      // top of it. The retreat is committed only once an actual hit lands (see
+      // below), so a slow or glancing puck that comes near but isn't struck is
+      // still pursued rather than abandoned mid-approach.
       tx = p.x;
       ty = p.y - (PAD_R + PUCK_R) + 6;
-      if (Math.hypot(ai.x - p.x, ai.y - p.y) < PAD_R + PUCK_R + 8) {
-        gs.aiRetreatUntil = now + 380;
-      }
     }
     const dx = tx - ai.x;
     const dy = ty - ai.y;
@@ -204,7 +203,11 @@ function step(gs: GS, hitRef: { v: boolean }, now: number): 'you' | 'cpu' | null
 
   // Mallet collisions.
   if (malletHit(p, gs.player)) hitRef.v = true;
-  if (malletHit(p, gs.ai)) hitRef.v = true;
+  if (malletHit(p, gs.ai)) {
+    hitRef.v = true;
+    // Struck the puck away — now retreat to guard the goal before attacking again.
+    gs.aiRetreatUntil = now + 380;
+  }
 
   capSpeed(p, PUCK_MAX);
   return null;
@@ -300,6 +303,23 @@ export default function AirHockey() {
     let raf = 0;
     let last = performance.now();
     let acc = 0;
+    // Pause via visibilitychange, not a hidden-rAF branch: mobile browsers
+    // suspend requestAnimationFrame while backgrounded, so a hidden frame may
+    // never run to keep `last` fresh — the first visible frame would then
+    // simulate the whole capped catch-up window and the puck could jump or
+    // score. Reset the accumulator on resume and shift the serve delay.
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (!hiddenAt) hiddenAt = performance.now();
+      } else if (hiddenAt) {
+        gsRef.current.serveAt += performance.now() - hiddenAt;
+        hiddenAt = 0;
+        last = performance.now();
+        acc = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     const frame = (now: number) => {
       const gs = gsRef.current;
       if (document.hidden) {
@@ -356,7 +376,10 @@ export default function AirHockey() {
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [playing]);
 
   const toField = useCallback((e: React.PointerEvent) => {

@@ -56,12 +56,16 @@ export default function Confetti({ fire = true }: { fire?: boolean }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    let dpr = Math.min(2, window.devicePixelRatio || 1);
     let W = window.innerWidth;
     let H = window.innerHeight;
     const resize = () => {
       W = window.innerWidth;
       H = window.innerHeight;
+      // Recompute the ratio too: on an overscaled display (or when the window
+      // moves to a monitor with a different scale) devicePixelRatio changes, and
+      // a stale ratio would mis-scale the context and throw the burst off-screen.
+      dpr = Math.min(2, window.devicePixelRatio || 1);
       // Buffer is sized in device pixels for crispness…
       canvas.width = W * dpr;
       canvas.height = H * dpr;
@@ -77,13 +81,22 @@ export default function Confetti({ fire = true }: { fire?: boolean }) {
     resize();
     window.addEventListener('resize', resize);
 
-    // Fire both corner cannons, then a smaller second wave shortly after.
+    // Fire both cannons from just INSIDE the bottom corners, not the literal
+    // corners: overscanned/overscaled screens (a TV on the /tv board, kiosk
+    // displays) crop the edges, so launching from (0,H)/(W,H) puts the densest
+    // burst in the cropped-off region and reads as "no confetti". Insetting keeps
+    // the launch points on the visible panel.
+    const mx = Math.round(W * 0.08); // horizontal inset from each side
+    const my = Math.round(H * 0.04); // small lift off the very bottom edge
     let particles: Particle[] = [
-      ...cannon(70, 0, H, Math.PI / 3), // bottom-left, up and to the right
-      ...cannon(70, W, H, (2 * Math.PI) / 3), // bottom-right, up and to the left
+      ...cannon(70, mx, H - my, Math.PI / 3), // bottom-left, up and to the right
+      ...cannon(70, W - mx, H - my, (2 * Math.PI) / 3), // bottom-right, up and to the left
     ];
     const wave2 = window.setTimeout(() => {
-      particles.push(...cannon(45, 0, H, Math.PI / 2.6), ...cannon(45, W, H, Math.PI - Math.PI / 2.6));
+      particles.push(
+        ...cannon(45, mx, H - my, Math.PI / 2.6),
+        ...cannon(45, W - mx, H - my, Math.PI - Math.PI / 2.6),
+      );
     }, 350);
 
     const GRAVITY = 0.32;

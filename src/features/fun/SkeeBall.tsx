@@ -280,21 +280,32 @@ export default function SkeeBall() {
     ctx.scale(dpr, dpr);
 
     let raf = 0;
-    let lastFrame = performance.now();
+    // Pause the animation clock while backgrounded so a resumed game doesn't
+    // teleport the ball (PWA/Capacitor lifecycle). Use visibilitychange rather
+    // than a hidden-rAF branch: mobile browsers suspend requestAnimationFrame
+    // while hidden, so a hidden frame may never run to shift the shot clock —
+    // the shot would then complete instantly on return. Shift by the away span.
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (!hiddenAt) hiddenAt = performance.now();
+      } else if (hiddenAt) {
+        const gap = performance.now() - hiddenAt;
+        const gs = gsRef.current;
+        if (gs.shot) {
+          gs.shot.startedAt += gap;
+          gs.shot.sinkAt += gap;
+        }
+        hiddenAt = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     const frame = (now: number) => {
       const gs = gsRef.current;
-      // Pause the animation clock while backgrounded so a resumed game doesn't
-      // teleport the ball (PWA/Capacitor lifecycle).
       if (document.hidden) {
-        if (gs.shot) {
-          gs.shot.startedAt += now - lastFrame;
-          gs.shot.sinkAt += now - lastFrame;
-        }
-        lastFrame = now;
         raf = requestAnimationFrame(frame);
         return;
       }
-      lastFrame = now;
 
       if (gs.phase === 'flight' && gs.shot) {
         const p = Math.min((now - gs.shot.startedAt) / FLIGHT_MS, 1);
@@ -325,7 +336,10 @@ export default function SkeeBall() {
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [playing, finalize]);
 
   // Clear a pending "next ball" timer if we leave the screen mid-result.
