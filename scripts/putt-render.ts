@@ -2,7 +2,7 @@
 // single PNG montage, so the course layout can be eyeballed without a browser.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
-import { W, H, HOLE_R, BALL_R, HOLES, sdUnion } from '../src/features/putt/world.ts';
+import { W, H, HOLE_R, BALL_R, ROUGH_BAND, HOLES, sdUnion } from '../src/features/putt/world.ts';
 
 const SCALE = 3; // field px per image px
 const CW = W / SCALE; // cell width  (120)
@@ -13,13 +13,13 @@ const IW = COLS * CW;
 const IH = ROWS * CH;
 
 type RGB = [number, number, number];
-const ROUGH: RGB = [10, 36, 23];
-const GREEN: RGB = [23, 146, 74];
+const ROUGH: RGB = [10, 36, 23]; // off-green
+const COLLAR: RGB = [46, 125, 70]; // rough fringe inside the green edge
+const FAIRWAY: RGB = [24, 162, 79];
 const WALL: RGB = [30, 107, 63];
-const PIT: RGB = [227, 205, 140];
+const SAND: RGB = [227, 205, 140];
 const CUP: RGB = [4, 22, 12];
 const MARK: RGB = [248, 250, 252];
-const HAZARD: RGB = [184, 153, 92];
 
 const img = Buffer.alloc(IW * IH * 3);
 const put = (x: number, y: number, c: RGB) => {
@@ -38,12 +38,12 @@ for (let hi = 0; hi < HOLES.length; hi++) {
       const fx = cx * SCALE;
       const fy = cy * SCALE;
       let col: RGB = ROUGH;
-      if (sdUnion(fx, fy, h.green) < 0) col = GREEN;
-      if (h.walls && sdUnion(fx, fy, h.walls) < 0) col = WALL;
-      if (h.pits) {
-        const q = sdUnion(fx, fy, h.pits);
-        if (q < 0) col = PIT;
-        else if (q < 2) col = HAZARD;
+      const gg = sdUnion(fx, fy, h.green);
+      if (gg < 0) {
+        col = gg > -ROUGH_BAND ? COLLAR : FAIRWAY;
+        // sand only where inside the green → chopped at the rail
+        if (h.pits && sdUnion(fx, fy, h.pits) < 0) col = SAND;
+        if (h.walls && sdUnion(fx, fy, h.walls) < 0) col = WALL;
       }
       if (Math.hypot(fx - h.cup.x, fy - h.cup.y) < HOLE_R) col = CUP;
       if (Math.hypot(fx - h.tee.x, fy - h.tee.y) < BALL_R) col = MARK;

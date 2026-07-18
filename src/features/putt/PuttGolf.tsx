@@ -8,6 +8,7 @@ import {
   MIN_SHOT,
   MAX_SHOT,
   MAX_DRAG,
+  ROUGH_BAND,
   HOLES,
   stepPhysics,
   type Seg,
@@ -30,7 +31,6 @@ type GS = {
   phase: Phase;
   holeIndex: number;
   strokes: number;
-  shotStart: { x: number; y: number };
   drag: Drag;
 };
 
@@ -78,6 +78,33 @@ function fillCapsule(ctx: CanvasRenderingContext2D, s: Seg, extra: number) {
   }
 }
 
+// Union outline of a capsule set as a single Path2D — used to clip sand to the
+// green so a bunker never spills past the rail.
+function unionPath(segs: Seg[], extra: number): Path2D {
+  const p = new Path2D();
+  for (const s of segs) {
+    const r = s.r + extra;
+    if (r <= 0) continue;
+    p.moveTo(s.ax + r, s.ay);
+    p.arc(s.ax, s.ay, r, 0, Math.PI * 2);
+    if (s.ax !== s.bx || s.ay !== s.by) {
+      p.moveTo(s.bx + r, s.by);
+      p.arc(s.bx, s.by, r, 0, Math.PI * 2);
+      const dx = s.bx - s.ax;
+      const dy = s.by - s.ay;
+      const l = Math.hypot(dx, dy);
+      const px = (-dy / l) * r;
+      const py = (dx / l) * r;
+      p.moveTo(s.ax + px, s.ay + py);
+      p.lineTo(s.bx + px, s.by + py);
+      p.lineTo(s.bx - px, s.by - py);
+      p.lineTo(s.ax - px, s.ay - py);
+      p.closePath();
+    }
+  }
+  return p;
+}
+
 function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   const hole = HOLES[gs.holeIndex];
 
@@ -85,20 +112,25 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillStyle = '#0a2417';
   ctx.fillRect(0, 0, W, H);
 
-  // Green: dark rim pass, then the surface on top → a clean rounded edge.
+  // Green in layers: dark rim, then the rough collar (whole green), then the
+  // brighter fairway inset by the collar width — leaving a fringe of rough
+  // around the edge.
   ctx.fillStyle = '#0b3b22';
   for (const s of hole.green) fillCapsule(ctx, s, 5);
-  ctx.fillStyle = '#15803d';
+  ctx.fillStyle = '#2e7d46';
   for (const s of hole.green) fillCapsule(ctx, s, 0);
-  ctx.fillStyle = '#17924a';
-  for (const s of hole.green) fillCapsule(ctx, s, -7);
+  ctx.fillStyle = '#18a24f';
+  for (const s of hole.green) fillCapsule(ctx, s, -ROUGH_BAND);
 
-  // Pits — sand bunkers: a darker sand rim, then the sand surface.
+  // Sand bunkers — clipped to the green so they never break the rail.
   if (hole.pits) {
+    ctx.save();
+    ctx.clip(unionPath(hole.green, 0));
     ctx.fillStyle = '#b8995c';
     for (const s of hole.pits) fillCapsule(ctx, s, 2);
     ctx.fillStyle = '#e3cd8c';
     for (const s of hole.pits) fillCapsule(ctx, s, 0);
+    ctx.restore();
   }
 
   // Walls — raised bars/bumpers with a lighter top.
@@ -201,7 +233,6 @@ export default function PuttGolf() {
     phase: 'aim',
     holeIndex: 0,
     strokes: 0,
-    shotStart: { x: HOLES[0].tee.x, y: HOLES[0].tee.y },
     drag: { active: false, sx: 0, sy: 0, dx: 0, dy: 0 },
   });
 
@@ -209,14 +240,12 @@ export default function PuttGolf() {
   const [holeIndex, setHoleIndex] = useState(0);
   const [strokes, setStrokes] = useState(0);
   const [scores, setScores] = useState<number[]>([]);
-  const [note, setNote] = useState('');
   const scoresRef = useRef<number[]>([]);
 
   const startHole = useCallback((index: number) => {
     const gs = gsRef.current;
     const hole = HOLES[index];
     gs.ball = { x: hole.tee.x, y: hole.tee.y, vx: 0, vy: 0 };
-    gs.shotStart = { x: hole.tee.x, y: hole.tee.y };
     gs.phase = 'aim';
     gs.holeIndex = index;
     gs.strokes = 0;
@@ -224,7 +253,6 @@ export default function PuttGolf() {
     setPhase('aim');
     setHoleIndex(index);
     setStrokes(0);
-    setNote('');
   }, []);
 
   // Render + physics loop.
@@ -250,13 +278,6 @@ export default function PuttGolf() {
           scoresRef.current = next;
           setScores(next);
           setPhase('sunk');
-        } else if (res === 'pit') {
-          gs.strokes += 1; // penalty stroke
-          gs.ball = { x: gs.shotStart.x, y: gs.shotStart.y, vx: 0, vy: 0 };
-          gs.phase = 'aim';
-          setStrokes(gs.strokes);
-          setPhase('aim');
-          setNote('🏖️ In the sand — +1 penalty, replay the shot');
         } else if (res === 'stopped') {
           gs.phase = 'aim';
           setPhase('aim');
@@ -310,14 +331,12 @@ export default function PuttGolf() {
     const power = Math.min(len / MAX_DRAG, 1);
     const a = Math.atan2(dy, dx);
     const speed = MIN_SHOT + power * (MAX_SHOT - MIN_SHOT);
-    gs.shotStart = { x: gs.ball.x, y: gs.ball.y };
     gs.ball.vx = Math.cos(a) * speed;
     gs.ball.vy = Math.sin(a) * speed;
     gs.phase = 'rolling';
     gs.strokes += 1;
     setStrokes(gs.strokes);
     setPhase('rolling');
-    setNote('');
   }, []);
 
   const advance = useCallback(() => {
@@ -345,7 +364,7 @@ export default function PuttGolf() {
 
   const hint =
     phase === 'aim'
-      ? note || 'Drag from the ball to aim — farther = harder — and release to putt.'
+      ? 'Drag from the ball to aim — farther = harder — and release to putt.'
       : phase === 'rolling'
         ? 'Rolling…'
         : phase === 'sunk'
@@ -380,11 +399,7 @@ export default function PuttGolf() {
               style={{ aspectRatio: `${W} / ${H}` }}
             />
 
-            <p
-              className={`mt-3 min-h-[2.5rem] text-center text-sm ${
-                note ? 'font-semibold text-amber-200' : 'text-fairway-100/80'
-              }`}
-            >
+            <p className="mt-3 min-h-[2.5rem] text-center text-sm text-fairway-100/80">
               {hint}
             </p>
 

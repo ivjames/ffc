@@ -1,19 +1,20 @@
 // Offline validation for the course. Not shipped — run with esbuild+node.
 // Checks each hole is geometrically sane and actually completable.
 import {
-  W, H, BALL_R, HOLE_R, MIN_SHOT, MAX_SHOT, MAX_DRAG,
+  W, H, BALL_R, HOLE_R, MIN_SHOT, MAX_SHOT,
   HOLES, sdUnion, stepPhysics, type Hole, type Ball, type Outcome,
 } from '../src/features/putt/world.ts';
 
+// A cell the ball could rest in: inside the green, clear of walls. Sand is
+// passable (just draggy), so it doesn't block the route.
 function freeAt(x: number, y: number, h: Hole): boolean {
   if (sdUnion(x, y, h.green) > -BALL_R) return false;
   if (h.walls && h.walls.length && sdUnion(x, y, h.walls) < BALL_R) return false;
-  if (h.pits && h.pits.length && sdUnion(x, y, h.pits) < 0) return false;
   return true;
 }
 
 // BFS over free cells: is the cup reachable from the tee through the green,
-// going around walls and pits? Proves the hole is completable in principle.
+// going around the walls? Proves the hole is completable in principle.
 function pathExists(h: Hole): boolean {
   const step = 4;
   const cols = Math.floor(W / step);
@@ -71,9 +72,9 @@ for (let i = 0; i < HOLES.length; i++) {
   if (sdUnion(h.tee.x, h.tee.y, h.green) > -(BALL_R + 2)) fail('tee not safely inside green');
   if (sdUnion(h.cup.x, h.cup.y, h.green) > -(HOLE_R + 2)) fail('cup not safely inside green');
   if (h.walls && sdUnion(h.cup.x, h.cup.y, h.walls) < HOLE_R) fail('cup overlaps a wall');
-  if (h.pits && sdUnion(h.cup.x, h.cup.y, h.pits) < HOLE_R) fail('cup overlaps a pit');
+  if (h.pits && sdUnion(h.cup.x, h.cup.y, h.pits) < 0) fail('cup sits in the sand');
   if (h.walls && sdUnion(h.tee.x, h.tee.y, h.walls) < BALL_R) fail('tee overlaps a wall');
-  if (h.pits && sdUnion(h.tee.x, h.tee.y, h.pits) < 0) fail('tee overlaps a pit');
+  if (h.pits && sdUnion(h.tee.x, h.tee.y, h.pits) < 0) fail('tee starts in the sand');
   for (const s of h.green) {
     const minX = Math.min(s.ax, s.bx) - s.r;
     const maxX = Math.max(s.ax, s.bx) + s.r;
@@ -83,12 +84,10 @@ for (let i = 0; i < HOLES.length; i++) {
   }
 
   // Completability.
-  if (!pathExists(h)) fail('no free path from tee to cup (blocked by walls/pits)');
+  if (!pathExists(h)) fail('no free path from tee to cup (blocked by walls)');
 
   // Shot-space stability + progress from the tee.
   let sunk1 = 0;
-  let pits = 0;
-  let clear = 0; // non-pit terminations
   let timeouts = 0;
   let nans = 0;
   let bestDist = Infinity;
@@ -99,20 +98,15 @@ for (let i = 0; i < HOLES.length; i++) {
       const { out, b } = simShot(h, h.tee, ang, p);
       if (out === 'nan') { nans++; continue; }
       if (out === 'timeout') { timeouts++; continue; }
-      if (out === 'sunk') { sunk1++; clear++; bestDist = 0; continue; }
-      if (out === 'pit') { pits++; continue; }
-      clear++;
+      if (out === 'sunk') { sunk1++; bestDist = 0; continue; }
       bestDist = Math.min(bestDist, Math.hypot(b.x - h.cup.x, b.y - h.cup.y));
     }
   }
   if (nans) fail(`${nans} shots produced NaN`);
   if (timeouts) fail(`${timeouts} shots never came to rest`);
-  if (clear === 0) fail('every shot from the tee falls in a pit (unavoidable hazard)');
   if (bestDist > 120 && sunk1 === 0) fail(`no tee shot gets near the cup (best ${bestDist.toFixed(0)}px)`);
 
-  console.log(
-    `  ✓ path ok · ${sunk1} one-shot sinks · best approach ${bestDist.toFixed(0)}px · ${pits} pit / ${clear} clear`,
-  );
+  console.log(`  ✓ path ok · ${sunk1} one-shot sinks · best approach ${bestDist.toFixed(0)}px`);
 }
 
 console.log(failures === 0 ? '\nALL HOLES VALID ✓' : `\n${failures} PROBLEM(S) ✗`);

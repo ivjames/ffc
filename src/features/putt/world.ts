@@ -18,13 +18,15 @@ export const BALL_R = 8;
 export const HOLE_R = 13;
 
 // Physics tuning (per-frame at ~60fps).
-export const FRICTION = 0.985; // velocity retained each frame on the green
+export const FRICTION = 0.985; // velocity retained each frame on the fairway
+export const FRICTION_ROUGH = 0.955; // the fringe/collar just inside the green edge
+export const FRICTION_SAND = 0.87; // a bunker bogs the ball down significantly
+export const ROUGH_BAND = 12; // width of the rough collar inside the green edge
 export const WALL_REST = 0.66; // energy kept on a bounce off a rail/wall
 export const STOP_SPEED = 0.16; // below this the ball is "at rest"
 export const MIN_SHOT = 3.0; // px/frame at 0% power
 export const MAX_SHOT = 14.5; // px/frame at 100% power
 export const CAPTURE_SPEED = 5.8; // a faster ball lips out of the cup
-export const PIT_SKIP = 10.6; // a faster ball skims across a pit instead of dropping
 export const MAX_DRAG = 132; // drag length (field units) that maps to full power
 
 export type Seg = { ax: number; ay: number; bx: number; by: number; r: number };
@@ -35,9 +37,9 @@ export type Hole = {
   cup: { x: number; y: number };
   green: Seg[]; // playable surface (union) — the ball must stay inside
   walls?: Seg[]; // solid obstacles, incl. curved ones (bounce off)
-  pits?: Seg[]; // hazards (drop in → penalty)
+  pits?: Seg[]; // sand bunkers (heavy drag) — clipped to the green when drawn
 };
-export type Outcome = 'rolling' | 'stopped' | 'sunk' | 'pit';
+export type Outcome = 'rolling' | 'stopped' | 'sunk';
 
 /** Capsule from A to B with radius r. */
 export function cap(ax: number, ay: number, bx: number, by: number, r: number): Seg {
@@ -89,9 +91,9 @@ function reflect(b: Ball, nx: number, ny: number) {
   b.vy -= (1 + WALL_REST) * vd * ny;
 }
 
-// Resolve the ball against one substep of motion. Returns a terminal outcome
-// ('sunk' | 'pit') if it happened this substep, else null.
-function resolve(b: Ball, hole: Hole): 'sunk' | 'pit' | null {
+// Resolve the ball against one substep of motion. Returns 'sunk' if it dropped
+// this substep, else null. (Sand is a drag zone handled per-frame, not here.)
+function resolve(b: Ball, hole: Hole): 'sunk' | null {
   // Hard field-edge rail — a safety net so the ball can never end up off-screen
   // even where a green's rounded end meets the field boundary.
   if (b.x < BALL_R) {
@@ -147,12 +149,6 @@ function resolve(b: Ball, hole: Hole): 'sunk' | 'pit' | null {
     b.vx += (dxc / dc) * 0.22;
     b.vy += (dyc / dc) * 0.22;
   }
-
-  // Pit: roll over one slowly enough and you drop in.
-  if (hole.pits && hole.pits.length) {
-    const q = sdUnion(b.x, b.y, hole.pits);
-    if (q < -BALL_R * 0.15 && s < PIT_SKIP) return 'pit';
-  }
   return null;
 }
 
@@ -166,8 +162,12 @@ export function stepPhysics(b: Ball, hole: Hole): Outcome {
     const outcome = resolve(b, hole);
     if (outcome) return outcome;
   }
-  b.vx *= FRICTION;
-  b.vy *= FRICTION;
+  // Surface friction: fairway, the rough collar near the green edge, or — most
+  // draggy of all — a sand bunker.
+  let fr = sdUnion(b.x, b.y, hole.green) > -ROUGH_BAND ? FRICTION_ROUGH : FRICTION;
+  if (hole.pits && hole.pits.length && sdUnion(b.x, b.y, hole.pits) < 0) fr = FRICTION_SAND;
+  b.vx *= fr;
+  b.vy *= fr;
   if (Math.hypot(b.vx, b.vy) < STOP_SPEED) {
     b.vx = 0;
     b.vy = 0;
