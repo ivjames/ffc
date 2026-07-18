@@ -18,7 +18,8 @@ export default function Home() {
   const [resume, setResume] = useState<LocalRound | null>(null);
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
-  const courseCount = coursesByLocation(locationId).length;
+  const courses = coursesByLocation(locationId);
+  const courseCount = courses.length;
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
@@ -97,19 +98,46 @@ export default function Home() {
           </button>
         )}
 
+        {/* Pick a course to play. Each tile opens that course's map, where a
+            tap begins the round. (Artwork will eventually replace the emoji
+            placeholders.) */}
+        {courses.length === 0 ? (
+          <p className="mb-6 text-center text-sm text-fairway-100/60">
+            No courses at this location yet.
+          </p>
+        ) : (
+          <div className="mb-6 grid grid-cols-2 gap-3">
+            {courses.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => navigate(`/courses/${c.id}/map`)}
+                className="flex aspect-square flex-col items-center justify-center gap-3 rounded-2xl border p-4 text-center transition active:scale-[0.98]"
+                style={{
+                  background: `${c.accent}22`,
+                  borderColor: `${c.accent}66`,
+                }}
+              >
+                <span
+                  className="flex h-16 w-16 items-center justify-center rounded-2xl text-4xl"
+                  style={{ background: `${c.accent}33` }}
+                >
+                  {themeEmoji(c.theme)}
+                </span>
+                <span className="text-base font-bold leading-tight text-fairway-50">{c.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="space-y-3">
-          <Button onClick={() => navigate('/new')}>Start new round</Button>
-          <Button variant="ghost" onClick={() => navigate('/courses')}>
-            Courses &amp; maps
-          </Button>
-          <Button variant="ghost" onClick={() => navigate('/rules')}>
-            Rules
-          </Button>
           <Button variant="ghost" onClick={() => navigate('/hunt')}>
             Scavenger hunt
           </Button>
           <Button variant="ghost" onClick={() => navigate('/putt')}>
             🕹️ Arcade Putt
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/rules')}>
+            Rules
           </Button>
           <Button variant="ghost" onClick={() => navigate('/tv')}>
             See the leaderboard
@@ -125,4 +153,30 @@ export default function Home() {
       </Content>
     </Screen>
   );
+}
+
+function themeEmoji(theme: string): string {
+  switch (theme) {
+    case 'blue':
+      return '🔵';
+    case 'green':
+      return '🟢';
+    case 'red':
+      return '🔴';
+    case 'dragon':
+      return '🐉';
+    case 'western':
+      return '🤠';
+    // Retained for any legacy themed courses.
+    case 'jungle':
+      return '🌴';
+    case 'pirate':
+      return '🏴‍☠️';
+    case 'space':
+      return '🚀';
+    case 'haunted':
+      return '👻';
+    default:
+      return '⛳️';
+  }
 }
