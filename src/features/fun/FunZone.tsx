@@ -103,7 +103,9 @@ export default function FunZone() {
       <TopBar title="While You Wait" back="/" />
       <Content>
         <p className="mb-3 text-center text-sm text-fairway-100/70">
-          Waiting for a lane, a kart, or the next hole? Pass the time.
+          Waiting for a lane, a kart, or the next hole?
+          <br />
+          Pass the time.
         </p>
 
         <div className="grid grid-cols-2 gap-2">
