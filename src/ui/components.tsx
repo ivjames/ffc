@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { playClick, playStroke, playUndo, playCup } from '../lib/sound';
 
@@ -114,21 +114,14 @@ export function Button({
   );
 }
 
-/** Arcade-style 3-char tag chip. A vertical gradient body, glossy top highlight,
- *  inner shade and a soft drop make it a rounded candy pill that stands off the
- *  neutral chrome. */
+/** Arcade-style 3-char tag chip. The material lives in `.tag-chip` (index.css)
+ *  so each visual template can reskin it; the course accent (or the house green
+ *  default) is passed in as `--tag-accent`. Candy paints it as a glossy pill. */
 export function TagChip({ tag, color }: { tag: string; color?: string }) {
-  const base = color ?? '#166534';
   return (
     <span
-      className="font-arcade inline-flex items-center rounded-lg px-2.5 py-1 text-lg font-bold"
-      style={{
-        backgroundImage: `linear-gradient(180deg, color-mix(in srgb, ${base}, white 20%), ${base})`,
-        color: '#f0fdf4',
-        boxShadow:
-          'inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -2px 4px rgba(0,0,0,0.28), 0 2px 4px -1px rgba(0,0,0,0.4)',
-        textShadow: '0 1px 1px rgba(0,0,0,0.4)',
-      }}
+      className="tag-chip font-arcade inline-flex items-center rounded-lg px-2.5 py-1 text-lg font-bold"
+      style={{ '--tag-accent': color ?? '#166534' } as CSSProperties}
     >
       {tag || '···'}
     </span>
