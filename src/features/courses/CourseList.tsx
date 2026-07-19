@@ -3,6 +3,7 @@ import { Screen, TopBar, Content } from '../../ui/components';
 import { coursesByLocation, locationById } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
 import { coursePar } from '../../lib/scoring';
+import { themeLabel } from '../../lib/theme';
 
 // §5.2 Course maps — courses at the current location; tap to view map + pars.
 export default function CourseList() {
@@ -40,7 +41,7 @@ export default function CourseList() {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-lg font-bold text-fairway-50">{c.name}</span>
                 <span className="block text-sm capitalize text-fairway-100/70">
-                  {c.theme} · {c.holeCount} holes · par {coursePar(c.pars)}
+                  {themeLabel(c.theme)} · {c.holeCount} holes · par {coursePar(c.pars)}
                 </span>
               </span>
               <span className="text-xl text-fairway-400">›</span>
