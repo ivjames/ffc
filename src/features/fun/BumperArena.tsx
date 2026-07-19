@@ -5,8 +5,9 @@ import type { Vec as FxVec } from './fx';
 import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, decay, shakeOffset } from './fx';
 
 // §12 Bumper arena — the shared engine behind Bumper Cars and Bumper Boats.
-// Drive with a floating joystick and ram the other units; land as many solid
-// bumps as you can before the 30-second horn. Top-down real-time canvas physics,
+// Drag to lead your unit around (it chases your finger like a lure, the same
+// control as the Go-Karts) and ram the other units; land as many solid bumps as
+// you can before the 30-second horn. Top-down real-time canvas physics,
 // client-side, offline. A `BumperTheme` swaps the visuals + handling so cars
 // (grippy, on a rink) and boats (floaty, on water) share one implementation.
 //
@@ -23,7 +24,12 @@ const N_AI = 4;
 const FIXED = 1000 / 120; // physics substep (ms)
 const WALL_E = 0.6; // wall bounce restitution
 const UNIT_E = 0.92; // unit-unit restitution
-const JOY_MAX = 60; // joystick travel (field units) for full throttle
+// Drag-to-lead control (matches Go-Karts): the player unit chases the finger
+// like a lure. Throttle scales with how far you drag ahead of it; holding the
+// finger over the unit lets it coast to a gentle stop.
+const LEAD = 90; // finger lead distance (field units) for full throttle
+const CATCH_R = 30; // within this of the finger, the unit eases to a stop
+const BRAKE = 0.9; // gentle braking once caught up to the finger
 const BUMP_COOLDOWN = 450; // ms before the same unit can be bumped again
 const GAME_MS = 30000;
 
@@ -70,14 +76,14 @@ type Unit = {
 type Ripple = { x: number; y: number; born: number }; // expanding wake ring
 type Splash = { x: number; y: number; vx: number; vy: number; born: number }; // droplet
 type Spark = { x: number; y: number; vx: number; vy: number; born: number }; // bump spark
-type Joystick = { active: boolean; ox: number; oy: number; kx: number; ky: number };
+type Touch = { active: boolean; x: number; y: number }; // finger lure position
 type Phase = 'play' | 'done';
 type GS = {
   phase: Phase;
   units: Unit[]; // [0] = player, rest = AI
   score: number;
   elapsed: number; // ms of active play
-  joy: Joystick;
+  touch: Touch;
   lastBump: number[]; // per-AI-index cooldown timestamps
   lastSound: number;
   ripples: Ripple[]; // boat wake trail
@@ -87,7 +93,6 @@ type GS = {
   lastSpark: number; // throttle for spark bursts
 };
 
-const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 const rnd = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
 function freshGS(theme: BumperTheme): GS {
@@ -118,7 +123,7 @@ function freshGS(theme: BumperTheme): GS {
     units,
     score: 0,
     elapsed: 0,
-    joy: { active: false, ox: 0, oy: 0, kx: 0, ky: 0 },
+    touch: { active: false, x: W / 2, y: H - 90 },
     lastBump: new Array(N_AI + 1).fill(-1e9),
     lastSound: -1e9,
     ripples: [],
@@ -159,15 +164,21 @@ function step(gs: GS, now: number, theme: BumperTheme) {
   const units = gs.units;
   const player = units[0];
 
-  // Player thrust from the joystick.
-  if (gs.joy.active) {
-    const dx = gs.joy.kx - gs.joy.ox;
-    const dy = gs.joy.ky - gs.joy.oy;
-    const len = Math.hypot(dx, dy);
-    if (len > 4) {
-      const throttle = Math.min(len / JOY_MAX, 1);
-      player.vx += (dx / len) * theme.accel * throttle;
-      player.vy += (dy / len) * theme.accel * throttle;
+  // Drag-to-lead: the finger is a lure the player unit chases. It accelerates
+  // toward the touch point with throttle scaled by how far you're leading it,
+  // and eases to a stop once it catches up — same feel as the Go-Karts.
+  if (gs.touch.active) {
+    const dx = gs.touch.x - player.x;
+    const dy = gs.touch.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 1) {
+      const throttle = Math.min(dist / LEAD, 1);
+      player.vx += (dx / dist) * theme.accel * throttle;
+      player.vy += (dy / dist) * theme.accel * throttle;
+    }
+    if (dist < CATCH_R) {
+      player.vx *= BRAKE;
+      player.vy *= BRAKE;
     }
   }
 
@@ -648,19 +659,20 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Joystick (UI — outside the shake).
-  if (gs.joy.active) {
-    const kx = clamp(gs.joy.kx, gs.joy.ox - JOY_MAX, gs.joy.ox + JOY_MAX);
-    const ky = clamp(gs.joy.ky, gs.joy.oy - JOY_MAX, gs.joy.oy + JOY_MAX);
+  // Lure: while dragging, show where you're leading the unit (UI — outside the
+  // shake), matching the Go-Karts' finger marker.
+  if (gs.touch.active) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(251,191,36,0.8)';
+    ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.arc(gs.joy.ox, gs.joy.oy, JOY_MAX, 0, TWO_PI);
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(kx, ky, 20, 0, TWO_PI);
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.arc(gs.touch.x, gs.touch.y, 7, 0, TWO_PI);
+    ctx.fillStyle = 'rgba(251,191,36,0.30)';
     ctx.fill();
+    ctx.strokeStyle = 'rgba(251,191,36,0.85)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -753,7 +765,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       const p = toField(e);
-      gsRef.current.joy = { active: true, ox: p.x, oy: p.y, kx: p.x, ky: p.y };
+      gsRef.current.touch = { active: true, x: p.x, y: p.y };
       canvasRef.current?.setPointerCapture(e.pointerId);
     },
     [toField],
@@ -761,15 +773,15 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
       const gs = gsRef.current;
-      if (!gs.joy.active) return;
+      if (!gs.touch.active) return;
       const p = toField(e);
-      gs.joy.kx = p.x;
-      gs.joy.ky = p.y;
+      gs.touch.x = p.x;
+      gs.touch.y = p.y;
     },
     [toField],
   );
   const onPointerUp = useCallback(() => {
-    gsRef.current.joy.active = false;
+    gsRef.current.touch.active = false;
   }, []);
 
   const restart = useCallback(() => {

@@ -7,7 +7,7 @@ const CARS: BumperTheme = {
   kind: 'car',
   playerColor: '#22c55e',
   aiColors: ['#f97316', '#eab308', '#a855f7', '#38bdf8'],
-  hint: 'Touch and drag to steer your green car — ram the others to score bumps.',
+  hint: 'Drag to lead your green car — it follows your finger. Ram the others to score bumps.',
   remark: (s) =>
     s >= 20 ? 'Demolition champ! 🏆' : s >= 12 ? 'Bumper pro! 🚗' : s >= 6 ? 'Nice driving! 👍' : 'Keep bumping! 🎮',
   friction: 0.975,
