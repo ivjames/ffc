@@ -119,36 +119,40 @@ export default function Summary() {
           style={{ '--glow': course.accent } as CSSProperties}
         >
           <div
-            className="surface animate-pop-in relative overflow-hidden rounded-3xl border border-fairway-500/40 p-6 text-center"
+            className="surface animate-pop-in relative overflow-hidden rounded-3xl border border-fairway-500/40 p-5"
             style={{ '--i': 0 } as CSSProperties}
           >
-            {/* Accent spotlight behind the trophy, in the course's own color. */}
+            {/* Accent spotlight behind the trophy (left), in the course's own color. */}
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 h-40"
+              className="pointer-events-none absolute inset-y-0 left-0 w-48"
               style={{
-                background: `radial-gradient(80% 100% at 50% 0%, ${course.accent}40, transparent 70%)`,
+                background: `radial-gradient(70% 100% at 0% 50%, ${course.accent}40, transparent 70%)`,
               }}
             />
-            <div className="relative">
-              <div className="animate-trophy-pop text-6xl leading-none">🏆</div>
-              <div className="mt-3 text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
-                {tied ? 'Tied for the win' : 'Winner'}
+            {/* One horizontal row: trophy left, champion in the middle, score
+                right — a compact hero rather than a tall stack. */}
+            <div className="relative flex items-center gap-4">
+              <div className="animate-trophy-pop shrink-0 text-5xl leading-none">🏆</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
+                  {tied ? 'Tied for the win' : 'Winner'}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                  {heroRows.map((row) => (
+                    <span
+                      key={row.p}
+                      className="font-arcade text-3xl font-black"
+                      style={{ color: ink }}
+                    >
+                      {row.tag}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-                {heroRows.map((row) => (
-                  <span
-                    key={row.p}
-                    className="font-arcade text-4xl font-black"
-                    style={{ color: ink }}
-                  >
-                    {row.tag}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-2 text-sm text-fairway-100/70">
-                <span className="text-lg font-black text-fairway-50">{heroRows[0].total}</span>
-                <span className="ml-2">{formatOverUnder(heroDiff)}</span>
+              <div className="shrink-0 text-right leading-tight">
+                <div className="text-2xl font-black text-fairway-50">{heroRows[0].total}</div>
+                <div className="text-sm text-fairway-100/70">{formatOverUnder(heroDiff)}</div>
               </div>
             </div>
           </div>
