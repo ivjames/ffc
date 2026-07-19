@@ -955,3 +955,20 @@ button {
   color: var(--color-fairway-50);
   text-shadow: none;
 }
+
+/* Keep disabled controls flat and inert under every skin. A skin's material
+   rule (e.g. `:root[data-template='blocky'] .key`) outranks the base
+   `.key:disabled { box-shadow: none }` reset above, which would otherwise
+   restore a raised shadow/border on a disabled control (the scorecard's
+   unavailable ± key, a disabled Start/Finish). Re-flatten at higher specificity
+   — the extra `:disabled` beats the skin rules, and being last also wins any
+   equal-specificity tie with the theme-scoped ones. */
+:root[data-template] .btn-accent:disabled,
+:root[data-template] .btn-danger:disabled,
+:root[data-template] .key:disabled,
+:root[data-template] .surface:disabled,
+:root[data-template] .surface-1:disabled {
+  box-shadow: none;
+  border-color: transparent;
+  transform: none;
+}
