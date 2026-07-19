@@ -3,7 +3,8 @@
 //
 //   • Fun facts       — a rotating deck of bite-size facts (FunFacts screen).
 //   • Trivia          — multiple-choice questions with one correct answer.
-//   • Challenge spinner — a wheel of quick, kid-safe group dares/challenges.
+//   • Challenge spinner — a wheel that mixes silly next-shot gameplay handicaps
+//     with quick, kid-safe group dares (Spinner screen).
 //
 // All content is static and bundled (no network), so every screen works
 // offline exactly like the scorecard. Content is intentionally generic and
@@ -27,6 +28,14 @@ export type TriviaQuestion = {
 export type Challenge = {
   emoji: string;
   text: string;
+  /**
+   * How the challenge lands:
+   *   • 'gameplay' — a handicap that bends the rules of your NEXT shot
+   *     (close your eyes, wrong end of the club…). Meaningful mid-round.
+   *   • 'dare'     — a just-for-fun stunt anyone can do in line, no game needed.
+   * Roughly half the wheel is each kind; the Spinner colors and labels them.
+   */
+  kind: 'gameplay' | 'dare';
 };
 
 // —— Fun facts ——————————————————————————————————————————————————————————
@@ -388,21 +397,28 @@ export const TRIVIA: TriviaQuestion[] = [
 ];
 
 // —— Challenge spinner ————————————————————————————————————————————————————
-// Quick, kid-safe group challenges — the kind of thing a family can do on the
-// spot while waiting for a lane or a kart. Nothing that needs equipment.
+// A mix of two flavors, roughly half and half (see `Challenge.kind`):
+//   • Gameplay handicaps — silly rule-benders for your NEXT shot. These shine
+//     when the spinner is opened mid-round from the scorecard: use the wrong
+//     end of your club, putt with your eyes closed, and so on.
+//   • Just-for-fun dares — quick, kid-safe stunts anyone can do on the spot
+//     while waiting for a lane or a kart. Nothing that needs equipment.
+// The list interleaves the two kinds so the wheel reads as a balanced mix.
 export const CHALLENGES: Challenge[] = [
-  { emoji: '🕺', text: 'Everyone does their best victory dance for 5 seconds!' },
-  { emoji: '😜', text: 'Make the silliest face you can — hold it for 3 seconds.' },
-  { emoji: '🦶', text: 'Balance on one foot until it is your turn.' },
-  { emoji: '🎤', text: 'Sing your favorite song title in your most dramatic voice.' },
-  { emoji: '🤝', text: 'Give everyone in your group a high five.' },
-  { emoji: '🐧', text: 'Waddle like a penguin to the nearest wall and back.' },
-  { emoji: '😐', text: 'Try not to laugh while someone tells their worst joke.' },
-  { emoji: '💪', text: 'Show off your strongest superhero pose.' },
-  { emoji: '🗣️', text: 'Talk in a robot voice until your next turn.' },
-  { emoji: '🎨', text: 'Name three things you can see that are the same color.' },
-  { emoji: '🙌', text: 'Do 5 air-high-fives with an imaginary teammate.' },
-  { emoji: '🐸', text: 'Take 3 giant frog hops in place.' },
-  { emoji: '🤔', text: 'Guess who in your group will win the next game.' },
-  { emoji: '🎉', text: 'Start a 5-second cheer for the whole group.' },
+  { kind: 'gameplay', emoji: '🙈', text: 'Close your eyes for your entire next shot — no peeking!' },
+  { kind: 'dare', emoji: '🕺', text: 'Everyone does their best victory dance for 5 seconds!' },
+  { kind: 'gameplay', emoji: '🔄', text: 'Take your next shot with the wrong end of your club.' },
+  { kind: 'dare', emoji: '😜', text: 'Make the silliest face you can — hold it for 3 seconds.' },
+  { kind: 'gameplay', emoji: '🦵', text: 'Putt croquet-style — club between your legs, facing the hole.' },
+  { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title in your most dramatic voice.' },
+  { kind: 'gameplay', emoji: '🤙', text: 'Play your next shot with only your weaker hand on the club.' },
+  { kind: 'dare', emoji: '🤝', text: 'Give everyone in your group a high five.' },
+  { kind: 'gameplay', emoji: '👣', text: 'Line up and take your next shot balancing on one foot.' },
+  { kind: 'dare', emoji: '🐧', text: 'Waddle like a penguin to the nearest wall and back.' },
+  { kind: 'gameplay', emoji: '🔙', text: 'Turn your back to the hole and putt facing backward.' },
+  { kind: 'dare', emoji: '🤖', text: 'Talk in a robot voice until your next turn.' },
+  { kind: 'gameplay', emoji: '🗣️', text: 'Call your shot out loud before you hit — say where it will stop.' },
+  { kind: 'dare', emoji: '🐸', text: 'Take 3 giant frog hops in place.' },
+  { kind: 'gameplay', emoji: '🌀', text: 'Spin around once, then putt right away — no lining it up again.' },
+  { kind: 'dare', emoji: '🎉', text: 'Start a 5-second cheer for the whole group.' },
 ];

@@ -4,9 +4,10 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { CHALLENGES } from '../../data/funContent';
 import { playClick, playTick, playLand } from '../../lib/sound';
 
-// §12 Challenge Spinner — a wheel of quick group dares. Tap to spin; the wheel
-// decelerates onto a random challenge (ticking as it passes each peg) and shows
-// the result. Bundled content, no network.
+// §12 Challenge Spinner — a wheel that mixes silly next-shot gameplay handicaps
+// (use the wrong end of your club, putt with your eyes closed…) with quick group
+// dares. Tap to spin; the wheel decelerates onto a random challenge (ticking as
+// it passes each peg) and shows the result. Bundled content, no network.
 
 const N = CHALLENGES.length;
 const SECTOR = 360 / N; // degrees per wedge
@@ -46,8 +47,18 @@ function timeAtProgress(progress: number): number {
   return bezierAxis((lo + hi) / 2, BX1, BX2);
 }
 
-// Alternating wedge fills — a bright arcade ribbon, cycled around the wheel.
-const WEDGE_COLORS = ['#f59e0b', '#3b82f6', '#ec4899', '#22c55e', '#a855f7', '#ef4444', '#14b8a6'];
+// Wedge fills split by challenge kind, so the two flavors read as distinct
+// bands as the wheel spins: cool blues/purples for gameplay handicaps, warm
+// ambers/pinks for just-for-fun dares. Colors cycle within each kind.
+const GAMEPLAY_COLORS = ['#3b82f6', '#6366f1', '#0ea5e9', '#8b5cf6'];
+const DARE_COLORS = ['#f59e0b', '#ec4899', '#ef4444', '#f97316'];
+
+/** Fill color for wedge `i`, chosen from its kind's palette. */
+function wedgeColor(i: number): string {
+  const c = CHALLENGES[i];
+  const palette = c.kind === 'gameplay' ? GAMEPLAY_COLORS : DARE_COLORS;
+  return palette[i % palette.length];
+}
 
 /** Point on the wheel at `angle` degrees clockwise from the top (12 o'clock). */
 function pointAt(angle: number, radius: number): [number, number] {
@@ -159,7 +170,7 @@ export default function Spinner() {
                 const [ex, ey] = pointAt(center, R * 0.66);
                 return (
                   <g key={i}>
-                    <path d={wedgePath(i)} fill={WEDGE_COLORS[i % WEDGE_COLORS.length]} stroke="#0b0f14" strokeWidth={0.8} />
+                    <path d={wedgePath(i)} fill={wedgeColor(i)} stroke="#0b0f14" strokeWidth={0.8} />
                     {/* Orient each emoji radially with its base toward the hub,
                         so when its wedge lands under the top pointer the emoji
                         stands upright. */}
@@ -184,12 +195,24 @@ export default function Spinner() {
 
         {chosen ? (
           <div className="animate-result-swell mb-5 rounded-2xl border border-fairway-700 bg-fairway-900/50 px-5 py-5 text-center">
-            <div className="text-4xl">{chosen.emoji}</div>
+            {/* Badge telling the group whether this bends the next shot or is
+                just a stunt, so a gameplay handicap doesn't get shrugged off. */}
+            <span
+              className="inline-block rounded-full px-3 py-0.5 text-xs font-bold uppercase tracking-wide"
+              style={
+                chosen.kind === 'gameplay'
+                  ? { background: '#3b82f633', color: '#93c5fd' }
+                  : { background: '#f59e0b33', color: '#fcd34d' }
+              }
+            >
+              {chosen.kind === 'gameplay' ? '⛳️ Next-shot twist' : '🎉 Just for fun'}
+            </span>
+            <div className="mt-3 text-4xl">{chosen.emoji}</div>
             <p className="mt-2 text-lg font-semibold leading-snug text-fairway-50">{chosen.text}</p>
           </div>
         ) : (
           <p className="mb-5 text-center text-sm text-fairway-100/70">
-            {spinning ? 'Round and round…' : 'Tap spin for a challenge!'}
+            {spinning ? 'Round and round…' : 'Tap spin for a challenge or a next-shot twist!'}
           </p>
         )}
 
