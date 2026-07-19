@@ -31,10 +31,6 @@ export default function FunFacts() {
     <Screen>
       <TopBar title="Fun Facts" back="/fun" />
       <Content>
-        <div className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-fairway-400">
-          {pos + 1} of {deck.length}
-        </div>
-
         {/* Tapping the card advances too, so the whole surface is the control. */}
         <button
           key={pos}
