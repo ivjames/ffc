@@ -14,7 +14,7 @@ import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
 // —— Field + physics (logical units; the canvas scales to fit) ————————————————
 const W = 340;
 const H = 560;
-const TRACK_W = 62; // asphalt width
+const TRACK_W = 54; // asphalt width — trimmed a touch so the infield reads and the lane races tighter
 const WALL = 6; // barrier thickness drawn outside each asphalt edge
 const KART_R = 7; // kart collision radius (half its body width)
 const N = 90; // centerline samples per track
@@ -107,6 +107,10 @@ function buildTrack(
 
 const CX = W / 2;
 const CY = H / 2 + 6;
+// Superellipse coordinate: signed |v|^e. With e < 1 it squares an oval off into
+// a rounded-rectangle "circuit" outline — long straights joined by four corners
+// — instead of a plain ellipse. Used by Grand Prix for a real track shape.
+const se = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** e;
 // Local projection (see WIN) means legs that pass close together are just tight
 // corners, not corridor merges — so shapes are free to pinch or even cross.
 // Every layout is still checked offline (scripts/scratchpad) to fit the canvas
@@ -120,25 +124,37 @@ const TRACKS: Track[] = [
     x: CX + 108 * Math.cos(t) + 22 * Math.sin(2 * t),
     y: CY + 196 * Math.sin(t),
   })),
-  buildTrack('boomerang', 'Boomerang', 'One big sweeper', (t) => ({
-    x: CX + 104 * Math.cos(t) + 30 * (Math.cos(t) * Math.cos(t) - 0.5),
-    y: CY + 198 * Math.sin(t),
+  // A boomerang laid on its side: a tall crescent sweeping the length of the
+  // canvas. The cos(2t) term bows the loop out to one side into the wing; the
+  // 37px x-offset recenters that one-sided bow. The longest lap in the set.
+  buildTrack('boomerang', 'Boomerang', 'One big sweeping bend', (t) => ({
+    x: CX - 37 + 94 * Math.cos(t) + 53 * Math.cos(2 * t),
+    y: CY + 230 * Math.sin(t),
   })),
-  buildTrack('hourglass', 'Hourglass', 'Squeeze through the middle', (t) => ({
-    x: CX + 118 * Math.cos(t),
-    y: CY + 196 * Math.sin(t) - 52 * Math.sin(t) * Math.cos(t),
-  })),
+  // A true hourglass: the polar radius pinches to a narrow waist at mid-height
+  // (small at the sides, r = 1 − 0.5·cos2t) and bulges into a lobe top and bottom.
+  buildTrack('hourglass', 'Hourglass', 'Squeeze through the middle', (t) => {
+    const r = 1 - 0.5 * Math.cos(2 * t);
+    return { x: CX + 100 * r * Math.cos(t), y: CY + 150 * r * Math.sin(t) };
+  }),
+  // A pronounced slalom: a slim body with a big sin(3t) sway so the S actually
+  // reads. Tighter apexes than the others, but the ±width tube stays drivable.
   buildTrack('esses', 'The Esses', 'Wiggle city — technical', (t) => ({
-    x: CX + 92 * Math.cos(t) + 26 * Math.sin(3 * t),
-    y: CY + 198 * Math.sin(t),
+    x: CX + 82 * Math.cos(t) + 34 * Math.sin(3 * t),
+    y: CY + 204 * Math.sin(t),
   })),
+  // A squared-off superellipse circuit — long straights into four defined
+  // corners, a proper racetrack outline rather than another wavy loop.
   buildTrack('grand-prix', 'Grand Prix', 'The long lap — corner after corner', (t) => ({
-    x: CX + 116 * Math.cos(t) + 16 * Math.sin(3 * t),
-    y: CY + 220 * Math.sin(t) + 16 * Math.sin(2 * t),
+    x: CX + 112 * se(Math.cos(t), 0.64),
+    y: CY + 214 * se(Math.sin(t), 0.7),
   })),
+  // A real snake: the whole ribbon is swept along an S-shaped spine
+  // (sin(π·cos t)) instead of an oval with wavy sides, so it slithers down the
+  // canvas with a thin winding seam rather than reading as another slalom.
   buildTrack('serpent', 'Serpent', 'Long, snaking esses — stay smooth', (t) => ({
-    x: CX + 104 * Math.cos(t) + 20 * Math.sin(3 * t),
-    y: CY + 218 * Math.sin(t),
+    x: CX + 48 * Math.sin(Math.PI * Math.cos(t)) + 68 * Math.sin(t),
+    y: CY - 206 * Math.cos(t),
   })),
   buildTrack(
     'crossover',
