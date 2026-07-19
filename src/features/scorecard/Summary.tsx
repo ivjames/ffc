@@ -206,7 +206,7 @@ export default function Summary() {
           <Button
             variant="ghost"
             onClick={() =>
-              navigate('/tv', {
+              navigate('/leaderboard', {
                 state: {
                   highlightCourseId: round.courseId,
                   // Carry this session's exact totals — a tag alone isn't a stable

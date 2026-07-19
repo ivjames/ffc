@@ -1,5 +1,5 @@
 // §6 Input validation — three-initial arcade tags.
-// Tags render on a public TV leaderboard (P2), so treat them as public content.
+// Tags render on a public leaderboard, so treat them as public content.
 // The Node API re-validates the SAME rules on write; this client check is a UX
 // convenience and is fully bypassable by hitting the endpoint directly.
 

@@ -8,7 +8,7 @@ import CourseList from './features/courses/CourseList';
 import CourseMap from './features/courses/CourseMap';
 import LocationPicker from './features/locations/LocationPicker';
 import Rules from './features/rules/Rules';
-import TvLeaderboard from './features/tv/TvLeaderboard';
+import Leaderboard from './features/leaderboard/Leaderboard';
 import Hunt from './features/hunt/Hunt';
 import PuttGolf from './features/putt/PuttGolf';
 import FunZone from './features/fun/FunZone';
@@ -43,8 +43,8 @@ export default function App() {
         <Route path="/courses" element={<CourseList />} />
         <Route path="/courses/:id/map" element={<CourseMap />} />
         <Route path="/rules" element={<Rules />} />
-        {/* P2 preview — the API already serves the leaderboard. */}
-        <Route path="/tv" element={<TvLeaderboard />} />
+        {/* Arcade high-score board. */}
+        <Route path="/leaderboard" element={<Leaderboard />} />
         {/* P3 — AI scavenger hunt. */}
         <Route path="/hunt" element={<Hunt />} />
         {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}

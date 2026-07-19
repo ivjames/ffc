@@ -16,10 +16,10 @@ type HighlightState = {
   highlightScores?: { tag: string; total: number }[];
 };
 
-// P2 preview. The full-screen /tv board is Phase 2, but the API already serves
-// the arcade high-score data, so this is a lightweight live view. Polls every
-// few seconds (§9 — no realtime service needed).
-export default function TvLeaderboard() {
+// Arcade high-score board. The API serves the high-score data; this is a
+// lightweight live view that polls every few seconds (§9 — no realtime service
+// needed).
+export default function Leaderboard() {
   const { state } = useLocation();
   const { highlightCourseId, highlightScores } = (state as HighlightState | null) ?? {};
   // Key on tag + total so we highlight the exact score from this session, not
@@ -66,7 +66,7 @@ export default function TvLeaderboard() {
   }, [period]);
 
   // Board position is the rank in the full ascending-by-total standings. When we
-  // arrive from a final scorecard, pin the just-played rows to the TOP of the
+  // arrive from a final scorecard, pin the just-played rows to the top of the
   // list so the players see their scores and positions immediately — but keep
   // each row's real rank number, so a highlighted row still reads "5th" even
   // though it's shown first. Everyone else stays in standings order below.

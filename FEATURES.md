@@ -65,8 +65,8 @@ retry-based sync layer.
 - **Hole-by-hole grid** split into front/back nines (two 10-column tables so 18
   holes don't overflow a phone); each cell colors under-par green / over-par amber.
 - Footer shows sync status ("Saved to leaderboard ✓" / retry / "will sync when
-  back online"). "View leaderboard" passes the exact just-played scores so the TV
-  board can highlight this round.
+  back online"). "View leaderboard" passes the exact just-played scores so the
+  leaderboard can highlight this round.
 
 ### Scoring & validation
 - `src/lib/scoring.ts` — 18 holes, stroke cap 6 (toggleable), running fair
@@ -210,10 +210,10 @@ the item is present, and confirmed finds are tracked **per player and per group*
 
 ---
 
-## 6. TV leaderboard (`/tv`)
+## 6. Leaderboard (`/leaderboard`)
 
-Arcade high-score board — the Phase-2 preview, already fed by data the scorecard
-has been persisting since launch.
+Arcade high-score board, fed by data the scorecard has been persisting since
+launch.
 
 - **API** (`routes/leaderboard.js`) — per player **tag**, best (lowest) total per
   course, sorted ascending, for **day / week / month / all-time**. Windows are

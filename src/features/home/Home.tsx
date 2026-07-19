@@ -152,7 +152,7 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/rules')}>
             Rules
           </Button>
-          <Button variant="ghost" onClick={() => navigate('/tv')}>
+          <Button variant="ghost" onClick={() => navigate('/leaderboard')}>
             See the leaderboard
           </Button>
           {/* Only worth showing when we're running in a browser tab, not the

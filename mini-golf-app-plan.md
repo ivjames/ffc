@@ -6,7 +6,7 @@ A self-contained spec for building the app. Hand this to Claude Code as the sour
 
 ## 1. Product summary
 
-An app for a mini golf venue with **four themed 18-hole courses**. Core is an easy 4-player scorecard. Ships web-first as an installable PWA, with a clean path to native later. Additional features (TV leaderboard, AI scavenger hunt, interactive course hardware) are planned as later phases but the v1 data layer is designed so they don't require a rewrite.
+An app for a mini golf venue with **four themed 18-hole courses**. Core is an easy 4-player scorecard. Ships web-first as an installable PWA, with a clean path to native later. Additional features (leaderboard, AI scavenger hunt, interactive course hardware) are planned as later phases but the v1 data layer is designed so they don't require a rewrite.
 
 ### Locked decisions
 | Decision | Choice |
@@ -19,7 +19,7 @@ An app for a mini golf venue with **four themed 18-hole courses**. Core is an ea
 | Par | Per-hole, values 2–4 (seeded/random placeholder until real pars exist) |
 | Player identity | **Three-initial tags** per player (arcade style), 1–4 players; `[A-Z0-9]{3}` |
 | Leaderboard tracking | **Individual player only** for now; group tag deferred |
-| Deferred | Group tag/leaderboard, TV leaderboard (P2), AI scavenger hunt (P3), native + IoT (P4) |
+| Deferred | Group tag/leaderboard, leaderboard (P2), AI scavenger hunt (P3), native + IoT (P4) |
 
 ---
 
@@ -149,7 +149,7 @@ Requirements:
 
 ## 6. Input validation
 
-Player entry is a **three-character tag** (arcade high-score style). These render on a public TV leaderboard in P2, so treat them as public content.
+Player entry is a **three-character tag** (arcade high-score style). These render on a public leaderboard in P2, so treat them as public content.
 
 - Constrain to exactly **3 characters, `[A-Z0-9]`**. Uppercase on input; reject anything else. This alone eliminates almost all abuse surface (no free text, no length handling, no markup).
 - **Blocklist of offensive 3-character combos** — the classic arcade problem (ASS, FUK, SEX, etc.). It's a small fixed list, not an open-ended profanity library. Maintain it as a simple array; reject on match and prompt for a different tag.
@@ -171,7 +171,7 @@ Player entry is a **three-character tag** (arcade high-score style). These rende
 | `/courses` | Course list | v1 |
 | `/courses/:id/map` | Course map + pars | v1 |
 | `/rules` | Rules | v1 |
-| `/tv` | TV leaderboard (full-screen, read-only) | P2 |
+| `/leaderboard` | Leaderboard (read-only) | P2 |
 | `/hunt` | Scavenger hunt | P3 |
 | `/putt` | Arcade Putt minigame | extra |
 | `/fun` | "While You Wait" content hub | §12 |
@@ -207,7 +207,7 @@ public/
 
 **Phase 1 — Launch (this build).** Offline-first PWA: 4-player scorecard, four courses, maps, rules, installable. Silently syncs completed rounds to the Node API / Postgres to seed the leaderboard.
 
-**Phase 2 — TV leaderboard.** Full-screen `/tv` route. Reads persisted rounds/scores; shows best **player** (three-initial) scores for day / week / month / all-time — the classic arcade high-score board. Auto-refresh by **polling the API every few seconds** (or SSE from the Node backend) — no realtime service needed. Runs on any browser or TV stick. Low effort because P1 already stored the data. (Group leaderboard slots in here once the group tag ships.)
+**Phase 2 — Leaderboard.** A `/leaderboard` route. Reads persisted rounds/scores; shows best **player** (three-initial) scores for day / week / month / all-time — the classic arcade high-score board. Auto-refresh by **polling the API every few seconds** (or SSE from the Node backend) — no realtime service needed. Runs on any browser. Low effort because P1 already stored the data. (Group leaderboard slots in here once the group tag ships.)
 
 **Phase 3 — AI scavenger hunt.** Photo capture (native camera via Capacitor is much better here) → vision model verifies the target item is present → track findings per group. Must-address before committing: per-image vision cost at volume; **content moderation** (public, possibly minors); anti-cheat (photo-of-a-photo); fixed vs rotating item lists (fixed is far simpler). Photos stored on **droplet disk or DO Spaces** (S3-compatible); the Node API proxies the vision calls to keep the API key server-side.
 

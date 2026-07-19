@@ -23,7 +23,7 @@ Built to the spec in [`mini-golf-app-plan.md`](./mini-golf-app-plan.md). This is
   offline; nothing is duplicated on retry.
 - **Backend API** (`server/`) — Node/Express + Postgres. All DB writes go
   through it (creds server-side); it re-validates every input. Also serves a
-  leaderboard query (Phase 2 preview at `/tv`).
+  leaderboard query (viewable at `/leaderboard`).
 
 ## Phase 3 — AI scavenger hunt (`/hunt`)
 
@@ -116,6 +116,5 @@ Routine updates: `ffc deploy`. Full runbook in [`DEPLOY.md`](./DEPLOY.md).
 
 - **Par values** are random 2–4 placeholders until real course pars are supplied.
 - **Map art** is generated placeholder SVGs until real maps exist.
-- **Group tag / leaderboard**, **TV board**, **AI scavenger hunt**, and
-  **native + IoT** are Phases 2–4 — the data model reserves space for them so
-  they're additive (see the plan's §9 / §11).
+- **Group tag / group leaderboard** and **native + IoT** are later phases — the
+  data model reserves space for them so they're additive (see the plan's §9 / §11).

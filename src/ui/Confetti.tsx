@@ -90,8 +90,8 @@ export default function Confetti({ fire = true }: { fire?: boolean }) {
     window.addEventListener('resize', resize);
 
     // Fire both cannons from just INSIDE the bottom corners, not the literal
-    // corners: overscanned/overscaled screens (a TV on the /tv board, kiosk
-    // displays) crop the edges, so launching from (0,H)/(W,H) puts the densest
+    // corners: overscanned/overscaled screens (big displays showing the
+    // leaderboard, kiosks) crop the edges, so launching from (0,H)/(W,H) puts the densest
     // burst in the cropped-off region and reads as "no confetti". Insetting keeps
     // the launch points on the visible panel.
     const mx = Math.round(W * 0.08); // horizontal inset from each side
