@@ -86,7 +86,13 @@ export default function Summary() {
   const tied = winnerIdx.length > 1;
   const ranked = round.playerTags
     .map((tag, p) => ({ tag, p, total: playerTotal(round.scores[p] ?? []) }))
-    .sort((a, b) => a.total - b.total);
+    .sort((a, b) => a.total - b.total)
+    .map((row, i) => ({ ...row, rank: i + 1 }));
+  // Winner(s) get the hero card; everyone else fills the standings below — so
+  // the winner is celebrated once, not repeated as a plain row.
+  const heroRows = ranked.filter((row) => winnerSet.has(row.p));
+  const restRows = ranked.filter((row) => !winnerSet.has(row.p));
+  const heroDiff = heroRows[0].total - par;
 
   return (
     <CourseTheme theme={course.theme} accent={course.accent}>
@@ -99,47 +105,71 @@ export default function Summary() {
           <div className="mt-1 text-xs text-fairway-100/70">Par {par}</div>
         </div>
 
-        {/* Standings — the winner is celebrated in place as the top row rather
-            than in a separate banner, so no name is shown twice. */}
-        <div className="mb-6 space-y-2">
-          {ranked.map((row, rank) => {
-            const diff = row.total - par;
-            const isWinner = winnerSet.has(row.p);
-            return (
-              <div
-                key={row.p}
-                style={{ '--i': rank } as CSSProperties}
-                className={`animate-rise-in flex items-center justify-between rounded-xl border px-4 py-3 ${
-                  isWinner
-                    ? 'border-fairway-500/60 bg-fairway-800/50'
-                    : 'border-fairway-800 bg-fairway-900/40'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 text-center font-mono text-sm text-fairway-100/70">
-                    {isWinner ? (
-                      <span className="animate-trophy-pop inline-block text-lg">🏆</span>
-                    ) : (
-                      rank + 1
-                    )}
-                  </span>
-                  <span className="font-arcade text-xl font-bold" style={{ color: ink }}>
-                    {row.tag}
-                  </span>
-                  {isWinner && (
-                    <span className="rounded-full bg-fairway-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fairway-300">
-                      {tied ? 'Tied' : 'Winner'}
-                    </span>
-                  )}
-                </div>
-                <div className="text-right">
-                  <span className="text-xl font-black text-fairway-50">{row.total}</span>
-                  <span className="ml-2 text-sm text-fairway-100/70">{formatOverUnder(diff)}</span>
-                </div>
-              </div>
-            );
-          })}
+        {/* Winner hero — the champion's spotlight. Named once here, then the
+            rest of the field follows below, so no tag is shown twice. */}
+        <div
+          className="animate-rise-in relative mb-6 overflow-hidden rounded-3xl border border-fairway-500/40 bg-fairway-900/60 p-6 text-center"
+          style={{ '--i': 0 } as CSSProperties}
+        >
+          {/* Accent spotlight behind the trophy, in the course's own color. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-40"
+            style={{
+              background: `radial-gradient(80% 100% at 50% 0%, ${course.accent}40, transparent 70%)`,
+            }}
+          />
+          <div className="relative">
+            <div className="animate-trophy-pop text-6xl leading-none">🏆</div>
+            <div className="mt-3 text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
+              {tied ? 'Tied for the win' : 'Winner'}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+              {heroRows.map((row) => (
+                <span
+                  key={row.p}
+                  className="font-arcade text-4xl font-black"
+                  style={{ color: ink }}
+                >
+                  {row.tag}
+                </span>
+              ))}
+            </div>
+            <div className="mt-2 text-sm text-fairway-100/70">
+              <span className="text-lg font-black text-fairway-50">{heroRows[0].total}</span>
+              <span className="ml-2">{formatOverUnder(heroDiff)}</span>
+            </div>
+          </div>
         </div>
+
+        {/* The rest of the field. */}
+        {restRows.length > 0 && (
+          <div className="mb-6 space-y-2">
+            {restRows.map((row) => {
+              const diff = row.total - par;
+              return (
+                <div
+                  key={row.p}
+                  style={{ '--i': row.rank } as CSSProperties}
+                  className="animate-rise-in flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-4 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-5 text-center font-mono text-sm text-fairway-100/70">
+                      {row.rank}
+                    </span>
+                    <span className="font-arcade text-xl font-bold" style={{ color: ink }}>
+                      {row.tag}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl font-black text-fairway-50">{row.total}</span>
+                    <span className="ml-2 text-sm text-fairway-100/70">{formatOverUnder(diff)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Hole-by-hole grid — split into front/back nines so 18 columns don't
             overflow and scroll on a phone. Each nine is 9 holes + a label
