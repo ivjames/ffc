@@ -29,6 +29,7 @@ import { UpdateModal } from './ui/UpdateModal';
 import SoundToggle from './ui/SoundToggle';
 import ThemeToggle from './ui/ThemeToggle';
 import SkinPicker from './ui/SkinPicker';
+import RotateNudge from './ui/RotateNudge';
 
 // §7 Routes / screens.
 export default function App() {
@@ -91,6 +92,10 @@ export default function App() {
       {/* Blocking prompt when a deploy lands while the app is open on a stale
           cached bundle — reloads onto the fresh build. */}
       <UpdateModal />
+
+      {/* Every screen is portrait-first — nudge phones back to vertical when
+          held sideways. */}
+      <RotateNudge />
     </>
   );
 }
