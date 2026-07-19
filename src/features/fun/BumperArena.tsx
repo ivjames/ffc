@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { playStroke, playFanfare } from '../../lib/sound';
+import { playBump, playWaterBump, playScore, playFanfare } from '../../lib/sound';
 
 // §12 Bumper arena — the shared engine behind Bumper Cars and Bumper Boats.
 // Drive with a floating joystick and ram the other units; land as many solid
@@ -235,8 +235,9 @@ function step(gs: GS, now: number, theme: BumperTheme) {
         b.vx += jimp * nx;
         b.vy += jimp * ny;
       }
-      // A hard enough hit throws up FX at the contact point: a splash for boats,
-      // a spark burst for cars.
+      // A hard enough hit throws up FX at the contact point (a splash for boats,
+      // a spark burst for cars) and plays a themed bump sound scaled by the
+      // closing speed, throttled so a pile-up doesn't machine-gun the audio.
       if (closing > theme.bumpSpeed) {
         const cx = a.x + nx * UNIT_R;
         const cy = a.y + ny * UNIT_R;
@@ -247,6 +248,12 @@ function step(gs: GS, now: number, theme: BumperTheme) {
           gs.lastSpark = now;
           spawnSparks(gs, cx, cy, now, closing);
         }
+        if (now - gs.lastSound > 70) {
+          gs.lastSound = now;
+          const intensity = Math.min(1.4, 0.5 + closing * 0.13);
+          if (theme.kind === 'boat') playWaterBump(intensity);
+          else playBump(intensity);
+        }
       }
       // Scoring: player (index 0) drives into an AI hard enough.
       if (i === 0 && closing > theme.bumpSpeed) {
@@ -254,10 +261,8 @@ function step(gs: GS, now: number, theme: BumperTheme) {
         if (playerIntoAi > 0.4 && now - gs.lastBump[aiIdx] > BUMP_COOLDOWN) {
           gs.score += 1;
           gs.lastBump[aiIdx] = now;
-          if (now - gs.lastSound > 60) {
-            playStroke();
-            gs.lastSound = now;
-          }
+          // Bright accent on top of the bump thud so a scoring hit stands out.
+          playScore();
         }
       }
     }
