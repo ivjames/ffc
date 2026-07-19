@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { Screen, TopBar, Content, Button, TagChip } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
 import { accentInk } from '../../lib/theme';
 import { courseById } from '../../data/courses';
@@ -255,11 +255,11 @@ export default function Scorecard() {
                   setHole(h);
                   setShowJump(false);
                 }}
-                className={`rounded-lg py-2 text-sm font-bold ${
+                className={`rounded-xl py-2 text-sm font-bold transition-transform active:translate-y-px ${
                   h === hole
-                    ? 'bg-fairway-700 text-fairway-50'
+                    ? 'btn-accent text-fairway-50'
                     : done
-                      ? 'bg-fairway-800 text-fairway-200'
+                      ? 'surface-1 text-fairway-200'
                       : 'border border-fairway-700 text-fairway-300'
                 }`}
               >
@@ -290,11 +290,16 @@ export default function Scorecard() {
               </>
             )}
           </div>
-          <div className="text-right">
+          <div className="flex flex-col items-center gap-1">
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
               Par
             </div>
-            <div className="text-4xl font-black" style={{ color: ink }}>
+            {/* Par medallion — a raised disc so the target reads as a physical
+                token rather than a loose number. */}
+            <div
+              className="surface-1 flex h-14 w-14 items-center justify-center rounded-full text-3xl font-black"
+              style={{ color: ink }}
+            >
               {par}
             </div>
           </div>
@@ -307,32 +312,29 @@ export default function Scorecard() {
             return (
               <div
                 key={p}
-                className="rounded-2xl border border-fairway-800 bg-fairway-900/40 p-3"
+                className="surface rounded-3xl border border-fairway-800/60 p-4"
               >
-                <div className="mb-2 flex items-center justify-between">
-                  <span
-                    className="font-arcade text-xl font-bold"
-                    style={{ color: ink }}
-                  >
-                    {tag}
-                  </span>
+                <div className="mb-2.5 flex items-center justify-between">
+                  <TagChip tag={tag} color={course.accent} />
                 </div>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => bump(p, -1)}
                     disabled={autoPlaying || strokes == null || strokes <= 1}
-                    className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 transition duration-150 ease-[cubic-bezier(0.22,1.4,0.36,1)] active:scale-90 active:bg-fairway-800 disabled:opacity-30 disabled:active:scale-100"
+                    className="key flex h-14 w-14 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
                     aria-label={`Decrease strokes for ${tag}`}
                   >
                     −
                   </button>
-                  <div className="flex-1 text-center">
+                  {/* The count sits in a carved well so it reads as a recessed
+                      readout between the two raised keys. */}
+                  <div className="surface-sunk flex h-14 flex-1 items-center justify-center rounded-2xl">
                     {/* Keyed on a per-player nonce that only changes on a real
                         stroke edit, so the punch fires on +/− but not when
                         navigating between holes. */}
                     <span
                       key={pops[p] ?? 0}
-                      className="inline-block text-4xl font-black text-fairway-50 animate-score-punch"
+                      className="animate-score-punch inline-block text-4xl font-black text-fairway-50"
                     >
                       {strokes ?? '–'}
                     </span>
@@ -342,7 +344,7 @@ export default function Scorecard() {
                     disabled={
                       autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
                     }
-                    className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 transition duration-150 ease-[cubic-bezier(0.22,1.4,0.36,1)] active:scale-90 active:bg-fairway-800 disabled:opacity-30 disabled:active:scale-100"
+                    className="key flex h-14 w-14 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
                     aria-label={`Increase strokes for ${tag}`}
                   >
                     +

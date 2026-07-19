@@ -56,6 +56,20 @@
   /* Interactive/brand accent (buttons). House green on un-themed hub screens;
      CourseTheme overrides it to the course accent. */
   --accent: #22c55e;
+
+  /* —— Depth system (dark) ————————————————————————————————————————————————
+     Layered elevation shadows + a top "bevel" highlight give flat surfaces
+     real physical relief. Dark mode leans on darker, cast shadows; the bevel
+     is a faint white top edge that reads as a lit lip. The surface pair is the
+     gradient a raised card is painted with (top lighter → bottom darker). */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
+  --elev-2: 0 2px 5px rgba(0, 0, 0, 0.4), 0 10px 22px -8px rgba(0, 0, 0, 0.6);
+  --elev-3: 0 4px 10px rgba(0, 0, 0, 0.45), 0 22px 48px -12px rgba(0, 0, 0, 0.7);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --bevel-strong: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --sink: inset 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(0, 0, 0, 0.3);
+  --surface-hi: color-mix(in srgb, var(--color-fairway-800), white 4%);
+  --surface-lo: var(--color-fairway-950);
 }
 
 /* Light — light-grey base; feature colors darken to stay legible on light. */
@@ -81,6 +95,20 @@
   --score-under: #0a7a40;
   --score-over: #a34a08;
   --accent: #1f9d55;
+
+  /* —— Depth system (light) ——————————————————————————————————————————————
+     Light mode reads depth from soft blue-grey cast shadows (never pure black,
+     which muddies a bright UI) and a crisp near-white bevel. Because the
+     fairway ramp inverts in light mode, the surface pair still goes light-top →
+     slightly-darker-bottom for the same raised read. */
+  --elev-1: 0 1px 2px rgba(30, 41, 59, 0.08), 0 2px 6px -2px rgba(30, 41, 59, 0.12);
+  --elev-2: 0 2px 5px rgba(30, 41, 59, 0.08), 0 10px 22px -8px rgba(30, 41, 59, 0.16);
+  --elev-3: 0 4px 10px rgba(30, 41, 59, 0.1), 0 22px 48px -12px rgba(30, 41, 59, 0.22);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --bevel-strong: inset 0 1px 0 rgba(255, 255, 255, 1);
+  --sink: inset 0 2px 5px rgba(30, 41, 59, 0.14), inset 0 1px 0 rgba(30, 41, 59, 0.06);
+  --surface-hi: #ffffff;
+  --surface-lo: color-mix(in srgb, var(--color-fairway-900), #0f172a 6%);
 }
 
 /* Per-course surface tint — a subtle wash of the course accent (set as
@@ -97,22 +125,124 @@
   --accent: var(--course-accent);
 }
 
-/* Primary button fill — mostly neutral with a wash of the interactive accent,
-   kept light enough (18%) that fairway-50 text stays WCAG-AA in both modes. */
+/* Primary button — a physical "candy key". A vertical accent-washed gradient
+   (lighter top → darker bottom) gives it a rounded, lit body; a solid colored
+   LIP below (`0 4px 0`) makes it stand proud of the page like a real button;
+   the bevel is its glossy top edge. The average fill stays at the AA-verified
+   ~18% accent wash so fairway-50 text is legible in both modes — the gradient
+   only redistributes that around the mean, it doesn't lighten it. Press drops
+   the key onto its lip (translateY + a thinner lip), so it visibly depresses. */
 .btn-accent {
-  background: color-mix(in srgb, var(--gray-700), var(--accent) 18%);
-  /* A hairline of the live accent up top + a soft accent glow beneath give the
-     primary action a lit, pressable "candy" feel without touching contrast. */
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gray-600), var(--accent) 18%),
+    color-mix(in srgb, var(--gray-800), var(--accent) 18%)
+  );
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, transparent, var(--accent) 55%),
-    0 6px 18px -8px color-mix(in srgb, transparent, var(--accent) 70%);
+    var(--bevel-strong),
+    0 4px 0 color-mix(in srgb, black, var(--accent) 45%),
+    var(--elev-2);
+  transition:
+    transform 0.09s ease,
+    box-shadow 0.09s ease;
 }
 .btn-accent:active {
-  background: color-mix(in srgb, var(--gray-800), var(--accent) 18%);
-  /* Press collapses the glow so the button reads as physically pushed in. */
+  transform: translateY(3px);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, transparent, var(--accent) 35%),
-    0 1px 4px -3px color-mix(in srgb, transparent, var(--accent) 60%);
+    var(--bevel),
+    0 1px 0 color-mix(in srgb, black, var(--accent) 45%),
+    var(--elev-1);
+}
+
+/* Danger key — same physical candy build as the primary, in a warning red so
+   destructive actions still read as a pressable object, not a flat swatch. */
+.btn-danger {
+  background-image: linear-gradient(180deg, #f2635b, #d5372e);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 4px 0 #8f1d17,
+    var(--elev-2);
+  transition:
+    transform 0.09s ease,
+    box-shadow 0.09s ease;
+}
+.btn-danger:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 1px 0 #8f1d17,
+    var(--elev-1);
+}
+
+/* —— Dimensional surfaces —————————————————————————————————————————————————
+   Reusable material treatments so any card/panel reads as a raised or recessed
+   physical object rather than a flat fill. Colors come from the mode-aware
+   depth tokens above, so both light and dark get correct relief for free. */
+
+/* A raised card: gradient body (lit top → shaded bottom), glossy top bevel, and
+   an ambient cast shadow. Drop-in for `bg-fairway-900/40` panels. */
+.surface {
+  background-image: linear-gradient(180deg, var(--surface-hi), var(--surface-lo));
+  box-shadow: var(--bevel), var(--elev-2);
+}
+
+/* A flatter raised tile — subtler lift for dense grids (hole jumper, chips). */
+.surface-1 {
+  background-image: linear-gradient(180deg, var(--surface-hi), var(--surface-lo));
+  box-shadow: var(--bevel), var(--elev-1);
+}
+
+/* A recessed well — content sits DOWN in the page (score readouts, the
+   stepper's number slot). The inner shadow reads as a carved pocket. */
+.surface-sunk {
+  background-color: var(--surface-lo);
+  box-shadow: var(--sink);
+}
+
+/* A tactile stepper/round key — a small raised button with a short lip that
+   depresses on press. Neutral cousin of `.btn-accent` for +/- controls. */
+.key {
+  background-image: linear-gradient(180deg, var(--surface-hi), var(--surface-lo));
+  box-shadow:
+    var(--bevel-strong),
+    0 3px 0 var(--color-fairway-950),
+    var(--elev-1);
+  transition:
+    transform 0.08s ease,
+    box-shadow 0.08s ease;
+}
+.key:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow:
+    var(--bevel),
+    0 1px 0 var(--color-fairway-950),
+    var(--elev-1);
+}
+
+/* A course tile — a raised candy key colored by its course. Set `--tile-accent`
+   (the course hex) inline; the gradient body and the 3D lip below both derive
+   from it, and it depresses onto its lip on press. Text stays `fairway-50`
+   (mode-aware: dark on the light-mode tile, light on the dark-mode tile). */
+.tile {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-fairway-900), var(--tile-accent) 30%),
+    color-mix(in srgb, var(--color-fairway-950), var(--tile-accent) 16%)
+  );
+  box-shadow:
+    var(--bevel-strong),
+    0 5px 0 color-mix(in srgb, black, var(--tile-accent) 42%),
+    var(--elev-2);
+  transition:
+    transform 0.09s ease,
+    box-shadow 0.09s ease;
+}
+.tile:active {
+  transform: translateY(4px);
+  box-shadow:
+    var(--bevel),
+    0 1px 0 color-mix(in srgb, black, var(--tile-accent) 42%),
+    var(--elev-1);
 }
 
 /* Sheen — a diagonal glint that sweeps once across a surface. Layered on the
@@ -161,7 +291,22 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-fairway-950);
+  /* Depth from the background up: a soft overhead glow at the top fades into a
+     slightly darker floor at the bottom, so the flat page reads as a lit space
+     the raised cards sit inside rather than a single dead grey. Kept very low
+     contrast so text over it is unaffected. Fixed so it doesn't scroll away. */
+  background:
+    radial-gradient(
+      130% 60% at 50% -10%,
+      color-mix(in srgb, var(--color-fairway-950), white 6%),
+      transparent 60%
+    ),
+    linear-gradient(
+      180deg,
+      var(--color-fairway-950),
+      color-mix(in srgb, var(--color-fairway-950), black 12%)
+    );
+  background-attachment: fixed;
   color: var(--color-fairway-50);
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* Respect device safe areas (notches) since we run full-screen as a PWA */

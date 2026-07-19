@@ -119,7 +119,7 @@ export default function Summary() {
           style={{ '--glow': course.accent } as CSSProperties}
         >
           <div
-            className="animate-pop-in relative overflow-hidden rounded-3xl border border-fairway-500/40 bg-fairway-900/60 p-6 text-center"
+            className="surface animate-pop-in relative overflow-hidden rounded-3xl border border-fairway-500/40 p-6 text-center"
             style={{ '--i': 0 } as CSSProperties}
           >
             {/* Accent spotlight behind the trophy, in the course's own color. */}
@@ -163,7 +163,7 @@ export default function Summary() {
                 <div
                   key={row.p}
                   style={{ '--i': row.rank } as CSSProperties}
-                  className="animate-rise-in flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-4 py-3"
+                  className="surface-1 animate-rise-in flex items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-3"
                 >
                   <div className="flex items-center gap-3">
                     <span className="w-5 text-center font-mono text-sm text-fairway-100/70">
@@ -238,7 +238,7 @@ function NineGrid({
   const holes = Array.from({ length: 9 }, (_, i) => start + i);
   const ink = accentInk(course.theme);
   return (
-    <div className="overflow-hidden rounded-xl border border-fairway-800">
+    <div className="surface-1 overflow-hidden rounded-2xl border border-fairway-800/60">
       {/* Fixed layout so columns are sized by these widths, not their content.
           Otherwise the back nine's two-digit hole numbers (10–18) and varying
           scores make its columns wider than the front nine's, so the two tables
