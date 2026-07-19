@@ -245,6 +245,20 @@
     var(--elev-1);
 }
 
+/* Disabled raised controls must read as flat and inert. These surface/key/button
+   classes are UNLAYERED, so they outrank Tailwind's layered `disabled:shadow-none`
+   utility no matter its specificity — a disabled Start/Finish/± would otherwise
+   keep its lip + elevation and still look pressable. Strip the relief explicitly
+   (the `disabled:opacity-40` utility then dims the flat face). */
+.btn-accent:disabled,
+.btn-danger:disabled,
+.key:disabled,
+.surface:disabled,
+.surface-1:disabled {
+  box-shadow: none;
+  transform: none;
+}
+
 /* Sheen — a diagonal glint that sweeps once across a surface. Layered on the
    primary button (::after) as a one-shot on mount so the main action "catches
    the light" when a screen assembles. Purely decorative; dropped under reduced
