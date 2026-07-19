@@ -169,7 +169,7 @@ export default function Summary() {
                 <div
                   key={row.p}
                   style={{ '--i': row.rank } as CSSProperties}
-                  className="surface-1 animate-rise-in flex items-center gap-4 rounded-2xl border border-fairway-800/60 px-5 py-3"
+                  className="surface-1 animate-rise-in flex items-baseline gap-4 rounded-2xl border border-fairway-800/60 px-5 py-3"
                 >
                   {/* Same three zones and column widths as the hero — place
                       left, tag centered, score right — so the columns line up
