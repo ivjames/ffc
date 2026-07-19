@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { playStroke, playFanfare } from '../../lib/sound';
+import { playBump, playWaterBump, playScore, playFanfare } from '../../lib/sound';
 
 // §12 Bumper arena — the shared engine behind Bumper Cars and Bumper Boats.
 // Drive with a floating joystick and ram the other units; land as many solid
@@ -31,6 +31,10 @@ const RIPPLE_LIFE = 1300; // ms a wake ripple lingers (long trail)
 const RIPPLE_MIN_SPEED = 0.8; // boat must be moving this fast to leave a wake
 const SPLASH_LIFE = 560; // ms a splash droplet lives
 const SPLASH_MIN_GAP = 55; // ms throttle between splash bursts
+
+// Car-only bump FX.
+const SPARK_LIFE = 340; // ms a bump spark lives (quick pop)
+const SPARK_MIN_GAP = 45; // ms throttle between spark bursts
 
 /** Per-game skin + handling. Everything that differs between cars and boats. */
 export type BumperTheme = {
@@ -63,6 +67,7 @@ type Unit = {
 };
 type Ripple = { x: number; y: number; born: number }; // expanding wake ring
 type Splash = { x: number; y: number; vx: number; vy: number; born: number }; // droplet
+type Spark = { x: number; y: number; vx: number; vy: number; born: number }; // bump spark
 type Joystick = { active: boolean; ox: number; oy: number; kx: number; ky: number };
 type Phase = 'play' | 'done';
 type GS = {
@@ -76,6 +81,8 @@ type GS = {
   ripples: Ripple[]; // boat wake trail
   splashes: Splash[]; // droplets thrown up by a bump
   lastSplash: number; // throttle for splash bursts
+  sparks: Spark[]; // sparks flung out by a car bump
+  lastSpark: number; // throttle for spark bursts
 };
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
@@ -115,6 +122,8 @@ function freshGS(theme: BumperTheme): GS {
     ripples: [],
     splashes: [],
     lastSplash: -1e9,
+    sparks: [],
+    lastSpark: -1e9,
   };
 }
 
@@ -226,10 +235,25 @@ function step(gs: GS, now: number, theme: BumperTheme) {
         b.vx += jimp * nx;
         b.vy += jimp * ny;
       }
-      // A hard enough hit throws up a splash at the contact point (boats only).
-      if (theme.kind === 'boat' && closing > theme.bumpSpeed && now - gs.lastSplash > SPLASH_MIN_GAP) {
-        gs.lastSplash = now;
-        spawnSplash(gs, a.x + nx * UNIT_R, a.y + ny * UNIT_R, now, closing);
+      // A hard enough hit throws up FX at the contact point (a splash for boats,
+      // a spark burst for cars) and plays a themed bump sound scaled by the
+      // closing speed, throttled so a pile-up doesn't machine-gun the audio.
+      if (closing > theme.bumpSpeed) {
+        const cx = a.x + nx * UNIT_R;
+        const cy = a.y + ny * UNIT_R;
+        if (theme.kind === 'boat' && now - gs.lastSplash > SPLASH_MIN_GAP) {
+          gs.lastSplash = now;
+          spawnSplash(gs, cx, cy, now, closing);
+        } else if (theme.kind === 'car' && now - gs.lastSpark > SPARK_MIN_GAP) {
+          gs.lastSpark = now;
+          spawnSparks(gs, cx, cy, now, closing);
+        }
+        if (now - gs.lastSound > 70) {
+          gs.lastSound = now;
+          const intensity = Math.min(1.4, 0.5 + closing * 0.13);
+          if (theme.kind === 'boat') playWaterBump(intensity);
+          else playBump(intensity);
+        }
       }
       // Scoring: player (index 0) drives into an AI hard enough.
       if (i === 0 && closing > theme.bumpSpeed) {
@@ -237,10 +261,8 @@ function step(gs: GS, now: number, theme: BumperTheme) {
         if (playerIntoAi > 0.4 && now - gs.lastBump[aiIdx] > BUMP_COOLDOWN) {
           gs.score += 1;
           gs.lastBump[aiIdx] = now;
-          if (now - gs.lastSound > 60) {
-            playStroke();
-            gs.lastSound = now;
-          }
+          // Bright accent on top of the bump thud so a scoring hit stands out.
+          playScore();
         }
       }
     }
@@ -260,7 +282,36 @@ function spawnSplash(gs: GS, x: number, y: number, now: number, closing: number)
   if (gs.splashes.length > 200) gs.splashes.splice(0, gs.splashes.length - 200);
 }
 
+/** Fling a small burst of sparks outward from a car bump's contact point. */
+function spawnSparks(gs: GS, x: number, y: number, now: number, closing: number) {
+  const n = 7;
+  const power = 1.1 + Math.min(closing, 6) * 0.28;
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + Math.random() * 0.7;
+    const spd = power * (0.6 + Math.random() * 0.9);
+    gs.sparks.push({ x, y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, born: now });
+  }
+  // Keep the pool bounded even under heavy contact.
+  if (gs.sparks.length > 200) gs.sparks.splice(0, gs.sparks.length - 200);
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
+/** Trace a 5-pointed star centered at (cx, cy) with the given outer radius. */
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  const inner = r * 0.5;
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const rad = k % 2 === 0 ? r : inner;
+    // Start at the top point (-90°) and step every 36°.
+    const a = -Math.PI / 2 + (k * Math.PI) / 5;
+    const x = cx + Math.cos(a) * rad;
+    const y = cy + Math.sin(a) * rad;
+    if (k === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
 function drawUnit(ctx: CanvasRenderingContext2D, c: Unit, isPlayer: boolean, theme: BumperTheme) {
   const speed = Math.hypot(c.vx, c.vy);
   const nx = speed > 0.3 ? c.vx / speed : 0;
@@ -294,6 +345,16 @@ function drawUnit(ctx: CanvasRenderingContext2D, c: Unit, isPlayer: boolean, the
     ctx.arc(c.x + nx * (UNIT_R - 6), c.y + ny * (UNIT_R - 6), 4, 0, Math.PI * 2);
     ctx.fillStyle = '#0b0f14';
     ctx.fill();
+  }
+
+  // Yellow star centered on the active player so it's easy to spot.
+  if (isPlayer) {
+    starPath(ctx, c.x, c.y, UNIT_R - 11);
+    ctx.fillStyle = '#facc15';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#78350f';
+    ctx.stroke();
   }
 }
 
@@ -374,6 +435,22 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
     ctx.globalAlpha = 1;
   }
 
+  // Spark burst thrown off by car bumps, drawn over the cars.
+  if (theme.kind === 'car') {
+    for (const s of gs.sparks) {
+      const age = now - s.born;
+      if (age < 0 || age > SPARK_LIFE) continue;
+      const t = age / SPARK_LIFE;
+      // Sparks fade warm from white to amber as they fly out and shrink.
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = t < 0.4 ? '#fef9c3' : '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(s.x + s.vx * age * 0.06, s.y + s.vy * age * 0.06, 2.4 * (1 - t) + 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // Joystick.
   if (gs.joy.active) {
     const kx = clamp(gs.joy.kx, gs.joy.ox - JOY_MAX, gs.joy.ox + JOY_MAX);
@@ -433,10 +510,12 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
         acc -= FIXED;
       }
 
-      // Age out water FX so the pools stay small.
+      // Age out FX so the pools stay small.
       if (theme.kind === 'boat') {
         if (gs.ripples.length) gs.ripples = gs.ripples.filter((r) => now - r.born <= RIPPLE_LIFE);
         if (gs.splashes.length) gs.splashes = gs.splashes.filter((s) => now - s.born <= SPLASH_LIFE);
+      } else if (theme.kind === 'car') {
+        if (gs.sparks.length) gs.sparks = gs.sparks.filter((s) => now - s.born <= SPARK_LIFE);
       }
 
       if (gs.score !== pushedScore) {

@@ -172,6 +172,27 @@ export function playTick(): void {
   noise({ dur: 0.02, gain: 0.06, freq: 3200 });
 }
 
+/** Rubbery fender thud when bumper cars collide. `intensity` (~0.5–1.4)
+ *  scales the loudness with the closing speed of the hit. */
+export function playBump(intensity = 1): void {
+  const g = Math.min(0.24, 0.12 * intensity);
+  tone({ type: 'sine', freq: 150, freqEnd: 68, dur: 0.13, gain: g });
+  noise({ dur: 0.04, gain: g * 0.5, freq: 520 });
+}
+
+/** Watery plunk when bumper boats collide. `intensity` (~0.5–1.4) scales the
+ *  loudness with the closing speed of the hit. */
+export function playWaterBump(intensity = 1): void {
+  const g = Math.min(0.2, 0.1 * intensity);
+  tone({ type: 'sine', freq: 260, freqEnd: 150, dur: 0.14, gain: g });
+  noise({ dur: 0.13, gain: g * 0.7, freq: 1300 });
+}
+
+/** Bright little "bip" accent layered on a bump that scores. */
+export function playScore(): void {
+  tone({ type: 'triangle', freq: 880, freqEnd: 1174.7, dur: 0.09, gain: 0.12 });
+}
+
 /** Triumphant little fanfare for the final scorecard. */
 export function playFanfare(): void {
   // Ascending arpeggio into a held chord — C5 E5 G5 C6, then C-major triad.
