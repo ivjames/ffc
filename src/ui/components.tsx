@@ -37,19 +37,24 @@ export function TopBar({
     // scroll; offsetting by env(safe-area-inset-top) locks it just below the
     // notch. The area above stays covered by the body's safe-area padding.
     <header
-      style={{ top: 'env(safe-area-inset-top)' }}
-      className="sticky z-10 flex items-center gap-2 border-b border-fairway-800/60 bg-fairway-950/90 px-3 py-3 backdrop-blur"
+      style={{
+        top: 'env(safe-area-inset-top)',
+        backgroundImage:
+          'linear-gradient(180deg, color-mix(in srgb, var(--color-fairway-900), transparent 12%), color-mix(in srgb, var(--color-fairway-950), transparent 12%))',
+        boxShadow: '0 2px 12px -2px rgba(0,0,0,0.35), var(--bevel)',
+      }}
+      className="sticky z-10 flex items-center gap-2 border-b border-fairway-800/60 px-3 py-3 backdrop-blur"
     >
       {back !== undefined && (
         <button
           onClick={() => (typeof back === 'number' ? navigate(back) : navigate(back))}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-fairway-100 active:bg-fairway-800"
+          className="key flex h-10 w-10 items-center justify-center rounded-xl text-fairway-100"
           aria-label="Back"
         >
           <span className="text-2xl leading-none">‹</span>
         </button>
       )}
-      <h1 className="flex-1 truncate text-lg font-bold text-fairway-50">{title}</h1>
+      <h1 className="flex-1 truncate text-lg font-black tracking-tight text-fairway-50">{title}</h1>
       {right}
     </header>
   );
@@ -79,17 +84,20 @@ export function Button({
   className = '',
   sound = 'click',
 }: ButtonProps) {
-  // A springy press: the button dips a bit further on tap and rides back on a
-  // slight overshoot ease, so every press feels physical. `duration-150` keeps
-  // the rebound quick enough not to lag the tap.
+  // Chunky, physical keys. The primary/danger variants carry their own 3D lip
+  // and depress on press (translateY, driven by `.btn-accent`/`.btn-danger` in
+  // index.css); the ghost variant is a subtler raised surface that dips a pixel.
+  // Extra bottom padding leaves room for each key's lip so the label stays
+  // centered in the visible face.
   const base =
-    'flex w-full items-center justify-center rounded-xl px-4 py-3 text-base font-semibold transition duration-150 ease-[cubic-bezier(0.22,1.4,0.36,1)] active:scale-[0.96] disabled:opacity-40 disabled:active:scale-100';
+    'flex w-full items-center justify-center rounded-2xl px-4 pb-4 pt-3.5 text-base font-bold transition disabled:opacity-40 disabled:shadow-none disabled:active:translate-y-0';
   const variants = {
     // The primary action also catches a one-shot light sweep on mount (btn-sheen)
     // so it reads as the lit, tappable "candy" element on the screen.
     primary: 'btn-accent btn-sheen text-fairway-50',
-    ghost: 'border border-fairway-700 bg-fairway-900/40 text-fairway-50 active:bg-fairway-800',
-    danger: 'bg-red-500/90 text-white active:bg-red-500',
+    ghost:
+      'surface-1 border border-fairway-700/70 text-fairway-50 transition-transform active:translate-y-px active:brightness-95',
+    danger: 'btn-danger text-white',
   };
   return (
     <button
@@ -106,18 +114,20 @@ export function Button({
   );
 }
 
-/** Arcade-style 3-char tag chip. A glossy top highlight + soft drop give it a
- *  tactile, candy-button read against the neutral chrome. */
+/** Arcade-style 3-char tag chip. A vertical gradient body, glossy top highlight,
+ *  inner shade and a soft drop make it a rounded candy pill that stands off the
+ *  neutral chrome. */
 export function TagChip({ tag, color }: { tag: string; color?: string }) {
+  const base = color ?? '#166534';
   return (
     <span
-      className="font-arcade inline-flex items-center rounded-md px-2 py-1 text-lg font-bold"
+      className="font-arcade inline-flex items-center rounded-lg px-2.5 py-1 text-lg font-bold"
       style={{
-        background: color ?? '#166534',
+        backgroundImage: `linear-gradient(180deg, color-mix(in srgb, ${base}, white 20%), ${base})`,
         color: '#f0fdf4',
         boxShadow:
-          'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 4px rgba(0,0,0,0.22), 0 1px 2px rgba(0,0,0,0.25)',
-        textShadow: '0 1px 1px rgba(0,0,0,0.35)',
+          'inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -2px 4px rgba(0,0,0,0.28), 0 2px 4px -1px rgba(0,0,0,0.4)',
+        textShadow: '0 1px 1px rgba(0,0,0,0.4)',
       }}
     >
       {tag || '···'}

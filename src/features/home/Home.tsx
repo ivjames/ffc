@@ -64,7 +64,7 @@ export default function Home() {
         <div className="mb-3">
           <button
             onClick={() => navigate('/locations')}
-            className="flex w-full items-center justify-between rounded-2xl border border-fairway-800 bg-fairway-900/40 px-4 py-2.5 text-left active:bg-fairway-800/60"
+            className="surface-1 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-2.5 text-left transition-transform active:translate-y-px"
           >
             <span className="flex items-center gap-2">
               <span className="text-lg">📍</span>
@@ -87,7 +87,7 @@ export default function Home() {
               playCup();
               navigate(`/play/${resume.clientId}`);
             }}
-            className="animate-glow-pulse mb-3 w-full rounded-2xl border border-fairway-500/40 bg-fairway-900/60 p-3 text-left transition active:scale-[0.98] active:bg-fairway-800/60"
+            className="surface animate-glow-pulse mb-3 w-full rounded-2xl border border-fairway-500/40 p-3.5 text-left transition-transform active:translate-y-px"
             style={{ '--glow': resumeCourse.accent } as CSSProperties}
           >
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
@@ -120,26 +120,23 @@ export default function Home() {
                   playClick();
                   navigate(`/courses/${c.id}/map`);
                 }}
-                className="animate-pop-in group flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition duration-150 ease-[cubic-bezier(0.22,1.4,0.36,1)] active:scale-95"
-                style={{
-                  '--i': i,
-                  background: `${c.accent}22`,
-                  borderColor: `${c.accent}66`,
-                  // A soft accent glow beneath each tile so the grid reads as a
-                  // row of lit, pressable buttons rather than flat swatches.
-                  boxShadow: `0 8px 20px -12px ${c.accent}`,
-                } as CSSProperties}
+                className="tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-4 text-center"
+                style={{ '--i': i, '--tile-accent': c.accent } as CSSProperties}
               >
+                {/* Domed emoji puck — a radial highlight + inner shade make the
+                    disc read as a glossy 3D button cap in the course color. */}
                 <span
-                  className="flex h-11 w-11 items-center justify-center rounded-xl text-2xl transition-transform duration-150 group-active:scale-110"
+                  className="flex h-14 w-14 items-center justify-center rounded-full text-3xl transition-transform duration-150 group-active:scale-110"
                   style={{
-                    background: `${c.accent}33`,
-                    boxShadow: `inset 0 1px 0 ${c.accent}99`,
+                    backgroundImage: `radial-gradient(circle at 50% 32%, color-mix(in srgb, ${c.accent}, white 42%), ${c.accent} 78%)`,
+                    boxShadow: `inset 0 1px 2px rgba(255,255,255,0.6), inset 0 -3px 6px rgba(0,0,0,0.3), 0 3px 6px -2px rgba(0,0,0,0.45)`,
                   }}
                 >
-                  {themeEmoji(c.theme)}
+                  <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
+                    {themeEmoji(c.theme)}
+                  </span>
                 </span>
-                <span className="text-sm font-bold leading-tight text-fairway-50">{c.name}</span>
+                <span className="text-sm font-black leading-tight text-fairway-50">{c.name}</span>
               </button>
             ))}
           </div>
