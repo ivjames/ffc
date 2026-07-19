@@ -14,7 +14,7 @@ import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
 // —— Field + physics (logical units; the canvas scales to fit) ————————————————
 const W = 340;
 const H = 560;
-const TRACK_W = 62; // asphalt width
+const TRACK_W = 54; // asphalt width — trimmed a touch so the infield reads and the lane races tighter
 const WALL = 6; // barrier thickness drawn outside each asphalt edge
 const KART_R = 7; // kart collision radius (half its body width)
 const N = 90; // centerline samples per track
