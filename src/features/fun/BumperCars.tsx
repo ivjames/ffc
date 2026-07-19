@@ -11,10 +11,10 @@ const CARS: BumperTheme = {
   remark: (s) =>
     s >= 20 ? 'Demolition champ! 🏆' : s >= 12 ? 'Bumper pro! 🚗' : s >= 6 ? 'Nice driving! 👍' : 'Keep bumping! 🎮',
   friction: 0.975,
-  accel: 0.16,
-  maxSpeed: 5.5,
-  aiAccel: 0.12,
-  aiMax: 4.4,
+  accel: 0.13,
+  maxSpeed: 4.6,
+  aiAccel: 0.1,
+  aiMax: 3.7,
   bumpSpeed: 2.0,
 };
 

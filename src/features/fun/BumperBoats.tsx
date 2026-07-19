@@ -11,15 +11,15 @@ const BOATS: BumperTheme = {
   hint: 'Touch and drag to steer your green boat — ram the others to score bumps.',
   remark: (s) =>
     s >= 20 ? 'Wave wrecker! 🏆' : s >= 12 ? 'Boat boss! 🚤' : s >= 6 ? 'Nice cruising! 👍' : 'Keep bumping! 🎮',
-  // Floatier than the cars: less damping (more glide). A touch more thrust than
-  // before plus a lower bump threshold so scoring on water isn't harder than in
-  // the cars despite the floatier handling.
+  // Floatier than the cars: less damping (more glide). Boats are also slower
+  // than the cars — gentler thrust and lower speed caps — with a lower bump
+  // threshold so scoring on water isn't harder despite the reduced top speed.
   friction: 0.984,
-  accel: 0.16,
-  maxSpeed: 5.4,
-  aiAccel: 0.11,
-  aiMax: 4.2,
-  bumpSpeed: 1.9,
+  accel: 0.1,
+  maxSpeed: 3.7,
+  aiAccel: 0.08,
+  aiMax: 3.0,
+  bumpSpeed: 1.6,
 };
 
 export default function BumperBoats() {
