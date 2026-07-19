@@ -243,17 +243,25 @@ on conflict (course_id, slug) do update
 
 -- Converge from an earlier iteration that seeded these California/classic lists
 -- onto ALL three venues' Blue/Green courses. Now that only Upland is themed, drop
--- those items from the other venues' Blue/Green courses — but ONLY when they have
--- no recorded finds, so this never destroys played data (matches the "migrations
--- must not silently drop played data" rule above). Idempotent: a no-op once clean.
+-- those items from the other venues' Blue/Green courses. Two guards keep this
+-- safe on every migrate: (1) match ONLY the exact slugs that earlier seed created
+-- (the California slugs on the Blue courses, the classic slugs on the Green
+-- courses) so a future venue-specific list with different slugs is never touched;
+-- (2) skip any item with recorded finds, so played data is never dropped (matches
+-- the "migrations must not silently drop played data" rule above). Idempotent.
 delete from hunt_item i
- where i.course_id in (
-   'b1111111-1111-4111-8111-111111111111',  -- Tukwila · Blue
-   'c1111111-1111-4111-8111-111111111111',  -- Wilsonville · Blue
-   'b2222222-2222-4222-8222-222222222222',  -- Tukwila · Green
-   'c2222222-2222-4222-8222-222222222222'   -- Wilsonville · Green
- )
- and not exists (select 1 from hunt_find f where f.item_id = i.id);
+ where not exists (select 1 from hunt_find f where f.item_id = i.id)
+   and (
+     (i.course_id in (
+        'b1111111-1111-4111-8111-111111111111',  -- Tukwila · Blue
+        'c1111111-1111-4111-8111-111111111111'   -- Wilsonville · Blue
+      ) and i.slug in ('golden-gate', 'redwood', 'lighthouse', 'surfboard', 'palm', 'bear-flag', 'poppy'))
+     or
+     (i.course_id in (
+        'b2222222-2222-4222-8222-222222222222',  -- Tukwila · Green
+        'c2222222-2222-4222-8222-222222222222'   -- Wilsonville · Green
+      ) and i.slug in ('windmill', 'loop', 'clown', 'wishing-well', 'castle', 'covered-bridge', 'gnome'))
+   );
 
 -- Backfill: existing finds for an item that is now `countable` must carry the
 -- flag too, so the partial unique index (which excludes countable finds) stops
