@@ -718,7 +718,7 @@ export default function GoKarts() {
       <Content>
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="font-bold text-fairway-50">
-            Lap <span className="text-fairway-100">{Math.min(lap + 1, LAPS)}</span>
+            Lap <span className="text-fairway-100">{Math.min(lap, LAPS)}</span>
             <span className="font-normal text-fairway-400"> / {LAPS}</span>
           </span>
           <span className="text-fairway-300">
