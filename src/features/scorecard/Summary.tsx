@@ -134,11 +134,11 @@ export default function Summary() {
                 right — a compact hero rather than a tall stack. */}
             <div className="relative flex items-center gap-4">
               <div className="animate-trophy-pop shrink-0 text-5xl leading-none">🏆</div>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 text-center">
                 <div className="text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
                   {tied ? 'Tied for the win' : 'Winner'}
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <div className="mt-0.5 flex flex-wrap items-baseline justify-center gap-x-3 gap-y-0.5">
                   {heroRows.map((row) => (
                     <span
                       key={row.p}
