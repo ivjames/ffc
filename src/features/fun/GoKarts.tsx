@@ -124,17 +124,23 @@ const TRACKS: Track[] = [
     x: CX + 108 * Math.cos(t) + 22 * Math.sin(2 * t),
     y: CY + 196 * Math.sin(t),
   })),
-  buildTrack('boomerang', 'Boomerang', 'One big sweeper', (t) => ({
-    x: CX + 104 * Math.cos(t) + 30 * (Math.cos(t) * Math.cos(t) - 0.5),
-    y: CY + 198 * Math.sin(t),
-  })),
-  buildTrack('hourglass', 'Hourglass', 'Squeeze through the middle', (t) => ({
+  // Two long straights folded into a bent-wing boomerang: the cos(2t) term arcs
+  // the loop up into a hairpin at the top instead of leaving a plain oval.
+  buildTrack('boomerang', 'Boomerang', 'Two straights, one big bend', (t) => ({
     x: CX + 118 * Math.cos(t),
-    y: CY + 196 * Math.sin(t) - 52 * Math.sin(t) * Math.cos(t),
+    y: CY + 118 * Math.sin(t) + 66 * Math.cos(2 * t) - 20,
   })),
+  // A true hourglass: the polar radius pinches to a narrow waist at mid-height
+  // (small at the sides, r = 1 − 0.5·cos2t) and bulges into a lobe top and bottom.
+  buildTrack('hourglass', 'Hourglass', 'Squeeze through the middle', (t) => {
+    const r = 1 - 0.5 * Math.cos(2 * t);
+    return { x: CX + 100 * r * Math.cos(t), y: CY + 150 * r * Math.sin(t) };
+  }),
+  // A pronounced slalom: a slim body with a big sin(3t) sway so the S actually
+  // reads. Tighter apexes than the others, but the ±width tube stays drivable.
   buildTrack('esses', 'The Esses', 'Wiggle city — technical', (t) => ({
-    x: CX + 92 * Math.cos(t) + 26 * Math.sin(3 * t),
-    y: CY + 198 * Math.sin(t),
+    x: CX + 82 * Math.cos(t) + 34 * Math.sin(3 * t),
+    y: CY + 204 * Math.sin(t),
   })),
   // A squared-off circuit (superellipse) with a chicane worked into one straight:
   // the longest lap in the set, and corner after corner rather than one big sweep.
