@@ -107,6 +107,10 @@ function buildTrack(
 
 const CX = W / 2;
 const CY = H / 2 + 6;
+// Superellipse coordinate: signed |v|^e. With e < 1 it squares an oval off into
+// a rounded-rectangle "circuit" outline — long straights joined by four corners
+// — instead of a plain ellipse. Used by Grand Prix for a real track shape.
+const se = (v: number, e: number) => Math.sign(v) * Math.abs(v) ** e;
 // Local projection (see WIN) means legs that pass close together are just tight
 // corners, not corridor merges — so shapes are free to pinch or even cross.
 // Every layout is still checked offline (scripts/scratchpad) to fit the canvas
@@ -132,13 +136,16 @@ const TRACKS: Track[] = [
     x: CX + 92 * Math.cos(t) + 26 * Math.sin(3 * t),
     y: CY + 198 * Math.sin(t),
   })),
+  // A squared-off circuit (superellipse) with a chicane worked into one straight:
+  // the longest lap in the set, and corner after corner rather than one big sweep.
   buildTrack('grand-prix', 'Grand Prix', 'The long lap — corner after corner', (t) => ({
-    x: CX + 116 * Math.cos(t) + 16 * Math.sin(3 * t),
-    y: CY + 220 * Math.sin(t) + 16 * Math.sin(2 * t),
+    x: CX + 104 * se(Math.cos(t), 0.72) + 16 * Math.sin(3 * t),
+    y: CY + 214 * se(Math.sin(t), 0.72),
   })),
+  // A tall, high-amplitude version of the esses — a genuine snake, not a lean.
   buildTrack('serpent', 'Serpent', 'Long, snaking esses — stay smooth', (t) => ({
-    x: CX + 104 * Math.cos(t) + 20 * Math.sin(3 * t),
-    y: CY + 218 * Math.sin(t),
+    x: CX + 100 * Math.cos(t) + 26 * Math.sin(3 * t),
+    y: CY + 210 * Math.sin(t),
   })),
   buildTrack(
     'crossover',
