@@ -31,13 +31,6 @@ const TILES: Tile[] = [
     accent: '#3b82f6',
   },
   {
-    to: '/fun/spinner',
-    emoji: '🎡',
-    title: 'Challenge Spinner',
-    blurb: 'Spin for a silly dare while you wait your turn.',
-    accent: '#ec4899',
-  },
-  {
     to: '/putt',
     emoji: '⛳️',
     title: 'Arcade Putt',
