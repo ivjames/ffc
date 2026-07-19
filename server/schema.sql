@@ -206,6 +206,59 @@ on conflict (course_id, slug) do update
       sort_order = excluded.sort_order,
       countable  = excluded.countable;
 
+-- Blue Course · California themed. The same curated list seeds all three Blue
+-- courses (Upland/Tukwila/Wilsonville), mirroring how the theme's rules are
+-- shared across locations in src/data/courses.ts — cross-joining the course ids
+-- with one item list keeps the three copies identical and edited in one place.
+-- Themed placeholders until the client confirms the real on-course props (§11).
+-- The golden poppy is `countable` (blooms in clusters — find as many as you can).
+insert into hunt_item (course_id, slug, name, hint, sort_order, countable)
+select c.course_id, i.slug, i.name, i.hint, i.sort_order, i.countable
+  from (values
+    ('a1111111-1111-4111-8111-111111111111'::uuid),
+    ('b1111111-1111-4111-8111-111111111111'::uuid),
+    ('c1111111-1111-4111-8111-111111111111'::uuid)
+  ) as c(course_id)
+  cross join (values
+    ('golden-gate', 'The Golden Gate',      'A mini Golden Gate Bridge with two tall red towers — frame the span.',            10, false),
+    ('redwood',     'A giant redwood',      'The towering painted redwoods along the coast holes — snap the treetops.',        20, false),
+    ('lighthouse',  'The coast lighthouse', 'A red-and-white striped lighthouse watching over the Pacific water hazard.',       30, false),
+    ('surfboard',   'A surfboard',          'A brightly painted surfboard standing on end near the water — catch the colors.', 40, false),
+    ('palm',        'A palm tree',          'A tall California palm — find one and snap the fronds against the sky.',           50, false),
+    ('bear-flag',   'The bear flag',        'The California grizzly-bear flag flying over the course — say cheese!',            60, false),
+    ('poppy',       'A golden poppy',       'The state flower blooms in bright orange clusters along the fairway edges — find as many as you can!', 70, true)
+  ) as i(slug, name, hint, sort_order, countable)
+on conflict (course_id, slug) do update
+  set name       = excluded.name,
+      hint       = excluded.hint,
+      sort_order = excluded.sort_order,
+      countable  = excluded.countable;
+
+-- Green Course · classic mini-golf themed. Seeds all three Green courses; same
+-- shared-list shape as the Blue list above. Themed placeholders until the client
+-- confirms the real on-course obstacles (§11).
+insert into hunt_item (course_id, slug, name, hint, sort_order, countable)
+select c.course_id, i.slug, i.name, i.hint, i.sort_order, i.countable
+  from (values
+    ('a2222222-2222-4222-8222-222222222222'::uuid),
+    ('b2222222-2222-4222-8222-222222222222'::uuid),
+    ('c2222222-2222-4222-8222-222222222222'::uuid)
+  ) as c(course_id)
+  cross join (values
+    ('windmill',       'The windmill',       'The classic red-roofed windmill with turning sails — catch it mid-spin.',     10, false),
+    ('loop',           'The loop-the-loop',  'The full 360° loop ramp — frame the whole curl.',                             20, false),
+    ('clown',          'The clown''s mouth', 'The big painted clown face whose open mouth swallows a good putt.',           30, false),
+    ('wishing-well',   'The wishing well',   'A little stone wishing well with a peaked roof beside the fairway.',          40, false),
+    ('castle',         'The castle',         'The classic mini-golf castle with battlements and a drawbridge over the cup.', 50, false),
+    ('covered-bridge', 'The covered bridge', 'A small wooden covered bridge the ball rolls straight through.',              60, false),
+    ('gnome',          'A garden gnome',     'A cheeky garden gnome tucked into the landscaping — find him and snap it.',    70, false)
+  ) as i(slug, name, hint, sort_order, countable)
+on conflict (course_id, slug) do update
+  set name       = excluded.name,
+      hint       = excluded.hint,
+      sort_order = excluded.sort_order,
+      countable  = excluded.countable;
+
 -- Backfill: existing finds for an item that is now `countable` must carry the
 -- flag too, so the partial unique index (which excludes countable finds) stops
 -- constraining them. Idempotent — only touches rows not already set.
