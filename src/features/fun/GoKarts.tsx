@@ -14,6 +14,7 @@ import {
   pushTrail,
   decay,
   shakeOffset,
+  fxRandom,
 } from './fx';
 
 // §12 Go-Karts — the seventh attraction mini-game. A top-down 3-lap time trial.
@@ -407,7 +408,7 @@ function updateFX(fx: FX, gs: GS, dt: number) {
     if (!fx.wasWall) {
       spawnBurst(fx.particles, cx, cy, 9, 150, '#dff6ff');
       fx.shake = Math.max(fx.shake, 5);
-    } else if (Math.random() < 0.6) {
+    } else if (fxRandom() < 0.6) {
       spawnBurst(fx.particles, cx, cy, 2, 70, '#dff6ff');
       fx.shake = Math.max(fx.shake, 1.6);
     }

@@ -10,6 +10,23 @@
 
 export const TWO_PI = Math.PI * 2;
 
+// FX randomness runs on its OWN PRNG so rendering (spark bursts, screen-shake)
+// never draws from the global Math.random() sequence the game sims use for
+// gameplay (serves, pitch timing, AI, …). Sharing that sequence would let a
+// frame-rate-dependent burst count shift later gameplay RNG — breaking the
+// "rendering-only" guarantee. Games route effect-only randomness through
+// fxRandom() for the same reason. Determinism of the effects themselves isn't
+// required; isolation from the gameplay stream is.
+let fxSeed = 0x9e3779b9 >>> 0;
+export function fxRandom(): number {
+  // mulberry32 — tiny, fast, self-contained.
+  fxSeed = (fxSeed + 0x6d2b79f5) >>> 0;
+  let t = fxSeed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
 export type Vec = { x: number; y: number };
 
 export type Particle = {
@@ -146,10 +163,10 @@ export function spawnBurst(
   color: string,
 ): void {
   for (let i = 0; i < n; i++) {
-    const a = Math.random() * TWO_PI;
-    const s = speed * (0.35 + Math.random() * 0.65);
-    const max = 260 + Math.random() * 300;
-    list.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: max, max, r: 1.4 + Math.random() * 2.6, color });
+    const a = fxRandom() * TWO_PI;
+    const s = speed * (0.35 + fxRandom() * 0.65);
+    const max = 260 + fxRandom() * 300;
+    list.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: max, max, r: 1.4 + fxRandom() * 2.6, color });
   }
 }
 
@@ -198,5 +215,5 @@ export function decay(v: number, dt: number, perMs: number): number {
 
 /** Random screen-shake offset for a magnitude (apply via ctx.translate). */
 export function shakeOffset(mag: number): Vec {
-  return { x: (Math.random() * 2 - 1) * mag, y: (Math.random() * 2 - 1) * mag };
+  return { x: (fxRandom() * 2 - 1) * mag, y: (fxRandom() * 2 - 1) * mag };
 }
