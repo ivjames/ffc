@@ -106,38 +106,50 @@ export default function Summary() {
         </div>
 
         {/* Winner hero — the champion's spotlight. Named once here, then the
-            rest of the field follows below, so no tag is shown twice. */}
+            rest of the field follows below, so no tag is shown twice.
+
+            Two elements: the outer wrapper carries the looping glow halo, the
+            inner card the one-shot pop-in entrance. They can't share an element
+            because both utilities set the `animation` shorthand and the later
+            one would overwrite the other — and the inner card's overflow-hidden
+            (which clips the spotlight) would also clip a glow drawn on it, so
+            the halo has to live on an un-clipped parent. */}
         <div
-          className="animate-rise-in relative mb-6 overflow-hidden rounded-3xl border border-fairway-500/40 bg-fairway-900/60 p-6 text-center"
-          style={{ '--i': 0 } as CSSProperties}
+          className="animate-glow-pulse mb-6 rounded-3xl"
+          style={{ '--glow': course.accent } as CSSProperties}
         >
-          {/* Accent spotlight behind the trophy, in the course's own color. */}
           <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-40"
-            style={{
-              background: `radial-gradient(80% 100% at 50% 0%, ${course.accent}40, transparent 70%)`,
-            }}
-          />
-          <div className="relative">
-            <div className="animate-trophy-pop text-6xl leading-none">🏆</div>
-            <div className="mt-3 text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
-              {tied ? 'Tied for the win' : 'Winner'}
-            </div>
-            <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-              {heroRows.map((row) => (
-                <span
-                  key={row.p}
-                  className="font-arcade text-4xl font-black"
-                  style={{ color: ink }}
-                >
-                  {row.tag}
-                </span>
-              ))}
-            </div>
-            <div className="mt-2 text-sm text-fairway-100/70">
-              <span className="text-lg font-black text-fairway-50">{heroRows[0].total}</span>
-              <span className="ml-2">{formatOverUnder(heroDiff)}</span>
+            className="animate-pop-in relative overflow-hidden rounded-3xl border border-fairway-500/40 bg-fairway-900/60 p-6 text-center"
+            style={{ '--i': 0 } as CSSProperties}
+          >
+            {/* Accent spotlight behind the trophy, in the course's own color. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-40"
+              style={{
+                background: `radial-gradient(80% 100% at 50% 0%, ${course.accent}40, transparent 70%)`,
+              }}
+            />
+            <div className="relative">
+              <div className="animate-trophy-pop text-6xl leading-none">🏆</div>
+              <div className="mt-3 text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
+                {tied ? 'Tied for the win' : 'Winner'}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+                {heroRows.map((row) => (
+                  <span
+                    key={row.p}
+                    className="font-arcade text-4xl font-black"
+                    style={{ color: ink }}
+                  >
+                    {row.tag}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-2 text-sm text-fairway-100/70">
+                <span className="text-lg font-black text-fairway-50">{heroRows[0].total}</span>
+                <span className="ml-2">{formatOverUnder(heroDiff)}</span>
+              </div>
             </div>
           </div>
         </div>

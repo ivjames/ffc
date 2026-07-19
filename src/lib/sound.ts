@@ -3,6 +3,14 @@
 // One shared AudioContext, created lazily on the first sound (which always
 // happens inside a user gesture, so autoplay policies are satisfied), plus a
 // persisted mute toggle.
+//
+// Each effect also fires a matching HAPTIC (lib/haptics) so the phone buzzes in
+// time with the sound. Pairing them here means every button that already
+// declares a sound gets tactile feedback for free — and the single mute toggle
+// governs both. (haptics imports isMuted() from here; this module imports only
+// the haptic() firing function, so there's no import cycle at eval time.)
+
+import { haptic, type Haptic } from './haptics';
 
 const MUTE_KEY = 'ffc.muted';
 
@@ -122,24 +130,34 @@ function noise(opts: { start?: number; dur: number; gain?: number; freq?: number
 
 // —— The kit ——————————————————————————————————————————————————————————
 
+// Fire a sound's paired haptic. Isolated so every effect reads as one line and
+// the sound↔buzz mapping lives in a single place.
+function buzz(kind: Haptic): void {
+  haptic(kind);
+}
+
 /** Mild, soft click for ordinary buttons. */
 export function playClick(): void {
+  buzz('tap');
   tone({ type: 'triangle', freq: 660, freqEnd: 520, dur: 0.05, gain: 0.09 });
 }
 
 /** Putter "tock" when a stroke is added. */
 export function playStroke(): void {
+  buzz('stroke');
   noise({ dur: 0.045, gain: 0.12, freq: 2600 });
   tone({ type: 'triangle', freq: 420, freqEnd: 300, dur: 0.09, gain: 0.14 });
 }
 
 /** Reverse-sounding blip when a stroke is undone (rising sweep). */
 export function playUndo(): void {
+  buzz('undo');
   tone({ type: 'triangle', freq: 300, freqEnd: 620, dur: 0.12, gain: 0.11 });
 }
 
 /** Ball dropping into the cup: a couple of descending plunks + a low thunk. */
 export function playCup(): void {
+  buzz('cup');
   tone({ type: 'sine', freq: 900, freqEnd: 760, dur: 0.06, gain: 0.16 });
   tone({ type: 'sine', freq: 620, freqEnd: 520, dur: 0.07, gain: 0.16, start: 0.07 });
   tone({ type: 'sine', freq: 300, freqEnd: 180, dur: 0.16, gain: 0.2, start: 0.15 });
@@ -148,12 +166,14 @@ export function playCup(): void {
 
 /** Bright rising two-note "ding" for a correct answer. */
 export function playDing(): void {
+  buzz('ding');
   tone({ type: 'triangle', freq: 784, dur: 0.09, gain: 0.16 });
   tone({ type: 'triangle', freq: 1046.5, dur: 0.16, gain: 0.16, start: 0.08 });
 }
 
 /** Spinner landing: a soft swelling "bump" that resolves into a bright ding. */
 export function playLand(): void {
+  buzz('select');
   // Low thump with a slower attack so it swells rather than snaps — matches the
   // result card's bump animation.
   tone({ type: 'sine', freq: 150, freqEnd: 92, dur: 0.22, gain: 0.24, attack: 0.03 });
@@ -164,6 +184,7 @@ export function playLand(): void {
 
 /** Low descending "buzz" for a wrong answer (soft, not harsh). */
 export function playBuzz(): void {
+  buzz('buzz');
   tone({ type: 'sawtooth', freq: 220, freqEnd: 150, dur: 0.22, gain: 0.09 });
 }
 
@@ -195,6 +216,7 @@ export function playScore(): void {
 
 /** Triumphant little fanfare for the final scorecard. */
 export function playFanfare(): void {
+  buzz('win');
   // Ascending arpeggio into a held chord — C5 E5 G5 C6, then C-major triad.
   const seq: Array<[number, number]> = [
     [523.25, 0.0],

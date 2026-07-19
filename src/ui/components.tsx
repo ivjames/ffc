@@ -79,10 +79,15 @@ export function Button({
   className = '',
   sound = 'click',
 }: ButtonProps) {
+  // A springy press: the button dips a bit further on tap and rides back on a
+  // slight overshoot ease, so every press feels physical. `duration-150` keeps
+  // the rebound quick enough not to lag the tap.
   const base =
-    'flex w-full items-center justify-center rounded-xl px-4 py-3 text-base font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100';
+    'flex w-full items-center justify-center rounded-xl px-4 py-3 text-base font-semibold transition duration-150 ease-[cubic-bezier(0.22,1.4,0.36,1)] active:scale-[0.96] disabled:opacity-40 disabled:active:scale-100';
   const variants = {
-    primary: 'btn-accent text-fairway-50',
+    // The primary action also catches a one-shot light sweep on mount (btn-sheen)
+    // so it reads as the lit, tappable "candy" element on the screen.
+    primary: 'btn-accent btn-sheen text-fairway-50',
     ghost: 'border border-fairway-700 bg-fairway-900/40 text-fairway-50 active:bg-fairway-800',
     danger: 'bg-red-500/90 text-white active:bg-red-500',
   };
@@ -101,12 +106,19 @@ export function Button({
   );
 }
 
-/** Arcade-style 3-char tag chip. */
+/** Arcade-style 3-char tag chip. A glossy top highlight + soft drop give it a
+ *  tactile, candy-button read against the neutral chrome. */
 export function TagChip({ tag, color }: { tag: string; color?: string }) {
   return (
     <span
       className="font-arcade inline-flex items-center rounded-md px-2 py-1 text-lg font-bold"
-      style={{ background: color ?? '#166534', color: '#f0fdf4' }}
+      style={{
+        background: color ?? '#166534',
+        color: '#f0fdf4',
+        boxShadow:
+          'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 4px rgba(0,0,0,0.22), 0 1px 2px rgba(0,0,0,0.25)',
+        textShadow: '0 1px 1px rgba(0,0,0,0.35)',
+      }}
     >
       {tag || '···'}
     </span>

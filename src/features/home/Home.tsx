@@ -11,6 +11,7 @@ import {
 } from '../../lib/geolocate';
 import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
+import { playClick, playCup } from '../../lib/sound';
 import type { LocalRound } from '../../types';
 
 // §7 Home — start round, view maps/rules, resume an in-progress game.
@@ -51,7 +52,7 @@ export default function Home() {
     <Screen>
       <Content>
         <div className="mb-4 mt-3 text-center">
-          <div className="text-4xl">⛳️</div>
+          <div className="animate-wiggle inline-block text-5xl leading-none drop-shadow">⛳️</div>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-fairway-50">Mini Golf</h1>
           <p className="mt-0.5 text-sm text-fairway-100/70">
             {courseCount} {courseCount === 1 ? 'course' : 'courses'} · eighteen holes each
@@ -82,8 +83,12 @@ export default function Home() {
 
         {resume && resumeCourse && (
           <button
-            onClick={() => navigate(`/play/${resume.clientId}`)}
-            className="mb-3 w-full rounded-2xl border border-fairway-500/40 bg-fairway-900/60 p-3 text-left active:bg-fairway-800/60"
+            onClick={() => {
+              playCup();
+              navigate(`/play/${resume.clientId}`);
+            }}
+            className="animate-glow-pulse mb-3 w-full rounded-2xl border border-fairway-500/40 bg-fairway-900/60 p-3 text-left transition active:scale-[0.98] active:bg-fairway-800/60"
+            style={{ '--glow': resumeCourse.accent } as CSSProperties}
           >
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
               Resume round
@@ -111,17 +116,26 @@ export default function Home() {
             {courses.map((c, i) => (
               <button
                 key={c.id}
-                onClick={() => navigate(`/courses/${c.id}/map`)}
-                className="animate-rise-in flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition active:scale-[0.98]"
+                onClick={() => {
+                  playClick();
+                  navigate(`/courses/${c.id}/map`);
+                }}
+                className="animate-pop-in group flex flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition duration-150 ease-[cubic-bezier(0.22,1.4,0.36,1)] active:scale-95"
                 style={{
                   '--i': i,
                   background: `${c.accent}22`,
                   borderColor: `${c.accent}66`,
+                  // A soft accent glow beneath each tile so the grid reads as a
+                  // row of lit, pressable buttons rather than flat swatches.
+                  boxShadow: `0 8px 20px -12px ${c.accent}`,
                 } as CSSProperties}
               >
                 <span
-                  className="flex h-11 w-11 items-center justify-center rounded-xl text-2xl"
-                  style={{ background: `${c.accent}33` }}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl text-2xl transition-transform duration-150 group-active:scale-110"
+                  style={{
+                    background: `${c.accent}33`,
+                    boxShadow: `inset 0 1px 0 ${c.accent}99`,
+                  }}
                 >
                   {themeEmoji(c.theme)}
                 </span>

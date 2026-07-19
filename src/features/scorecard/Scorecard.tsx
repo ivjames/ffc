@@ -321,18 +321,18 @@ export default function Scorecard() {
                   <button
                     onClick={() => bump(p, -1)}
                     disabled={autoPlaying || strokes == null || strokes <= 1}
-                    className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 active:bg-fairway-800 disabled:opacity-30"
+                    className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 transition duration-150 ease-[cubic-bezier(0.22,1.4,0.36,1)] active:scale-90 active:bg-fairway-800 disabled:opacity-30 disabled:active:scale-100"
                     aria-label={`Decrease strokes for ${tag}`}
                   >
                     −
                   </button>
                   <div className="flex-1 text-center">
                     {/* Keyed on a per-player nonce that only changes on a real
-                        stroke edit, so the pop fires on +/− but not when
+                        stroke edit, so the punch fires on +/− but not when
                         navigating between holes. */}
                     <span
                       key={pops[p] ?? 0}
-                      className="inline-block text-4xl font-black text-fairway-50 animate-score-pop"
+                      className="inline-block text-4xl font-black text-fairway-50 animate-score-punch"
                     >
                       {strokes ?? '–'}
                     </span>
@@ -342,7 +342,7 @@ export default function Scorecard() {
                     disabled={
                       autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
                     }
-                    className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 active:bg-fairway-800 disabled:opacity-30"
+                    className="flex h-14 w-14 items-center justify-center rounded-xl border border-fairway-700 bg-fairway-950 text-3xl font-bold text-fairway-100 transition duration-150 ease-[cubic-bezier(0.22,1.4,0.36,1)] active:scale-90 active:bg-fairway-800 disabled:opacity-30 disabled:active:scale-100"
                     aria-label={`Increase strokes for ${tag}`}
                   >
                     +
