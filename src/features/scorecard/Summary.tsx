@@ -182,9 +182,9 @@ export default function Summary() {
                       {row.tag}
                     </span>
                   </div>
-                  <div className="w-20 shrink-0 text-right">
-                    <span className="text-xl font-black text-fairway-50">{row.total}</span>
-                    <span className="ml-2 text-sm text-fairway-100/70">{formatOverUnder(diff)}</span>
+                  <div className="w-20 shrink-0 text-right leading-tight">
+                    <div className="text-xl font-black text-fairway-50">{row.total}</div>
+                    <div className="text-sm text-fairway-100/70">{formatOverUnder(diff)}</div>
                   </div>
                 </div>
               );
