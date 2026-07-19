@@ -582,6 +582,23 @@ button {
   }
 }
 
+/* The rotate-to-portrait nudge glyph: tip the phone from upright to landscape
+   and back, on a loop, so the direction to rotate reads without words. */
+@keyframes rotate-nudge {
+  0%,
+  40% {
+    transform: rotate(0deg);
+  }
+  70%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+
+.rotate-nudge-phone {
+  animation: rotate-nudge 2.4s ease-in-out infinite alternate;
+}
+
 /* Honor the OS "reduce motion" setting. Rather than snapping content in with no
    feedback at all, entrance animations degrade to a gentle opacity-only fade
    (no translation/scale, so nothing that could trigger vestibular discomfort).
@@ -604,7 +621,8 @@ button {
   /* A looping glow and the one-shot sheen are ambient motion, not entrance
      feedback — drop them entirely so nothing pulses or sweeps. */
   .animate-glow-pulse,
-  .btn-sheen::after {
+  .btn-sheen::after,
+  .rotate-nudge-phone {
     animation: none;
   }
   .animate-result-swell {
