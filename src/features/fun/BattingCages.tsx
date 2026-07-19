@@ -38,6 +38,10 @@ const PITCHES = 10;
 const RESULT_MS = 780; // hold on the outcome before the next pitch
 const TRAVEL_MIN = 880;
 const TRAVEL_MAX = 1360;
+// Randomized beat between the batter holding down and the ball leaving the
+// mound, so the release can't be timed off the press alone.
+const DELAY_MIN = 250;
+const DELAY_MAX = 900;
 
 type Kind = 'hr' | 'hit' | 'foul' | 'miss';
 type Outcome = { label: string; pts: number; kind: Kind };
@@ -61,9 +65,9 @@ type GS = {
 const rnd = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
-function newPitch(gs: GS, now: number) {
+function newPitch(gs: GS) {
   gs.phase = 'pitch';
-  gs.pitchStart = now;
+  gs.pitchStart = 0; // 0 → not pitched yet; holding down to load starts the pitch
   gs.travelMs = rnd(TRAVEL_MIN, TRAVEL_MAX);
   gs.loaded = false;
   gs.loadAt = 0;
@@ -73,12 +77,12 @@ function newPitch(gs: GS, now: number) {
   gs.ball = { x: W / 2, y: MOUND_Y, vx: 0, vy: 0 };
 }
 
-function freshGS(now: number): GS {
+function freshGS(): GS {
   const gs: GS = {
     phase: 'pitch',
     pitchNo: 0,
     total: 0,
-    pitchStart: now,
+    pitchStart: 0,
     travelMs: TRAVEL_MIN,
     loaded: false,
     loadAt: 0,
@@ -88,7 +92,7 @@ function freshGS(now: number): GS {
     outcome: null,
     resultAt: 0,
   };
-  newPitch(gs, now);
+  newPitch(gs);
   return gs;
 }
 
@@ -327,16 +331,19 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.fillStyle = plate;
   ctx.fill();
 
-  // Bat — held cocked back over the shoulder (READY), wound further back while
-  // loading, then swept across the zone to follow-through on the swing.
-  const READY = 0.5; // up-and-back over the batter's shoulder
-  const COCK = 0.95; // wound back further while holding
-  const SWING = -1.2; // follow-through across the plate
-  let angle = READY;
+  // Bat — held horizontal over the plate at rest, dropped down to load while
+  // holding, then swept up-and-forward toward the ball on release. The barrel is
+  // drawn straight up (angle 0) and canvas angles run clockwise from there; the
+  // plate is to the left of the pivot (9 o'clock, -PI/2), so loading drops the
+  // barrel down and the swing sweeps clockwise up the plate side into the ball.
+  const REST = -Math.PI / 2; // horizontal, barrel pointing toward the plate
+  const COCK = -Math.PI; // dropped straight down to load
+  const SWING = -0.2; // clockwise up through the plate, finishing toward the ball
+  let angle = REST;
   if (gs.swung) {
     angle = COCK + (SWING - COCK) * clamp((now - gs.swingAt) / 160, 0, 1);
   } else if (gs.phase === 'pitch' && gs.loaded) {
-    angle = READY + (COCK - READY) * clamp((now - gs.loadAt) / 220, 0, 1);
+    angle = REST + (COCK - REST) * clamp((now - gs.loadAt) / 220, 0, 1);
   }
   ctx.save();
   ctx.translate(W / 2 + 30, PLATE_Y + 26);
@@ -395,11 +402,10 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
 export default function BattingCages() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  // Anchor the first pitch to the real clock. Creating this with t=0 would make
-  // the opening frame treat the ball as already past the plate and instantly
-  // record a strike, losing the first of the ten pitches on every normal visit.
+  // The ball sits on the mound until the batter holds down, so a fresh state is
+  // safe to build with no clock reading — the pitch clock only starts on press.
   const gsRef = useRef<GS>(null!);
-  if (!gsRef.current) gsRef.current = freshGS(performance.now());
+  if (!gsRef.current) gsRef.current = freshGS();
   const fxRef = useRef<FX>(freshFX());
 
   const [phase, setPhase] = useState<Phase>('pitch');
@@ -433,7 +439,7 @@ export default function BattingCages() {
       } else if (hiddenAt) {
         const gap = performance.now() - hiddenAt;
         const gs = gsRef.current;
-        gs.pitchStart += gap;
+        if (gs.pitchStart) gs.pitchStart += gap; // 0 → not pitched; keep the sentinel
         gs.resultAt += gap;
         gs.swingAt += gap;
         gs.loadAt += gap;
@@ -453,22 +459,29 @@ export default function BattingCages() {
       last = now;
 
       if (gs.phase === 'pitch') {
-        // Kinematic descent from absolute time so timing stays framerate-exact.
-        const p = (now - gs.pitchStart) / gs.travelMs;
-        gs.ball.y = MOUND_Y + (PLATE_Y - MOUND_Y) * p;
-        // No swing and the ball has passed the plate → strike (watched or held
-        // too long without releasing).
-        if (!gs.swung && now - (gs.pitchStart + gs.travelMs) > LATE_CUTOFF) {
-          gs.loaded = false;
-          gs.outcome = { label: 'Strike!', pts: 0, kind: 'miss' };
-          gs.ball.vx = 0;
-          gs.ball.vy = 7;
-          gs.phase = 'result';
-          gs.resultAt = now;
-          contactFX(fxRef.current, 'miss', gs.ball.x, gs.ball.y);
-          setOutcome(gs.outcome);
-          setPhase('result');
-          playUndo();
+        if (!gs.pitchStart) {
+          // The ball waits on the mound until the batter holds down to pitch.
+          gs.ball.y = MOUND_Y;
+        } else {
+          // Kinematic descent from absolute time so timing stays framerate-exact.
+          // p stays 0 during the pre-launch delay (pitchStart is in the future),
+          // holding the ball on the mound until its randomized release moment.
+          const p = Math.max(0, (now - gs.pitchStart) / gs.travelMs);
+          gs.ball.y = MOUND_Y + (PLATE_Y - MOUND_Y) * p;
+          // No swing and the ball has passed the plate → strike (watched or held
+          // too long without releasing).
+          if (!gs.swung && now - (gs.pitchStart + gs.travelMs) > LATE_CUTOFF) {
+            gs.loaded = false;
+            gs.outcome = { label: 'Strike!', pts: 0, kind: 'miss' };
+            gs.ball.vx = 0;
+            gs.ball.vy = 7;
+            gs.phase = 'result';
+            gs.resultAt = now;
+            contactFX(fxRef.current, 'miss', gs.ball.x, gs.ball.y);
+            setOutcome(gs.outcome);
+            setPhase('result');
+            playUndo();
+          }
         }
       } else if (gs.phase === 'result') {
         // Animate the ball off the bat (or past the plate).
@@ -482,7 +495,7 @@ export default function BattingCages() {
             playFanfare();
           } else {
             gs.pitchNo += 1;
-            newPitch(gs, now);
+            newPitch(gs);
             setPitchNo(gs.pitchNo);
             setPhase('pitch');
           }
@@ -500,15 +513,19 @@ export default function BattingCages() {
     };
   }, [playing]);
 
-  // Press to load: the batter winds the bat back and holds, ready to swing.
+  // Press to pitch and load: holding down releases the pitch and winds the bat
+  // back, ready to swing. The ball waits on the mound until this moment.
   const onPress = useCallback((e: React.PointerEvent) => {
     const gs = gsRef.current;
     if (gs.phase !== 'pitch' || gs.swung || gs.loaded) return;
     // Capture the pointer so the release is delivered even if the finger drags
     // off the canvas — otherwise `loaded` sticks and later pitches are ignored.
     e.currentTarget.setPointerCapture?.(e.pointerId);
+    const now = performance.now();
     gs.loaded = true;
-    gs.loadAt = performance.now();
+    gs.loadAt = now;
+    // Launch the ball a randomized beat after the hold, not instantly.
+    if (!gs.pitchStart) gs.pitchStart = now + rnd(DELAY_MIN, DELAY_MAX);
   }, []);
 
   // Release to swing: contact timing is the moment the batter lets go.
@@ -538,7 +555,7 @@ export default function BattingCages() {
   }, []);
 
   const restart = useCallback(() => {
-    gsRef.current = freshGS(performance.now());
+    gsRef.current = freshGS();
     fxRef.current = freshFX();
     setPhase('pitch');
     setPitchNo(0);
@@ -574,7 +591,7 @@ export default function BattingCages() {
       ? outcome.pts > 0
         ? `${outcome.label} +${outcome.pts}`
         : outcome.label
-      : 'Hold to load up, release to swing as the ball reaches the plate.';
+      : 'Hold to pitch and wind up, release to swing as the ball reaches the plate.';
 
   return (
     <Screen>
