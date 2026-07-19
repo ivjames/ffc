@@ -126,11 +126,8 @@ export default function Home() {
                 {/* Domed emoji puck — a radial highlight + inner shade make the
                     disc read as a glossy 3D button cap in the course color. */}
                 <span
-                  className="flex h-14 w-14 items-center justify-center rounded-full text-3xl transition-transform duration-150 group-active:scale-110"
-                  style={{
-                    backgroundImage: `radial-gradient(circle at 50% 32%, color-mix(in srgb, ${c.accent}, white 42%), ${c.accent} 78%)`,
-                    boxShadow: `inset 0 1px 2px rgba(255,255,255,0.6), inset 0 -3px 6px rgba(0,0,0,0.3), 0 3px 6px -2px rgba(0,0,0,0.45)`,
-                  }}
+                  className="course-puck flex h-14 w-14 items-center justify-center rounded-full text-3xl transition-transform duration-150 group-active:scale-110"
+                  style={{ '--puck-accent': c.accent } as CSSProperties}
                 >
                   <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
                     {themeEmoji(c.theme)}

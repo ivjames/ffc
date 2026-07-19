@@ -245,6 +245,36 @@
     var(--elev-1);
 }
 
+/* A domed course puck — a glossy 3D button cap in the course color, set inline
+   as `--puck-accent`. Shared by the home course tiles; skins restyle it below. */
+.course-puck {
+  background-image: radial-gradient(
+    circle at 50% 32%,
+    color-mix(in srgb, var(--puck-accent, var(--accent)), white 42%),
+    var(--puck-accent, var(--accent)) 78%
+  );
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.6),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.3),
+    0 3px 6px -2px rgba(0, 0, 0, 0.45);
+}
+
+/* An arcade tag chip — a rounded candy pill in `--tag-accent` (a course accent,
+   or the house green by default). Skins restyle it below. */
+.tag-chip {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tag-accent, #166534), white 20%),
+    var(--tag-accent, #166534)
+  );
+  color: #f0fdf4;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.28),
+    0 2px 4px -1px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+
 /* Disabled raised controls must read as flat and inert. These surface/key/button
    classes are UNLAYERED, so they outrank Tailwind's layered `disabled:shadow-none`
    utility no matter its specificity — a disabled Start/Finish/± would otherwise
@@ -843,4 +873,85 @@ button {
 :root[data-template='chrome'] .tile:active {
   transform: translateY(2px);
   box-shadow: inset 0 1px 0 var(--cr-bevel), 0 1px 3px -1px var(--cr-cast);
+}
+
+/* ——— Course pucks & tag chips per skin —————————————————————————————————————
+   The domed candy puck and glossy candy pill are the base above; each skin
+   restyles them to match its material (flat + inked, neon, frosted, metal). */
+
+/* Blocky — flat disc / flat pill, both with a fat ink ring + hard shadow. */
+:root[data-template='blocky'] .course-puck {
+  background-image: none;
+  background-color: var(--puck-accent, var(--accent));
+  border: 3px solid var(--bk-line);
+  box-shadow: 2px 2px 0 var(--bk-cast);
+}
+:root[data-template='blocky'] .tag-chip {
+  background-image: none;
+  background-color: var(--tag-accent, #166534);
+  border: 2px solid var(--bk-line);
+  box-shadow: 2px 2px 0 var(--bk-cast);
+}
+
+/* UV — the domed cap and pill fluoresce: an accent-colored glow halo. */
+:root[data-template='uv'] .course-puck {
+  box-shadow:
+    0 0 14px var(--puck-accent, var(--accent)),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.35);
+}
+:root[data-template='uv'] .tag-chip {
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--tag-accent, #166534), transparent 25%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Glass — a glassy dome (bright top highlight over the tint) and a frosted,
+   accent-tinted pill; text follows the mode-aware ramp so it stays legible. */
+:root[data-template='glass'] .course-puck {
+  background-image: radial-gradient(
+    circle at 50% 30%,
+    rgba(255, 255, 255, 0.9),
+    color-mix(in srgb, var(--puck-accent, var(--accent)), white 20%)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    inset 0 1px 3px rgba(255, 255, 255, 0.8),
+    inset 0 -5px 9px color-mix(in srgb, var(--puck-accent, var(--accent)), transparent 45%),
+    0 6px 14px -7px rgba(0, 0, 0, 0.5);
+}
+:root[data-template='glass'] .tag-chip {
+  background-image: none;
+  background-color: color-mix(in srgb, var(--gl-fill), var(--tag-accent, #166534) 50%);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--gl-line);
+  box-shadow: inset 0 1px 0 var(--gl-hi);
+  color: var(--color-fairway-50);
+  text-shadow: none;
+}
+
+/* Chrome — a polished metal cap and an accent-tinted brushed-metal pill. */
+:root[data-template='chrome'] .course-puck {
+  background-image: radial-gradient(
+    circle at 50% 26%,
+    #ffffff,
+    color-mix(in srgb, var(--puck-accent, var(--accent)), var(--cr-guard) 42%) 58%,
+    var(--cr-lo)
+  );
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.9),
+    inset 0 -4px 8px var(--cr-shade),
+    0 3px 8px -2px var(--cr-cast);
+}
+:root[data-template='chrome'] .tag-chip {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cr-hi), var(--tag-accent, #166534) 28%),
+    color-mix(in srgb, var(--cr-lo), var(--tag-accent, #166534) 20%)
+  );
+  border: 1px solid var(--cr-line);
+  box-shadow: inset 0 1px 0 var(--cr-bevel);
+  color: var(--color-fairway-50);
+  text-shadow: none;
 }
