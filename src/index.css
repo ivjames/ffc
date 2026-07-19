@@ -654,14 +654,19 @@ button {
   background-image: none;
   background-color: var(--color-fairway-950);
 }
+/* Flat, but not a solid accent: fairway-50 text (mode-aware) on a pure accent
+   fill fails WCAG AA for mid-tone accents (e.g. white on green ≈ 2.1:1). Use the
+   same neutral-dominant ~18% accent wash candy is AA-verified on — dark in dark
+   mode, light in light mode — so the label stays ≥4.5:1 for every course accent
+   in both modes, just without candy's gradient/bevel. */
 :root[data-template='unstyled'] .btn-accent {
   background-image: none;
-  background-color: var(--accent);
+  background-color: color-mix(in srgb, var(--color-fairway-700), var(--accent) 18%);
   box-shadow: none;
 }
 :root[data-template='unstyled'] .btn-danger {
   background-image: none;
-  background-color: #dc2626;
+  background-color: #b91c1c; /* red-700: white label clears 4.5:1 (≈6:1) */
   box-shadow: none;
 }
 :root[data-template='unstyled'] .surface,
