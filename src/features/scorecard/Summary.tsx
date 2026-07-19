@@ -152,9 +152,9 @@ export default function Summary() {
                   ))}
                 </div>
               </div>
-              <div className="w-20 shrink-0 text-right leading-tight">
-                <div className="text-2xl font-black text-fairway-50">{heroRows[0].total}</div>
-                <div className="text-sm text-fairway-100/70">{formatOverUnder(heroDiff)}</div>
+              <div className="shrink-0 text-right">
+                <span className="text-2xl font-black text-fairway-50">{heroRows[0].total}</span>
+                <span className="ml-2 text-sm text-fairway-100/70">{formatOverUnder(heroDiff)}</span>
               </div>
             </div>
           </div>
@@ -169,7 +169,7 @@ export default function Summary() {
                 <div
                   key={row.p}
                   style={{ '--i': row.rank } as CSSProperties}
-                  className="surface-1 animate-rise-in flex items-baseline gap-4 rounded-2xl border border-fairway-800/60 px-5 py-3"
+                  className="surface-1 animate-rise-in flex items-center gap-4 rounded-2xl border border-fairway-800/60 px-5 py-3"
                 >
                   {/* Same three zones and column widths as the hero — place
                       left, tag centered, score right — so the columns line up
@@ -182,9 +182,9 @@ export default function Summary() {
                       {row.tag}
                     </span>
                   </div>
-                  <div className="w-20 shrink-0 text-right leading-tight">
-                    <div className="text-xl font-black text-fairway-50">{row.total}</div>
-                    <div className="text-sm text-fairway-100/70">{formatOverUnder(diff)}</div>
+                  <div className="shrink-0 text-right">
+                    <span className="text-xl font-black text-fairway-50">{row.total}</span>
+                    <span className="ml-2 text-sm text-fairway-100/70">{formatOverUnder(diff)}</span>
                   </div>
                 </div>
               );
