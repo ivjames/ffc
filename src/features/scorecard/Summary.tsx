@@ -167,17 +167,19 @@ export default function Summary() {
                 <div
                   key={row.p}
                   style={{ '--i': row.rank } as CSSProperties}
-                  className="surface-1 animate-rise-in flex items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-3"
+                  className="surface-1 animate-rise-in flex items-center gap-4 rounded-2xl border border-fairway-800/60 px-4 py-3"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="w-5 text-center font-mono text-sm text-fairway-100/70">
-                      {row.rank}
-                    </span>
+                  {/* Same three zones as the hero: place left, tag centered,
+                      score right. */}
+                  <span className="shrink-0 font-mono text-2xl font-black text-fairway-100/50">
+                    {row.rank}
+                  </span>
+                  <div className="min-w-0 flex-1 text-center">
                     <span className="font-arcade text-xl font-bold" style={{ color: ink }}>
                       {row.tag}
                     </span>
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     <span className="text-xl font-black text-fairway-50">{row.total}</span>
                     <span className="ml-2 text-sm text-fairway-100/70">{formatOverUnder(diff)}</span>
                   </div>
