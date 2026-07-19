@@ -327,16 +327,19 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.fillStyle = plate;
   ctx.fill();
 
-  // Bat — held cocked back over the shoulder (READY), wound further back while
-  // loading, then swept across the zone to follow-through on the swing.
-  const READY = 0.5; // up-and-back over the batter's shoulder
-  const COCK = 0.95; // wound back further while holding
-  const SWING = -1.2; // follow-through across the plate
-  let angle = READY;
+  // Bat — held horizontal over the plate at rest, drawn up and back over the
+  // shoulder while loading, then swept forward across the zone toward the ball
+  // on the swing. The barrel is drawn straight up (angle 0), and the ball comes
+  // down the left of the pivot, so the plate side is a negative (leftward)
+  // angle and drawing back is a positive (rightward) one.
+  const REST = -Math.PI / 2; // horizontal, barrel pointing toward the plate
+  const COCK = 0.5; // drawn up and back over the shoulder while loading
+  const SWING = -Math.PI / 2 - 0.9; // follow-through across the plate toward the ball
+  let angle = REST;
   if (gs.swung) {
     angle = COCK + (SWING - COCK) * clamp((now - gs.swingAt) / 160, 0, 1);
   } else if (gs.phase === 'pitch' && gs.loaded) {
-    angle = READY + (COCK - READY) * clamp((now - gs.loadAt) / 220, 0, 1);
+    angle = REST + (COCK - REST) * clamp((now - gs.loadAt) / 220, 0, 1);
   }
   ctx.save();
   ctx.translate(W / 2 + 30, PLATE_Y + 26);
