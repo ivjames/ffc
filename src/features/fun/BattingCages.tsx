@@ -488,6 +488,27 @@ export default function BattingCages() {
         gs.ball.vy += 0.25 * (dt / 16); // gravity
         gs.ball.x += gs.ball.vx * (dt / 16);
         gs.ball.y += gs.ball.vy * (dt / 16);
+        // Keep the batted ball inside the cage — it caroms off the netting and
+        // ground and settles rather than flying off-frame and vanishing while
+        // the outcome text is still up. Impulses fire on contact, so they stay
+        // framerate-independent.
+        const groundY = H - BALL_R - 4;
+        if (gs.ball.y > groundY) {
+          gs.ball.y = groundY;
+          gs.ball.vy *= -0.34; // damped bounce off the ground
+          gs.ball.vx *= 0.6; // ground friction
+          if (Math.abs(gs.ball.vy) < 1.2) gs.ball.vy = 0; // come to rest
+        } else if (gs.ball.y < BALL_R) {
+          gs.ball.y = BALL_R;
+          gs.ball.vy = Math.abs(gs.ball.vy) * 0.4; // off the top netting
+        }
+        if (gs.ball.x < BALL_R) {
+          gs.ball.x = BALL_R;
+          gs.ball.vx = Math.abs(gs.ball.vx) * 0.5; // off the side netting
+        } else if (gs.ball.x > W - BALL_R) {
+          gs.ball.x = W - BALL_R;
+          gs.ball.vx = -Math.abs(gs.ball.vx) * 0.5;
+        }
         if (now - gs.resultAt >= RESULT_MS) {
           if (gs.pitchNo + 1 >= PITCHES) {
             gs.phase = 'done';
