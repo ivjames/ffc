@@ -478,12 +478,12 @@ export const CHALLENGE_SETS: Record<string, Challenge[]> = {
     { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title in your mightiest dragon voice.' },
     { kind: 'gameplay', emoji: '🔙', text: 'Turn your back to the hole and putt facing backward.' },
     { kind: 'dare', emoji: '🛡️', text: 'Strike your bravest knight pose and hold it.' },
-    { kind: 'gameplay', emoji: '🗡️', text: "Call your shot like a hero's vow before you strike." },
+    { kind: 'gameplay', emoji: '📣', text: "Call your shot out loud like a hero's vow before you putt." },
     { kind: 'dare', emoji: '👑', text: 'Bow to the whole group like royalty.' },
   ],
   // Western — the mine-cart and saloon course. Yeehaw energy.
   western: [
-    { kind: 'gameplay', emoji: '🤠', text: "Putt like you're drawing a six-shooter — quick, no lining it up." },
+    { kind: 'gameplay', emoji: '🤠', text: 'Putt quick as a tumbleweed — no lining it up.' },
     { kind: 'dare', emoji: '🐴', text: 'Gallop like a horse to the next tee.' },
     { kind: 'gameplay', emoji: '🙈', text: 'Close your eyes for your entire next shot — no peeking!' },
     { kind: 'dare', emoji: '🎩', text: 'Tip your imaginary hat to the whole group.' },
@@ -492,7 +492,7 @@ export const CHALLENGE_SETS: Record<string, Challenge[]> = {
     { kind: 'gameplay', emoji: '🦵', text: 'Putt croquet-style, straddling the club like a horse.' },
     { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title like an old cowboy ballad.' },
     { kind: 'gameplay', emoji: '🤙', text: 'Play your next shot with only your weaker hand on the club.' },
-    { kind: 'dare', emoji: '💥', text: 'Strike your best "quick draw" pose and freeze.' },
+    { kind: 'dare', emoji: '🪢', text: 'Swing an imaginary lasso over your head for 5 seconds.' },
     { kind: 'gameplay', emoji: '🔙', text: 'Turn your back to the hole and putt facing backward.' },
     { kind: 'dare', emoji: '🌵', text: 'Stand as still as a cactus for 5 seconds.' },
   ],
