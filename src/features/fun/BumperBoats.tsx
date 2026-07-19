@@ -15,11 +15,11 @@ const BOATS: BumperTheme = {
   // than the cars — gentler thrust and lower speed caps — with a lower bump
   // threshold so scoring on water isn't harder despite the reduced top speed.
   friction: 0.984,
-  accel: 0.1,
-  maxSpeed: 3.7,
-  aiAccel: 0.08,
-  aiMax: 3.0,
-  bumpSpeed: 1.6,
+  accel: 0.085,
+  maxSpeed: 3.1,
+  aiAccel: 0.068,
+  aiMax: 2.55,
+  bumpSpeed: 1.4,
 };
 
 export default function BumperBoats() {
