@@ -28,6 +28,7 @@ import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
 import SoundToggle from './ui/SoundToggle';
 import ThemeToggle from './ui/ThemeToggle';
+import SkinPicker from './ui/SkinPicker';
 
 // §7 Routes / screens.
 export default function App() {
@@ -82,6 +83,7 @@ export default function App() {
         className="fixed bottom-0 left-0 z-50 flex items-center gap-2 p-2"
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
       >
+        <SkinPicker />
         <ThemeToggle />
         <SoundToggle />
       </div>

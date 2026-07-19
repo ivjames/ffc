@@ -581,3 +581,266 @@ button {
     animation: fade-in 0.3s ease-out both;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TEMPLATE SKINS
+   Selectable visual templates layered on the candy base. A skin restyles only
+   the shared MATERIAL classes — the page background, `.btn-accent`, `.surface`,
+   `.surface-1`, `.key`, `.tile` — under `:root[data-template='…']`, so every
+   screen re-skins at once (src/lib/skin.ts flips the attribute). Panels stay
+   dark in dark mode and light in light mode, so the neutral `--color-fairway-*`
+   text ramp remains legible; a skin's identity comes from STRUCTURE (bevels,
+   fat outlines, neon glow, brushed metal) plus the interactive `--accent` and
+   per-tile `--tile-accent`, both of which still flow through untouched.
+   `candy` is the base above and needs no block here. Each new skin overrides
+   the base's background-image/box-shadow fully so no candy gloss leaks through.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ——— QUIRKY BLOCKY — fat ink outlines + hard offset shadows, no gloss ——————— */
+:root[data-template='blocky'][data-theme='dark'] {
+  --bk-paper: #151119;
+  --bk-dot: rgba(255, 255, 255, 0.07);
+  --bk-panel: #221f2a;
+  --bk-line: #efe7d8;
+  --bk-cast: #34303d;
+}
+:root[data-template='blocky'][data-theme='light'] {
+  --bk-paper: #fff4da;
+  --bk-dot: rgba(26, 26, 26, 0.09);
+  --bk-panel: #ffffff;
+  --bk-line: #1a1a1a;
+  --bk-cast: #1a1a1a;
+}
+:root[data-template='blocky'] body {
+  background-color: var(--bk-paper);
+  background-image: radial-gradient(var(--bk-dot) 1.6px, transparent 1.6px);
+  background-size: 16px 16px;
+}
+:root[data-template='blocky'] .surface,
+:root[data-template='blocky'] .surface-1,
+:root[data-template='blocky'] .key {
+  background-image: none;
+  background-color: var(--bk-panel);
+  border: 3px solid var(--bk-line);
+  box-shadow: 4px 4px 0 var(--bk-cast);
+}
+:root[data-template='blocky'] .btn-accent {
+  background-image: none;
+  background-color: var(--accent);
+  border: 3px solid var(--bk-cast);
+  box-shadow: 4px 4px 0 var(--bk-cast);
+  color: #16121b;
+}
+:root[data-template='blocky'] .tile {
+  background-image: none;
+  background-color: var(--bk-panel);
+  border: 3px solid var(--bk-line);
+  box-shadow: 5px 5px 0 var(--tile-accent, var(--bk-line));
+}
+:root[data-template='blocky'] .btn-accent:active,
+:root[data-template='blocky'] .key:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--bk-cast);
+}
+:root[data-template='blocky'] .tile:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--tile-accent, var(--bk-line));
+}
+
+/* ——— UV PARTY — dark glass rimmed in neon (dark) / neon-on-white (light) ——— */
+:root[data-template='uv'][data-theme='dark'] body {
+  background-color: #0a0616;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    radial-gradient(70% 45% at 50% -5%, rgba(157, 75, 255, 0.35), transparent 70%);
+  background-size: 27px 27px, 27px 27px, 100% 100%;
+}
+:root[data-template='uv'][data-theme='light'] body {
+  background-color: #f5f1fc;
+  background-image:
+    radial-gradient(rgba(157, 75, 255, 0.06) 1px, transparent 1px),
+    radial-gradient(60% 45% at 100% 0%, rgba(22, 200, 214, 0.14), transparent 70%);
+  background-size: 24px 24px, 100% 100%;
+}
+:root[data-template='uv'][data-theme='dark'] .surface,
+:root[data-template='uv'][data-theme='dark'] .surface-1,
+:root[data-template='uv'][data-theme='dark'] .key {
+  background-image: none;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid #16f2e3;
+  box-shadow: 0 0 13px rgba(22, 242, 227, 0.28), inset 0 0 13px rgba(22, 242, 227, 0.08);
+}
+:root[data-template='uv'][data-theme='dark'] .btn-accent {
+  background-image: none;
+  background-color: color-mix(in srgb, var(--accent), transparent 82%);
+  border: 1px solid var(--accent);
+  box-shadow:
+    0 0 15px color-mix(in srgb, var(--accent), transparent 55%),
+    inset 0 0 14px color-mix(in srgb, var(--accent), transparent 82%);
+}
+:root[data-template='uv'][data-theme='dark'] .tile {
+  background-image: none;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--tile-accent, #9d4bff);
+  box-shadow:
+    0 0 15px color-mix(in srgb, var(--tile-accent, #9d4bff), transparent 55%),
+    inset 0 0 16px color-mix(in srgb, var(--tile-accent, #9d4bff), transparent 82%);
+}
+:root[data-template='uv'][data-theme='light'] .surface,
+:root[data-template='uv'][data-theme='light'] .surface-1,
+:root[data-template='uv'][data-theme='light'] .key {
+  background-image: none;
+  background-color: #ffffff;
+  border: 2px solid #12b3c6;
+  box-shadow: 3px 3px 0 rgba(18, 179, 198, 0.32);
+}
+:root[data-template='uv'][data-theme='light'] .btn-accent {
+  background-image: none;
+  background-color: #ffffff;
+  border: 2px solid var(--accent);
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--accent), transparent 62%);
+  color: color-mix(in srgb, var(--accent), black 32%);
+}
+:root[data-template='uv'][data-theme='light'] .tile {
+  background-image: none;
+  background-color: #ffffff;
+  border: 2px solid var(--tile-accent, #9d4bff);
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--tile-accent, #9d4bff), transparent 60%);
+}
+:root[data-template='uv'] .btn-accent:active,
+:root[data-template='uv'] .key:active:not(:disabled),
+:root[data-template='uv'] .tile:active {
+  transform: translateY(1px);
+}
+
+/* ——— GLASSY — frosted translucent panels over an aurora ————————————————————— */
+:root[data-template='glass'][data-theme='dark'] body {
+  background-color: #0a0d18;
+  background-image:
+    radial-gradient(48% 40% at 12% 6%, rgba(99, 120, 255, 0.4), transparent 62%),
+    radial-gradient(46% 36% at 92% 12%, rgba(192, 84, 252, 0.32), transparent 62%),
+    radial-gradient(58% 48% at 74% 102%, rgba(34, 197, 225, 0.28), transparent 62%);
+}
+:root[data-template='glass'][data-theme='light'] body {
+  background-color: #e6ecfb;
+  background-image:
+    radial-gradient(48% 38% at 12% 8%, rgba(124, 156, 255, 0.5), transparent 62%),
+    radial-gradient(44% 34% at 92% 12%, rgba(240, 171, 252, 0.45), transparent 62%),
+    radial-gradient(55% 46% at 74% 100%, rgba(103, 232, 249, 0.45), transparent 62%);
+}
+:root[data-template='glass'][data-theme='dark'] {
+  --gl-fill: rgba(255, 255, 255, 0.08);
+  --gl-line: rgba(255, 255, 255, 0.18);
+  --gl-hi: rgba(255, 255, 255, 0.22);
+  --gl-cast: rgba(0, 0, 0, 0.55);
+}
+:root[data-template='glass'][data-theme='light'] {
+  --gl-fill: rgba(255, 255, 255, 0.45);
+  --gl-line: rgba(255, 255, 255, 0.75);
+  --gl-hi: rgba(255, 255, 255, 0.85);
+  --gl-cast: rgba(40, 50, 95, 0.32);
+}
+:root[data-template='glass'] .surface,
+:root[data-template='glass'] .surface-1,
+:root[data-template='glass'] .key,
+:root[data-template='glass'] .btn-accent,
+:root[data-template='glass'] .tile {
+  background-image: none;
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid var(--gl-line);
+  box-shadow: 0 10px 26px -12px var(--gl-cast), inset 0 1px 0 var(--gl-hi);
+}
+:root[data-template='glass'] .surface,
+:root[data-template='glass'] .surface-1,
+:root[data-template='glass'] .key {
+  background-color: var(--gl-fill);
+}
+:root[data-template='glass'] .btn-accent {
+  background-color: color-mix(in srgb, var(--gl-fill), var(--accent) 45%);
+}
+:root[data-template='glass'] .tile {
+  background-color: color-mix(in srgb, var(--gl-fill), var(--tile-accent, var(--accent)) 30%);
+}
+:root[data-template='glass'] .btn-accent:active,
+:root[data-template='glass'] .key:active:not(:disabled),
+:root[data-template='glass'] .tile:active {
+  transform: translateY(1px);
+}
+
+/* ——— CHROME / METALLIC — gunmetal (dark) / brushed aluminium (light) ———————— */
+:root[data-template='chrome'][data-theme='dark'] body {
+  background-image: linear-gradient(
+    180deg,
+    #20262e 0%,
+    #2c343e 43%,
+    #46515d 50%,
+    #232a32 57%,
+    #14181d 100%
+  );
+}
+:root[data-template='chrome'][data-theme='light'] body {
+  background-image: linear-gradient(
+    180deg,
+    #d6dde4 0%,
+    #eef2f6 44%,
+    #ffffff 50%,
+    #e7ecf1 56%,
+    #cfd6dd 100%
+  );
+}
+:root[data-template='chrome'][data-theme='dark'] {
+  --cr-hi: #4c5661;
+  --cr-lo: #2a313a;
+  --cr-line: #59636e;
+  --cr-bevel: rgba(255, 255, 255, 0.4);
+  --cr-shade: rgba(0, 0, 0, 0.5);
+  --cr-cast: rgba(0, 0, 0, 0.55);
+  --cr-guard: #262c33;
+}
+:root[data-template='chrome'][data-theme='light'] {
+  --cr-hi: #ffffff;
+  --cr-lo: #dde3e9;
+  --cr-line: #bcc5ce;
+  --cr-bevel: rgba(255, 255, 255, 0.95);
+  --cr-shade: rgba(120, 132, 145, 0.3);
+  --cr-cast: rgba(90, 102, 115, 0.45);
+  --cr-guard: #d5dce2;
+}
+:root[data-template='chrome'] .surface,
+:root[data-template='chrome'] .surface-1,
+:root[data-template='chrome'] .key,
+:root[data-template='chrome'] .btn-accent {
+  background-image: linear-gradient(180deg, var(--cr-hi), var(--cr-lo));
+  border: 1px solid var(--cr-line);
+  box-shadow:
+    inset 0 1px 0 var(--cr-bevel),
+    inset 0 -2px 5px var(--cr-shade),
+    0 3px 9px -3px var(--cr-cast);
+}
+:root[data-template='chrome'] .btn-accent {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cr-hi), var(--accent) 26%),
+    color-mix(in srgb, var(--cr-lo), var(--accent) 18%)
+  );
+}
+:root[data-template='chrome'] .tile {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cr-hi), var(--tile-accent, var(--accent)) 24%),
+    color-mix(in srgb, var(--cr-guard), var(--tile-accent, var(--accent)) 14%)
+  );
+  border: 1px solid var(--cr-line);
+  box-shadow:
+    inset 0 1px 0 var(--cr-bevel),
+    inset 0 -3px 7px var(--cr-shade),
+    0 4px 11px -3px var(--cr-cast);
+}
+:root[data-template='chrome'] .btn-accent:active,
+:root[data-template='chrome'] .key:active:not(:disabled),
+:root[data-template='chrome'] .tile:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 1px 0 var(--cr-bevel), 0 1px 3px -1px var(--cr-cast);
+}
