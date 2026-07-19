@@ -596,12 +596,23 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number, fx: FX) {
   }
   ctx.restore();
 
-  // —— Dynamic layer (the moving world), shaken on impacts/laps ——
+  // —— Dynamic layer (the moving world) ——
+  // Camera shake jolts the moving pieces — the kart, its trail and the dust — on
+  // impacts and laps. The bridge, like the walls and asphalt, is fixed track
+  // infrastructure and is drawn OUTSIDE the shake: rattling the crossover deck on
+  // a wall bump reads as the whole bridge wobbling, which it shouldn't.
+  const s = fx.shake > 0.05 ? shakeOffset(fx.shake) : null;
+
+  // Which leg the kart is on decides its layering against the fixed bridge deck:
+  // near the bridge's under-arc it passes beneath the deck (draw deck last to hide
+  // it); otherwise it rides over the top (draw deck first).
+  const k = gs.kart;
+  const b = track.bridge;
+  const underBridge = b !== undefined && arcGap(gs.prevF, b.underF) < b.bandF;
+  if (b && !underBridge) drawBridge(ctx, b);
+
   ctx.save();
-  if (fx.shake > 0.05) {
-    const s = shakeOffset(fx.shake);
-    ctx.translate(s.x, s.y);
-  }
+  if (s) ctx.translate(s.x, s.y);
 
   // Lure: while dragging, show where you're leading the kart.
   if (gs.phase === 'race' && gs.touch.active) {
@@ -628,19 +639,13 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number, fx: FX) {
     ctx.fill();
   }
 
-  // Kart, layered against the bridge: when it's on the leg passing under the
-  // deck (near the bridge's under-arc), draw it first so the deck hides it;
-  // otherwise draw the deck first so the kart rides over the top.
-  const k = gs.kart;
-  const b = track.bridge;
-  const underBridge = b !== undefined && arcGap(gs.prevF, b.underF) < b.bandF;
-  if (b && !underBridge) drawBridge(ctx, b);
   drawKart(ctx, k);
-  if (b && underBridge) drawBridge(ctx, b);
 
   // Dust / spark bursts, additive.
   drawParticles(ctx, fx.particles);
   ctx.restore();
+
+  if (b && underBridge) drawBridge(ctx, b);
 
   // —— Lap flash overlay ——
   if (fx.flash > 0) {
