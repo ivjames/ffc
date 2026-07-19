@@ -124,11 +124,12 @@ const TRACKS: Track[] = [
     x: CX + 108 * Math.cos(t) + 22 * Math.sin(2 * t),
     y: CY + 196 * Math.sin(t),
   })),
-  // Two long straights folded into a bent-wing boomerang: the cos(2t) term arcs
-  // the loop up into a hairpin at the top instead of leaving a plain oval.
-  buildTrack('boomerang', 'Boomerang', 'Two straights, one big bend', (t) => ({
-    x: CX + 118 * Math.cos(t),
-    y: CY + 118 * Math.sin(t) + 66 * Math.cos(2 * t) - 20,
+  // A boomerang laid on its side: a tall crescent sweeping the length of the
+  // canvas. The cos(2t) term bows the loop out to one side into the wing; the
+  // 37px x-offset recenters that one-sided bow. The longest lap in the set.
+  buildTrack('boomerang', 'Boomerang', 'One big sweeping bend', (t) => ({
+    x: CX - 37 + 94 * Math.cos(t) + 53 * Math.cos(2 * t),
+    y: CY + 230 * Math.sin(t),
   })),
   // A true hourglass: the polar radius pinches to a narrow waist at mid-height
   // (small at the sides, r = 1 − 0.5·cos2t) and bulges into a lobe top and bottom.
