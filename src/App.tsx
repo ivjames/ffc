@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Home from './features/home/Home';
 import CoursePicker from './features/scorecard/CoursePicker';
 import PlayerSetup from './features/scorecard/PlayerSetup';
@@ -33,9 +33,6 @@ import RotateNudge from './ui/RotateNudge';
 
 // §7 Routes / screens.
 export default function App() {
-  // The /tv leaderboard is built for wide screens; every other screen is
-  // portrait-first, so the rotate-to-vertical nudge is suppressed there.
-  const onTv = useLocation().pathname === '/tv';
   return (
     <>
       <Routes>
@@ -96,9 +93,9 @@ export default function App() {
           cached bundle — reloads onto the fresh build. */}
       <UpdateModal />
 
-      {/* Nudge phones back to portrait when held sideways (skipped on /tv,
-          which is designed for wide screens). */}
-      {!onTv && <RotateNudge />}
+      {/* Every screen is portrait-first — nudge phones back to vertical when
+          held sideways. */}
+      <RotateNudge />
     </>
   );
 }

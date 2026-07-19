@@ -11,8 +11,7 @@ import { useEffect, useState } from 'react';
 //   (orientation: landscape) and (max-height: 540px)
 // The max-height clause keeps this to phones held sideways — a short, wide
 // viewport — and leaves laptops/desktops/tablets (tall enough even in
-// landscape) untouched. The full-screen /tv leaderboard is *meant* for wide
-// screens, so App.tsx skips mounting this on that route.
+// landscape) untouched.
 const LANDSCAPE_PHONE = '(orientation: landscape) and (max-height: 540px)';
 
 export default function RotateNudge() {
