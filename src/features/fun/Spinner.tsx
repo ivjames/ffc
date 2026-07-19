@@ -101,15 +101,21 @@ export default function Spinner() {
     const travel = 5 * 360 + delta; // total degrees this spin sweeps
     setRotation((r) => r + travel);
 
-    // Tick once per peg as it actually passes the pointer. A peg boundary sits
-    // every SECTOR degrees; for each one the wheel crosses, invert the easing
-    // curve to find WHEN that crossing happens, so the clicks track the real
-    // rotation speed — dense at the fast start, spreading out as it settles.
+    // Tick once per peg as it actually passes the pointer. Peg boundaries sit
+    // every SECTOR degrees in ABSOLUTE rotation, so a peg crosses the pointer
+    // each time the running angle passes a multiple of SECTOR. The wheel rests
+    // on a wedge center — half a sector off a boundary — after any spin, so we
+    // start from the current within-sector offset rather than assuming we begin
+    // on a boundary; otherwise every spin after the first ticks half a sector
+    // late (and the final tick collides with the landing). For each crossing,
+    // invert the easing curve to find WHEN it happens, so the clicks track the
+    // real rotation speed — dense at the fast start, spreading out as it settles.
     timers.current.forEach(clearTimeout);
     timers.current = [];
-    const pegs = Math.floor(travel / SECTOR);
-    for (let k = 1; k <= pegs; k++) {
-      const when = timeAtProgress((k * SECTOR) / travel) * SPIN_MS;
+    const startMod = ((rotation % SECTOR) + SECTOR) % SECTOR;
+    const firstCrossing = startMod === 0 ? SECTOR : SECTOR - startMod;
+    for (let dist = firstCrossing; dist <= travel; dist += SECTOR) {
+      const when = timeAtProgress(dist / travel) * SPIN_MS;
       const id = window.setTimeout(playTick, when);
       timers.current.push(id);
     }
