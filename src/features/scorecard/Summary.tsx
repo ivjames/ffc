@@ -133,7 +133,9 @@ export default function Summary() {
             {/* One horizontal row: trophy left, champion in the middle, score
                 right — a compact hero rather than a tall stack. */}
             <div className="relative flex items-center gap-4">
-              <div className="animate-trophy-pop shrink-0 text-5xl leading-none">🏆</div>
+              <div className="animate-trophy-pop w-14 shrink-0 text-center text-5xl leading-none">
+                🏆
+              </div>
               <div className="min-w-0 flex-1 text-center">
                 <div className="text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
                   {tied ? 'Tied for the win' : 'Winner'}
@@ -150,7 +152,7 @@ export default function Summary() {
                   ))}
                 </div>
               </div>
-              <div className="shrink-0 text-right leading-tight">
+              <div className="w-20 shrink-0 text-right leading-tight">
                 <div className="text-2xl font-black text-fairway-50">{heroRows[0].total}</div>
                 <div className="text-sm text-fairway-100/70">{formatOverUnder(heroDiff)}</div>
               </div>
@@ -167,11 +169,12 @@ export default function Summary() {
                 <div
                   key={row.p}
                   style={{ '--i': row.rank } as CSSProperties}
-                  className="surface-1 animate-rise-in flex items-center gap-4 rounded-2xl border border-fairway-800/60 px-4 py-3"
+                  className="surface-1 animate-rise-in flex items-center gap-4 rounded-2xl border border-fairway-800/60 px-5 py-3"
                 >
-                  {/* Same three zones as the hero: place left, tag centered,
-                      score right. */}
-                  <span className="shrink-0 font-mono text-2xl font-black text-fairway-100/50">
+                  {/* Same three zones and column widths as the hero — place
+                      left, tag centered, score right — so the columns line up
+                      down the whole card. */}
+                  <span className="w-14 shrink-0 text-center font-mono text-2xl font-black text-fairway-100/50">
                     {row.rank}
                   </span>
                   <div className="min-w-0 flex-1 text-center">
@@ -179,7 +182,7 @@ export default function Summary() {
                       {row.tag}
                     </span>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="w-20 shrink-0 text-right">
                     <span className="text-xl font-black text-fairway-50">{row.total}</span>
                     <span className="ml-2 text-sm text-fairway-100/70">{formatOverUnder(diff)}</span>
                   </div>
