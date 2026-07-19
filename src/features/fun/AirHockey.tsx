@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
+import type { Particle, Vec as FxVec } from './fx';
+import {
+  TWO_PI,
+  withAlpha,
+  roundRectPath,
+  drawShadow,
+  drawSphere,
+  neonLine,
+  spawnBurst,
+  stepParticles,
+  drawParticles,
+  pushTrail,
+  decay,
+  shakeOffset,
+} from './fx';
 
 // §12 Air Hockey — the second attraction mini-game. Drag your mallet in the
 // bottom half to defend your goal and slam the puck into the CPU's; first to 7
@@ -213,74 +228,161 @@ function step(gs: GS, hitRef: { v: boolean }, now: number): 'you' | 'cpu' | null
   return null;
 }
 
+// —— juice: rendering-only effects (no gameplay state) ————————————————————————
+// These live outside GS so the fixed-timestep sim is never touched; they're
+// advanced per animation frame with a real dt and only ever paint pixels. Built
+// on the shared ./fx toolkit so every Fun Zone game shares one visual language.
+type FX = {
+  trail: FxVec[]; // recent puck positions → motion streak
+  particles: Particle[]; // spark bursts on hits/goals
+  shake: number; // camera shake magnitude (px), decays to 0
+  flash: number; // goal flash 0..1, decays to 0
+  flashColor: string;
+};
+
+function freshFX(): FX {
+  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#ffffff' };
+}
+
+/** Advance the visual-only effects by `dt` ms (framerate-correct). */
+function updateFX(fx: FX, gs: GS, dt: number) {
+  pushTrail(fx.trail, gs.puck.x, gs.puck.y);
+  fx.particles = stepParticles(fx.particles, dt);
+  fx.shake = decay(fx.shake, dt, 0.02);
+  fx.flash = decay(fx.flash, dt, 0.0022);
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
-function draw(ctx: CanvasRenderingContext2D, gs: GS) {
+/** A domed, top-lit mallet: ground shadow, lit body + rim, inner knob. */
+function drawMallet(ctx: CanvasRenderingContext2D, x: number, y: number, light: string, base: string, dark: string) {
+  drawShadow(ctx, x, y + 6, PAD_R * 0.95, PAD_R * 0.5);
+  drawSphere(ctx, x, y, PAD_R, light, base, dark, { rim: true });
+  drawSphere(ctx, x, y, PAD_R * 0.5, light, base, dark, { specular: false });
+}
+
+/** A glossy puck: ground shadow, lit body, incised ring, specular hotspot. */
+function drawPuck(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  drawShadow(ctx, x, y + 5, PUCK_R * 0.95, PUCK_R * 0.55, 0.4);
+  drawSphere(ctx, x, y, PUCK_R, '#ffffff', '#dbe4ee', '#8b97a6');
+  ctx.beginPath();
+  ctx.arc(x, y, PUCK_R * 0.62, 0, TWO_PI);
+  ctx.strokeStyle = 'rgba(80,95,115,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.clearRect(0, 0, W, H);
 
-  // Table.
-  ctx.fillStyle = '#0e1a2b';
+  // —— Table surface: a polished icy rink, top-lit ——
+  const surf = ctx.createLinearGradient(0, 0, 0, H);
+  surf.addColorStop(0, '#12233b');
+  surf.addColorStop(0.5, '#0d1a2c');
+  surf.addColorStop(1, '#0a1524');
+  ctx.fillStyle = surf;
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#2a3a55';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(1.5, 1.5, W - 3, H - 3);
 
-  // Center line + circle.
-  ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+  // Soft overhead sheen.
+  const sheen = ctx.createRadialGradient(W / 2, H * 0.28, 20, W / 2, H * 0.28, H * 0.72);
+  sheen.addColorStop(0, 'rgba(120,170,220,0.16)');
+  sheen.addColorStop(1, 'rgba(120,170,220,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, W, H);
+
+  // Corner vignette for depth.
+  const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // —— Rink rails (beveled border) ——
+  ctx.save();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(9,15,25,0.9)';
+  roundRectPath(ctx, 3, 3, W - 6, H - 6, 16);
+  ctx.stroke();
   ctx.lineWidth = 2;
+  const rail = ctx.createLinearGradient(0, 0, W, 0);
+  rail.addColorStop(0, 'rgba(120,170,220,0.35)');
+  rail.addColorStop(0.5, 'rgba(185,220,255,0.55)');
+  rail.addColorStop(1, 'rgba(120,170,220,0.35)');
+  ctx.strokeStyle = rail;
+  roundRectPath(ctx, 5, 5, W - 10, H - 10, 14);
+  ctx.stroke();
+  ctx.restore();
+
+  // —— Center line + face-off circle, glowing ——
+  ctx.save();
+  ctx.strokeStyle = 'rgba(120,190,255,0.28)';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(90,170,255,0.7)';
+  ctx.shadowBlur = 8;
   ctx.beginPath();
-  ctx.moveTo(0, MID);
-  ctx.lineTo(W, MID);
+  ctx.moveTo(10, MID);
+  ctx.lineTo(W - 10, MID);
   ctx.stroke();
   ctx.beginPath();
   ctx.arc(W / 2, MID, 46, 0, Math.PI * 2);
   ctx.stroke();
-
-  // Goals (mouths in the end walls).
-  ctx.strokeStyle = '#38bdf8';
-  ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.moveTo(GOAL_X0, 2.5);
-  ctx.lineTo(GOAL_X1, 2.5);
-  ctx.moveTo(GOAL_X0, H - 2.5);
-  ctx.lineTo(GOAL_X1, H - 2.5);
-  ctx.stroke();
-
-  // Mallets.
-  const mallet = (x: number, y: number, color: string) => {
-    ctx.beginPath();
-    ctx.arc(x, y, PAD_R, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, PAD_R * 0.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fill();
-  };
-  mallet(gs.ai.x, gs.ai.y, '#ef4444');
-  mallet(gs.player.x, gs.player.y, '#22c55e');
-
-  // Puck.
-  ctx.beginPath();
-  ctx.arc(gs.puck.x, gs.puck.y, PUCK_R, 0, Math.PI * 2);
-  ctx.fillStyle = '#f8fafc';
+  ctx.arc(W / 2, MID, 5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(120,190,255,0.4)';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  ctx.restore();
+
+  // —— Goals: glowing neon mouths (cyan = CPU end, green = your end) ——
+  neonLine(ctx, GOAL_X0, 4, GOAL_X1, 4, '#38bdf8', 5, 16);
+  neonLine(ctx, GOAL_X0, H - 4, GOAL_X1, H - 4, '#22c55e', 5, 16);
+
+  // —— Dynamic layer (shaken on goals) ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
+  }
+
+  // Puck motion trail (drawn under everything moving).
+  for (let i = 0; i < fx.trail.length; i++) {
+    const t = fx.trail[i];
+    const k = i / fx.trail.length;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, PUCK_R * (0.3 + k * 0.65), 0, TWO_PI);
+    ctx.fillStyle = `rgba(150,210,255,${0.02 + k * 0.1})`;
+    ctx.fill();
+  }
+
+  drawMallet(ctx, gs.ai.x, gs.ai.y, '#fca5a5', '#ef4444', '#7f1d1d');
+  drawMallet(ctx, gs.player.x, gs.player.y, '#86efac', '#22c55e', '#14532d');
+  drawPuck(ctx, gs.puck.x, gs.puck.y);
+
+  drawParticles(ctx, fx.particles);
+  ctx.restore();
+
+  // —— Goal flash overlay ——
+  if (fx.flash > 0) {
+    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.25);
+    ctx.fillRect(0, 0, W, H);
+  }
 
   // "Get ready" flash on serve.
   if (gs.phase === 'serve') {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.save();
+    ctx.fillStyle = 'rgba(230,245,255,0.92)';
+    ctx.shadowColor = 'rgba(90,170,255,0.9)';
+    ctx.shadowBlur = 12;
     ctx.font = 'bold 20px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('Get ready…', W / 2, MID - 80);
+    ctx.restore();
   }
 }
 
 export default function AirHockey() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS(0));
+  const fxRef = useRef<FX>(freshFX());
 
   const [phase, setPhase] = useState<Phase>('serve');
   const [you, setYou] = useState(0);
@@ -327,7 +429,8 @@ export default function AirHockey() {
         raf = requestAnimationFrame(frame);
         return;
       }
-      acc += Math.min(now - last, 100); // clamp to avoid a spiral after a stall
+      const dt = Math.min(now - last, 100); // clamp to avoid a spiral after a stall
+      acc += dt;
       last = now;
 
       if (gs.phase === 'serve' && now >= gs.serveAt) serve(gs);
@@ -344,18 +447,29 @@ export default function AirHockey() {
         }
         acc -= FIXED;
       }
-      if (hitRef.v) playStroke();
+      const fx = fxRef.current;
+      if (hitRef.v) {
+        playStroke();
+        spawnBurst(fx.particles, gs.puck.x, gs.puck.y, 8, 150, '#cfe8ff');
+      }
 
       if (goal) {
         acc = 0;
+        fx.shake = 7;
+        fx.flash = 1;
+        fx.trail.length = 0;
         if (goal === 'you') {
           gs.you += 1;
           gs.serveDir = -1; // serve away toward the CPU next
+          fx.flashColor = '#38bdf8';
+          spawnBurst(fx.particles, W / 2, 12, 28, 320, '#7dd3fc');
           setYou(gs.you);
           playCup();
         } else {
           gs.cpu += 1;
           gs.serveDir = 1;
+          fx.flashColor = '#ef4444';
+          spawnBurst(fx.particles, W / 2, H - 12, 28, 320, '#fca5a5');
           setCpu(gs.cpu);
           playUndo();
         }
@@ -372,7 +486,8 @@ export default function AirHockey() {
         }
       }
 
-      draw(ctx, gs);
+      updateFX(fx, gs, dt);
+      draw(ctx, gs, fx);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -409,6 +524,7 @@ export default function AirHockey() {
 
   const restart = useCallback(() => {
     gsRef.current = freshGS(performance.now());
+    fxRef.current = freshFX();
     setYou(0);
     setCpu(0);
     setPhase('serve');

@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
+import type { Particle, Vec as FxVec } from './fx';
+import {
+  TWO_PI,
+  withAlpha,
+  roundRectPath,
+  drawShadow,
+  neonLine,
+  spawnBurst,
+  stepParticles,
+  drawParticles,
+  pushTrail,
+  decay,
+  shakeOffset,
+  fxRandom,
+} from './fx';
 
 // §12 Go-Karts — the seventh attraction mini-game. A top-down 3-lap time trial.
 // Pick from a catalogue of procedural circuits, then drag to lead your kart
@@ -316,6 +331,93 @@ function step(gs: GS): boolean {
   return lapped;
 }
 
+// —— juice: rendering-only effects (no gameplay state) ————————————————————————
+// These live outside GS so the fixed-timestep sim is never touched; they're
+// advanced per animation frame with a real dt and only ever paint pixels. Built
+// on the shared ./fx toolkit so every Fun Zone game shares one visual language.
+type FX = {
+  trail: FxVec[]; // recent kart positions → speed streak
+  skids: FxVec[]; // rubber laid down on the asphalt while drifting
+  particles: Particle[]; // dust on wall scrapes, sparks on a lap
+  shake: number; // camera shake magnitude (px), decays to 0
+  flash: number; // lap flash 0..1, decays to 0
+  flashColor: string;
+  popup: string; // "Lap 2" / "Best lap!" text
+  popupT: number; // popup life 0..1, decays to 0
+  prevHead: number; // last frame heading → drift detection
+  wasWall: boolean; // touching a barrier last frame → first-contact pop
+};
+
+function freshFX(): FX {
+  return {
+    trail: [],
+    skids: [],
+    particles: [],
+    shake: 0,
+    flash: 0,
+    flashColor: '#06b6d4',
+    popup: '',
+    popupT: 0,
+    prevHead: 0,
+    wasWall: false,
+  };
+}
+
+/** Advance the visual-only effects by `dt` ms (framerate-correct). Reads kart
+ *  state and the (pure) track projection to lay a motion trail, drift skids and
+ *  wall-scrape dust — all painted, never fed back into the sim. */
+function updateFX(fx: FX, gs: GS, dt: number) {
+  const k = gs.kart;
+  fx.particles = stepParticles(fx.particles, dt, 0.02);
+  fx.shake = decay(fx.shake, dt, 0.02);
+  fx.flash = decay(fx.flash, dt, 0.0022);
+  fx.popupT = decay(fx.popupT, dt, 0.0006);
+
+  if (gs.phase !== 'race') {
+    fx.prevHead = k.heading;
+    fx.wasWall = false;
+    return;
+  }
+
+  // Speed streak behind the kart.
+  if (k.speed > 0.25) pushTrail(fx.trail, k.x, k.y, 20);
+
+  // Drift skids: when the heading swings hard at speed, lay two rear-wheel marks.
+  let dh = k.heading - fx.prevHead;
+  dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+  if (k.speed > 0.9 && Math.abs(dh) > 0.05) {
+    const bx = k.x - Math.cos(k.heading) * 8;
+    const by = k.y - Math.sin(k.heading) * 8;
+    const ox = -Math.sin(k.heading) * 4;
+    const oy = Math.cos(k.heading) * 4;
+    fx.skids.push({ x: bx + ox, y: by + oy });
+    fx.skids.push({ x: bx - ox, y: by - oy });
+    while (fx.skids.length > 120) fx.skids.shift();
+  }
+  fx.prevHead = k.heading;
+
+  // Wall-scrape dust: re-project (read-only) to see if the kart is pinned to a
+  // barrier. A bigger pop + shake on first contact, then a light continuous
+  // spray while it grinds along.
+  const pr = project(gs.track, k.x, k.y, k.seg);
+  if (pr.dist > WALL_DIST - 1.2 && k.speed > 0.55) {
+    const nx = (k.x - pr.px) / (pr.dist || 1);
+    const ny = (k.y - pr.py) / (pr.dist || 1);
+    const cx = pr.px + nx * WALL_DIST;
+    const cy = pr.py + ny * WALL_DIST;
+    if (!fx.wasWall) {
+      spawnBurst(fx.particles, cx, cy, 9, 150, '#dff6ff');
+      fx.shake = Math.max(fx.shake, 5);
+    } else if (fxRandom() < 0.6) {
+      spawnBurst(fx.particles, cx, cy, 2, 70, '#dff6ff');
+      fx.shake = Math.max(fx.shake, 1.6);
+    }
+    fx.wasWall = true;
+  } else {
+    fx.wasWall = false;
+  }
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
 /** Trace a track's centerline as a closed path on the given context. */
 function traceTrack(ctx: CanvasRenderingContext2D, track: Track) {
@@ -328,14 +430,45 @@ function traceTrack(ctx: CanvasRenderingContext2D, track: Track) {
   ctx.closePath();
 }
 
+/** A top-lit cyan racer: a soft ground shadow, a gradient-shaded body with a
+ *  glossy roof highlight, dark tyres and a tinted cockpit. Body dimensions match
+ *  the original (render-only change — collision still uses KART_R). */
 function drawKart(ctx: CanvasRenderingContext2D, k: Kart) {
   ctx.save();
   ctx.translate(k.x, k.y);
+  // Contact shadow sits on the track, un-rotated.
+  drawShadow(ctx, 0, 3, 13, 8, 0.4);
   ctx.rotate(k.heading);
-  ctx.fillStyle = '#22c55e';
-  ctx.fillRect(-11, -7, 22, 14);
+
+  // Dark tyres poking out from under the body.
   ctx.fillStyle = '#0b0f14';
-  ctx.fillRect(2, -5, 7, 10); // windshield/cockpit toward the front
+  ctx.fillRect(-9, -9, 5, 3);
+  ctx.fillRect(4, -9, 5, 3);
+  ctx.fillRect(-9, 6, 5, 3);
+  ctx.fillRect(4, 6, 5, 3);
+
+  // Lit body: a cross-body gradient reads as a rounded, top-lit shell.
+  const g = ctx.createLinearGradient(0, -7, 0, 7);
+  g.addColorStop(0, '#a5f3fc');
+  g.addColorStop(0.5, '#06b6d4');
+  g.addColorStop(1, '#0e7490');
+  roundRectPath(ctx, -11, -7, 22, 14, 3);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(3,20,28,0.55)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Glossy hood highlight toward the front.
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  roundRectPath(ctx, -7, -5, 6, 3, 1.5);
+  ctx.fill();
+
+  // Cockpit toward the front.
+  ctx.fillStyle = '#08131a';
+  roundRectPath(ctx, 1, -4.5, 7, 9, 2);
+  ctx.fill();
+
   ctx.restore();
 }
 
@@ -372,11 +505,22 @@ function arcGap(a: number, b: number): number {
   return Math.min(d, 1 - d);
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
+function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number, fx: FX) {
   const track = gs.track;
   ctx.clearRect(0, 0, W, H);
-  // Grass.
-  ctx.fillStyle = '#14361f';
+
+  // —— Grass infield with depth ——
+  const grass = ctx.createLinearGradient(0, 0, 0, H);
+  grass.addColorStop(0, '#1a4526');
+  grass.addColorStop(0.5, '#14361f');
+  grass.addColorStop(1, '#0f2817');
+  ctx.fillStyle = grass;
+  ctx.fillRect(0, 0, W, H);
+  // Soft overhead sheen on the grass.
+  const glow = ctx.createRadialGradient(W / 2, H * 0.3, 20, W / 2, H * 0.3, H * 0.75);
+  glow.addColorStop(0, 'rgba(120,200,150,0.10)');
+  glow.addColorStop(1, 'rgba(120,200,150,0)');
+  ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
   ctx.lineJoin = 'round';
@@ -387,15 +531,33 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   ctx.strokeStyle = '#0b0f14';
   ctx.lineWidth = TRACK_W + WALL * 2 + 2;
   ctx.stroke();
+  // Wall ring, faintly lit so the barrier reads as a raised kerb.
+  const wallGrad = ctx.createLinearGradient(0, 0, 0, H);
+  wallGrad.addColorStop(0, '#eef4fb');
+  wallGrad.addColorStop(1, '#c3ccd8');
   traceTrack(ctx, track);
-  ctx.strokeStyle = '#e2e8f0';
+  ctx.strokeStyle = wallGrad;
   ctx.lineWidth = TRACK_W + WALL * 2;
   ctx.stroke();
   // Asphalt on top, leaving the wall ring exposed on both edges.
+  const asphalt = ctx.createLinearGradient(0, 0, 0, H);
+  asphalt.addColorStop(0, '#474e59');
+  asphalt.addColorStop(0.5, '#3a414b');
+  asphalt.addColorStop(1, '#2f353e');
   traceTrack(ctx, track);
-  ctx.strokeStyle = '#3f4650';
+  ctx.strokeStyle = asphalt;
   ctx.lineWidth = TRACK_W;
   ctx.stroke();
+  // Top-lit sheen streak down the asphalt.
+  const sheen = ctx.createLinearGradient(0, 0, 0, H);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.07)');
+  sheen.addColorStop(0.5, 'rgba(255,255,255,0.02)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  traceTrack(ctx, track);
+  ctx.strokeStyle = sheen;
+  ctx.lineWidth = TRACK_W;
+  ctx.stroke();
+  // Dashed centre lane marking.
   traceTrack(ctx, track);
   ctx.strokeStyle = 'rgba(255,255,255,0.10)';
   ctx.lineWidth = 2;
@@ -403,7 +565,19 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Start/finish line — a checkered band across the track at the start point.
+  // —— Drift skids: rubber laid on the asphalt (static, under everything) ——
+  if (fx.skids.length) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,12,16,0.30)';
+    for (const s of fx.skids) {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 1.6, 0, TWO_PI);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Start/finish line — a checkered band with a soft neon gate glow.
   const p0 = track.pts[0];
   const p1 = track.pts[1];
   const ang = Math.atan2(p1.y - p0.y, p1.x - p0.x);
@@ -412,6 +586,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   ctx.rotate(ang + Math.PI / 2);
   const half = TRACK_W / 2;
   const sq = TRACK_W / 4;
+  neonLine(ctx, -half, -sq - 1, half, -sq - 1, '#22d3ee', 3, 12);
+  neonLine(ctx, -half, sq + 1, half, sq + 1, '#22d3ee', 3, 12);
   for (let r = 0; r < 2; r++) {
     for (let c = 0; c < 4; c++) {
       ctx.fillStyle = (r + c) % 2 === 0 ? '#f8fafc' : '#0b0f14';
@@ -420,8 +596,18 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   }
   ctx.restore();
 
+  // —— Dynamic layer (the moving world), shaken on impacts/laps ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
+  }
+
   // Lure: while dragging, show where you're leading the kart.
   if (gs.phase === 'race' && gs.touch.active) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(251,191,36,0.8)';
+    ctx.shadowBlur = 10;
     ctx.beginPath();
     ctx.arc(gs.touch.x, gs.touch.y, 7, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(251,191,36,0.30)';
@@ -429,6 +615,17 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
     ctx.strokeStyle = 'rgba(251,191,36,0.85)';
     ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.restore();
+  }
+
+  // Speed streak trailing the kart.
+  for (let i = 0; i < fx.trail.length; i++) {
+    const t = fx.trail[i];
+    const kf = i / fx.trail.length;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, KART_R * (0.25 + kf * 0.7), 0, TWO_PI);
+    ctx.fillStyle = `rgba(103,232,249,${0.02 + kf * 0.14})`;
+    ctx.fill();
   }
 
   // Kart, layered against the bridge: when it's on the leg passing under the
@@ -441,17 +638,45 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   drawKart(ctx, k);
   if (b && underBridge) drawBridge(ctx, b);
 
+  // Dust / spark bursts, additive.
+  drawParticles(ctx, fx.particles);
+  ctx.restore();
+
+  // —— Lap flash overlay ——
+  if (fx.flash > 0) {
+    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // —— Lap / best-lap popup, glowing and floating up ——
+  if (fx.popupT > 0 && fx.popup) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, fx.popupT);
+    ctx.fillStyle = '#ecfeff';
+    ctx.shadowColor = 'rgba(6,182,212,0.9)';
+    ctx.shadowBlur = 16;
+    ctx.font = 'bold 26px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fx.popup, W / 2, H * 0.32 - (1 - fx.popupT) * 22);
+    ctx.restore();
+  }
+
   // Countdown.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
     const n = Math.ceil(left / 800);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(0, 0, W, H);
+    ctx.save();
     ctx.fillStyle = '#fbbf24';
+    ctx.shadowColor = 'rgba(251,191,36,0.7)';
+    ctx.shadowBlur = 18;
     ctx.font = 'bold 64px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
+    ctx.restore();
   }
 }
 
@@ -492,6 +717,7 @@ function TrackThumb({ track }: { track: Track }) {
 export default function GoKarts() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS | null>(null);
+  const fxRef = useRef<FX>(freshFX());
   // Best lap per track id, held for the life of the screen so the picker can
   // show your personal best on each circuit.
   const bestsRef = useRef<Record<string, number>>({});
@@ -507,6 +733,7 @@ export default function GoKarts() {
     const gs = freshGS(performance.now(), track);
     gs.best = bestsRef.current[track.id] ?? Infinity;
     gsRef.current = gs;
+    fxRef.current = freshFX();
     setPhase('countdown');
     setLap(0);
     setRaceTime(0);
@@ -555,6 +782,7 @@ export default function GoKarts() {
       }
       const dt = Math.min(now - last, 100);
       last = now;
+      const fx = fxRef.current;
 
       if (gs.phase === 'countdown' && now - gs.countStart >= COUNTDOWN_MS) {
         gs.phase = 'race';
@@ -568,6 +796,7 @@ export default function GoKarts() {
           const lapped = step(gs);
           if (lapped) {
             const lapMs = gs.raceTime - gs.lapStart;
+            const isBest = lapMs < gs.best; // read before gs.best mutates (FX only)
             gs.lastLap = lapMs;
             if (lapMs < gs.best) {
               gs.best = lapMs;
@@ -575,6 +804,21 @@ export default function GoKarts() {
               setBest(lapMs);
             }
             gs.lapStart = gs.raceTime;
+            // —— juice (rendering only): flash + spark burst on every lap, a
+            // brighter one on a personal best ——
+            fx.flash = 1;
+            fx.flashColor = isBest ? '#06b6d4' : '#22d3ee';
+            fx.shake = Math.max(fx.shake, isBest ? 6 : 4);
+            spawnBurst(
+              fx.particles,
+              gs.kart.x,
+              gs.kart.y,
+              isBest ? 26 : 16,
+              isBest ? 300 : 200,
+              isBest ? '#a5f3fc' : '#67e8f9',
+            );
+            fx.popup = isBest ? 'Best lap!' : `Lap ${gs.laps}`;
+            fx.popupT = 1;
             if (gs.laps >= LAPS) {
               gs.phase = 'done';
               setPhase('done');
@@ -597,7 +841,8 @@ export default function GoKarts() {
         setRaceTime(shownTime);
       }
 
-      draw(ctx, gs, now);
+      updateFX(fx, gs, dt);
+      draw(ctx, gs, now, fx);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);

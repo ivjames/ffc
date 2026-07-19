@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
+import type { Particle, Vec as FxVec } from './fx';
+import {
+  TWO_PI,
+  withAlpha,
+  roundRectPath,
+  drawShadow,
+  drawSphere,
+  neonLine,
+  spawnBurst,
+  stepParticles,
+  drawParticles,
+  pushTrail,
+  decay,
+  shakeOffset,
+} from './fx';
 
 // §12 Axe Throwing — the fourth attraction mini-game. A two-tap timing game:
 // a vertical guide sweeps left↔right (tap to set your aim), then a horizontal
@@ -88,95 +103,223 @@ function freshGS(now: number): GS {
   };
 }
 
+// —— juice: rendering-only effects (no gameplay state) ————————————————————————
+// These live outside GS so the timing sim is never touched; they're advanced per
+// animation frame with a real dt and only ever paint pixels. Built on the shared
+// ./fx toolkit so every Fun Zone game shares one visual language.
+type FX = {
+  trail: FxVec[]; // recent flying-axe positions → spinning motion streak
+  particles: Particle[]; // wood-chip / spark bursts on release + stick
+  shake: number; // impact shake magnitude (px), decays to 0
+  flash: number; // bullseye flash 0..1, decays to 0
+  flashColor: string;
+};
+
+function freshFX(): FX {
+  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#fbbf24' };
+}
+
+/** Advance the visual-only effects by `dt` ms (framerate-correct). */
+function updateFX(fx: FX, dt: number) {
+  fx.particles = stepParticles(fx.particles, dt, 0.02, 220); // gravity so chips fall
+  fx.shake = decay(fx.shake, dt, 0.02);
+  fx.flash = decay(fx.flash, dt, 0.0022);
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
 function drawAxe(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, scale = 1) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
   ctx.scale(scale, scale);
-  // Handle.
-  ctx.fillStyle = '#8b5a2b';
+  // Wooden handle — lengthwise grain gradient.
+  const hg = ctx.createLinearGradient(-2.5, 0, 2.5, 0);
+  hg.addColorStop(0, '#4a2f18');
+  hg.addColorStop(0.45, '#a06a34');
+  hg.addColorStop(0.6, '#8b5a2b');
+  hg.addColorStop(1, '#3d2713');
+  ctx.fillStyle = hg;
   ctx.fillRect(-2.5, -6, 5, 26);
-  // Head.
-  ctx.fillStyle = '#cbd5e1';
+  // Steel head — lit metal gradient (bright bevel → shadowed body).
+  const mg = ctx.createLinearGradient(-2, -14, 12, -1);
+  mg.addColorStop(0, '#f1f5f9');
+  mg.addColorStop(0.5, '#cbd5e1');
+  mg.addColorStop(1, '#64748b');
   ctx.beginPath();
   ctx.moveTo(-2, -10);
   ctx.lineTo(12, -14);
   ctx.lineTo(12, -1);
   ctx.lineTo(-2, -4);
   ctx.closePath();
+  ctx.fillStyle = mg;
   ctx.fill();
+  // Specular glint along the cutting edge.
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(11.4, -13);
+  ctx.lineTo(11.4, -1.6);
+  ctx.stroke();
   ctx.restore();
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
-  ctx.clearRect(0, 0, W, H);
-  // Backdrop.
-  ctx.fillStyle = '#0e1626';
-  ctx.fillRect(0, 0, W, H);
+/** The wooden board + concentric scoring rings + glossy bullseye, top-lit. */
+function drawBoard(ctx: CanvasRenderingContext2D) {
+  const bx = 28;
+  const by = 60;
+  const bw = W - 56;
+  const bh = 320;
 
-  // Wood board behind the target.
-  ctx.fillStyle = '#3a2a18';
-  ctx.fillRect(28, 60, W - 56, 320);
-  ctx.strokeStyle = '#241a10';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(28, 60, W - 56, 320);
+  // Soft contact shadow so the board floats off the back wall.
+  drawShadow(ctx, CENTER.x, by + bh + 6, bw * 0.5, 20, 0.4);
 
-  // Rings.
-  for (const ring of RINGS) {
+  // Wooden plank — radial grain darkening toward the edges.
+  ctx.save();
+  roundRectPath(ctx, bx, by, bw, bh, 12);
+  ctx.clip();
+  const wood = ctx.createRadialGradient(CENTER.x, CENTER.y - 20, 20, CENTER.x, CENTER.y, 230);
+  wood.addColorStop(0, '#5a3f22');
+  wood.addColorStop(0.6, '#3f2c17');
+  wood.addColorStop(1, '#241910');
+  ctx.fillStyle = wood;
+  ctx.fillRect(bx, by, bw, bh);
+  // Faint vertical grain lines.
+  ctx.strokeStyle = 'rgba(0,0,0,0.14)';
+  ctx.lineWidth = 1;
+  for (let gx = bx + 10; gx < bx + bw; gx += 16) {
     ctx.beginPath();
-    ctx.arc(CENTER.x, CENTER.y, ring.r, 0, Math.PI * 2);
-    ctx.fillStyle = ring.fill;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 1.5;
+    ctx.moveTo(gx, by);
+    ctx.lineTo(gx + 4, by + bh);
     ctx.stroke();
   }
-  // Clutch dots.
-  for (const c of CLUTCH) {
+  ctx.restore();
+
+  // Beveled frame.
+  ctx.strokeStyle = 'rgba(20,13,7,0.9)';
+  ctx.lineWidth = 5;
+  roundRectPath(ctx, bx, by, bw, bh, 12);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(180,130,70,0.25)';
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, bx + 2, by + 2, bw - 4, bh - 4, 10);
+  ctx.stroke();
+
+  // Scoring discs — outer→inner (each covers the previous), lit top-left.
+  for (const ring of RINGS) {
+    const g = ctx.createRadialGradient(
+      CENTER.x - ring.r * 0.35,
+      CENTER.y - ring.r * 0.4,
+      ring.r * 0.1,
+      CENTER.x,
+      CENTER.y,
+      ring.r,
+    );
+    g.addColorStop(0, withAlpha('#ffffff', 0.22));
+    g.addColorStop(0.18, ring.fill);
+    g.addColorStop(1, withAlpha('#000000', 0.28));
     ctx.beginPath();
-    ctx.arc(c.x, c.y, CLUTCH_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#22c55e';
+    ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
+    ctx.fillStyle = ring.fill;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+  // Ring boundaries — soft amber-lit strokes.
+  ctx.save();
+  ctx.shadowColor = 'rgba(251,191,36,0.5)';
+  for (const ring of RINGS) {
+    ctx.beginPath();
+    ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
+    ctx.strokeStyle = 'rgba(255,240,210,0.35)';
     ctx.lineWidth = 1.5;
+    ctx.shadowBlur = 5;
     ctx.stroke();
+  }
+  ctx.restore();
+
+  // Glossy bullseye highlight.
+  ctx.beginPath();
+  ctx.arc(CENTER.x - 7, CENTER.y - 8, 6, 0, TWO_PI);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fill();
+
+  // Corner clutch dots — lit green spheres.
+  for (const c of CLUTCH) {
+    drawShadow(ctx, c.x, c.y + 3, CLUTCH_R * 0.9, CLUTCH_R * 0.5, 0.35);
+    drawSphere(ctx, c.x, c.y, CLUTCH_R, '#bbf7d0', '#22c55e', '#14532d', { rim: true });
+  }
+}
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
+  ctx.clearRect(0, 0, W, H);
+
+  // —— Throwing-range backdrop: dim gradient + warm radial sheen + vignette ——
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#141d2f');
+  bg.addColorStop(0.5, '#0e1626');
+  bg.addColorStop(1, '#080d18');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const sheen = ctx.createRadialGradient(W / 2, CENTER.y, 20, W / 2, CENTER.y, H * 0.6);
+  sheen.addColorStop(0, 'rgba(234,179,8,0.12)');
+  sheen.addColorStop(1, 'rgba(234,179,8,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, W, H);
+
+  const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // —— The target (static) ——
+  drawBoard(ctx);
+
+  // —— Dynamic layer (shaken on impact) ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
+  }
+
+  // Spinning motion trail behind the flying axe.
+  for (let i = 0; i < fx.trail.length; i++) {
+    const t = fx.trail[i];
+    const k = i / fx.trail.length;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, 2 + k * 5, 0, TWO_PI);
+    ctx.fillStyle = `rgba(251,191,36,${0.03 + k * 0.16})`;
+    ctx.fill();
   }
 
   // Previous throws stuck in the board.
   for (const m of gs.marks) drawAxe(ctx, m.x, m.y, -0.35, 0.8);
 
-  // Aiming guides.
+  // Aiming guides — glowing amber sweep lines.
   if (gs.phase === 'aimX') {
     const x = SWEEP_X0 + (SWEEP_X1 - SWEEP_X0) * triWave(now - gs.sweepBase, SWEEP_X_MS);
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 5]);
-    ctx.beginPath();
-    ctx.moveTo(x, 60);
-    ctx.lineTo(x, 380);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    neonLine(ctx, x, 60, x, 380, '#fbbf24', 2.5, 12);
   } else if (gs.phase === 'aimY') {
     const y = SWEEP_Y0 + (SWEEP_Y1 - SWEEP_Y0) * triWave(now - gs.sweepBase, SWEEP_Y_MS);
     // Locked vertical + sweeping horizontal; their crossing is the target point.
-    ctx.strokeStyle = 'rgba(251,191,36,0.5)';
+    ctx.save();
+    ctx.strokeStyle = 'rgba(251,191,36,0.4)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(gs.lockX, 60);
     ctx.lineTo(gs.lockX, 380);
     ctx.stroke();
-    ctx.strokeStyle = '#fbbf24';
-    ctx.setLineDash([6, 5]);
+    ctx.restore();
+    neonLine(ctx, 28, y, W - 28, y, '#fbbf24', 2.5, 12);
+    ctx.save();
     ctx.beginPath();
-    ctx.moveTo(28, y);
-    ctx.lineTo(W - 28, y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.arc(gs.lockX, y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#fbbf24';
+    ctx.arc(gs.lockX, y, 5, 0, TWO_PI);
+    ctx.fillStyle = '#fde68a';
+    ctx.shadowColor = '#fbbf24';
+    ctx.shadowBlur = 12;
     ctx.fill();
+    ctx.restore();
   }
 
   // Flying axe (spins from the thrower to the landing point).
@@ -191,19 +334,44 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   // Stuck result + floating points.
   if (gs.phase === 'scored' && gs.land) {
     drawAxe(ctx, gs.land.x, gs.land.y, -0.35);
-    ctx.font = 'bold 22px system-ui, sans-serif';
-    ctx.fillStyle = gs.score >= 7 ? '#4ade80' : gs.score > 0 ? '#fbbf24' : '#94a3b8';
+    ctx.save();
     ctx.textAlign = 'center';
-    ctx.fillText(gs.score > 0 ? `+${gs.score}` : 'MISS', gs.land.x, gs.land.y - 22);
+    ctx.shadowBlur = 12;
+    if (gs.score >= 5) {
+      const big = gs.score >= 7;
+      const label = big ? 'CLUTCH!' : 'BULLSEYE!';
+      const col = big ? '#4ade80' : '#fbbf24';
+      ctx.font = 'bold 18px system-ui, sans-serif';
+      ctx.fillStyle = col;
+      ctx.shadowColor = col;
+      ctx.fillText(label, gs.land.x, gs.land.y - 40);
+    }
+    ctx.font = 'bold 22px system-ui, sans-serif';
+    const sc = gs.score >= 7 ? '#4ade80' : gs.score > 0 ? '#fde68a' : '#94a3b8';
+    ctx.fillStyle = sc;
+    ctx.shadowColor = sc;
+    ctx.fillText(gs.score > 0 ? `+${gs.score}` : 'MISS', gs.land.x, gs.land.y - 20);
+    ctx.restore();
   }
 
   // Thrower's axe at the ready.
   if (gs.phase === 'aimX' || gs.phase === 'aimY') drawAxe(ctx, W / 2, H - 24, 0);
+
+  // Additive spark / chip particles.
+  drawParticles(ctx, fx.particles);
+  ctx.restore();
+
+  // —— Bullseye flash overlay ——
+  if (fx.flash > 0) {
+    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
+    ctx.fillRect(0, 0, W, H);
+  }
 }
 
 export default function AxeThrow() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS(0));
+  const fxRef = useRef<FX>(freshFX());
   const nextTimer = useRef<number | null>(null);
 
   const [phase, setPhase] = useState<Phase>('aimX');
@@ -242,17 +410,30 @@ export default function AxeThrow() {
 
     let raf = 0;
     let sweepPausedAt = 0;
+    let last = performance.now();
     const frame = (now: number) => {
       const gs = gsRef.current;
+      const fx = fxRef.current;
       if (document.hidden) {
         // Freeze the sweeps while backgrounded by advancing their base.
         if (!sweepPausedAt) sweepPausedAt = now;
+        last = now;
         raf = requestAnimationFrame(frame);
         return;
       }
       if (sweepPausedAt) {
         gs.sweepBase += now - sweepPausedAt;
         sweepPausedAt = 0;
+      }
+      const dt = Math.min(now - last, 100);
+      last = now;
+
+      // Feed the spinning motion trail while the axe is in flight.
+      if (gs.phase === 'flying' && gs.land) {
+        const p = Math.min((now - gs.flyStart) / FLIGHT_MS, 1);
+        const sx = W / 2;
+        const sy = H - 24;
+        pushTrail(fx.trail, sx + (gs.land.x - sx) * p, sy + (gs.land.y - sy) * p, 14);
       }
 
       if (gs.phase === 'flying' && gs.land && now - gs.flyStart >= FLIGHT_MS) {
@@ -263,13 +444,31 @@ export default function AxeThrow() {
         setTotal(gs.total);
         setLastScore(gs.score);
         setPhase('scored');
+        // Impact juice: wood-chips at the stick point + a shake; a flash and a
+        // bigger burst when the axe sticks the bullseye (5) or a clutch (7).
+        fx.trail.length = 0;
+        const big = gs.score >= 5;
+        spawnBurst(
+          fx.particles,
+          gs.land.x,
+          gs.land.y,
+          big ? 26 : gs.score > 0 ? 14 : 8,
+          big ? 300 : 180,
+          big ? '#fde68a' : '#c8963e',
+        );
+        fx.shake = big ? 6 : gs.score > 0 ? 3.5 : 2;
+        if (big) {
+          fx.flash = 1;
+          fx.flashColor = gs.score >= 7 ? '#4ade80' : '#fbbf24';
+        }
         if (gs.score >= 7) playFanfare();
         else if (gs.score > 0) playCup();
         else playUndo();
         nextTimer.current = window.setTimeout(() => loadNext(performance.now()), NEXT_DELAY_MS);
       }
 
-      draw(ctx, gs, now);
+      updateFX(fx, dt);
+      draw(ctx, gs, fx, now);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -298,6 +497,10 @@ export default function AxeThrow() {
       gs.phase = 'flying';
       gs.flyStart = now;
       setPhase('flying');
+      // Release puff off the thrower's hand + a fresh trail for this throw.
+      const fx = fxRef.current;
+      fx.trail.length = 0;
+      spawnBurst(fx.particles, W / 2, H - 24, 7, 120, '#c8963e');
       playStroke();
     }
   }, []);
@@ -305,6 +508,7 @@ export default function AxeThrow() {
   const restart = useCallback(() => {
     if (nextTimer.current) clearTimeout(nextTimer.current);
     gsRef.current = freshGS(performance.now());
+    fxRef.current = freshFX();
     setPhase('aimX');
     setThrowNo(0);
     setTotal(0);

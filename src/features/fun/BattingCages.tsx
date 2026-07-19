@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playStroke, playUndo, playFanfare } from '../../lib/sound';
+import type { Particle, Vec as FxVec } from './fx';
+import {
+  TWO_PI,
+  withAlpha,
+  roundRectPath,
+  drawShadow,
+  drawSphere,
+  spawnBurst,
+  stepParticles,
+  drawParticles,
+  pushTrail,
+  decay,
+  shakeOffset,
+} from './fx';
 
 // §12 Batting Cages — the fifth attraction mini-game. Balls are pitched down the
 // cage at varying speeds; tap to swing and time your contact at the plate. Nail
@@ -101,35 +115,208 @@ function contactVelocity(kind: Kind): { vx: number; vy: number } {
   }
 }
 
+// —— juice: rendering-only effects (no gameplay state) ————————————————————————
+// These live outside GS so the timing sim is never touched; they're advanced per
+// animation frame with a real dt and only ever paint pixels. Built on the shared
+// ./fx toolkit so every Fun Zone game shares one visual language.
+type FX = {
+  trail: FxVec[]; // recent ball positions → motion streak
+  particles: Particle[]; // spark bursts on contact / home runs
+  shake: number; // screen-shake magnitude (px), decays to 0
+  flash: number; // contact flash 0..1, decays to 0
+  flashColor: string;
+  pitchSeen: number; // last pitchStart drawn — to reset the trail per pitch
+};
+
+function freshFX(): FX {
+  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#ffffff', pitchSeen: -1 };
+}
+
+/** Advance the visual-only effects by `dt` ms (framerate-correct). */
+function updateFX(fx: FX, gs: GS, dt: number) {
+  // A brand-new pitch: wipe the streak (no ghost line from the old ball) and
+  // kick up a little dust off the mound as the pitcher releases.
+  if (gs.pitchStart !== fx.pitchSeen) {
+    fx.trail.length = 0;
+    if (fx.pitchSeen !== -1) spawnBurst(fx.particles, W / 2, MOUND_Y + 2, 7, 70, '#8a97ad');
+    fx.pitchSeen = gs.pitchStart;
+  }
+  pushTrail(fx.trail, gs.ball.x, gs.ball.y, 14);
+  fx.particles = stepParticles(fx.particles, dt);
+  fx.shake = decay(fx.shake, dt, 0.02);
+  fx.flash = decay(fx.flash, dt, 0.0025);
+}
+
+/** Kick off the contact juice for a swing outcome, at the ball's position. */
+function contactFX(fx: FX, kind: Kind, x: number, y: number) {
+  switch (kind) {
+    case 'hr':
+      fx.shake = 9;
+      fx.flash = 1;
+      fx.flashColor = '#ef4444';
+      spawnBurst(fx.particles, x, y, 30, 360, '#fecaca');
+      spawnBurst(fx.particles, x, y, 16, 200, '#ffffff');
+      break;
+    case 'hit':
+      fx.shake = 6;
+      fx.flash = 0.5;
+      fx.flashColor = '#fbbf24';
+      spawnBurst(fx.particles, x, y, 18, 240, '#fde68a');
+      break;
+    case 'foul':
+      fx.shake = 3;
+      fx.flash = 0.28;
+      fx.flashColor = '#f59e0b';
+      spawnBurst(fx.particles, x, y, 10, 170, '#fcd34d');
+      break;
+    default:
+      // Whiff / strike — a faint puff of missed air, no shake.
+      spawnBurst(fx.particles, x, y, 6, 90, '#64748b');
+  }
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
-function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
+/** A lit baseball: soft shadow, top-lit off-white body, red seams, and a bright
+ *  specular hotspot — the workhorse round object of the scene. */
+function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  drawShadow(ctx, x, y + BALL_R + 3, BALL_R * 0.95, BALL_R * 0.4, 0.28);
+  drawSphere(ctx, x, y, BALL_R, '#ffffff', '#eef1f5', '#b7c0cc');
+  ctx.save();
+  ctx.strokeStyle = withAlpha('#ef4444', 0.9);
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(x - BALL_R * 0.62, y, BALL_R * 1.2, -0.85, 0.85);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x + BALL_R * 0.62, y, BALL_R * 1.2, Math.PI - 0.85, Math.PI + 0.85);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A lit wooden bat drawn within the caller's rotated frame (barrel toward −y). */
+function drawBat(ctx: CanvasRenderingContext2D) {
+  const len = 56;
+  // Contact shadow behind the barrel for a little lift off the surface.
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(1.5, 2);
+  ctx.lineTo(1.5, -len + 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Tapered wooden body: thin at the handle, thick at the barrel end.
+  const wood = ctx.createLinearGradient(-5, 0, 5, -len);
+  wood.addColorStop(0, '#7c4f22');
+  wood.addColorStop(0.5, '#b9843c');
+  wood.addColorStop(1, '#e7bd72');
+  ctx.beginPath();
+  ctx.moveTo(-2.4, 6);
+  ctx.lineTo(2.4, 6);
+  ctx.lineTo(5, -len);
+  ctx.lineTo(-5, -len);
+  ctx.closePath();
+  ctx.fillStyle = wood;
+  ctx.fill();
+  // Rounded barrel cap + handle knob.
+  ctx.beginPath();
+  ctx.arc(0, -len, 5, 0, TWO_PI);
+  ctx.fillStyle = '#e7bd72';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 6, 3.4, 0, TWO_PI);
+  ctx.fillStyle = '#5f3c19';
+  ctx.fill();
+  // Glossy highlight streak along the barrel.
+  ctx.strokeStyle = 'rgba(255,240,210,0.6)';
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-2, 0);
+  ctx.lineTo(-3, -len + 4);
+  ctx.stroke();
+}
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0e1626';
+
+  // —— Stadium backdrop: lit sky above, dark cage floor below ——
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#1c2b46');
+  bg.addColorStop(0.45, '#121e33');
+  bg.addColorStop(1, '#0a1220');
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // Cage netting hint (faint verticals).
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  // Warm overhead stadium-light sheen.
+  const sheen = ctx.createRadialGradient(W / 2, H * 0.12, 12, W / 2, H * 0.12, H * 0.62);
+  sheen.addColorStop(0, 'rgba(255,196,196,0.14)');
+  sheen.addColorStop(1, 'rgba(255,196,196,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, W, H);
+
+  // Corner vignette for depth.
+  const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.74);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // —— Cage netting: a faint diamond mesh, fading toward the foreground ——
+  ctx.save();
+  ctx.strokeStyle = 'rgba(180,205,235,0.05)';
   ctx.lineWidth = 1;
-  for (let x = 30; x < W; x += 30) {
+  const gap = 34;
+  for (let d = -H; d < W + H; d += gap) {
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, H);
+    ctx.moveTo(d, 0);
+    ctx.lineTo(d + H, H);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(d, 0);
+    ctx.lineTo(d - H, H);
     ctx.stroke();
   }
+  ctx.restore();
 
-  // Pitcher's mound.
-  ctx.fillStyle = '#3a4a63';
+  // —— Outfield fence: a soft red glowing arc up the cage (distance marker) ——
+  ctx.save();
+  ctx.strokeStyle = withAlpha('#ef4444', 0.35);
+  ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(239,68,68,0.55)';
+  ctx.shadowBlur = 10;
   ctx.beginPath();
-  ctx.ellipse(W / 2, MOUND_Y, 34, 14, 0, 0, Math.PI * 2);
+  ctx.arc(W / 2, MOUND_Y + 240, 250, Math.PI * 1.16, Math.PI * 1.84);
+  ctx.stroke();
+  ctx.restore();
+
+  // —— Pitcher's mound: a lit dirt hummock ——
+  drawShadow(ctx, W / 2, MOUND_Y + 8, 36, 12, 0.35);
+  const mound = ctx.createRadialGradient(W / 2, MOUND_Y - 5, 4, W / 2, MOUND_Y + 4, 36);
+  mound.addColorStop(0, '#5a6c88');
+  mound.addColorStop(1, '#293650');
+  ctx.beginPath();
+  ctx.ellipse(W / 2, MOUND_Y, 34, 14, 0, 0, TWO_PI);
+  ctx.fillStyle = mound;
   ctx.fill();
 
-  // Strike zone at the plate.
-  ctx.strokeStyle = 'rgba(56,189,248,0.5)';
+  // —— Strike zone: a glowing red frame at the plate ——
+  ctx.save();
+  roundRectPath(ctx, W / 2 - 46, PLATE_Y - 40, 92, 60, 8);
+  ctx.strokeStyle = withAlpha('#ef4444', 0.6);
   ctx.lineWidth = 2;
-  ctx.strokeRect(W / 2 - 46, PLATE_Y - 40, 92, 60);
+  ctx.shadowColor = 'rgba(239,68,68,0.8)';
+  ctx.shadowBlur = 11;
+  ctx.stroke();
+  ctx.restore();
 
-  // Home plate.
-  ctx.fillStyle = '#e5e7eb';
+  // —— Home plate: lit off-white pentagon ——
+  const plate = ctx.createLinearGradient(0, PLATE_Y + 30, 0, PLATE_Y + 56);
+  plate.addColorStop(0, '#ffffff');
+  plate.addColorStop(1, '#b9bfca');
   ctx.beginPath();
   ctx.moveTo(W / 2 - 22, PLATE_Y + 34);
   ctx.lineTo(W / 2 + 22, PLATE_Y + 34);
@@ -137,6 +324,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   ctx.lineTo(W / 2, PLATE_Y + 56);
   ctx.lineTo(W / 2 - 22, PLATE_Y + 46);
   ctx.closePath();
+  ctx.fillStyle = plate;
   ctx.fill();
 
   // Bat — held cocked back over the shoulder (READY), wound further back while
@@ -153,37 +341,55 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number) {
   ctx.save();
   ctx.translate(W / 2 + 30, PLATE_Y + 26);
   ctx.rotate(angle);
-  ctx.strokeStyle = '#d4a24e';
-  ctx.lineWidth = 6;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(0, -56);
-  ctx.stroke();
+  drawBat(ctx);
   ctx.restore();
 
-  // Ball.
-  ctx.beginPath();
-  ctx.arc(gs.ball.x, gs.ball.y, BALL_R, 0, Math.PI * 2);
-  ctx.fillStyle = '#f8fafc';
-  ctx.fill();
-  ctx.strokeStyle = '#ef4444';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  // —— Dynamic layer (shaken on solid contact) ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
+  }
 
-  // Outcome text.
+  // Ball motion trail — a fast red-white streak (drawn under the ball).
+  for (let i = 0; i < fx.trail.length; i++) {
+    const t = fx.trail[i];
+    const k = i / fx.trail.length;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, BALL_R * (0.28 + k * 0.72), 0, TWO_PI);
+    ctx.fillStyle = `rgba(255,220,220,${0.03 + k * 0.14})`;
+    ctx.fill();
+  }
+
+  drawBall(ctx, gs.ball.x, gs.ball.y);
+  drawParticles(ctx, fx.particles);
+  ctx.restore();
+
+  // —— Contact flash overlay ——
+  if (fx.flash > 0) {
+    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.26);
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // —— Outcome text, with a soft glow ——
   if (gs.phase === 'result' && gs.outcome) {
-    ctx.font = 'bold 26px system-ui, sans-serif';
+    const hr = gs.outcome.kind === 'hr';
+    const color = hr
+      ? '#4ade80'
+      : gs.outcome.kind === 'hit'
+        ? '#fbbf24'
+        : gs.outcome.kind === 'foul'
+          ? '#f59e0b'
+          : '#94a3b8';
+    ctx.save();
+    ctx.font = `bold ${hr ? 32 : 26}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillStyle =
-      gs.outcome.kind === 'hr'
-        ? '#4ade80'
-        : gs.outcome.kind === 'hit'
-          ? '#fbbf24'
-          : gs.outcome.kind === 'foul'
-            ? '#f59e0b'
-            : '#94a3b8';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = hr ? 22 : 12;
     ctx.fillText(gs.outcome.label, W / 2, H / 2);
+    ctx.restore();
   }
 }
 
@@ -194,6 +400,7 @@ export default function BattingCages() {
   // record a strike, losing the first of the ten pitches on every normal visit.
   const gsRef = useRef<GS>(null!);
   if (!gsRef.current) gsRef.current = freshGS(performance.now());
+  const fxRef = useRef<FX>(freshFX());
 
   const [phase, setPhase] = useState<Phase>('pitch');
   const [pitchNo, setPitchNo] = useState(0);
@@ -258,6 +465,7 @@ export default function BattingCages() {
           gs.ball.vy = 7;
           gs.phase = 'result';
           gs.resultAt = now;
+          contactFX(fxRef.current, 'miss', gs.ball.x, gs.ball.y);
           setOutcome(gs.outcome);
           setPhase('result');
           playUndo();
@@ -281,7 +489,8 @@ export default function BattingCages() {
         }
       }
 
-      draw(ctx, gs, now);
+      updateFX(fxRef.current, gs, dt);
+      draw(ctx, gs, fxRef.current, now);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -319,6 +528,7 @@ export default function BattingCages() {
     gs.ball.vy = v.vy;
     gs.phase = 'result';
     gs.resultAt = now;
+    contactFX(fxRef.current, oc.kind, gs.ball.x, gs.ball.y);
     setOutcome(oc);
     setTotal(gs.total);
     setPhase('result');
@@ -329,6 +539,7 @@ export default function BattingCages() {
 
   const restart = useCallback(() => {
     gsRef.current = freshGS(performance.now());
+    fxRef.current = freshFX();
     setPhase('pitch');
     setPitchNo(0);
     setTotal(0);

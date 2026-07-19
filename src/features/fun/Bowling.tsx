@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
+import type { Particle, Vec as FxVec } from './fx';
+import {
+  TWO_PI,
+  withAlpha,
+  roundRectPath,
+  drawShadow,
+  drawSphere,
+  neonLine,
+  spawnBurst,
+  stepParticles,
+  drawParticles,
+  pushTrail,
+  decay,
+  shakeOffset,
+} from './fx';
 
 // §12 Bowling — the sixth attraction mini-game. Swipe up the lane to roll (aim
 // with the angle, power with the length; an angled shot hooks a little). Real
@@ -216,19 +231,150 @@ function collide(
   }
 }
 
+// —— juice: rendering-only effects (no gameplay state) ————————————————————————
+// These live outside GS so the fixed-timestep sim is never touched; they're
+// advanced per animation frame with a real dt and only ever paint pixels. Built
+// on the shared ./fx toolkit so every Fun Zone game shares one visual language.
+type FX = {
+  trail: FxVec[]; // recent ball positions → rolling motion streak
+  particles: Particle[]; // spark bursts on pin hits / strikes / spares
+  shake: number; // camera shake magnitude (px), decays to 0
+  flash: number; // strike/spare flash 0..1, decays to 0
+  downSeen: Map<Pin, boolean>; // pins already spark-flashed (so each falls once)
+  prevPhase: Phase; // for edge-detecting the roll → sweep transition
+};
+
+function freshFX(): FX {
+  return { trail: [], particles: [], shake: 0, flash: 0, downSeen: new Map(), prevPhase: 'aim' };
+}
+
+const PURPLE_LIGHT = '#e9d5ff';
+const PURPLE = '#a855f7';
+const PURPLE_DEEP = '#6b21a8';
+
+/** Advance the visual-only effects by `dt` ms (framerate-correct). Reads gs but
+ *  never mutates it — every event it reacts to (pin down, strike, spare) has
+ *  already happened in the sim. */
+function updateFX(fx: FX, gs: GS, dt: number) {
+  // Rolling ball leaves a fading streak; other phases clear it.
+  if (gs.phase === 'rolling') pushTrail(fx.trail, gs.ball.x, gs.ball.y, 14);
+  else fx.trail.length = 0;
+
+  // A pin that just went down throws a little purple spark burst, once.
+  for (const p of gs.pins) {
+    if (p.down && !fx.downSeen.has(p)) {
+      fx.downSeen.set(p, true);
+      spawnBurst(fx.particles, p.x, p.y, 6, 120, PURPLE_LIGHT);
+    }
+  }
+
+  // On the roll → sweep edge, celebrate strikes (big) and spares (small).
+  if (fx.prevPhase !== 'sweep' && gs.phase === 'sweep') {
+    const cx = W / 2;
+    const cy = HEAD_Y - PIN_GAP_Y * 1.5;
+    if (gs.note.includes('Strike')) {
+      fx.shake = 8;
+      fx.flash = 1;
+      spawnBurst(fx.particles, cx, cy, 34, 320, PURPLE_LIGHT);
+      spawnBurst(fx.particles, cx, cy, 18, 180, '#f0abfc');
+    } else if (gs.note.includes('Spare')) {
+      fx.shake = 4;
+      fx.flash = 0.6;
+      spawnBurst(fx.particles, cx, cy, 20, 240, PURPLE);
+    }
+  }
+  fx.prevPhase = gs.phase;
+
+  fx.particles = stepParticles(fx.particles, dt, 0.02, 40);
+  fx.shake = decay(fx.shake, dt, 0.02);
+  fx.flash = decay(fx.flash, dt, 0.0022);
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
-function draw(ctx: CanvasRenderingContext2D, gs: GS) {
+/** A standing pin: soft shadow, lit body, glossy highlight, purple neck ring. */
+function drawStandingPin(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  drawShadow(ctx, x, y + PIN_R * 0.55, PIN_R * 1.05, PIN_R * 0.5, 0.3);
+  drawSphere(ctx, x, y, PIN_R, '#ffffff', '#e8edf4', '#9aa6b6');
+  // Purple neck stripe reads as the classic pin band + our theme accent.
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, PIN_R - 2.5, 0, TWO_PI);
+  ctx.strokeStyle = PURPLE;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = withAlpha(PURPLE, 0.7);
+  ctx.shadowBlur = 5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A fallen pin: a faded, top-lit ellipse lying along its travel direction. */
+function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
+  const g = ctx.createLinearGradient(0, -PIN_R, 0, PIN_R);
+  g.addColorStop(0, 'rgba(236,240,246,0.55)');
+  g.addColorStop(1, 'rgba(150,163,184,0.45)');
+  ctx.beginPath();
+  ctx.ellipse(0, 0, PIN_R + 3, PIN_R - 3, 0, 0, TWO_PI);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(148,163,184,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** The glossy, top-lit bowling ball with a contact shadow. */
+function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  drawShadow(ctx, x, y + BALL_R * 0.55, BALL_R * 0.95, BALL_R * 0.5, 0.35);
+  drawSphere(ctx, x, y, BALL_R, PURPLE_LIGHT, PURPLE, PURPLE_DEEP, { rim: true });
+}
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#0e1626';
+
+  // —— Backdrop: a dim, top-lit alley beyond the pins ——
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#1a1330');
+  bg.addColorStop(0.35, '#121026');
+  bg.addColorStop(1, '#0b0a16');
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
-  // Gutters + lane.
-  ctx.fillStyle = '#0a1018';
-  ctx.fillRect(0, 0, LANE_L, H);
-  ctx.fillRect(LANE_R, 0, W - LANE_R, H);
-  ctx.fillStyle = '#3a2f1e';
+
+  // Pin-deck sheen glowing down from the top (behind the rack).
+  const sheen = ctx.createRadialGradient(W / 2, HEAD_Y - 40, 10, W / 2, HEAD_Y - 40, H * 0.55);
+  sheen.addColorStop(0, withAlpha(PURPLE, 0.16));
+  sheen.addColorStop(1, withAlpha(PURPLE, 0));
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, W, H);
+
+  // —— Gutters: rounded, recessed channels either side of the lane ——
+  const gut = ctx.createLinearGradient(0, 0, 0, H);
+  gut.addColorStop(0, '#141021');
+  gut.addColorStop(1, '#0a0813');
+  ctx.fillStyle = gut;
+  roundRectPath(ctx, 4, 6, LANE_L - 8, H - 12, 8);
+  ctx.fill();
+  roundRectPath(ctx, LANE_R + 4, 6, W - LANE_R - 8, H - 12, 8);
+  ctx.fill();
+
+  // —— Lane: polished wood, brighter toward the bowler where light pools ——
+  const wood = ctx.createLinearGradient(0, 0, 0, H);
+  wood.addColorStop(0, '#4a3a22');
+  wood.addColorStop(0.55, '#5a4526');
+  wood.addColorStop(1, '#6b5330');
+  ctx.fillStyle = wood;
+  ctx.fillRect(LANE_L, 0, LANE_R - LANE_L, H);
+  // A soft lengthwise gloss down the middle of the boards.
+  const gloss = ctx.createLinearGradient(LANE_L, 0, LANE_R, 0);
+  gloss.addColorStop(0, 'rgba(0,0,0,0.25)');
+  gloss.addColorStop(0.5, 'rgba(255,236,190,0.10)');
+  gloss.addColorStop(1, 'rgba(0,0,0,0.25)');
+  ctx.fillStyle = gloss;
   ctx.fillRect(LANE_L, 0, LANE_R - LANE_L, H);
   // Lane boards.
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.20)';
   ctx.lineWidth = 1;
   for (let x = LANE_L + 20; x < LANE_R; x += 20) {
     ctx.beginPath();
@@ -236,73 +382,106 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
     ctx.lineTo(x, H);
     ctx.stroke();
   }
-  // Foul line.
-  ctx.strokeStyle = '#b91c1c';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(LANE_L, H - 70);
-  ctx.lineTo(LANE_R, H - 70);
-  ctx.stroke();
 
-  // Pins: standing ones are bright upright circles; knocked-down ones lie flat
-  // (a faded ellipse) so you can see the rack fall before the sweep clears it.
-  for (const p of gs.pins) {
-    if (p.down) {
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      // Lie the pin along its travel direction (or sideways if it barely moved).
-      ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
-      ctx.beginPath();
-      ctx.ellipse(0, 0, PIN_R + 3, PIN_R - 3, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(226,232,240,0.5)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(148,163,184,0.5)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.restore();
-    } else {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, PIN_R, 0, Math.PI * 2);
-      ctx.fillStyle = '#f8fafc';
-      ctx.fill();
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, PIN_R - 3, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+  // —— Aiming arrows: the classic lane guide, glowing in the theme color ——
+  ctx.save();
+  ctx.fillStyle = withAlpha(PURPLE, 0.5);
+  ctx.shadowColor = withAlpha(PURPLE, 0.7);
+  ctx.shadowBlur = 6;
+  for (let i = -2; i <= 2; i++) {
+    const ax = W / 2 + i * 26;
+    const ay = HEAD_Y + 150 + Math.abs(i) * 14;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - 4, ay + 12);
+    ctx.lineTo(ax + 4, ay + 12);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // —— Foul line: a glowing neon accent ——
+  neonLine(ctx, LANE_L, H - 70, LANE_R, H - 70, PURPLE, 3, 12);
+
+  // —— Vignette for depth ——
+  const vig = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.28, W / 2, H * 0.5, H * 0.72);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // —— Dynamic layer (shaken on strikes/spares) ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
   }
 
-  // Aim guide.
+  // Rolling ball motion streak, tapering behind the ball.
+  for (let i = 0; i < fx.trail.length; i++) {
+    const t = fx.trail[i];
+    const k = i / fx.trail.length;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, BALL_R * (0.3 + k * 0.6), 0, TWO_PI);
+    ctx.fillStyle = withAlpha(PURPLE, 0.04 + k * 0.14);
+    ctx.fill();
+  }
+
+  // Pins: fallen ones lie flat (drawn first), standing ones stand lit on top.
+  for (const p of gs.pins) if (p.down) drawFallenPin(ctx, p);
+  for (const p of gs.pins) if (!p.down) drawStandingPin(ctx, p.x, p.y);
+
+  // Aim guide (glowing).
   if (gs.phase === 'aim' && gs.drag.active) {
     const v = launch(gs.drag.dx, gs.drag.dy);
     if (v) {
       const len = 120;
       const s = Math.hypot(v.vx0, v.vy0);
-      ctx.strokeStyle = 'rgba(56,189,248,0.8)';
+      ctx.save();
+      ctx.strokeStyle = withAlpha('#38bdf8', 0.85);
+      ctx.shadowColor = withAlpha('#38bdf8', 0.8);
+      ctx.shadowBlur = 10;
       ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
       ctx.setLineDash([6, 6]);
       ctx.beginPath();
       ctx.moveTo(START.x, START.y);
       ctx.lineTo(START.x + (v.vx0 / s) * len, START.y + (v.vy0 / s) * len);
       ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.restore();
     }
   }
 
-  // Ball.
-  ctx.beginPath();
-  ctx.arc(gs.ball.x, gs.ball.y, BALL_R, 0, Math.PI * 2);
-  ctx.fillStyle = '#22c55e';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  drawBall(ctx, gs.ball.x, gs.ball.y);
+
+  drawParticles(ctx, fx.particles);
+  ctx.restore();
+
+  // —— Strike/spare flash overlay ——
+  if (fx.flash > 0) {
+    ctx.fillStyle = withAlpha(PURPLE, fx.flash * 0.22);
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // —— On-canvas STRIKE! / SPARE! banner, softly lit ——
+  if (gs.phase === 'sweep' && (gs.note.includes('Strike') || gs.note.includes('Spare'))) {
+    const strike = gs.note.includes('Strike');
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 34px system-ui, sans-serif';
+    ctx.fillStyle = strike ? '#f5e9ff' : '#ede9fe';
+    ctx.shadowColor = withAlpha(PURPLE, 0.95);
+    ctx.shadowBlur = 18;
+    ctx.fillText(strike ? 'STRIKE!' : 'SPARE!', W / 2, HEAD_Y + 60);
+    ctx.restore();
+  }
 }
 
 export default function Bowling() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS());
+  const fxRef = useRef<FX>(freshFX());
 
   const [phase, setPhase] = useState<Phase>('aim');
   const [score, setScore] = useState(0);
@@ -441,7 +620,8 @@ export default function Bowling() {
         raf = requestAnimationFrame(frameLoop);
         return;
       }
-      acc += Math.min(now - last, 100);
+      const dt = Math.min(now - last, 100);
+      acc += dt;
       last = now;
 
       while (acc >= FIXED) {
@@ -462,7 +642,8 @@ export default function Bowling() {
         applySweep();
       }
 
-      draw(ctx, gs);
+      updateFX(fxRef.current, gs, dt);
+      draw(ctx, gs, fxRef.current);
       raf = requestAnimationFrame(frameLoop);
     };
     raf = requestAnimationFrame(frameLoop);
@@ -510,11 +691,14 @@ export default function Bowling() {
     gs.rollStart = performance.now();
     setPhase('rolling');
     setNote('');
+    // Rendering-only: a little release puff at the foul line.
+    spawnBurst(fxRef.current.particles, gs.ball.x, gs.ball.y, 10, 140, PURPLE_LIGHT);
     playStroke();
   }, []);
 
   const restart = useCallback(() => {
     gsRef.current = freshGS();
+    fxRef.current = freshFX();
     setScore(0);
     setFrame(0);
     setNote('');

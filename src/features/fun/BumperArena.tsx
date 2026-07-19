@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playBump, playWaterBump, playScore, playFanfare } from '../../lib/sound';
+import type { Vec as FxVec } from './fx';
+import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, decay, shakeOffset } from './fx';
 
 // §12 Bumper arena — the shared engine behind Bumper Cars and Bumper Boats.
 // Drive with a floating joystick and ram the other units; land as many solid
@@ -295,6 +297,84 @@ function spawnSparks(gs: GS, x: number, y: number, now: number, closing: number)
   if (gs.sparks.length > 200) gs.sparks.splice(0, gs.sparks.length - 200);
 }
 
+// —— juice: rendering-only effects (no gameplay state) ————————————————————————
+// These live OUTSIDE GS so the fixed-timestep sim is never touched. They're
+// advanced per animation frame with a real dt and only ever paint pixels:
+// per-unit motion trails (skid marks / wakes), a decaying screen-shake on hard
+// contact, and a flash on a scoring bump. Events are detected by watching values
+// the sim already updates (score, the spark/splash spawn timestamps) — the
+// physics and scoring paths are left completely alone.
+type FX = {
+  trails: FxVec[][]; // one capped motion trail per unit (index-aligned with gs.units)
+  shake: number; // camera-shake magnitude (px), decays to 0
+  flash: number; // scoring-bump flash 0..1, decays to 0
+  flashColor: string;
+  prevScore: number;
+  prevSpark: number; // last-seen gs.lastSpark timestamp
+  prevSplash: number; // last-seen gs.lastSplash timestamp
+};
+
+function freshFX(nUnits: number): FX {
+  return {
+    trails: Array.from({ length: nUnits }, () => [] as FxVec[]),
+    shake: 0,
+    flash: 0,
+    flashColor: '#ffffff',
+    prevScore: 0,
+    prevSpark: -1e9,
+    prevSplash: -1e9,
+  };
+}
+
+/** Advance the visual-only effects by `dt` ms (framerate-correct). Reacts to
+ *  events that already happened in the sim this frame. */
+function updateFX(fx: FX, gs: GS, theme: BumperTheme, dt: number) {
+  // Trails: extend while a unit is moving, fade (shift out) once it stops.
+  for (let i = 0; i < gs.units.length && i < fx.trails.length; i++) {
+    const c = gs.units[i];
+    if (Math.hypot(c.vx, c.vy) > 0.6) pushTrail(fx.trails[i], c.x, c.y, 12);
+    else if (fx.trails[i].length) fx.trails[i].shift();
+  }
+  // Event → shake/flash (thresholds don't feed back into gameplay).
+  if (gs.score !== fx.prevScore) {
+    fx.prevScore = gs.score;
+    fx.shake = Math.max(fx.shake, 5.5);
+    fx.flash = 1;
+    fx.flashColor = theme.kind === 'boat' ? '#7dd3fc' : '#fdba74';
+  }
+  if (gs.lastSpark !== fx.prevSpark) {
+    fx.prevSpark = gs.lastSpark;
+    fx.shake = Math.max(fx.shake, 3);
+  }
+  if (gs.lastSplash !== fx.prevSplash) {
+    fx.prevSplash = gs.lastSplash;
+    fx.shake = Math.max(fx.shake, 2.5);
+  }
+  fx.shake = decay(fx.shake, dt, 0.02);
+  fx.flash = decay(fx.flash, dt, 0.004);
+}
+
+/** Lighten/darken a `#rrggbb` toward white/black by `t` (0..1). */
+function shade(hex: string, t: number): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  let r = (n >> 16) & 255;
+  let g = (n >> 8) & 255;
+  let b = n & 255;
+  if (t >= 0) {
+    r += (255 - r) * t;
+    g += (255 - g) * t;
+    b += (255 - b) * t;
+  } else {
+    const k = 1 + t;
+    r *= k;
+    g *= k;
+    b *= k;
+  }
+  return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
 /** Trace a 5-pointed star centered at (cx, cy) with the given outer radius. */
 function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
@@ -316,25 +396,44 @@ function drawUnit(ctx: CanvasRenderingContext2D, c: Unit, isPlayer: boolean, the
   const speed = Math.hypot(c.vx, c.vy);
   const nx = speed > 0.3 ? c.vx / speed : 0;
   const ny = speed > 0.3 ? c.vy / speed : 0;
+  const boat = theme.kind === 'boat';
 
-  // Bumper ring (rubber tube for a boat, fender for a car).
+  // Contact shadow (cars) / soft hull reflection on the water (boats).
+  drawShadow(ctx, c.x, c.y + (boat ? 4 : 6), UNIT_R * 0.95, UNIT_R * (boat ? 0.55 : 0.5), boat ? 0.18 : 0.34);
+
+  // Player highlight: a glowing ring so your unit reads instantly.
+  if (isPlayer) {
+    ctx.save();
+    ctx.strokeStyle = withAlpha('#facc15', 0.9);
+    ctx.shadowColor = '#facc15';
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, UNIT_R + 2.5, 0, TWO_PI);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Bumper ring (rubber tube for a boat, fender for a car): dark base + lit
+  // colored fender so the rim catches the overhead light.
   ctx.beginPath();
-  ctx.arc(c.x, c.y, UNIT_R, 0, Math.PI * 2);
-  ctx.fillStyle = theme.kind === 'boat' ? '#0b2a44' : isPlayer ? '#052e16' : '#111a2b';
+  ctx.arc(c.x, c.y, UNIT_R, 0, TWO_PI);
+  ctx.fillStyle = boat ? '#0b2a44' : isPlayer ? '#052e16' : '#0d1424';
   ctx.fill();
   ctx.lineWidth = 5;
-  ctx.strokeStyle = c.color;
+  ctx.strokeStyle = shade(c.color, 0.12);
   ctx.stroke();
 
-  // Body / seat.
-  ctx.beginPath();
-  ctx.arc(c.x, c.y, UNIT_R - 8, 0, Math.PI * 2);
-  ctx.fillStyle = c.color;
-  ctx.fill();
-  if (theme.kind === 'boat') {
+  // Lit domed body via a top-left radial gradient.
+  drawSphere(ctx, c.x, c.y, UNIT_R - 8, shade(c.color, 0.55), c.color, shade(c.color, -0.45), {
+    specular: true,
+    rim: isPlayer,
+  });
+
+  if (boat) {
     // Dark cockpit well so it reads as a seat, not a solid disc.
     ctx.beginPath();
-    ctx.arc(c.x, c.y, UNIT_R - 14, 0, Math.PI * 2);
+    ctx.arc(c.x, c.y, UNIT_R - 14, 0, TWO_PI);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fill();
   }
@@ -342,51 +441,92 @@ function drawUnit(ctx: CanvasRenderingContext2D, c: Unit, isPlayer: boolean, the
   // Heading nub in the direction of travel.
   if (speed > 0.3) {
     ctx.beginPath();
-    ctx.arc(c.x + nx * (UNIT_R - 6), c.y + ny * (UNIT_R - 6), 4, 0, Math.PI * 2);
+    ctx.arc(c.x + nx * (UNIT_R - 6), c.y + ny * (UNIT_R - 6), 4, 0, TWO_PI);
     ctx.fillStyle = '#0b0f14';
     ctx.fill();
   }
 
-  // Yellow star centered on the active player so it's easy to spot.
+  // Glowing yellow star centered on the active player.
   if (isPlayer) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(250,204,21,0.8)';
+    ctx.shadowBlur = 8;
     starPath(ctx, c.x, c.y, UNIT_R - 11);
     ctx.fillStyle = '#facc15';
     ctx.fill();
+    ctx.restore();
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = '#78350f';
     ctx.stroke();
   }
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: number) {
-  ctx.clearRect(0, 0, W, H);
+/** A capped motion trail behind a unit: dark skid streak (cars) / bright wake
+ *  (boats), widening and fading toward the unit. */
+function drawTrail(ctx: CanvasRenderingContext2D, trail: FxVec[], boat: boolean) {
+  if (trail.length < 2) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (let i = 1; i < trail.length; i++) {
+    const k = i / trail.length;
+    const a = trail[i - 1];
+    const b = trail[i];
+    ctx.strokeStyle = boat ? `rgba(219,234,254,${k * 0.16})` : `rgba(20,22,30,${k * 0.3})`;
+    ctx.lineWidth = (boat ? 7 : 6) * k;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
-  if (theme.kind === 'boat') {
-    // Water floor with ripple lines.
-    ctx.fillStyle = '#0b3a5c';
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+/** Paint the lit arena floor (gradient + sheen + accents + vignette) and its
+ *  rounded, glowing rail. Purely cosmetic; identical bounds for both variants. */
+function drawArena(ctx: CanvasRenderingContext2D, theme: BumperTheme, now: number) {
+  const boat = theme.kind === 'boat';
+  const accent = boat ? '#0ea5e9' : '#f97316';
+
+  const surf = ctx.createLinearGradient(0, 0, 0, H);
+  if (boat) {
+    surf.addColorStop(0, '#0c4a6e');
+    surf.addColorStop(0.5, '#075985');
+    surf.addColorStop(1, '#0a3350');
+  } else {
+    surf.addColorStop(0, '#1b2942');
+    surf.addColorStop(0.5, '#111c30');
+    surf.addColorStop(1, '#0b1220');
+  }
+  ctx.fillStyle = surf;
+  ctx.fillRect(0, 0, W, H);
+
+  if (boat) {
+    // Drifting water: sine bands that slowly slide, plus a couple of soft
+    // sun-glint highlights so the surface reads as living water.
+    const drift = now * 0.0012;
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
     ctx.lineWidth = 2;
     for (let y = 24; y < H; y += 34) {
       ctx.beginPath();
       for (let x = 0; x <= W; x += 20) {
-        const yy = y + Math.sin((x / W) * Math.PI * 4) * 3;
+        const yy = y + Math.sin((x / W) * Math.PI * 4 + drift + y * 0.05) * 3;
         if (x === 0) ctx.moveTo(x, yy);
         else ctx.lineTo(x, yy);
       }
       ctx.stroke();
     }
-    ctx.strokeStyle = '#155e8c';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(2, 2, W - 4, H - 4);
+    for (let i = 0; i < 2; i++) {
+      const gx = W * (0.32 + i * 0.4) + Math.sin(drift + i) * 18;
+      const gy = H * (0.3 + i * 0.4);
+      const glint = ctx.createRadialGradient(gx, gy, 6, gx, gy, 120);
+      glint.addColorStop(0, 'rgba(186,230,253,0.14)');
+      glint.addColorStop(1, 'rgba(186,230,253,0)');
+      ctx.fillStyle = glint;
+      ctx.fillRect(0, 0, W, H);
+    }
   } else {
-    // Rink floor with a faint grid for a sense of motion.
-    ctx.fillStyle = '#0e1626';
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = '#2a3a55';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(2, 2, W - 4, H - 4);
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    // Glossy rink: a faint grid for a sense of motion under a warm sheen.
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
     ctx.lineWidth = 1;
     for (let x = 40; x < W; x += 40) {
       ctx.beginPath();
@@ -400,10 +540,50 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
       ctx.lineTo(W, y);
       ctx.stroke();
     }
+    const sheen = ctx.createRadialGradient(W / 2, H * 0.3, 20, W / 2, H * 0.3, H * 0.75);
+    sheen.addColorStop(0, 'rgba(249,115,22,0.1)');
+    sheen.addColorStop(1, 'rgba(249,115,22,0)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(0, 0, W, H);
   }
 
-  // Wake trail: fading, expanding rings drawn under the boats.
-  if (theme.kind === 'boat') {
+  // Corner vignette for depth.
+  const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.75);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.4)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // Rounded wall: dark bevel under a glowing accent rail.
+  ctx.save();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = boat ? 'rgba(6,25,40,0.9)' : 'rgba(8,12,22,0.9)';
+  roundRectPath(ctx, 4, 4, W - 8, H - 8, 18);
+  ctx.stroke();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = withAlpha(accent, 0.6);
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = 12;
+  roundRectPath(ctx, 6, 6, W - 12, H - 12, 16);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: number, fx: FX) {
+  const boat = theme.kind === 'boat';
+  ctx.clearRect(0, 0, W, H);
+
+  drawArena(ctx, theme, now);
+
+  // —— Dynamic layer: everything that moves, shaken on a hard bump ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
+  }
+
+  // Boat wake: fading, expanding rings drawn under the boats.
+  if (boat) {
     ctx.strokeStyle = '#dbeafe';
     ctx.lineWidth = 2;
     for (const rp of gs.ripples) {
@@ -412,16 +592,21 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
       const t = age / RIPPLE_LIFE;
       ctx.globalAlpha = (1 - t) * 0.3;
       ctx.beginPath();
-      ctx.arc(rp.x, rp.y, 5 + t * 22, 0, Math.PI * 2);
+      ctx.arc(rp.x, rp.y, 5 + t * 22, 0, TWO_PI);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
   }
 
+  // Per-unit motion trails (skid / wake), under the units.
+  for (let i = 0; i < gs.units.length && i < fx.trails.length; i++) drawTrail(ctx, fx.trails[i], boat);
+
   for (let i = gs.units.length - 1; i >= 0; i--) drawUnit(ctx, gs.units[i], i === 0, theme);
 
-  // Splash droplets thrown up by bumps, drawn over the boats.
-  if (theme.kind === 'boat') {
+  // Splash droplets thrown up by bumps, drawn over the boats (additive foam).
+  if (boat) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = '#eff6ff';
     for (const s of gs.splashes) {
       const age = now - s.born;
@@ -429,14 +614,17 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
       const t = age / SPLASH_LIFE;
       ctx.globalAlpha = 1 - t;
       ctx.beginPath();
-      ctx.arc(s.x + s.vx * age * 0.05, s.y + s.vy * age * 0.05, 3 * (1 - t) + 0.8, 0, Math.PI * 2);
+      ctx.arc(s.x + s.vx * age * 0.05, s.y + s.vy * age * 0.05, 3 * (1 - t) + 0.8, 0, TWO_PI);
       ctx.fill();
     }
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
 
-  // Spark burst thrown off by car bumps, drawn over the cars.
-  if (theme.kind === 'car') {
+  // Spark burst thrown off by car bumps, drawn over the cars (additive).
+  if (!boat) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const s of gs.sparks) {
       const age = now - s.born;
       if (age < 0 || age > SPARK_LIFE) continue;
@@ -445,23 +633,32 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
       ctx.globalAlpha = 1 - t;
       ctx.fillStyle = t < 0.4 ? '#fef9c3' : '#f59e0b';
       ctx.beginPath();
-      ctx.arc(s.x + s.vx * age * 0.06, s.y + s.vy * age * 0.06, 2.4 * (1 - t) + 0.6, 0, Math.PI * 2);
+      ctx.arc(s.x + s.vx * age * 0.06, s.y + s.vy * age * 0.06, 2.4 * (1 - t) + 0.6, 0, TWO_PI);
       ctx.fill();
     }
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
 
-  // Joystick.
+  ctx.restore(); // end dynamic layer
+
+  // Scoring-bump flash overlay.
+  if (fx.flash > 0) {
+    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.16);
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Joystick (UI — outside the shake).
   if (gs.joy.active) {
     const kx = clamp(gs.joy.kx, gs.joy.ox - JOY_MAX, gs.joy.ox + JOY_MAX);
     const ky = clamp(gs.joy.ky, gs.joy.oy - JOY_MAX, gs.joy.oy + JOY_MAX);
     ctx.beginPath();
-    ctx.arc(gs.joy.ox, gs.joy.oy, JOY_MAX, 0, Math.PI * 2);
+    ctx.arc(gs.joy.ox, gs.joy.oy, JOY_MAX, 0, TWO_PI);
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(kx, ky, 20, 0, Math.PI * 2);
+    ctx.arc(kx, ky, 20, 0, TWO_PI);
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.fill();
   }
@@ -470,6 +667,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
 export default function BumperArena({ theme }: { theme: BumperTheme }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS(theme));
+  const fxRef = useRef<FX>(freshFX(N_AI + 1));
 
   const [phase, setPhase] = useState<Phase>('play');
   const [score, setScore] = useState(0);
@@ -534,7 +732,8 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
         playFanfare();
       }
 
-      draw(ctx, gs, theme, now);
+      updateFX(fxRef.current, gs, theme, dt);
+      draw(ctx, gs, theme, now, fxRef.current);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -575,6 +774,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
 
   const restart = useCallback(() => {
     gsRef.current = freshGS(theme);
+    fxRef.current = freshFX(N_AI + 1);
     setScore(0);
     setSecs(GAME_MS / 1000);
     setPhase('play');
