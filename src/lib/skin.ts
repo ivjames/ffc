@@ -9,16 +9,18 @@
 // app's `--color-fairway-*` text ramp stays legible either way; the skin's
 // identity comes from structure (bevels, borders, glow, metal) + the accent.
 //
-// 'candy' is the default look and the base (unscoped) styling in index.css, so
-// data-template='candy' simply adds no overrides. The initial attribute is set
-// by a tiny inline script in index.html BEFORE first paint (no flash of the
-// wrong skin); this module reads it back and takes over.
+// 'unstyled' is the DEFAULT — a plain, flat baseline with no gloss. 'candy' (the
+// unscoped base styling in index.css) and the other looks are opt-in skins on
+// top of it. The initial attribute is set by a tiny inline script in index.html
+// BEFORE first paint (no flash of the wrong skin); this module reads it back and
+// takes over.
 
-export type Skin = 'candy' | 'blocky' | 'uv' | 'glass' | 'chrome';
+export type Skin = 'unstyled' | 'candy' | 'blocky' | 'uv' | 'glass' | 'chrome';
 
 /** The selectable skins, in picker order, with a label, one-liner, and a
  *  representative swatch color for the picker dot. */
 export const SKINS: { id: Skin; label: string; blurb: string; dot: string }[] = [
+  { id: 'unstyled', label: 'Unstyled', blurb: 'Plain & flat (default)', dot: '#9ca3af' },
   { id: 'candy', label: 'Candy', blurb: 'Glossy arcade keys', dot: '#22c55e' },
   { id: 'blocky', label: 'Quirky Blocky', blurb: 'Toybox neubrutalism', dot: '#ff5d5d' },
   { id: 'uv', label: 'UV Party', blurb: 'Blacklight neon', dot: '#16f2e3' },
@@ -33,7 +35,7 @@ function isSkin(v: unknown): v is Skin {
   return typeof v === 'string' && (IDS as string[]).includes(v);
 }
 
-// The user's saved choice, or null if they've never picked one (→ candy).
+// The user's saved choice, or null if they've never picked one (→ unstyled).
 function storedSkin(): Skin | null {
   try {
     const s = localStorage.getItem(KEY);
@@ -46,7 +48,7 @@ function storedSkin(): Skin | null {
 function readInitial(): Skin {
   const attr = document.documentElement.dataset.template;
   if (isSkin(attr)) return attr;
-  return storedSkin() ?? 'candy';
+  return storedSkin() ?? 'unstyled';
 }
 
 let current: Skin = readInitial();
