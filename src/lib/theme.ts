@@ -19,13 +19,30 @@ export function accentInk(theme: string): string {
   return `var(--ink-${INK_THEMES.has(theme) ? theme : 'default'})`;
 }
 
+/**
+ * Human-readable name for a course theme, shown as the tile subtitle. Falls back
+ * to the raw theme key (capitalized by the caller) for themes without a label.
+ */
+export function themeLabel(theme: string): string {
+  switch (theme) {
+    case 'blue':
+      return 'California';
+    case 'green':
+      return 'Classic mini golf';
+    default:
+      return theme;
+  }
+}
+
 /** Emoji marker for a course theme (shared by every course tile/placeholder). */
 export function themeEmoji(theme: string): string {
   switch (theme) {
+    // Blue Course — California themed (palm / coast).
     case 'blue':
-      return '🔵';
+      return '🌴';
+    // Green Course — classic mini golf themed (flag in the cup).
     case 'green':
-      return '🟢';
+      return '⛳️';
     case 'red':
       return '🔴';
     case 'dragon':

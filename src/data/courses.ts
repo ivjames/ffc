@@ -58,18 +58,21 @@ export const LOCATIONS: LocationSeed[] = [
 
 // Per-course notes, keyed by theme (a course's `rules` is set from its theme
 // below). Short, themed flavor that reads on the Rules screen; the same theme
-// shares notes across locations since it's the same course concept. Placeholder
-// content until the client supplies real per-course rules (§11).
+// shares notes across locations since it's the same course concept. The Blue
+// Course is California-themed and the Green Course is classic-mini-golf-themed;
+// the others stay placeholder until the client supplies real per-course rules (§11).
 const THEME_RULES: Record<string, string[]> = {
+  // California-themed: coast, redwoods, and Golden State landmarks.
   blue: [
-    'Fast blue felt — the banks run quick, so ease off your backswing.',
-    'Water comes into play on the back nine: fish your ball out and add one stroke.',
-    'Several two-tier greens reward a firm, confident first putt.',
+    'Coast holes run past a mini Golden Gate — thread the ball between the towers while the span is clear.',
+    'Pacific water hazards guard the back nine: fish your ball out and add one stroke.',
+    'Redwood shade and beach sand steal a fast ball’s speed — a firm, confident putt holds its line.',
   ],
+  // Classic mini-golf-themed: the timeless windmill, loop, and clown obstacles.
   green: [
-    'Our gentlest layout — a good warm-up and friendly to younger players.',
-    'Hedgerows line the fairways; a ball lost in the greenery is replayed where it entered.',
-    'Time your putt through the windmill — the gate opens on a slow, steady turn.',
+    'Time your putt through the spinning windmill — the gate opens on a slow, steady turn.',
+    'The loop-the-loop needs pace: hit it firm or the ball rolls right back to your feet.',
+    'Bank it past the clown’s mouth and the wishing well — the classic banks reward a scouting look.',
   ],
   dragon: [
     'The dragon guards the mid-course — putt through while its jaws are open.',
