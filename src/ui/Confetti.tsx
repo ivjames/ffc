@@ -9,6 +9,11 @@ import { useEffect, useRef } from 'react';
 // is what honors that setting (see index.css). Callers who never want it can
 // simply pass `fire={false}`.
 
+// Confetti comes in three shapes so a burst reads as a shower of mixed
+// paper/streamers rather than a cloud of identical squares — a small variety
+// that makes the celebration feel richer.
+type Shape = 'rect' | 'strip' | 'circle';
+
 type Particle = {
   x: number;
   y: number;
@@ -18,10 +23,12 @@ type Particle = {
   vrot: number;
   size: number;
   color: string;
+  shape: Shape;
   life: number; // frames remaining
 };
 
-const COLORS = ['#22c55e', '#f0fdf4', '#fbbf24', '#38bdf8', '#f472b6', '#a78bfa'];
+const COLORS = ['#22c55e', '#f0fdf4', '#fbbf24', '#38bdf8', '#f472b6', '#a78bfa', '#fb923c'];
+const SHAPES: Shape[] = ['rect', 'strip', 'circle'];
 
 // One cannon: `count` particles launched from (ox, oy) toward `angle` (radians,
 // measured from +x, counter-clockwise) with some spread.
@@ -40,6 +47,7 @@ function cannon(count: number, ox: number, oy: number, angle: number): Particle[
       vrot: (Math.random() - 0.5) * 0.4,
       size: 6 + Math.random() * 6,
       color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      shape: SHAPES[Math.floor(Math.random() * SHAPES.length)],
       life: 90 + Math.floor(Math.random() * 50),
     });
   }
@@ -118,7 +126,16 @@ export default function Confetti({ fire = true }: { fire?: boolean }) {
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rot);
         ctx.fillStyle = p.color;
-        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        if (p.shape === 'circle') {
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size * 0.4, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.shape === 'strip') {
+          // A long thin streamer of ribbon.
+          ctx.fillRect(-p.size * 0.2, -p.size * 0.7, p.size * 0.4, p.size * 1.4);
+        } else {
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        }
         ctx.restore();
       }
       if (particles.length > 0) {

@@ -108,8 +108,8 @@ export default function Summary() {
         {/* Winner hero — the champion's spotlight. Named once here, then the
             rest of the field follows below, so no tag is shown twice. */}
         <div
-          className="animate-rise-in relative mb-6 overflow-hidden rounded-3xl border border-fairway-500/40 bg-fairway-900/60 p-6 text-center"
-          style={{ '--i': 0 } as CSSProperties}
+          className="animate-pop-in animate-glow-pulse relative mb-6 overflow-hidden rounded-3xl border border-fairway-500/40 bg-fairway-900/60 p-6 text-center"
+          style={{ '--i': 0, '--glow': course.accent } as CSSProperties}
         >
           {/* Accent spotlight behind the trophy, in the course's own color. */}
           <div
