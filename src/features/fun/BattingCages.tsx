@@ -38,6 +38,10 @@ const PITCHES = 10;
 const RESULT_MS = 780; // hold on the outcome before the next pitch
 const TRAVEL_MIN = 880;
 const TRAVEL_MAX = 1360;
+// Randomized beat between the batter holding down and the ball leaving the
+// mound, so the release can't be timed off the press alone.
+const DELAY_MIN = 250;
+const DELAY_MAX = 900;
 
 type Kind = 'hr' | 'hit' | 'foul' | 'miss';
 type Outcome = { label: string; pts: number; kind: Kind };
@@ -460,7 +464,9 @@ export default function BattingCages() {
           gs.ball.y = MOUND_Y;
         } else {
           // Kinematic descent from absolute time so timing stays framerate-exact.
-          const p = (now - gs.pitchStart) / gs.travelMs;
+          // p stays 0 during the pre-launch delay (pitchStart is in the future),
+          // holding the ball on the mound until its randomized release moment.
+          const p = Math.max(0, (now - gs.pitchStart) / gs.travelMs);
           gs.ball.y = MOUND_Y + (PLATE_Y - MOUND_Y) * p;
           // No swing and the ball has passed the plate → strike (watched or held
           // too long without releasing).
@@ -518,7 +524,8 @@ export default function BattingCages() {
     const now = performance.now();
     gs.loaded = true;
     gs.loadAt = now;
-    if (!gs.pitchStart) gs.pitchStart = now; // holding down starts the pitch
+    // Launch the ball a randomized beat after the hold, not instantly.
+    if (!gs.pitchStart) gs.pitchStart = now + rnd(DELAY_MIN, DELAY_MAX);
   }, []);
 
   // Release to swing: contact timing is the moment the batter lets go.
