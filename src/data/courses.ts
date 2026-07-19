@@ -57,19 +57,32 @@ export const LOCATIONS: LocationSeed[] = [
 ];
 
 // Per-course notes, keyed by theme (a course's `rules` is set from its theme
-// below). Short, themed flavor that reads on the Rules screen; the same theme
-// shares notes across locations since it's the same course concept. The Blue
-// Course is California-themed and the Green Course is classic-mini-golf-themed;
-// the others stay placeholder until the client supplies real per-course rules (§11).
+// below). Short, themed flavor that reads on the Rules screen. A theme shares
+// notes across locations, so a course only carries a distinct theme when its
+// decor is actually its own: Upland's Blue Course is California-themed
+// (`california`) and its Green Course is classic-mini-golf-themed (`classic`),
+// while every other venue's Blue/Green course stays on the generic `blue`/`green`
+// placeholder until the client supplies that venue's real per-course rules (§11).
 const THEME_RULES: Record<string, string[]> = {
-  // California-themed: coast, redwoods, and Golden State landmarks.
+  // Generic placeholders — Blue/Green courses that aren't yet individually themed.
   blue: [
+    'Fast blue felt — the banks run quick, so ease off your backswing.',
+    'Water comes into play on the back nine: fish your ball out and add one stroke.',
+    'Several two-tier greens reward a firm, confident first putt.',
+  ],
+  green: [
+    'Our gentlest layout — a good warm-up and friendly to younger players.',
+    'Hedgerows line the fairways; a ball lost in the greenery is replayed where it entered.',
+    'Time your putt through the windmill — the gate opens on a slow, steady turn.',
+  ],
+  // Upland · Blue Course — California-themed: coast, redwoods, Golden State icons.
+  california: [
     'Coast holes run past a mini Golden Gate — thread the ball between the towers while the span is clear.',
     'Pacific water hazards guard the back nine: fish your ball out and add one stroke.',
     'Redwood shade and beach sand steal a fast ball’s speed — a firm, confident putt holds its line.',
   ],
-  // Classic mini-golf-themed: the timeless windmill, loop, and clown obstacles.
-  green: [
+  // Upland · Green Course — classic mini-golf: the timeless windmill/loop/clown.
+  classic: [
     'Time your putt through the spinning windmill — the gate opens on a slow, steady turn.',
     'The loop-the-loop needs pace: hit it firm or the ball rolls right back to your feet.',
     'Bank it past the clown’s mouth and the wishing well — the classic banks reward a scouting look.',
@@ -96,21 +109,23 @@ export const COURSES: CourseSeed[] = [
     id: 'a1111111-1111-4111-8111-111111111111',
     locationId: LOC_UPLAND,
     name: 'Blue Course',
-    theme: 'blue',
+    // California-themed (Upland is the Golden State venue); keeps its blue accent.
+    theme: 'california',
     holeCount: 18,
     pars: [3, 2, 3, 2, 3, 4, 2, 3, 2, 3, 3, 2, 4, 3, 2, 3, 2, 3],
     accent: '#3b82f6',
-    rules: THEME_RULES.blue,
+    rules: THEME_RULES.california,
   },
   {
     id: 'a2222222-2222-4222-8222-222222222222',
     locationId: LOC_UPLAND,
     name: 'Green Course',
-    theme: 'green',
+    // Classic-mini-golf-themed; keeps its green accent.
+    theme: 'classic',
     holeCount: 18,
     pars: [2, 3, 2, 3, 3, 2, 4, 3, 2, 3, 2, 3, 3, 4, 2, 3, 3, 2],
     accent: '#22c55e',
-    rules: THEME_RULES.green,
+    rules: THEME_RULES.classic,
   },
   {
     id: 'a3333333-3333-4333-8333-333333333333',
