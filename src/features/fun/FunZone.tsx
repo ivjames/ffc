@@ -106,7 +106,7 @@ export default function FunZone() {
           Waiting for a lane, a kart, or the next hole? Pass the time.
         </p>
 
-        <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
           {TILES.map((t, i) => (
             <button
               key={t.to}
@@ -114,7 +114,7 @@ export default function FunZone() {
                 playClick();
                 navigate(t.to);
               }}
-              className="animate-rise-in flex w-full items-center gap-3 rounded-2xl border px-4 py-4 text-left transition active:scale-[0.98]"
+              className="animate-rise-in flex h-full w-full flex-col gap-2 rounded-2xl border px-4 py-4 text-left transition active:scale-[0.98]"
               style={
                 {
                   '--i': i,
