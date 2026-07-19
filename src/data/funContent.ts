@@ -3,7 +3,8 @@
 //
 //   • Fun facts       — a rotating deck of bite-size facts (FunFacts screen).
 //   • Trivia          — multiple-choice questions with one correct answer.
-//   • Challenge spinner — a wheel of quick, kid-safe group dares/challenges.
+//   • Challenge spinner — a wheel that mixes silly next-shot gameplay handicaps
+//     with quick, kid-safe group dares (Spinner screen).
 //
 // All content is static and bundled (no network), so every screen works
 // offline exactly like the scorecard. Content is intentionally generic and
@@ -27,6 +28,14 @@ export type TriviaQuestion = {
 export type Challenge = {
   emoji: string;
   text: string;
+  /**
+   * How the challenge lands:
+   *   • 'gameplay' — a handicap that bends the rules of your NEXT shot
+   *     (weaker hand, wrong end of the club…). Meaningful mid-round.
+   *   • 'dare'     — a just-for-fun stunt anyone can do in line, no game needed.
+   * Roughly half the wheel is each kind; the Spinner colors and labels them.
+   */
+  kind: 'gameplay' | 'dare';
 };
 
 // —— Fun facts ——————————————————————————————————————————————————————————
@@ -388,21 +397,129 @@ export const TRIVIA: TriviaQuestion[] = [
 ];
 
 // —— Challenge spinner ————————————————————————————————————————————————————
-// Quick, kid-safe group challenges — the kind of thing a family can do on the
-// spot while waiting for a lane or a kart. Nothing that needs equipment.
-export const CHALLENGES: Challenge[] = [
-  { emoji: '🕺', text: 'Everyone does their best victory dance for 5 seconds!' },
-  { emoji: '😜', text: 'Make the silliest face you can — hold it for 3 seconds.' },
-  { emoji: '🦶', text: 'Balance on one foot until it is your turn.' },
-  { emoji: '🎤', text: 'Sing your favorite song title in your most dramatic voice.' },
-  { emoji: '🤝', text: 'Give everyone in your group a high five.' },
-  { emoji: '🐧', text: 'Waddle like a penguin to the nearest wall and back.' },
-  { emoji: '😐', text: 'Try not to laugh while someone tells their worst joke.' },
-  { emoji: '💪', text: 'Show off your strongest superhero pose.' },
-  { emoji: '🗣️', text: 'Talk in a robot voice until your next turn.' },
-  { emoji: '🎨', text: 'Name three things you can see that are the same color.' },
-  { emoji: '🙌', text: 'Do 5 air-high-fives with an imaginary teammate.' },
-  { emoji: '🐸', text: 'Take 3 giant frog hops in place.' },
-  { emoji: '🤔', text: 'Guess who in your group will win the next game.' },
-  { emoji: '🎉', text: 'Start a 5-second cheer for the whole group.' },
+// Each wheel mixes two flavors, roughly half and half (see `Challenge.kind`):
+//   • Gameplay handicaps — silly rule-benders for your NEXT shot. These shine
+//     when the spinner is opened mid-round from the scorecard: use the wrong
+//     end of your club, putt one-footed, and so on. Keep them safe on a busy
+//     course — the player must stay facing the hole and able to see people,
+//     balls, and obstacles, so no eyes-closed / backward / spin-then-swing.
+//   • Just-for-fun dares — quick, kid-safe stunts anyone can do on the spot
+//     while waiting for a lane or a kart. Nothing that needs equipment.
+// Every set interleaves the two kinds so the wheel reads as a balanced mix.
+//
+// PER-COURSE SETS: the spinner picks a set by the current course's THEME (the
+// same `theme` key used for `THEME_RULES` in data/courses.ts), so a dragon
+// course spins dragon-flavored dares. A course whose theme has no set — or the
+// spinner opened outside a round — falls back to `DEFAULT_CHALLENGES`. Use
+// `challengesForTheme()` rather than reaching into these tables directly.
+
+// The generic wheel: works on any course and anywhere in the app (Fun Zone,
+// direct link). Also the fallback when a course theme has no dedicated set.
+export const DEFAULT_CHALLENGES: Challenge[] = [
+  { kind: 'gameplay', emoji: '🎈', text: 'Putt as gently as you can — barely tap it.' },
+  { kind: 'dare', emoji: '🕺', text: 'Everyone does their best victory dance for 5 seconds!' },
+  { kind: 'gameplay', emoji: '🔄', text: 'Take your next shot with the wrong end of your club.' },
+  { kind: 'dare', emoji: '😜', text: 'Make the silliest face you can — hold it for 3 seconds.' },
+  { kind: 'gameplay', emoji: '🦵', text: 'Putt croquet-style — club between your legs, facing the hole.' },
+  { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title in your most dramatic voice.' },
+  { kind: 'gameplay', emoji: '🤙', text: 'Play your next shot with only your weaker hand on the club.' },
+  { kind: 'dare', emoji: '🤝', text: 'Give everyone in your group a high five.' },
+  { kind: 'gameplay', emoji: '👣', text: 'Line up and take your next shot balancing on one foot.' },
+  { kind: 'dare', emoji: '🐧', text: 'Waddle like a penguin to the nearest wall and back.' },
+  { kind: 'gameplay', emoji: '🧍', text: 'Putt with your feet together, heels touching.' },
+  { kind: 'dare', emoji: '🤖', text: 'Talk in a robot voice until your next turn.' },
+  { kind: 'gameplay', emoji: '🗣️', text: 'Call your shot out loud before you hit — say where it will stop.' },
+  { kind: 'dare', emoji: '🐸', text: 'Take 3 giant frog hops in place.' },
+  { kind: 'gameplay', emoji: '🤏', text: 'Putt gripping the club with just your fingertips.' },
+  { kind: 'dare', emoji: '🎉', text: 'Start a 5-second cheer for the whole group.' },
 ];
+
+// Per-course sets, keyed by course theme. Each is a self-contained, balanced
+// wheel themed to that course concept. Themes without an entry fall back to
+// DEFAULT_CHALLENGES via `challengesForTheme()`.
+export const CHALLENGE_SETS: Record<string, Challenge[]> = {
+  // Blue — fast felt and water hazards. A cool, splashy set.
+  blue: [
+    { kind: 'gameplay', emoji: '🌀', text: 'Putt in one smooth motion, like a wave — no practice swings.' },
+    { kind: 'dare', emoji: '🌊', text: 'Do your best two-armed ocean wave for the group.' },
+    { kind: 'gameplay', emoji: '🧊', text: 'Putt as gently as you can — pretend the green is thin ice.' },
+    { kind: 'dare', emoji: '🐬', text: 'Make a dolphin squeak everyone can hear.' },
+    { kind: 'gameplay', emoji: '🤙', text: 'Play your next shot with only your weaker hand on the club.' },
+    { kind: 'dare', emoji: '🏊', text: 'Mime swimming all the way to the next hole.' },
+    { kind: 'gameplay', emoji: '⏸️', text: 'Freeze for 3 seconds at the top of your backswing, then putt.' },
+    { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title like a sea shanty.' },
+    { kind: 'gameplay', emoji: '👣', text: 'Line up and take your next shot balancing on one foot.' },
+    { kind: 'dare', emoji: '🫧', text: 'Blow an imaginary bubble, then "pop" it dramatically.' },
+    { kind: 'gameplay', emoji: '🐟', text: 'Name a fish out loud, then putt before you forget it.' },
+    { kind: 'dare', emoji: '🤝', text: 'Give everyone in your group a splashy high five.' },
+  ],
+  // Green — the gentle garden layout with windmills and hedges.
+  green: [
+    { kind: 'gameplay', emoji: '🌱', text: 'Putt up on your tiptoes, tall as a growing sprout.' },
+    { kind: 'dare', emoji: '🌻', text: 'Strike your tallest "growing sunflower" stretch.' },
+    { kind: 'gameplay', emoji: '🌬️', text: 'Putt in one smooth motion — pretend the windmill gate is closing.' },
+    { kind: 'dare', emoji: '🐝', text: 'Buzz like a bee all the way to the next tee.' },
+    { kind: 'gameplay', emoji: '🤙', text: 'Play your next shot with only your weaker hand on the club.' },
+    { kind: 'dare', emoji: '🦋', text: 'Flap like a butterfly for 5 seconds.' },
+    { kind: 'gameplay', emoji: '🐢', text: 'Take the slowest, calmest backswing you can, then putt.' },
+    { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title softly, like a lullaby.' },
+    { kind: 'gameplay', emoji: '👣', text: 'Line up and take your next shot balancing on one foot.' },
+    { kind: 'dare', emoji: '🐸', text: 'Take 3 giant frog hops in place.' },
+    { kind: 'gameplay', emoji: '🌼', text: 'Name a flower out loud before you putt.' },
+    { kind: 'dare', emoji: '🤝', text: 'Give everyone in your group a gentle high five.' },
+  ],
+  // Dragon — the fantasy cavern course. Brave, roaring flavor.
+  dragon: [
+    { kind: 'gameplay', emoji: '🐉', text: 'Roar like a dragon, THEN take your next shot.' },
+    { kind: 'dare', emoji: '🐲', text: 'Stomp like a dragon all the way to the next hole.' },
+    { kind: 'gameplay', emoji: '🌋', text: 'Take your slowest, most menacing backswing, then putt.' },
+    { kind: 'dare', emoji: '🔥', text: 'Breathe pretend fire at the sky for 3 seconds.' },
+    { kind: 'gameplay', emoji: '🔄', text: 'Take your next shot with the wrong end of your club — a "tail swing".' },
+    { kind: 'dare', emoji: '🦇', text: 'Flap like a cavern bat for 5 seconds.' },
+    { kind: 'gameplay', emoji: '🤙', text: 'Play your next shot with your weaker "claw" only.' },
+    { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title in your mightiest dragon voice.' },
+    { kind: 'gameplay', emoji: '💎', text: 'Putt as gently as you dare — sneak past the sleeping dragon.' },
+    { kind: 'dare', emoji: '🛡️', text: 'Strike your bravest knight pose and hold it.' },
+    { kind: 'gameplay', emoji: '📣', text: "Call your shot out loud like a hero's vow before you putt." },
+    { kind: 'dare', emoji: '👑', text: 'Bow to the whole group like royalty.' },
+  ],
+  // Western — the mine-cart and saloon course. Yeehaw energy.
+  western: [
+    { kind: 'gameplay', emoji: '🤠', text: 'Putt quick as a tumbleweed — no lining it up.' },
+    { kind: 'dare', emoji: '🐴', text: 'Gallop like a horse to the next tee.' },
+    { kind: 'gameplay', emoji: '⭐', text: 'Take your next shot up on your tiptoes.' },
+    { kind: 'dare', emoji: '🎩', text: 'Tip your imaginary hat to the whole group.' },
+    { kind: 'gameplay', emoji: '🔄', text: 'Take your next shot with the wrong end of your club.' },
+    { kind: 'dare', emoji: '🪕', text: 'Do a 3-second hoedown dance.' },
+    { kind: 'gameplay', emoji: '🦵', text: 'Putt croquet-style, straddling the club like a horse.' },
+    { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title like an old cowboy ballad.' },
+    { kind: 'gameplay', emoji: '🤙', text: 'Play your next shot with only your weaker hand on the club.' },
+    { kind: 'dare', emoji: '🪢', text: 'Swing an imaginary lasso over your head for 5 seconds.' },
+    { kind: 'gameplay', emoji: '👢', text: 'Putt with your boots together, heels touching.' },
+    { kind: 'dare', emoji: '🌵', text: 'Stand as still as a cactus for 5 seconds.' },
+  ],
+  // Red — the championship layout. Big-stage, high-pressure flavor.
+  red: [
+    { kind: 'gameplay', emoji: '⏱️', text: 'Putt within 3 seconds — no lining it up, championship pressure!' },
+    { kind: 'dare', emoji: '🏆', text: 'Take a champion\'s victory lap around your group.' },
+    { kind: 'gameplay', emoji: '🎯', text: 'Call your shot out loud before you hit — pro style.' },
+    { kind: 'dare', emoji: '📣', text: 'Give a 5-second acceptance speech for winning.' },
+    { kind: 'gameplay', emoji: '🔄', text: 'Take your next shot with the wrong end of your club.' },
+    { kind: 'dare', emoji: '🕺', text: 'Everyone does their best victory dance for 5 seconds!' },
+    { kind: 'gameplay', emoji: '🤙', text: 'Play your next shot with only your weaker hand on the club.' },
+    { kind: 'dare', emoji: '🎤', text: 'Sing your favorite song title like a stadium anthem.' },
+    { kind: 'gameplay', emoji: '👣', text: 'Line up and take your next shot balancing on one foot.' },
+    { kind: 'dare', emoji: '🙌', text: 'Start a slow clap that builds up for the group.' },
+    { kind: 'gameplay', emoji: '🤏', text: 'Putt gripping the club with just your fingertips.' },
+    { kind: 'dare', emoji: '🔥', text: 'Strike your fiercest "game face" for 3 seconds.' },
+  ],
+};
+
+/**
+ * The challenge wheel for a given course theme. Falls back to the generic
+ * DEFAULT_CHALLENGES when no theme is given or the theme has no dedicated set
+ * (e.g. the spinner opened from the Fun Zone rather than a round).
+ */
+export function challengesForTheme(theme?: string): Challenge[] {
+  return (theme && CHALLENGE_SETS[theme]) || DEFAULT_CHALLENGES;
+}

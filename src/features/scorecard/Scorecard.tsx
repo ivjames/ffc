@@ -221,9 +221,14 @@ export default function Scorecard() {
               🔍
             </button>
             {/* Challenge spinner — a quick group dare while waiting your turn;
-                returns here on back (§12). */}
+                carries the course so the wheel uses that course's themed set,
+                and returns here on back (§12). */}
             <button
-              onClick={() => navigate('/fun/spinner', { state: { from: `/play/${clientId}` } })}
+              onClick={() =>
+                navigate('/fun/spinner', {
+                  state: { from: `/play/${clientId}`, courseId: round.courseId },
+                })
+              }
               className="rounded-lg px-2 py-2 text-lg leading-none active:bg-fairway-800"
               aria-label="Challenge spinner"
               title="Challenge spinner"
