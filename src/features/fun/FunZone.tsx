@@ -102,11 +102,11 @@ export default function FunZone() {
     <Screen>
       <TopBar title="While You Wait" back="/" />
       <Content>
-        <p className="mb-4 text-center text-sm text-fairway-100/70">
+        <p className="mb-3 text-center text-sm text-fairway-100/70">
           Waiting for a lane, a kart, or the next hole? Pass the time.
         </p>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {TILES.map((t, i) => (
             <button
               key={t.to}
@@ -114,7 +114,7 @@ export default function FunZone() {
                 playClick();
                 navigate(t.to);
               }}
-              className="animate-rise-in flex h-full w-full flex-col gap-2 rounded-2xl border px-4 py-4 text-left transition active:scale-[0.98]"
+              className="animate-rise-in flex h-full w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98]"
               style={
                 {
                   '--i': i,
@@ -124,14 +124,13 @@ export default function FunZone() {
               }
             >
               <span
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl"
                 style={{ background: `${t.accent}33` }}
               >
                 {t.emoji}
               </span>
-              <span className="min-w-0">
-                <span className="block text-lg font-bold text-fairway-50">{t.title}</span>
-                <span className="block text-sm text-fairway-100/70">{t.blurb}</span>
+              <span className="block min-w-0 text-sm font-bold leading-tight text-fairway-50">
+                {t.title}
               </span>
             </button>
           ))}
