@@ -8,11 +8,13 @@ import { useEffect, useState } from 'react';
 //
 // Detection is a media query, not the screen.orientation API, so it works the
 // same across browsers and stays in CSS's hands:
-//   (orientation: landscape) and (max-height: 540px)
-// The max-height clause keeps this to phones held sideways — a short, wide
-// viewport — and leaves laptops/desktops/tablets (tall enough even in
-// landscape) untouched.
-const LANDSCAPE_PHONE = '(orientation: landscape) and (max-height: 540px)';
+//   (orientation: landscape) and (max-height: 540px) and (pointer: coarse)
+// The max-height clause keeps this to short, wide viewports, and (pointer:
+// coarse) restricts it to touch devices — so a snapped/short desktop or laptop
+// window (e.g. 1280×500), which is landscape and short but can't be *rotated*,
+// is left alone rather than blocked by the overlay.
+const LANDSCAPE_PHONE =
+  '(orientation: landscape) and (max-height: 540px) and (pointer: coarse)';
 
 export default function RotateNudge() {
   const [landscape, setLandscape] = useState(false);
