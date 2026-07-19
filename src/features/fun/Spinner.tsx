@@ -7,9 +7,9 @@ import { courseById } from '../../data/courses';
 import { playClick, playTick, playLand } from '../../lib/sound';
 
 // §12 Challenge Spinner — a wheel that mixes silly next-shot gameplay handicaps
-// (use the wrong end of your club, putt with your eyes closed…) with quick group
-// dares. Tap to spin; the wheel decelerates onto a random challenge (ticking as
-// it passes each peg) and shows the result. Bundled content, no network.
+// (use the wrong end of your club, putt one-footed…) with quick group dares.
+// Tap to spin; the wheel decelerates onto a random challenge (ticking as it
+// passes each peg) and shows the result. Bundled content, no network.
 //
 // PER-COURSE SETS: opened mid-round from the scorecard, the nav state carries
 // the round's `courseId`; the wheel then uses that course's themed challenge
