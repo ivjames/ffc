@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { playStroke, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
+import type { Particle, Vec as FxVec } from './fx';
+import {
+  TWO_PI,
+  withAlpha,
+  roundRectPath,
+  drawShadow,
+  drawSphere,
+  spawnBurst,
+  stepParticles,
+  drawParticles,
+  pushTrail,
+  decay,
+  shakeOffset,
+} from './fx';
 
 // §12 Skee-Ball — the first attraction mini-game. Swipe up the lane to roll a
 // ball into the target: each scoring ring has a hole the ball drops into. Thread
@@ -129,44 +143,140 @@ function freshGS(): GS {
   };
 }
 
+// —— juice: rendering-only effects (no gameplay state) ————————————————————————
+// These live outside GS so the deterministic sim is never touched; they're
+// advanced per animation frame with a real dt and only ever paint pixels. Built
+// on the shared ./fx toolkit so every Fun Zone game shares one visual language.
+type FX = {
+  trail: FxVec[]; // recent ball positions → motion streak while rolling
+  particles: Particle[]; // spark bursts on release / score
+  shake: number; // screen-shake magnitude (px), decays to 0
+  flash: number; // big-score flash 0..1, decays to 0
+  flashColor: string;
+};
+
+function freshFX(): FX {
+  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#22c55e' };
+}
+
+/** Advance the visual-only effects by `dt` ms (framerate-correct). */
+function updateFX(fx: FX, gs: GS, dt: number) {
+  if (gs.phase === 'flight' || gs.phase === 'sink') pushTrail(fx.trail, gs.ball.x, gs.ball.y, 14);
+  else fx.trail.length = 0;
+  fx.particles = stepParticles(fx.particles, dt);
+  fx.shake = decay(fx.shake, dt, 0.02);
+  fx.flash = decay(fx.flash, dt, 0.0022);
+}
+
 // —— drawing —————————————————————————————————————————————————————————————————
-function draw(ctx: CanvasRenderingContext2D, gs: GS) {
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.clearRect(0, 0, W, H);
 
-  // Lane + gutters.
-  ctx.fillStyle = '#0b1220';
+  // —— Backboard: a deep, top-lit green cabinet ——
+  const back = ctx.createLinearGradient(0, 0, 0, H);
+  back.addColorStop(0, '#071a12');
+  back.addColorStop(0.5, '#05130d');
+  back.addColorStop(1, '#040d09');
+  ctx.fillStyle = back;
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#111a2b';
-  ctx.fillRect(24, 0, W - 48, H);
-  ctx.strokeStyle = '#1f2c44';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(24, 0, W - 48, H);
+
+  // Overhead sheen over the scoring end.
+  const sheen = ctx.createRadialGradient(W / 2, H * 0.24, 20, W / 2, H * 0.24, H * 0.7);
+  sheen.addColorStop(0, 'rgba(74,222,128,0.14)');
+  sheen.addColorStop(1, 'rgba(74,222,128,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, W, H);
+
+  // —— The rolling lane: a felt strip with a lit crown down the middle ——
+  const laneX = 24;
+  const laneW = W - 48;
+  const lane = ctx.createLinearGradient(laneX, 0, laneX + laneW, 0);
+  lane.addColorStop(0, '#0a2318');
+  lane.addColorStop(0.5, '#124a30');
+  lane.addColorStop(1, '#0a2318');
+  ctx.save();
+  roundRectPath(ctx, laneX, -20, laneW, H + 40, 22);
+  ctx.fillStyle = lane;
+  ctx.fill();
+  // Lengthwise sheen so the felt reads as a rolling surface.
+  const laneSheen = ctx.createLinearGradient(0, 0, 0, H);
+  laneSheen.addColorStop(0, 'rgba(120,240,170,0.10)');
+  laneSheen.addColorStop(0.55, 'rgba(120,240,170,0.03)');
+  laneSheen.addColorStop(1, 'rgba(0,0,0,0.18)');
+  ctx.fillStyle = laneSheen;
+  ctx.fill();
+  ctx.restore();
+
+  // Rounded rails flanking the lane.
+  ctx.save();
+  roundRectPath(ctx, 22, -20, laneW + 4, H + 40, 24);
+  ctx.lineWidth = 5;
+  const rail = ctx.createLinearGradient(0, 0, 0, H);
+  rail.addColorStop(0, 'rgba(134,239,172,0.55)');
+  rail.addColorStop(0.5, 'rgba(34,197,94,0.4)');
+  rail.addColorStop(1, 'rgba(20,83,45,0.5)');
+  ctx.strokeStyle = rail;
+  ctx.stroke();
+  ctx.restore();
+
+  // —— Corner vignette for depth ——
+  const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.72);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // —— Dynamic layer (shaken on a big score) ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
+  }
 
   // Target rings + their drop holes. Draw lower (bigger) rings first so the
   // upper rings layer cleanly on top where they touch.
   const ordered = [...HOLES].sort((a, b) => b.cy - a.cy);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
   for (const h of ordered) {
-    // Funnel dish.
+    // Funnel dish: a lit bowl sinking toward its drop hole.
+    const dish = ctx.createRadialGradient(h.cx, h.cy - h.R * 0.3, h.R * 0.1, h.cx, h.cy, h.R);
+    dish.addColorStop(0, withAlpha(h.color, 0.32));
+    dish.addColorStop(0.7, withAlpha(h.color, 0.14));
+    dish.addColorStop(1, 'rgba(3,10,7,0.55)');
     ctx.beginPath();
-    ctx.arc(h.cx, h.cy, h.R, 0, Math.PI * 2);
-    ctx.fillStyle = h.color + '26';
+    ctx.arc(h.cx, h.cy, h.R, 0, TWO_PI);
+    ctx.fillStyle = dish;
     ctx.fill();
-    ctx.lineWidth = 3;
+    // Glowing neon rim.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(h.cx, h.cy, h.R, 0, TWO_PI);
     ctx.strokeStyle = h.color;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = h.color;
+    ctx.shadowBlur = 12;
     ctx.stroke();
-    // Value label near the top of the ring.
-    ctx.fillStyle = '#e5edf7';
+    ctx.restore();
+    // Value label near the top of the ring, softly lit.
+    ctx.save();
+    ctx.fillStyle = '#eafff2';
     ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.shadowColor = withAlpha(h.color, 0.9);
+    ctx.shadowBlur = 6;
     ctx.fillText(String(h.pts), h.cx, h.cy - h.R * 0.42);
-    // The hole at the bottom of the ring.
+    ctx.restore();
+    // The hole at the bottom of the ring — a dark recess with a lit lip.
     const dp = holeDrop(h);
+    const pit = ctx.createRadialGradient(dp.x, dp.y - HOLE_R * 0.4, 1, dp.x, dp.y, HOLE_R);
+    pit.addColorStop(0, '#0a1710');
+    pit.addColorStop(1, '#03070a');
     ctx.beginPath();
-    ctx.arc(dp.x, dp.y, HOLE_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#05070d';
+    ctx.arc(dp.x, dp.y, HOLE_R, 0, TWO_PI);
+    ctx.fillStyle = pit;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.strokeStyle = withAlpha(h.color, 0.6);
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
@@ -177,7 +287,10 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
     const v = launchVelocity(gs.drag.dx, gs.drag.dy);
     if (v && v.vy0 < 0) {
       const tStar = apexTime(v);
-      ctx.fillStyle = '#cbd5e1';
+      ctx.save();
+      ctx.fillStyle = '#dbe7ff';
+      ctx.shadowColor = 'rgba(203,213,225,0.8)';
+      ctx.shadowBlur = 6;
       for (let i = 1; i <= 30; i++) {
         const p = trajectory(v, (i / 30) * tStar);
         // Fade from the ball (full) to nothing at FADE_END_Y (below the target).
@@ -185,34 +298,57 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
         if (a <= 0.03) continue;
         ctx.globalAlpha = a * a * 0.7;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 2.6, 0, TWO_PI);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
+      ctx.restore();
     }
   }
 
-  // The ball.
-  if (gs.ballR > 0.5) {
-    ctx.beginPath();
-    ctx.arc(gs.ball.x, gs.ball.y, gs.ballR, 0, Math.PI * 2);
-    const grad = ctx.createRadialGradient(gs.ball.x - 4, gs.ball.y - 4, 2, gs.ball.x, gs.ball.y, gs.ballR);
-    grad.addColorStop(0, '#ffffff');
-    grad.addColorStop(1, '#c7d2e0');
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+  // Ball motion streak while it's rolling (drawn under the ball).
+  if (fx.trail.length > 1) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < fx.trail.length; i++) {
+      const t = fx.trail[i];
+      const k = i / fx.trail.length;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, gs.ballR * (0.25 + k * 0.7), 0, TWO_PI);
+      ctx.fillStyle = `rgba(190,230,255,${0.02 + k * 0.09})`;
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
-  // Floating "+N" once the ball has settled.
+  // The ball: a lit sphere with a soft contact shadow.
+  if (gs.ballR > 0.5) {
+    drawShadow(ctx, gs.ball.x, gs.ball.y + gs.ballR * 0.5, gs.ballR * 0.95, gs.ballR * 0.45, 0.35);
+    drawSphere(ctx, gs.ball.x, gs.ball.y, gs.ballR, '#ffffff', '#d3ddec', '#8794a6');
+  }
+
+  // Spark bursts on release / score.
+  drawParticles(ctx, fx.particles);
+
+  // Floating "+N" once the ball has settled, glowing so it reads as lit.
   if (gs.phase === 'scored' && gs.shot && gs.lastPts !== null) {
     const at = gs.shot.hole ? holeDrop(gs.shot.hole) : gs.shot.land;
+    const col = gs.lastPts >= 100 ? '#4ade80' : gs.lastPts > 0 ? '#fbbf24' : '#94a3b8';
+    ctx.save();
     ctx.font = 'bold 22px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = gs.lastPts >= 100 ? '#4ade80' : gs.lastPts > 0 ? '#fbbf24' : '#94a3b8';
+    ctx.fillStyle = col;
+    ctx.shadowColor = withAlpha(col, 0.9);
+    ctx.shadowBlur = 14;
     ctx.fillText(gs.lastPts > 0 ? `+${gs.lastPts}` : 'MISS', at.x, Math.max(at.y - 24, 20));
+    ctx.restore();
+  }
+
+  ctx.restore();
+
+  // —— Big-score flash overlay ——
+  if (fx.flash > 0) {
+    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
+    ctx.fillRect(0, 0, W, H);
   }
 }
 
@@ -221,6 +357,7 @@ const easeOut = (t: number) => 1 - (1 - t) * (1 - t) * (1 - t);
 export default function SkeeBall() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS());
+  const fxRef = useRef<FX>(freshFX());
   const nextTimer = useRef<number | null>(null);
 
   const [phase, setPhase] = useState<Phase>('aim');
@@ -260,6 +397,21 @@ export default function SkeeBall() {
     setTotal(gs.total);
     setLastPts(shot.score);
     setPhase('scored');
+    // Rendering-only celebration keyed off the score that already happened.
+    const fx = fxRef.current;
+    const at = shot.hole ? holeDrop(shot.hole) : shot.land;
+    if (shot.score >= 100) {
+      fx.shake = 8;
+      fx.flash = 1;
+      fx.flashColor = shot.hole?.color ?? '#22c55e';
+      spawnBurst(fx.particles, at.x, at.y, 30, 300, '#86efac');
+      spawnBurst(fx.particles, at.x, at.y, 14, 150, '#eafff2');
+    } else if (shot.score > 0) {
+      fx.shake = 4;
+      spawnBurst(fx.particles, at.x, at.y, 16, 200, shot.hole?.color ?? '#22c55e');
+    } else {
+      spawnBurst(fx.particles, at.x, at.y, 6, 90, '#64748b');
+    }
     if (shot.score >= 100) playFanfare();
     else if (shot.score > 0) (shot.score >= 40 ? playCup : playDing)();
     else playUndo();
@@ -280,6 +432,7 @@ export default function SkeeBall() {
     ctx.scale(dpr, dpr);
 
     let raf = 0;
+    let last = performance.now(); // rendering-only dt clock (does not drive the sim)
     // Pause the animation clock while backgrounded so a resumed game doesn't
     // teleport the ball (PWA/Capacitor lifecycle). Use visibilitychange rather
     // than a hidden-rAF branch: mobile browsers suspend requestAnimationFrame
@@ -303,9 +456,12 @@ export default function SkeeBall() {
     const frame = (now: number) => {
       const gs = gsRef.current;
       if (document.hidden) {
+        last = now;
         raf = requestAnimationFrame(frame);
         return;
       }
+      const dt = Math.min(now - last, 100); // clamp so a stall doesn't spike effects
+      last = now;
 
       if (gs.phase === 'flight' && gs.shot) {
         const p = Math.min((now - gs.shot.startedAt) / FLIGHT_MS, 1);
@@ -332,7 +488,8 @@ export default function SkeeBall() {
         if (q >= 1) finalize();
       }
 
-      draw(ctx, gs);
+      updateFX(fxRef.current, gs, dt);
+      draw(ctx, gs, fxRef.current);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -391,12 +548,17 @@ export default function SkeeBall() {
     gs.ballR = BALL_R;
     gs.phase = 'flight';
     setPhase('flight');
+    // Rendering-only launch puff at the release point.
+    const fx = fxRef.current;
+    fx.trail.length = 0;
+    spawnBurst(fx.particles, START.x, START.y, 8, 120, '#86efac');
     playStroke();
   }, []);
 
   const restart = useCallback(() => {
     if (nextTimer.current) clearTimeout(nextTimer.current);
     gsRef.current = freshGS();
+    fxRef.current = freshFX();
     setPhase('aim');
     setBallNo(0);
     setTotal(0);
