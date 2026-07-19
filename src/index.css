@@ -192,6 +192,30 @@ button {
   animation: score-pop 0.26s ease-out;
 }
 
+/* The spinner result card swells in when the wheel lands — a bump that
+   overshoots and settles, paired with the landing sound. */
+@keyframes result-swell {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(0.97);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-result-swell {
+  animation: result-swell 0.5s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+
 /* The winner trophy gets a celebratory bounce on the final scorecard. */
 @keyframes trophy-pop {
   0% {
@@ -237,5 +261,8 @@ button {
   .animate-score-pop,
   .animate-trophy-pop {
     animation: none;
+  }
+  .animate-result-swell {
+    animation: fade-in 0.3s ease-out both;
   }
 }

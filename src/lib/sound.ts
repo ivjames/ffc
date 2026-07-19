@@ -152,6 +152,16 @@ export function playDing(): void {
   tone({ type: 'triangle', freq: 1046.5, dur: 0.16, gain: 0.16, start: 0.08 });
 }
 
+/** Spinner landing: a soft swelling "bump" that resolves into a bright ding. */
+export function playLand(): void {
+  // Low thump with a slower attack so it swells rather than snaps — matches the
+  // result card's bump animation.
+  tone({ type: 'sine', freq: 150, freqEnd: 92, dur: 0.22, gain: 0.24, attack: 0.03 });
+  // Bright two-note flourish on top so a landing still feels like a win.
+  tone({ type: 'triangle', freq: 784, dur: 0.09, gain: 0.13, start: 0.06 });
+  tone({ type: 'triangle', freq: 1046.5, dur: 0.18, gain: 0.13, start: 0.14 });
+}
+
 /** Low descending "buzz" for a wrong answer (soft, not harsh). */
 export function playBuzz(): void {
   tone({ type: 'sawtooth', freq: 220, freqEnd: 150, dur: 0.22, gain: 0.09 });
