@@ -261,6 +261,22 @@ function spawnSplash(gs: GS, x: number, y: number, now: number, closing: number)
 }
 
 // —— drawing —————————————————————————————————————————————————————————————————
+/** Trace a 5-pointed star centered at (cx, cy) with the given outer radius. */
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  const inner = r * 0.5;
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const rad = k % 2 === 0 ? r : inner;
+    // Start at the top point (-90°) and step every 36°.
+    const a = -Math.PI / 2 + (k * Math.PI) / 5;
+    const x = cx + Math.cos(a) * rad;
+    const y = cy + Math.sin(a) * rad;
+    if (k === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
 function drawUnit(ctx: CanvasRenderingContext2D, c: Unit, isPlayer: boolean, theme: BumperTheme) {
   const speed = Math.hypot(c.vx, c.vy);
   const nx = speed > 0.3 ? c.vx / speed : 0;
@@ -294,6 +310,16 @@ function drawUnit(ctx: CanvasRenderingContext2D, c: Unit, isPlayer: boolean, the
     ctx.arc(c.x + nx * (UNIT_R - 6), c.y + ny * (UNIT_R - 6), 4, 0, Math.PI * 2);
     ctx.fillStyle = '#0b0f14';
     ctx.fill();
+  }
+
+  // Yellow star centered on the active player so it's easy to spot.
+  if (isPlayer) {
+    starPath(ctx, c.x, c.y, UNIT_R - 11);
+    ctx.fillStyle = '#facc15';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#78350f';
+    ctx.stroke();
   }
 }
 
