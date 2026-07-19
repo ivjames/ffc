@@ -169,6 +169,21 @@ body {
     env(safe-area-inset-left);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  /* This is an app/game, not a document. Dragging to aim a putt, steer a boat,
+     or fling a ball otherwise trips the browser's native text selection and
+     highlights labels or the playfield mid-play. Suppress selection app-wide
+     (and the iOS long-press callout); form fields opt back in below. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Text entry still needs real selection — player names, hunt answers, etc. */
+input,
+textarea,
+[contenteditable='true'] {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Big, glove-friendly tap targets by default for stepper buttons */
