@@ -82,6 +82,8 @@ export default function Summary() {
   const par = coursePar(course.pars);
   const ink = accentInk(course.theme);
   const winnerIdx = winners(round.scores, round.playerTags.length);
+  const winnerSet = new Set(winnerIdx);
+  const tied = winnerIdx.length > 1;
   const ranked = round.playerTags
     .map((tag, p) => ({ tag, p, total: playerTotal(round.scores[p] ?? []) }))
     .sort((a, b) => a.total - b.total);
@@ -97,38 +99,38 @@ export default function Summary() {
           <div className="mt-1 text-xs text-fairway-100/70">Par {par}</div>
         </div>
 
-        {/* Winner banner */}
-        <div className="mb-6 rounded-2xl border border-fairway-500/40 bg-fairway-900/60 p-4 text-center">
-          <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
-            {winnerIdx.length > 1 ? 'Tied' : 'Winner'}
-          </div>
-          <div className="mt-1 flex items-center justify-center gap-2 text-2xl font-black">
-            <span className="animate-trophy-pop inline-block">🏆</span>
-            {winnerIdx.map((p) => (
-              <span key={p} className="font-arcade" style={{ color: ink }}>
-                {round.playerTags[p]}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Standings */}
+        {/* Standings — the winner is celebrated in place as the top row rather
+            than in a separate banner, so no name is shown twice. */}
         <div className="mb-6 space-y-2">
           {ranked.map((row, rank) => {
             const diff = row.total - par;
+            const isWinner = winnerSet.has(row.p);
             return (
               <div
                 key={row.p}
                 style={{ '--i': rank } as CSSProperties}
-                className="animate-rise-in flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-4 py-3"
+                className={`animate-rise-in flex items-center justify-between rounded-xl border px-4 py-3 ${
+                  isWinner
+                    ? 'border-fairway-500/60 bg-fairway-800/50'
+                    : 'border-fairway-800 bg-fairway-900/40'
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-5 text-center font-mono text-sm text-fairway-100/70">
-                    {rank + 1}
+                  <span className="w-6 text-center font-mono text-sm text-fairway-100/70">
+                    {isWinner ? (
+                      <span className="animate-trophy-pop inline-block text-lg">🏆</span>
+                    ) : (
+                      rank + 1
+                    )}
                   </span>
                   <span className="font-arcade text-xl font-bold" style={{ color: ink }}>
                     {row.tag}
                   </span>
+                  {isWinner && (
+                    <span className="rounded-full bg-fairway-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fairway-300">
+                      {tied ? 'Tied' : 'Winner'}
+                    </span>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-xl font-black text-fairway-50">{row.total}</span>
@@ -142,7 +144,7 @@ export default function Summary() {
         {/* Hole-by-hole grid — split into front/back nines so 18 columns don't
             overflow and scroll on a phone. Each nine is 9 holes + a label
             column = 10 columns, which fits the width. */}
-        <div className="mb-6 space-y-3">
+        <div className="mb-6 space-y-2">
           <NineGrid round={round} course={course} label="Front" start={0} />
           <NineGrid round={round} course={course} label="Back" start={9} />
         </div>
@@ -200,18 +202,18 @@ function NineGrid({
           scores make its columns wider than the front nine's, so the two tables
           don't line up. The label column is a fixed width and the nine hole
           columns split the rest evenly and identically across both nines. */}
-      <table className="w-full table-fixed border-collapse text-center text-sm">
+      <table className="w-full table-fixed border-collapse text-center text-sm leading-none">
         <colgroup>
-          <col className="w-16" />
+          <col className="w-14" />
           {holes.map((h) => (
             <col key={h} />
           ))}
         </colgroup>
         <thead>
           <tr className="bg-fairway-900/60 text-fairway-100/70">
-            <th className="px-2 py-2 text-left font-semibold">{label}</th>
+            <th className="px-2 py-1.5 text-left font-semibold">{label}</th>
             {holes.map((h) => (
-              <th key={h} className="px-1 py-2 font-normal">
+              <th key={h} className="px-0.5 py-1.5 font-normal">
                 {h + 1}
               </th>
             ))}
@@ -219,7 +221,7 @@ function NineGrid({
           <tr className="bg-fairway-950 text-fairway-100/70">
             <th className="px-2 py-1 text-left font-normal">Par</th>
             {holes.map((h) => (
-              <td key={h} className="px-1 py-1">
+              <td key={h} className="px-0.5 py-1">
                 {course.pars[h]}
               </td>
             ))}
@@ -229,7 +231,7 @@ function NineGrid({
           {round.playerTags.map((tag, p) => (
             <tr key={p} className="border-t border-fairway-800">
               <td
-                className="font-arcade px-2 py-2 text-left font-bold"
+                className="font-arcade px-2 py-1.5 text-left font-bold"
                 style={{ color: ink }}
               >
                 {tag}
@@ -247,7 +249,7 @@ function NineGrid({
                 return (
                   <td
                     key={h}
-                    className={`px-1 py-2 ${signal ? '' : 'text-fairway-100'}`}
+                    className={`px-0.5 py-1.5 ${signal ? '' : 'text-fairway-100'}`}
                     style={signal ? { color: signal } : undefined}
                   >
                     {s ?? '·'}
