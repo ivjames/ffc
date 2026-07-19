@@ -143,16 +143,18 @@ const TRACKS: Track[] = [
     x: CX + 82 * Math.cos(t) + 34 * Math.sin(3 * t),
     y: CY + 204 * Math.sin(t),
   })),
-  // A squared-off circuit (superellipse) with a chicane worked into one straight:
-  // the longest lap in the set, and corner after corner rather than one big sweep.
+  // A squared-off superellipse circuit — long straights into four defined
+  // corners, a proper racetrack outline rather than another wavy loop.
   buildTrack('grand-prix', 'Grand Prix', 'The long lap — corner after corner', (t) => ({
-    x: CX + 104 * se(Math.cos(t), 0.72) + 16 * Math.sin(3 * t),
-    y: CY + 214 * se(Math.sin(t), 0.72),
+    x: CX + 112 * se(Math.cos(t), 0.64),
+    y: CY + 214 * se(Math.sin(t), 0.7),
   })),
-  // A tall, high-amplitude version of the esses — a genuine snake, not a lean.
+  // A real snake: the whole ribbon is swept along an S-shaped spine
+  // (sin(π·cos t)) instead of an oval with wavy sides, so it slithers down the
+  // canvas with a thin winding seam rather than reading as another slalom.
   buildTrack('serpent', 'Serpent', 'Long, snaking esses — stay smooth', (t) => ({
-    x: CX + 100 * Math.cos(t) + 26 * Math.sin(3 * t),
-    y: CY + 210 * Math.sin(t),
+    x: CX + 48 * Math.sin(Math.PI * Math.cos(t)) + 68 * Math.sin(t),
+    y: CY - 206 * Math.cos(t),
   })),
   buildTrack(
     'crossover',
