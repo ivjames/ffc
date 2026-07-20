@@ -10,7 +10,6 @@ import '@fontsource/orbitron/latin-400.css';
 import '@fontsource/orbitron/latin-700.css';
 import '@fontsource/exo-2/latin-400.css';
 import '@fontsource/exo-2/latin-700.css';
-import '@fontsource/pirata-one/latin-400.css';
 import '@fontsource/spectral/latin-400.css';
 import '@fontsource/spectral/latin-600.css';
 import '@fontsource/source-sans-3/latin-400.css';

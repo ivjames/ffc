@@ -1551,7 +1551,7 @@ button {
   --t-panel: rgba(14, 30, 52, 0.52); --t-line: #4a90b8; --t-hi: rgba(255, 255, 255, 0.14); --accent: #e0b24a;
 }
 :root[data-template='nautical'][data-theme='light'] {
-  --t-bg: url('/themes/nautical/bg-light.webp'); --t-floor: #dcecf6; --t-veil: rgba(255, 255, 255, 0.4);
+  --t-bg: url('/themes/nautical/bg-light.webp'); --t-floor: #d7e6f2; --t-veil: rgba(215, 230, 242, 0.2);
   --t-panel: rgba(255, 255, 255, 0.5); --t-line: #3a6b8a; --t-hi: rgba(255, 255, 255, 0.85); --accent: #b8863a;
 }
 :root[data-template='space'][data-theme='dark'] {
@@ -1789,6 +1789,126 @@ button {
   text-shadow: 0 1px 8px rgba(60, 120, 40, 0.55);
 }
 
+/* ——— NAUTICAL / PIRATE — full-fidelity kit (both modes) ——————————————————————
+   Weathered-wood plank frame (rope + corner bolts), composed pirate-cove course
+   cards, brass/wood menu + compass-pin icons, and a Cinzel wordmark (the free
+   stand-in for the kit's Adobe-only Captain Morgan) carry the brand in both
+   modes. Light is the daytime kit (aged-parchment panels, dark ink, navy
+   title); dark reuses the same art over the breadth night-sea glass with a gold
+   title. Shared structure first, then per-mode palette + title colour. */
+:root[data-template='nautical'] .surface,
+:root[data-template='nautical'] .surface-1 {
+  border: 10px solid transparent;
+  border-image: url('/themes/nautical/frame.webp') 28 / 10px / 0 stretch;
+}
+:root[data-template='nautical'] .surface-1 {
+  position: relative;
+}
+:root[data-template='nautical'] .tile.card-art {
+  background-image: var(--tile-img);
+  background-size: cover;
+  background-position: center bottom;
+  background-color: transparent;
+  border: 0;
+  border-image: none;
+  box-shadow: 0 6px 16px -8px rgba(10, 25, 40, 0.55);
+  min-height: 168px;
+  padding: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-template='nautical'] .tile.card-art .tile-label,
+:root[data-template='nautical'] .tile.card-art .course-puck {
+  display: none;
+}
+:root[data-template='nautical'] .hero-glyph {
+  display: none;
+}
+:root[data-template='nautical'] .menu-ico {
+  display: block;
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  background: center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+:root[data-template='nautical'] .menu-ico[data-ico='hunt'] {
+  background-image: url('/themes/nautical/menu-hunt.webp');
+}
+:root[data-template='nautical'] .menu-ico[data-ico='wait'] {
+  background-image: url('/themes/nautical/menu-wait.webp');
+}
+:root[data-template='nautical'] .menu-ico[data-ico='rules'] {
+  background-image: url('/themes/nautical/menu-rules.webp');
+}
+:root[data-template='nautical'] .menu-ico[data-ico='leaderboard'] {
+  background-image: url('/themes/nautical/menu-leaderboard.webp');
+}
+:root[data-template='nautical'] .menu-emoji {
+  display: none;
+}
+:root[data-template='nautical'] .loc-pin {
+  display: inline-block;
+  width: 22px;
+  height: 28px;
+  font-size: 0;
+  background: center / contain no-repeat url('/themes/nautical/pin.webp');
+}
+
+/* ——— NAUTICAL LIGHT (daytime kit: aged-parchment panels, dark ink, navy title) */
+:root[data-template='nautical'][data-theme='light'] {
+  --color-fairway-50: #23252a;
+  --color-fairway-100: #2f3238;
+  --color-fairway-200: #3d4048;
+  --color-fairway-300: #4a463c;
+  --color-fairway-400: #4e4a40;
+  --color-fairway-500: #7c7566;
+  --color-fairway-600: #9c9280;
+  --color-fairway-700: #c3b99f;
+  --color-fairway-800: #dbceae;
+  --color-fairway-900: #efe5cc;
+  --color-fairway-950: #e7dabb;
+  --accent: #0f4c81;
+}
+:root[data-template='nautical'][data-theme='light'] .surface,
+:root[data-template='nautical'][data-theme='light'] .surface-1,
+:root[data-template='nautical'][data-theme='light'] .key {
+  background-image: linear-gradient(180deg, #f3ebd3, #e4d6b3);
+  background-color: #ece0c2;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 6px 16px -9px rgba(20, 35, 50, 0.4);
+}
+:root[data-template='nautical'][data-theme='light'] .surface-sunk {
+  background-color: #e1d3b0;
+  border: 1px solid #b3a074;
+  box-shadow: inset 0 2px 6px rgba(50, 40, 20, 0.25);
+}
+:root[data-template='nautical'][data-theme='light'] .btn-accent {
+  background-image: linear-gradient(180deg, #8a5a24, #6a4014);
+  border: 1px solid #472a0c;
+  color: #f5e8cc;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 180, 0.25), 0 4px 10px -5px rgba(50, 30, 10, 0.5);
+}
+:root[data-template='nautical'][data-theme='light'] .tag-chip {
+  background-image: linear-gradient(180deg, #e9dcbb, #d4c096);
+  border: 1px solid #8a7040;
+  color: #23252a;
+}
+:root[data-template='nautical'][data-theme='light'] .hero-title {
+  color: #0f4c81;
+  text-shadow: 0 1px 3px rgba(240, 235, 220, 0.85), 0 1px 8px rgba(240, 235, 220, 0.55);
+}
+
+/* ——— NAUTICAL DARK (same art over the breadth night-sea glass, gold title) —— */
+:root[data-template='nautical'][data-theme='dark'] .hero-title {
+  color: #e6bf5c;
+  text-shadow: 0 1px 8px rgba(180, 140, 50, 0.5);
+}
+
 /* ═══════════════ THEME FONTS (typographic branding) ═══════════════
    Each theme maps a self-hosted display face to `--theme-font` (see
    src/fonts.ts); it's applied to titles, the hero, tile/course names, and
@@ -1802,7 +1922,7 @@ button {
 :root[data-template='cyberpunk'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='forest'] { --theme-font: 'Spectral', Georgia, serif; }
 :root[data-template='steampunk'] { --theme-font: 'Cinzel Decorative', Georgia, serif; }
-:root[data-template='nautical'] { --theme-font: 'Pirata One', Georgia, serif; }
+:root[data-template='nautical'] { --theme-font: 'Cinzel', Georgia, serif; }
 :root[data-template='space'] { --theme-font: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='zen'] { --theme-font: 'Shippori Mincho', Georgia, serif; }
 
@@ -1821,10 +1941,13 @@ button {
   font-family: var(--theme-font, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
 }
 
-/* Forest pairs its display face (Spectral) with a Source Sans 3 body, per the
-   kit's type system. Set on body only — the display elements above match
-   directly, so they keep Spectral; everything else inherits Source Sans 3. */
-:root[data-template='forest'] body {
+/* Forest (Spectral) and Nautical (Cinzel — the free stand-in for the kit's
+   Adobe-only Captain Morgan) both pair their display face with a Source Sans 3
+   body, per their kits' type systems. Set on body only — the display elements
+   above match directly, so they keep their face; everything else inherits
+   Source Sans 3. */
+:root[data-template='forest'] body,
+:root[data-template='nautical'] body {
   font-family: 'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 

@@ -54,6 +54,12 @@ export function courseArt(skin: string, theme: string, mode: Mode): CourseArt {
     const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
     return n ? { tile: `/themes/forest/card-${n}.webp`, card: true } : {};
   }
+  if (skin === 'nautical') {
+    // Fully-composed pirate-cove cards (wood frame + scene + crest + name baked
+    // in) in both modes; light is the daytime kit, dark reuses the same art.
+    const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
+    return n ? { tile: `/themes/nautical/card-${n}.webp`, card: true } : {};
+  }
   if (skin === 'underwater') {
     const n = UNDERWATER[theme];
     return n ? { tile: `/themes/underwater/tile-${n}.webp` } : {};
