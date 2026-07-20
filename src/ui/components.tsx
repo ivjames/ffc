@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { playClick, playStroke, playUndo, playCup } from '../lib/sound';
+import HeaderControls from './HeaderControls';
 
 // Map a button's declared sound to its player. 'none' skips audio entirely
 // (for buttons that trigger their own effect elsewhere).
@@ -71,6 +72,9 @@ export function TopBar({
       )}
       <h1 className="flex-1 truncate text-lg font-black tracking-tight text-fairway-50">{title}</h1>
       {right}
+      {/* Global light/dark + mute switches, anchored to the header's right edge
+          on every screen that has a bar. */}
+      <HeaderControls />
     </header>
   );
 }

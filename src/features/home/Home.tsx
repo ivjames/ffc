@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
+import HeaderControls from '../../ui/HeaderControls';
 import { getActiveRound } from '../../db';
 import { courseById, locationById, coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId, setCurrentLocationId, isLocationPinned } from '../../lib/location';
@@ -51,7 +52,12 @@ export default function Home() {
   return (
     <Screen>
       <Content>
-        <div className="mb-4 mt-3 text-center">
+        {/* Home has no TopBar, so keep the light/dark + mute switches reachable
+            from its top-right corner. */}
+        <div className="mb-1 flex justify-end">
+          <HeaderControls />
+        </div>
+        <div className="mb-4 text-center">
           <div className="animate-wiggle inline-block text-5xl leading-none drop-shadow">⛳️</div>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-fairway-50">Mini Golf</h1>
           <p className="mt-0.5 text-sm text-fairway-100/70">

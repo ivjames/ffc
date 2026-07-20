@@ -26,8 +26,6 @@ import GoKarts from './features/fun/GoKarts';
 import Install from './features/install/Install';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
-import SoundToggle from './ui/SoundToggle';
-import ThemeToggle from './ui/ThemeToggle';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
 
@@ -78,15 +76,13 @@ export default function App() {
         <BuildStamp />
       </div>
 
-      {/* Always-available controls, bottom-left (mirrors the build stamp):
-          light/dark toggle beside the mute switch. */}
+      {/* Skin picker stays in the bottom-left corner (mirrors the build stamp).
+          The light/dark and mute switches now ride in each screen's header. */}
       <div
         className="fixed bottom-0 left-0 z-50 flex items-center gap-2 p-2"
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
       >
         <SkinPicker />
-        <ThemeToggle />
-        <SoundToggle />
       </div>
 
       {/* Blocking prompt when a deploy lands while the app is open on a stale
