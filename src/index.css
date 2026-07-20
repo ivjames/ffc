@@ -1946,24 +1946,19 @@ button {
 :root[data-template='space'] .hero-glyph {
   display: none;
 }
-/* Menu icons sit on a dark metal chip (the icons ship on their native navy
-   ground, which the chip colour matches — so the two blend seamlessly and the
-   dark chest reads without a fragile alpha key). */
+/* Menu icons pinned to each button's left edge (flood-fill keyed to transparent
+   — a tight ground-colour match leaves the chest's near-black outline intact as
+   a wall, so the fill stops at the silhouette instead of leaking through it). */
 :root[data-template='space'] .menu-ico {
   display: block;
   position: absolute;
-  left: 12px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background-color: #060e1c;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
-  border: 1px solid rgba(120, 160, 210, 0.4);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 1px 3px rgba(0, 0, 0, 0.5);
+  width: 30px;
+  height: 30px;
+  background: center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
 }
 :root[data-template='space'] .menu-ico[data-ico='hunt'] {
   background-image: url('/themes/space/menu-hunt.webp');
