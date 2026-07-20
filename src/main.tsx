@@ -5,6 +5,7 @@ import App from './App';
 import { startSyncWorker } from './sync';
 import { registerPwa } from './pwa';
 import { initInstallCapture } from './lib/pwaInstall';
+import './fonts';
 import './index.css';
 
 // Register the service worker. autoUpdate reloads the page once when a new

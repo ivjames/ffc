@@ -1512,6 +1512,38 @@ button {
   --t-panel: rgba(255, 252, 246, 0.62); --t-line: #c2a888; --t-hi: rgba(255, 255, 255, 0.85); --accent: #c0392b;
 }
 
+/* ═══════════════ THEME FONTS (typographic branding) ═══════════════
+   Each theme maps a self-hosted display face to `--theme-font` (see
+   src/fonts.ts); it's applied to titles, the hero, tile/course names, and
+   buttons so the type itself carries the brand. Body copy keeps the neutral UI
+   stack for legibility. Themes without a font fall back to the system stack. */
+:root[data-template='candy'] { --theme-font: 'Baloo 2', ui-sans-serif, system-ui, sans-serif; }
+:root[data-template='blocky'] { --theme-font: 'Luckiest Guy', ui-sans-serif, system-ui, sans-serif; }
+:root[data-template='uv'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
+:root[data-template='underwater'] { --theme-font: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
+:root[data-template='fantasy'] { --theme-font: 'Cinzel', Georgia, serif; }
+:root[data-template='cyberpunk'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
+:root[data-template='forest'] { --theme-font: 'Uncial Antiqua', Georgia, serif; }
+:root[data-template='steampunk'] { --theme-font: 'Cinzel Decorative', Georgia, serif; }
+:root[data-template='nautical'] { --theme-font: 'Pirata One', Georgia, serif; }
+:root[data-template='space'] { --theme-font: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
+:root[data-template='zen'] { --theme-font: 'Shippori Mincho', Georgia, serif; }
+
+/* Apply the theme face to display type + buttons across any skin that sets one;
+   skins without `--theme-font` inherit the neutral system stack unchanged. */
+:root[data-template] h1,
+:root[data-template] h2,
+:root[data-template] .hs-title,
+:root[data-template] .hs-resume-name,
+:root[data-template] .hs-loc-name,
+:root[data-template] .tile-name,
+:root[data-template] .btn-accent,
+:root[data-template] .btn-danger,
+:root[data-template] .btn-accent .menu-emoji,
+:root[data-template] button.surface-1 {
+  font-family: var(--theme-font, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+}
+
 /* Keep disabled controls flat and inert under every skin. A skin's material
    rule (e.g. `:root[data-template='blocky'] .key`) outranks the base
    `.key:disabled { box-shadow: none }` reset above, which would otherwise
