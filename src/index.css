@@ -1383,6 +1383,135 @@ button {
   background: center / contain no-repeat url('/themes/fantasy/pin.webp');
 }
 
+/* ═══════════════ IMAGE THEMES (breadth pass, light + dark) ═══════════════
+   Six themes from the master kit sheets, each with a real background image per
+   mode over a shared "themed glass" material. Panels stay dark in dark mode /
+   light in light mode (via the per-theme `--t-*` vars), so the fairway text ramp
+   reads; identity comes from the background + accent + border hue. Icons/frames
+   are CSS/emoji for now — upgrade to sliced art when high-res per-theme sheets
+   land. `:is()` applies the shared material to all six at once. */
+:root:is(
+    [data-template='cyberpunk'],
+    [data-template='forest'],
+    [data-template='steampunk'],
+    [data-template='nautical'],
+    [data-template='space'],
+    [data-template='zen']
+  ) body {
+  background-color: var(--t-floor);
+  background-image: linear-gradient(var(--t-veil), var(--t-veil)), var(--t-bg);
+  background-size: cover;
+  background-position: center;
+}
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .surface,
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .surface-1,
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .key {
+  background-image: none;
+  background-color: var(--t-panel);
+  border: 1px solid var(--t-line);
+  box-shadow: 0 8px 22px -12px rgba(0, 0, 0, 0.55), inset 0 1px 0 var(--t-hi);
+  -webkit-backdrop-filter: blur(7px) saturate(1.15);
+  backdrop-filter: blur(7px) saturate(1.15);
+}
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .surface-sunk {
+  background-color: var(--t-floor);
+  border: 1px solid var(--t-line);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .btn-accent {
+  background-image: none;
+  background-color: color-mix(in srgb, var(--color-fairway-700), var(--accent) 24%);
+  border: 1px solid color-mix(in srgb, var(--accent), white 20%);
+  box-shadow: 0 0 16px -7px var(--accent), inset 0 1px 0 var(--t-hi);
+}
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .btn-danger {
+  background-image: none;
+  background-color: #b91c1c;
+  border: 1px solid color-mix(in srgb, #ef4444, white 20%);
+  box-shadow: 0 0 14px -7px #ef4444;
+}
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .tile {
+  background-image: none;
+  background-color: color-mix(in srgb, var(--t-panel), var(--tile-accent, var(--accent)) 32%);
+  border: 1px solid color-mix(in srgb, var(--tile-accent, var(--accent)), var(--t-line) 55%);
+  box-shadow:
+    0 0 18px -9px color-mix(in srgb, var(--tile-accent, var(--accent)), transparent 45%),
+    inset 0 1px 0 var(--t-hi);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+}
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .course-puck {
+  background: radial-gradient(
+    circle at 50% 32%,
+    color-mix(in srgb, var(--puck-accent, var(--accent)), white 45%),
+    var(--puck-accent, var(--accent)) 76%
+  );
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.5), 0 3px 8px -3px rgba(0, 0, 0, 0.5);
+}
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .tag-chip {
+  background-image: none;
+  background-color: color-mix(in srgb, var(--t-panel), var(--tag-accent, #166534) 45%);
+  border: 1px solid color-mix(in srgb, var(--tag-accent, #166534), var(--t-line) 50%);
+  box-shadow: inset 0 1px 0 var(--t-hi);
+  color: var(--color-fairway-50);
+  text-shadow: none;
+}
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .btn-accent:active,
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .key:active:not(:disabled),
+:root:is([data-template='cyberpunk'], [data-template='forest'], [data-template='steampunk'], [data-template='nautical'], [data-template='space'], [data-template='zen']) .tile:active {
+  transform: translateY(1px);
+}
+
+/* Per-theme palettes (dark = Sheet 1, light = Sheet 2). */
+:root[data-template='cyberpunk'][data-theme='dark'] {
+  --t-bg: url('/themes/cyberpunk/bg-dark.webp'); --t-floor: #0a0616; --t-veil: rgba(6, 4, 16, 0.5);
+  --t-panel: rgba(22, 10, 44, 0.5); --t-line: #22d3ee; --t-hi: rgba(255, 255, 255, 0.14); --accent: #ff2fd0;
+}
+:root[data-template='cyberpunk'][data-theme='light'] {
+  --t-bg: url('/themes/cyberpunk/bg-light.webp'); --t-floor: #ece9f7; --t-veil: rgba(255, 255, 255, 0.42);
+  --t-panel: rgba(255, 255, 255, 0.5); --t-line: #0891b2; --t-hi: rgba(255, 255, 255, 0.85); --accent: #c026d3;
+}
+:root[data-template='forest'][data-theme='dark'] {
+  --t-bg: url('/themes/forest/bg-dark.webp'); --t-floor: #0c1508; --t-veil: rgba(6, 14, 4, 0.5);
+  --t-panel: rgba(20, 34, 16, 0.5); --t-line: #6fae5a; --t-hi: rgba(255, 255, 255, 0.12); --accent: #86efac;
+}
+:root[data-template='forest'][data-theme='light'] {
+  --t-bg: url('/themes/forest/bg-light.webp'); --t-floor: #eaf3e0; --t-veil: rgba(255, 255, 255, 0.4);
+  --t-panel: rgba(255, 255, 255, 0.5); --t-line: #6a9a52; --t-hi: rgba(255, 255, 255, 0.85); --accent: #3f8f3f;
+}
+:root[data-template='steampunk'][data-theme='dark'] {
+  --t-bg: url('/themes/steampunk/bg-dark.webp'); --t-floor: #17110a; --t-veil: rgba(14, 9, 4, 0.5);
+  --t-panel: rgba(46, 34, 18, 0.55); --t-line: #b78a34; --t-hi: rgba(255, 230, 180, 0.18); --accent: #d99a3a;
+}
+:root[data-template='steampunk'][data-theme='light'] {
+  --t-bg: url('/themes/steampunk/bg-light.webp'); --t-floor: #efe4cf; --t-veil: rgba(255, 250, 240, 0.4);
+  --t-panel: rgba(255, 250, 240, 0.55); --t-line: #a9803a; --t-hi: rgba(255, 255, 255, 0.85); --accent: #b06b1f;
+}
+:root[data-template='nautical'][data-theme='dark'] {
+  --t-bg: url('/themes/nautical/bg-dark.webp'); --t-floor: #071324; --t-veil: rgba(4, 10, 20, 0.5);
+  --t-panel: rgba(14, 30, 52, 0.52); --t-line: #4a90b8; --t-hi: rgba(255, 255, 255, 0.14); --accent: #e0b24a;
+}
+:root[data-template='nautical'][data-theme='light'] {
+  --t-bg: url('/themes/nautical/bg-light.webp'); --t-floor: #dcecf6; --t-veil: rgba(255, 255, 255, 0.4);
+  --t-panel: rgba(255, 255, 255, 0.5); --t-line: #3a6b8a; --t-hi: rgba(255, 255, 255, 0.85); --accent: #b8863a;
+}
+:root[data-template='space'][data-theme='dark'] {
+  --t-bg: url('/themes/space/bg-dark.webp'); --t-floor: #0a0620; --t-veil: rgba(6, 4, 20, 0.5);
+  --t-panel: rgba(30, 16, 56, 0.52); --t-line: #a855f7; --t-hi: rgba(255, 255, 255, 0.14); --accent: #22d3ee;
+}
+:root[data-template='space'][data-theme='light'] {
+  --t-bg: url('/themes/space/bg-light.webp'); --t-floor: #e9e6fa; --t-veil: rgba(255, 255, 255, 0.38);
+  --t-panel: rgba(255, 255, 255, 0.5); --t-line: #7c3aed; --t-hi: rgba(255, 255, 255, 0.85); --accent: #7c3aed;
+}
+:root[data-template='zen'][data-theme='dark'] {
+  --t-bg: url('/themes/zen/bg-dark.webp'); --t-floor: #1a1512; --t-veil: rgba(12, 9, 6, 0.45);
+  --t-panel: rgba(40, 32, 26, 0.5); --t-line: #b98a6a; --t-hi: rgba(255, 240, 225, 0.14); --accent: #c0564a;
+}
+:root[data-template='zen'][data-theme='light'] {
+  --t-bg: url('/themes/zen/bg-light.webp'); --t-floor: #efe7d8; --t-veil: rgba(255, 252, 246, 0.42);
+  --t-panel: rgba(255, 252, 246, 0.62); --t-line: #c2a888; --t-hi: rgba(255, 255, 255, 0.85); --accent: #c0392b;
+}
+
 /* Keep disabled controls flat and inert under every skin. A skin's material
    rule (e.g. `:root[data-template='blocky'] .key`) outranks the base
    `.key:disabled { box-shadow: none }` reset above, which would otherwise

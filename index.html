@@ -42,14 +42,22 @@
           t = null;
         }
         if (
-          t !== 'candy' &&
-          t !== 'blocky' &&
-          t !== 'uv' &&
-          t !== 'glass' &&
-          t !== 'chrome' &&
-          t !== 'underwater' &&
-          t !== 'fantasy' &&
-          t !== 'unstyled'
+          [
+            'candy',
+            'blocky',
+            'uv',
+            'glass',
+            'chrome',
+            'underwater',
+            'fantasy',
+            'cyberpunk',
+            'forest',
+            'steampunk',
+            'nautical',
+            'space',
+            'zen',
+            'unstyled',
+          ].indexOf(t) === -1
         ) {
           t = 'unstyled';
         }
