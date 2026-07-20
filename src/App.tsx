@@ -27,10 +27,9 @@ import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
-import SoundToggle from './ui/SoundToggle';
-import ThemeToggle from './ui/ThemeToggle';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
+import { DEV_MODE } from './lib/flags';
 
 // §7 Routes / screens.
 export default function App() {
@@ -72,25 +71,29 @@ export default function App() {
         <Route path="*" element={<Home />} />
       </Routes>
 
-      {/* Build stamp on every page — fixed, non-interactive so it never blocks
-          a tap. Confirms which build the browser actually loaded. */}
-      <div
-        className="pointer-events-none fixed bottom-0 right-0 z-50 select-none px-2"
-        style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
-      >
-        <BuildStamp />
-      </div>
+      {/* Dev-only chrome — build stamp (bottom-right) and skin picker
+          (bottom-left). Gated behind DEV_MODE alongside the app's other
+          development affordances; the light/dark and mute switches that used to
+          share these corners now ride in each screen's header. */}
+      {DEV_MODE && (
+        <>
+          {/* Build stamp on every page — fixed, non-interactive so it never
+              blocks a tap. Confirms which build the browser actually loaded. */}
+          <div
+            className="pointer-events-none fixed bottom-0 right-0 z-50 select-none px-2"
+            style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
+          >
+            <BuildStamp />
+          </div>
 
-      {/* Always-available controls, bottom-left (mirrors the build stamp):
-          light/dark toggle beside the mute switch. */}
-      <div
-        className="fixed bottom-0 left-0 z-50 flex items-center gap-2 p-2"
-        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
-      >
-        <SkinPicker />
-        <ThemeToggle />
-        <SoundToggle />
-      </div>
+          <div
+            className="fixed bottom-0 left-0 z-50 flex items-center gap-2 p-2"
+            style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+          >
+            <SkinPicker />
+          </div>
+        </>
+      )}
 
       {/* Blocking prompt when a deploy lands while the app is open on a stale
           cached bundle — reloads onto the fresh build. */}

@@ -14,6 +14,7 @@ import {
   isRoundComplete,
 } from '../../lib/scoring';
 import { playClick, playStroke, playUndo, playCup } from '../../lib/sound';
+import { DEV_MODE } from '../../lib/flags';
 
 // Testing aid — the gap between simulated button taps. The auto-player drives
 // the real +/Next handlers one tap per tick, so each tap fires its sound; the
@@ -395,10 +396,11 @@ export default function Scorecard() {
           )}
         </div>
 
-        {/* Auto-play (testing) — taps the real +/Next buttons across the whole
-            course so their sounds fire in sequence. Play taps every half
-            second; fast forward taps every sixteenth of a second. Either way,
-            Pause stops mid-course. */}
+        {/* Auto-play (testing, dev-mode only) — taps the real +/Next buttons
+            across the whole course so their sounds fire in sequence. Play taps
+            every half second; fast forward taps every sixteenth of a second.
+            Either way, Pause stops mid-course. */}
+        {DEV_MODE && (
         <div className="mt-3">
           {autoPlaying ? (
             <Button
@@ -440,6 +442,7 @@ export default function Scorecard() {
             </p>
           )}
         </div>
+        )}
 
         {hole < HOLE_COUNT - 1 && !currentHoleScored && (
           <p className="mt-3 text-center text-xs text-fairway-100/70">

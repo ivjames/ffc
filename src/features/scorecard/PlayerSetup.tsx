@@ -11,6 +11,7 @@ import {
   TAG_LENGTH,
 } from '../../lib/sanitize';
 import { createLocalRound, putRound } from '../../db';
+import { DEV_MODE } from '../../lib/flags';
 
 // Testing aid — a random valid arcade tag (three A–Z/0–9 chars), retrying the
 // rare blocklisted combo. Feeds the auto-play button so a whole round can be
@@ -146,17 +147,19 @@ export default function PlayerSetup() {
           </Button>
         </div>
 
-        {/* Auto-play (testing) — skip the roster, roll a random one, and walk
-            the whole course automatically. Play paces the taps; fast forward
-            races through. Mirrors the scorecard's own auto-play controls. */}
-        <div className="mt-3 flex gap-3">
-          <Button variant="ghost" onClick={() => void autoStart('slow')} disabled={submitting}>
-            ▶ Auto play (test)
-          </Button>
-          <Button variant="ghost" onClick={() => void autoStart('fast')} disabled={submitting}>
-            ⏭ Fast forward
-          </Button>
-        </div>
+        {/* Auto-play (testing, dev-mode only) — skip the roster, roll a random
+            one, and walk the whole course automatically. Play paces the taps;
+            fast forward races through. Mirrors the scorecard's auto-play. */}
+        {DEV_MODE && (
+          <div className="mt-3 flex gap-3">
+            <Button variant="ghost" onClick={() => void autoStart('slow')} disabled={submitting}>
+              ▶ Auto play (test)
+            </Button>
+            <Button variant="ghost" onClick={() => void autoStart('fast')} disabled={submitting}>
+              ⏭ Fast forward
+            </Button>
+          </div>
+        )}
       </Content>
     </Screen>
     </CourseTheme>

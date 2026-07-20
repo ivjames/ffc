@@ -4,6 +4,7 @@ import { Screen, TopBar, Content, Button, TagChip } from '../../ui/components';
 import { getActiveRound } from '../../db';
 import { courseById } from '../../data/courses';
 import type { LocalRound } from '../../types';
+import { DEV_MODE } from '../../lib/flags';
 import {
   fetchHuntItems,
   fetchHuntProgress,
@@ -37,11 +38,12 @@ type ItemState =
       count?: number;
     };
 
-// TESTING ONLY — remove before production. When VITE_HUNT_ALLOW_UPLOAD is
-// 'true' at build time, we drop the `capture` hint on the file input so the
+// Dev-mode affordance: drop the `capture` hint on the file input so the OS
 // picker also offers the phone's photo library (upload a saved image), not just
-// the live camera. Unset in production so players must take a real photo.
-const ALLOW_UPLOAD = import.meta.env.VITE_HUNT_ALLOW_UPLOAD === 'true';
+// the live camera. In production (DEV_MODE off) `capture` forces the rear camera
+// so players must take a real photo. Pairs with the server's
+// HUNT_ALLOW_PHOTO_OF_PHOTO (see server/.env.example) for photo-of-photo checks.
+const ALLOW_UPLOAD = DEV_MODE;
 
 export default function Hunt() {
   const navigate = useNavigate();
