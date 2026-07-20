@@ -1563,12 +1563,12 @@ button {
   --t-panel: rgba(255, 255, 255, 0.5); --t-line: #2f6fd0; --t-hi: rgba(255, 255, 255, 0.85); --accent: #1b6fff;
 }
 :root[data-template='zen'][data-theme='dark'] {
-  --t-bg: url('/themes/zen/bg-dark.webp'); --t-floor: #1a1512; --t-veil: rgba(12, 9, 6, 0.45);
-  --t-panel: rgba(40, 32, 26, 0.5); --t-line: #b98a6a; --t-hi: rgba(255, 240, 225, 0.14); --accent: #c0564a;
+  --t-bg: url('/themes/zen/bg-dark.webp'); --t-floor: #12160f; --t-veil: rgba(8, 12, 7, 0.45);
+  --t-panel: rgba(26, 34, 24, 0.5); --t-line: #6f9668; --t-hi: rgba(240, 255, 235, 0.12); --accent: #2e6a63;
 }
 :root[data-template='zen'][data-theme='light'] {
-  --t-bg: url('/themes/zen/bg-light.webp'); --t-floor: #efe7d8; --t-veil: rgba(255, 252, 246, 0.42);
-  --t-panel: rgba(255, 252, 246, 0.62); --t-line: #c2a888; --t-hi: rgba(255, 255, 255, 0.85); --accent: #c0392b;
+  --t-bg: url('/themes/zen/bg-light.webp'); --t-floor: #e7ecdd; --t-veil: rgba(231, 236, 221, 0.2);
+  --t-panel: rgba(255, 255, 255, 0.5); --t-line: #6a9a6a; --t-hi: rgba(255, 255, 255, 0.85); --accent: #2e6a63;
 }
 
 /* ——— CYBERPUNK — full-fidelity neon skin (both modes) ————————————————————————
@@ -1995,6 +1995,125 @@ button {
   text-shadow: 0 1px 4px rgba(230, 238, 250, 0.8);
 }
 
+/* ——— ZEN GARDEN — full-fidelity kit (both modes) ———————————————————————————
+   Bamboo-green fret-corner paper frame, composed garden course cards, and
+   ink/gold lotus·hourglass·scroll·trophy menu + teardrop-pin icons carry the
+   brand in both modes. Light is the daytime kit (paper panels, dark ink, green
+   Spectral title); dark reuses the same art over the night-garden glass with a
+   lighter green title. Shared structure first, then per-mode palette + title. */
+:root[data-template='zen'] .surface,
+:root[data-template='zen'] .surface-1 {
+  border: 9px solid transparent;
+  border-image: url('/themes/zen/frame.webp') 24 / 9px / 0 stretch;
+}
+:root[data-template='zen'] .surface-1 {
+  position: relative;
+}
+:root[data-template='zen'] .tile.card-art {
+  background-image: var(--tile-img);
+  background-size: cover;
+  background-position: center bottom;
+  background-color: transparent;
+  border: 0;
+  border-image: none;
+  box-shadow: 0 6px 16px -8px rgba(30, 45, 25, 0.5);
+  min-height: 168px;
+  padding: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-template='zen'] .tile.card-art .tile-label,
+:root[data-template='zen'] .tile.card-art .course-puck {
+  display: none;
+}
+:root[data-template='zen'] .hero-glyph {
+  display: none;
+}
+:root[data-template='zen'] .menu-ico {
+  display: block;
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  background: center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+:root[data-template='zen'] .menu-ico[data-ico='hunt'] {
+  background-image: url('/themes/zen/menu-hunt.webp');
+}
+:root[data-template='zen'] .menu-ico[data-ico='wait'] {
+  background-image: url('/themes/zen/menu-wait.webp');
+}
+:root[data-template='zen'] .menu-ico[data-ico='rules'] {
+  background-image: url('/themes/zen/menu-rules.webp');
+}
+:root[data-template='zen'] .menu-ico[data-ico='leaderboard'] {
+  background-image: url('/themes/zen/menu-leaderboard.webp');
+}
+:root[data-template='zen'] .menu-emoji {
+  display: none;
+}
+:root[data-template='zen'] .loc-pin {
+  display: inline-block;
+  width: 20px;
+  height: 28px;
+  font-size: 0;
+  background: center / contain no-repeat url('/themes/zen/pin.webp');
+}
+
+/* ——— ZEN LIGHT (daytime kit: paper panels, dark ink, green title) ——— */
+:root[data-template='zen'][data-theme='light'] {
+  --color-fairway-50: #23241f;
+  --color-fairway-100: #2f302a;
+  --color-fairway-200: #3c3d36;
+  --color-fairway-300: #494a42;
+  --color-fairway-400: #52534a;
+  --color-fairway-500: #7c7b74;
+  --color-fairway-600: #9c9b90;
+  --color-fairway-700: #c2c0b2;
+  --color-fairway-800: #dcdac9;
+  --color-fairway-900: #f0eee0;
+  --color-fairway-950: #e8e5d4;
+  --accent: #2e6a63;
+}
+:root[data-template='zen'][data-theme='light'] .surface,
+:root[data-template='zen'][data-theme='light'] .surface-1,
+:root[data-template='zen'][data-theme='light'] .key {
+  background-image: linear-gradient(180deg, #f7f5ea, #ece9d7);
+  background-color: #f2efe2;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 6px 16px -9px rgba(40, 50, 30, 0.35);
+}
+:root[data-template='zen'][data-theme='light'] .surface-sunk {
+  background-color: #e6e2d1;
+  border: 1px solid #b6b39c;
+  box-shadow: inset 0 2px 6px rgba(50, 50, 30, 0.2);
+}
+:root[data-template='zen'][data-theme='light'] .btn-accent {
+  background-image: linear-gradient(180deg, #3d8a72, #2e6a63);
+  border: 1px solid #234f49;
+  color: #f3f1e6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 10px -5px rgba(20, 55, 45, 0.5);
+}
+:root[data-template='zen'][data-theme='light'] .tag-chip {
+  background-image: linear-gradient(180deg, #e7e6d2, #d3d2ba);
+  border: 1px solid #8a8a68;
+  color: #23241f;
+}
+:root[data-template='zen'][data-theme='light'] .hero-title {
+  color: #2e6a63;
+  text-shadow: 0 1px 3px rgba(247, 245, 234, 0.85), 0 1px 8px rgba(247, 245, 234, 0.55);
+}
+
+/* ——— ZEN DARK (same art over the breadth night-garden glass, lighter title) — */
+:root[data-template='zen'][data-theme='dark'] .hero-title {
+  color: #8fc98a;
+  text-shadow: 0 1px 8px rgba(50, 110, 60, 0.5);
+}
+
 /* ═══════════════ THEME FONTS (typographic branding) ═══════════════
    Each theme maps a self-hosted display face to `--theme-font` (see
    src/fonts.ts); it's applied to titles, the hero, tile/course names, and
@@ -2010,7 +2129,7 @@ button {
 :root[data-template='steampunk'] { --theme-font: 'Cinzel Decorative', Georgia, serif; }
 :root[data-template='nautical'] { --theme-font: 'Cinzel', Georgia, serif; }
 :root[data-template='space'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
-:root[data-template='zen'] { --theme-font: 'Shippori Mincho', Georgia, serif; }
+:root[data-template='zen'] { --theme-font: 'Spectral', Georgia, serif; }
 
 /* Apply the theme face to display type + buttons across any skin that sets one;
    skins without `--theme-font` inherit the neutral system stack unchanged. */
@@ -2033,7 +2152,8 @@ button {
    above match directly, so they keep their face; everything else inherits
    Source Sans 3. */
 :root[data-template='forest'] body,
-:root[data-template='nautical'] body {
+:root[data-template='nautical'] body,
+:root[data-template='zen'] body {
   font-family: 'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 /* Space uses Orbitron for the header/title only (its `--theme-font`), with Exo 2

@@ -14,8 +14,6 @@ import '@fontsource/spectral/latin-400.css';
 import '@fontsource/spectral/latin-600.css';
 import '@fontsource/source-sans-3/latin-400.css';
 import '@fontsource/source-sans-3/latin-600.css';
-import '@fontsource/shippori-mincho/latin-400.css';
-import '@fontsource/shippori-mincho/latin-700.css';
 import '@fontsource/baloo-2/latin-400.css';
 import '@fontsource/baloo-2/latin-700.css';
 import '@fontsource/luckiest-guy/latin-400.css';

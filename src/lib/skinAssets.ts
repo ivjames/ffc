@@ -66,6 +66,12 @@ export function courseArt(skin: string, theme: string, mode: Mode): CourseArt {
     const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
     return n ? { tile: `/themes/space/card-${n}.webp`, card: true } : {};
   }
+  if (skin === 'zen') {
+    // Fully-composed zen-garden cards (fret-corner frame + scene + crest + name
+    // baked in) in both modes; light is the daytime kit, dark reuses the art.
+    const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
+    return n ? { tile: `/themes/zen/card-${n}.webp`, card: true } : {};
+  }
   if (skin === 'underwater') {
     const n = UNDERWATER[theme];
     return n ? { tile: `/themes/underwater/tile-${n}.webp` } : {};
