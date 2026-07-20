@@ -1555,12 +1555,12 @@ button {
   --t-panel: rgba(255, 255, 255, 0.5); --t-line: #3a6b8a; --t-hi: rgba(255, 255, 255, 0.85); --accent: #b8863a;
 }
 :root[data-template='space'][data-theme='dark'] {
-  --t-bg: url('/themes/space/bg-dark.webp'); --t-floor: #0a0620; --t-veil: rgba(6, 4, 20, 0.5);
-  --t-panel: rgba(30, 16, 56, 0.52); --t-line: #a855f7; --t-hi: rgba(255, 255, 255, 0.14); --accent: #22d3ee;
+  --t-bg: url('/themes/space/bg-dark.webp'); --t-floor: #070a18; --t-veil: rgba(6, 10, 26, 0.45);
+  --t-panel: rgba(16, 26, 52, 0.55); --t-line: #3a7fd6; --t-hi: rgba(255, 255, 255, 0.14); --accent: #2f7ff0;
 }
 :root[data-template='space'][data-theme='light'] {
-  --t-bg: url('/themes/space/bg-light.webp'); --t-floor: #e9e6fa; --t-veil: rgba(255, 255, 255, 0.38);
-  --t-panel: rgba(255, 255, 255, 0.5); --t-line: #7c3aed; --t-hi: rgba(255, 255, 255, 0.85); --accent: #7c3aed;
+  --t-bg: url('/themes/space/bg-light.webp'); --t-floor: #dde5f4; --t-veil: rgba(221, 229, 244, 0.2);
+  --t-panel: rgba(255, 255, 255, 0.5); --t-line: #2f6fd0; --t-hi: rgba(255, 255, 255, 0.85); --accent: #1b6fff;
 }
 :root[data-template='zen'][data-theme='dark'] {
   --t-bg: url('/themes/zen/bg-dark.webp'); --t-floor: #1a1512; --t-veil: rgba(12, 9, 6, 0.45);
@@ -1909,6 +1909,97 @@ button {
   text-shadow: 0 1px 8px rgba(180, 140, 50, 0.5);
 }
 
+/* ——— SPACE / GALACTIC — full-fidelity kit (both modes) ———————————————————————
+   Brushed-metal frame with neon corner accents, composed space-colony course
+   cards, and metal-chip menu + hex-pin icons carry the brand in both modes (like
+   cyberpunk, the dark sci-fi art reads on both). Dark is the sheet's native look
+   (deep-space glass, silver Orbitron wordmark with a cyan glow); light keeps the
+   same art over lighter glass with a slate-blue wordmark. Shared structure
+   first, then per-mode title colour. */
+:root[data-template='space'] .surface,
+:root[data-template='space'] .surface-1 {
+  border: 9px solid transparent;
+  border-image: url('/themes/space/frame.webp') 26 / 9px / 0 stretch;
+}
+:root[data-template='space'] .surface-1 {
+  position: relative;
+}
+/* Composed cards — dark space scenes with metal frames baked in; the corners
+   are dark (they blend into the dark panels), so no scrim/label/puck. */
+:root[data-template='space'] .tile.card-art {
+  background-image: var(--tile-img);
+  background-size: cover;
+  background-position: center;
+  background-color: #0a1120;
+  border: 0;
+  border-image: none;
+  box-shadow: 0 6px 18px -8px rgba(20, 60, 120, 0.5);
+  min-height: 168px;
+  padding: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-template='space'] .tile.card-art .tile-label,
+:root[data-template='space'] .tile.card-art .course-puck {
+  display: none;
+}
+:root[data-template='space'] .hero-glyph {
+  display: none;
+}
+/* Menu icons sit on a dark metal chip (the icons ship on their native navy
+   ground, which the chip colour matches — so the two blend seamlessly and the
+   dark chest reads without a fragile alpha key). */
+:root[data-template='space'] .menu-ico {
+  display: block;
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background-color: #060e1c;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  border: 1px solid rgba(120, 160, 210, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+:root[data-template='space'] .menu-ico[data-ico='hunt'] {
+  background-image: url('/themes/space/menu-hunt.webp');
+}
+:root[data-template='space'] .menu-ico[data-ico='wait'] {
+  background-image: url('/themes/space/menu-wait.webp');
+}
+:root[data-template='space'] .menu-ico[data-ico='rules'] {
+  background-image: url('/themes/space/menu-rules.webp');
+}
+:root[data-template='space'] .menu-ico[data-ico='leaderboard'] {
+  background-image: url('/themes/space/menu-leaderboard.webp');
+}
+:root[data-template='space'] .menu-emoji {
+  display: none;
+}
+:root[data-template='space'] .loc-pin {
+  display: inline-block;
+  width: 22px;
+  height: 28px;
+  font-size: 0;
+  background: center / contain no-repeat url('/themes/space/pin.webp');
+  filter: drop-shadow(0 0 4px rgba(60, 140, 240, 0.5));
+}
+
+/* Dark (native): silver Orbitron wordmark with a cyan glow. */
+:root[data-template='space'][data-theme='dark'] .hero-title {
+  color: #eaf2ff;
+  text-shadow: 0 0 10px rgba(60, 160, 255, 0.55), 0 0 20px rgba(40, 120, 255, 0.35);
+}
+/* Light: same art over lighter glass; darker slate-blue wordmark reads on it. */
+:root[data-template='space'][data-theme='light'] .hero-title {
+  color: #163a72;
+  text-shadow: 0 1px 4px rgba(230, 238, 250, 0.8);
+}
+
 /* ═══════════════ THEME FONTS (typographic branding) ═══════════════
    Each theme maps a self-hosted display face to `--theme-font` (see
    src/fonts.ts); it's applied to titles, the hero, tile/course names, and
@@ -1923,7 +2014,7 @@ button {
 :root[data-template='forest'] { --theme-font: 'Spectral', Georgia, serif; }
 :root[data-template='steampunk'] { --theme-font: 'Cinzel Decorative', Georgia, serif; }
 :root[data-template='nautical'] { --theme-font: 'Cinzel', Georgia, serif; }
-:root[data-template='space'] { --theme-font: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
+:root[data-template='space'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='zen'] { --theme-font: 'Shippori Mincho', Georgia, serif; }
 
 /* Apply the theme face to display type + buttons across any skin that sets one;
@@ -1949,6 +2040,19 @@ button {
 :root[data-template='forest'] body,
 :root[data-template='nautical'] body {
   font-family: 'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+/* Space uses Orbitron for the header/title only (its `--theme-font`), with Exo 2
+   for body AND buttons/labels — Orbitron is too wide for sentence-length button
+   copy. Body via the body rule; buttons/menu buttons overridden back to Exo 2
+   (they'd otherwise inherit Orbitron from the display rule above). */
+:root[data-template='space'] body {
+  font-family: 'Exo 2', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+:root[data-template='space'] .btn-accent,
+:root[data-template='space'] .btn-danger,
+:root[data-template='space'] button.surface-1,
+:root[data-template='space'] .btn-accent .menu-emoji {
+  font-family: 'Exo 2', ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Keep disabled controls flat and inert under every skin. A skin's material
