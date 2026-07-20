@@ -28,6 +28,7 @@ import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
+import { SHOW_DEV_CHROME } from './lib/flags';
 
 // §7 Routes / screens.
 export default function App() {
@@ -67,23 +68,29 @@ export default function App() {
         <Route path="*" element={<Home />} />
       </Routes>
 
-      {/* Build stamp on every page — fixed, non-interactive so it never blocks
-          a tap. Confirms which build the browser actually loaded. */}
-      <div
-        className="pointer-events-none fixed bottom-0 right-0 z-50 select-none px-2"
-        style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
-      >
-        <BuildStamp />
-      </div>
+      {/* Temporary dev chrome — build stamp (bottom-right) and skin picker
+          (bottom-left). Both are gated behind SHOW_DEV_CHROME and will be
+          removed once the app ships; the light/dark and mute switches that used
+          to share these corners now ride in each screen's header. */}
+      {SHOW_DEV_CHROME && (
+        <>
+          {/* Build stamp on every page — fixed, non-interactive so it never
+              blocks a tap. Confirms which build the browser actually loaded. */}
+          <div
+            className="pointer-events-none fixed bottom-0 right-0 z-50 select-none px-2"
+            style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
+          >
+            <BuildStamp />
+          </div>
 
-      {/* Skin picker stays in the bottom-left corner (mirrors the build stamp).
-          The light/dark and mute switches now ride in each screen's header. */}
-      <div
-        className="fixed bottom-0 left-0 z-50 flex items-center gap-2 p-2"
-        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
-      >
-        <SkinPicker />
-      </div>
+          <div
+            className="fixed bottom-0 left-0 z-50 flex items-center gap-2 p-2"
+            style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+          >
+            <SkinPicker />
+          </div>
+        </>
+      )}
 
       {/* Blocking prompt when a deploy lands while the app is open on a stale
           cached bundle — reloads onto the fresh build. */}
