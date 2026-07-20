@@ -4,8 +4,6 @@
 // titles and buttons for typographic branding.
 import '@fontsource/cinzel/latin-400.css';
 import '@fontsource/cinzel/latin-700.css';
-import '@fontsource/cinzel-decorative/latin-400.css';
-import '@fontsource/cinzel-decorative/latin-700.css';
 import '@fontsource/orbitron/latin-400.css';
 import '@fontsource/orbitron/latin-700.css';
 import '@fontsource/exo-2/latin-400.css';

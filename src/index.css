@@ -1606,11 +1606,11 @@ button {
   --t-panel: rgba(255, 255, 255, 0.5); --t-line: #6a9a52; --t-hi: rgba(255, 255, 255, 0.85); --accent: #3f8f3f;
 }
 :root[data-template='steampunk'][data-theme='dark'] {
-  --t-bg: url('/themes/steampunk/bg-dark.webp'); --t-floor: #17110a; --t-veil: rgba(14, 9, 4, 0.5);
-  --t-panel: rgba(46, 34, 18, 0.55); --t-line: #b78a34; --t-hi: rgba(255, 230, 180, 0.18); --accent: #d99a3a;
+  --t-bg: url('/themes/steampunk/bg-dark.webp'); --t-floor: #14100a; --t-veil: rgba(12, 8, 4, 0.42);
+  --t-panel: rgba(42, 32, 18, 0.55); --t-line: #b78a34; --t-hi: rgba(255, 230, 180, 0.16); --accent: #c69c2e;
 }
 :root[data-template='steampunk'][data-theme='light'] {
-  --t-bg: url('/themes/steampunk/bg-light.webp'); --t-floor: #efe4cf; --t-veil: rgba(255, 250, 240, 0.4);
+  --t-bg: url('/themes/steampunk/bg-light.webp'); --t-floor: #e7ddc8; --t-veil: rgba(231, 221, 200, 0.22);
   --t-panel: rgba(255, 250, 240, 0.55); --t-line: #a9803a; --t-hi: rgba(255, 255, 255, 0.85); --accent: #b06b1f;
 }
 :root[data-template='nautical'][data-theme='dark'] {
@@ -2181,6 +2181,83 @@ button {
   text-shadow: 0 1px 8px rgba(50, 110, 60, 0.5);
 }
 
+/* ——— STEAMPUNK VICTORIAN — full-fidelity kit (both modes) ————————————————————
+   Brass-riveted gearwork frame, composed Victorian-city course cards, and
+   brass/leather chest·hourglass·scroll·trophy menu + teardrop-pin icons carry
+   the brand in both modes (the dark scenes read on both, like cyberpunk). Dark
+   is the sheet's native look (aged-brass glass, gold Cinzel wordmark — the free
+   stand-in for the kit's Adobe-only Copperplate); light reuses the art over
+   lighter glass with a deeper brass title. Shared structure, then per-mode. */
+:root[data-template='steampunk'] .surface,
+:root[data-template='steampunk'] .surface-1 {
+  border: 11px solid transparent;
+  border-image: url('/themes/steampunk/frame.webp') 28 / 11px / 0 stretch;
+}
+:root[data-template='steampunk'] .surface-1 {
+  position: relative;
+}
+:root[data-template='steampunk'] .tile.card-art {
+  background-image: var(--tile-img);
+  background-size: cover;
+  background-position: center bottom;
+  background-color: #17110a;
+  border: 0;
+  border-image: none;
+  box-shadow: 0 6px 16px -8px rgba(60, 40, 10, 0.6);
+  min-height: 168px;
+  padding: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-template='steampunk'] .tile.card-art .tile-label,
+:root[data-template='steampunk'] .tile.card-art .course-puck {
+  display: none;
+}
+:root[data-template='steampunk'] .hero-glyph {
+  display: none;
+}
+:root[data-template='steampunk'] .menu-ico {
+  display: block;
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  background: center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+:root[data-template='steampunk'] .menu-ico[data-ico='hunt'] {
+  background-image: url('/themes/steampunk/menu-hunt.webp');
+}
+:root[data-template='steampunk'] .menu-ico[data-ico='wait'] {
+  background-image: url('/themes/steampunk/menu-wait.webp');
+}
+:root[data-template='steampunk'] .menu-ico[data-ico='rules'] {
+  background-image: url('/themes/steampunk/menu-rules.webp');
+}
+:root[data-template='steampunk'] .menu-ico[data-ico='leaderboard'] {
+  background-image: url('/themes/steampunk/menu-leaderboard.webp');
+}
+:root[data-template='steampunk'] .menu-emoji {
+  display: none;
+}
+:root[data-template='steampunk'] .loc-pin {
+  display: inline-block;
+  width: 20px;
+  height: 28px;
+  font-size: 0;
+  background: center / contain no-repeat url('/themes/steampunk/pin.webp');
+}
+:root[data-template='steampunk'][data-theme='dark'] .hero-title {
+  color: #e0b64a;
+  text-shadow: 0 0 10px rgba(200, 150, 40, 0.45), 0 1px 3px rgba(30, 18, 4, 0.7);
+}
+:root[data-template='steampunk'][data-theme='light'] .hero-title {
+  color: #7a4e12;
+  text-shadow: 0 1px 4px rgba(245, 238, 220, 0.8);
+}
+
 /* ═══════════════ THEME FONTS (typographic branding) ═══════════════
    Each theme maps a self-hosted display face to `--theme-font` (see
    src/fonts.ts); it's applied to titles, the hero, tile/course names, and
@@ -2193,7 +2270,7 @@ button {
 :root[data-template='fantasy'] { --theme-font: 'Cinzel', Georgia, serif; }
 :root[data-template='cyberpunk'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='forest'] { --theme-font: 'Spectral', Georgia, serif; }
-:root[data-template='steampunk'] { --theme-font: 'Cinzel Decorative', Georgia, serif; }
+:root[data-template='steampunk'] { --theme-font: 'Cinzel', Georgia, serif; }
 :root[data-template='nautical'] { --theme-font: 'Cinzel', Georgia, serif; }
 :root[data-template='space'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='zen'] { --theme-font: 'Spectral', Georgia, serif; }
@@ -2221,7 +2298,8 @@ button {
 :root[data-template='forest'] body,
 :root[data-template='nautical'] body,
 :root[data-template='zen'] body,
-:root[data-template='underwater'] body {
+:root[data-template='underwater'] body,
+:root[data-template='steampunk'] body {
   font-family: 'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 /* Space uses Orbitron for the header/title only (its `--theme-font`), with Exo 2

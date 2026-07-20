@@ -72,6 +72,12 @@ export function courseArt(skin: string, theme: string, mode: Mode): CourseArt {
     const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
     return n ? { tile: `/themes/zen/card-${n}.webp`, card: true } : {};
   }
+  if (skin === 'steampunk') {
+    // Fully-composed Victorian-city cards (brass frame + scene + crest + name
+    // baked in) in both modes; dark is the native look, light reuses the art.
+    const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
+    return n ? { tile: `/themes/steampunk/card-${n}.webp`, card: true } : {};
+  }
   if (skin === 'underwater') {
     const n = UNDERWATER[theme];
     return n ? { tile: `/themes/underwater/tile-${n}.webp` } : {};
