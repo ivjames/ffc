@@ -31,20 +31,35 @@ export function TopBar({
   right?: ReactNode;
 }) {
   const navigate = useNavigate();
+  const barGradient =
+    'linear-gradient(180deg, color-mix(in srgb, var(--color-fairway-900), transparent 12%), color-mix(in srgb, var(--color-fairway-950), transparent 12%))';
   return (
     // Sticky, but pinned to the safe-area top rather than the raw viewport edge.
     // With `top-0` the bar slid up behind the iPhone status bar / camera on
     // scroll; offsetting by env(safe-area-inset-top) locks it just below the
-    // notch. The area above stays covered by the body's safe-area padding.
+    // notch.
     <header
       style={{
         top: 'env(safe-area-inset-top)',
-        backgroundImage:
-          'linear-gradient(180deg, color-mix(in srgb, var(--color-fairway-900), transparent 12%), color-mix(in srgb, var(--color-fairway-950), transparent 12%))',
+        backgroundImage: barGradient,
         boxShadow: '0 2px 12px -2px rgba(0,0,0,0.35), var(--bevel)',
       }}
       className="sticky z-10 flex items-center gap-2 border-b border-fairway-800/60 px-3 py-3 backdrop-blur"
     >
+      {/* Fill the safe-area strip directly above the pinned bar. The body's
+          top padding covers it at rest, but that padding scrolls away with the
+          page, so once scrolled the notch gap exposed content sliding up behind
+          the bar. This overlay tracks the bar (always at env(safe-area-inset-top)),
+          painting the same gradient so the header reads as reaching the very top. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0"
+        style={{
+          top: 'calc(-1 * env(safe-area-inset-top))',
+          height: 'env(safe-area-inset-top)',
+          backgroundImage: barGradient,
+        }}
+      />
       {back !== undefined && (
         <button
           onClick={() => (typeof back === 'number' ? navigate(back) : navigate(back))}
