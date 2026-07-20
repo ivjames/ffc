@@ -1232,6 +1232,15 @@ button {
     inset 0 1px 0 rgba(226, 196, 120, 0.18),
     0 6px 16px -8px rgba(0, 0, 0, 0.7);
 }
+/* Ornate 9-slice frame on the headline panels (location bar, menu buttons,
+   resume card). The frame art's hollow centre is ignored by border-image, so the
+   stone fill above shows through; the gold scrollwork corners + edges draw in the
+   transparent border box. */
+:root[data-template='fantasy'] .surface,
+:root[data-template='fantasy'] .surface-1 {
+  border: 11px solid transparent;
+  border-image: url('/themes/fantasy/frame.webp') 24 / 11px / 0 stretch;
+}
 :root[data-template='fantasy'] .surface-sunk {
   background-color: #140f08;
   border: 1px solid #4a3c1e;
@@ -1259,14 +1268,15 @@ button {
   color: #f4e8cc;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
 }
-/* Tile fallback (courses without art) */
+/* Tile fallback (courses without art) — same ornate frame as the panels. */
 :root[data-template='fantasy'] .tile {
   background-image: linear-gradient(
     180deg,
     color-mix(in srgb, #2a2318, var(--tile-accent, var(--accent)) 18%),
     color-mix(in srgb, #1a140c, var(--tile-accent, var(--accent)) 10%)
   );
-  border: 1px solid #8a6d2f;
+  border: 10px solid transparent;
+  border-image: url('/themes/fantasy/frame.webp') 24 / 10px / 0 stretch;
   box-shadow: inset 0 1px 0 rgba(240, 210, 130, 0.2), 0 6px 16px -8px rgba(0, 0, 0, 0.7);
 }
 /* Painted course tile + heraldic crest (real image assets) */
@@ -1276,7 +1286,7 @@ button {
     var(--tile-img);
   background-size: cover, cover;
   background-position: center 40%;
-  border: 2px solid #8a6d2f;
+  /* border-image frame inherited from the `.tile` rule above */
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.6),
     inset 0 1px 0 rgba(240, 210, 130, 0.25),
