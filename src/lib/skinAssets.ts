@@ -48,6 +48,12 @@ export function courseArt(skin: string, theme: string, mode: Mode): CourseArt {
     const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
     return n ? { tile: `/themes/cyberpunk/card-${n}.webp`, card: true } : {};
   }
+  if (skin === 'forest') {
+    // Fully-composed enchanted-forest cards (frame + scene + crest + name baked
+    // in) in both modes; light is the daytime kit, dark reuses the same art.
+    const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
+    return n ? { tile: `/themes/forest/card-${n}.webp`, card: true } : {};
+  }
   if (skin === 'underwater') {
     const n = UNDERWATER[theme];
     return n ? { tile: `/themes/underwater/tile-${n}.webp` } : {};

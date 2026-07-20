@@ -1535,7 +1535,7 @@ button {
   --t-panel: rgba(20, 34, 16, 0.5); --t-line: #6fae5a; --t-hi: rgba(255, 255, 255, 0.12); --accent: #86efac;
 }
 :root[data-template='forest'][data-theme='light'] {
-  --t-bg: url('/themes/forest/bg-light.webp'); --t-floor: #eaf3e0; --t-veil: rgba(255, 255, 255, 0.4);
+  --t-bg: url('/themes/forest/bg-light.webp'); --t-floor: #e6eed9; --t-veil: rgba(232, 240, 216, 0.22);
   --t-panel: rgba(255, 255, 255, 0.5); --t-line: #6a9a52; --t-hi: rgba(255, 255, 255, 0.85); --accent: #3f8f3f;
 }
 :root[data-template='steampunk'][data-theme='dark'] {
@@ -1663,6 +1663,132 @@ button {
   filter: drop-shadow(0 0 5px rgba(0, 245, 255, 0.6));
 }
 
+/* ——— ENCHANTED FOREST — full-fidelity kit (both modes) ———————————————————————
+   The vine-gold frame, composed course cards, green/gold menu + pin icons, and
+   Spectral wordmark carry the brand in both modes (per the "home page carries
+   the branding" rule). Light is the daytime kit from the sheet (parchment
+   panels, dark ink, forest-green title); dark reuses the same art over the
+   breadth night-forest glass with a lighter leaf-green title. Shared structure
+   first, then the per-mode palette + title colour. */
+:root[data-template='forest'] .surface,
+:root[data-template='forest'] .surface-1 {
+  border: 9px solid transparent;
+  border-image: url('/themes/forest/frame.webp') 26 / 9px / 0 stretch;
+}
+/* Ghost menu buttons (.surface-1) anchor their absolute icon. */
+:root[data-template='forest'] .surface-1 {
+  position: relative;
+}
+/* Composed course cards — the image is the whole card (frame + scene + crest +
+   name baked in), so drop the glass fill/border/scrim label + emoji puck. */
+:root[data-template='forest'] .tile.card-art {
+  background-image: var(--tile-img);
+  background-size: cover;
+  background-position: center bottom;
+  background-color: transparent;
+  border: 0;
+  border-image: none;
+  box-shadow: 0 6px 16px -8px rgba(20, 40, 15, 0.55);
+  min-height: 168px;
+  padding: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+:root[data-template='forest'] .tile.card-art .tile-label,
+:root[data-template='forest'] .tile.card-art .course-puck {
+  display: none;
+}
+/* Hero: Spectral wordmark (the emoji glyph is hidden; the <h1> stays for screen
+   readers and is painted as the lockup). Colour + halo are set per mode. */
+:root[data-template='forest'] .hero-glyph {
+  display: none;
+}
+/* Green/gold menu icons pinned to each button's left edge. */
+:root[data-template='forest'] .menu-ico {
+  display: block;
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  background: center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+:root[data-template='forest'] .menu-ico[data-ico='hunt'] {
+  background-image: url('/themes/forest/menu-hunt.webp');
+}
+:root[data-template='forest'] .menu-ico[data-ico='wait'] {
+  background-image: url('/themes/forest/menu-wait.webp');
+}
+:root[data-template='forest'] .menu-ico[data-ico='rules'] {
+  background-image: url('/themes/forest/menu-rules.webp');
+}
+:root[data-template='forest'] .menu-ico[data-ico='leaderboard'] {
+  background-image: url('/themes/forest/menu-leaderboard.webp');
+}
+:root[data-template='forest'] .menu-emoji {
+  display: none;
+}
+:root[data-template='forest'] .loc-pin {
+  display: inline-block;
+  width: 22px;
+  height: 28px;
+  font-size: 0;
+  background: center / contain no-repeat url('/themes/forest/pin.webp');
+}
+
+/* ——— FOREST LIGHT (daytime kit: parchment panels, dark ink, green title) ——— */
+:root[data-template='forest'][data-theme='light'] {
+  --color-fairway-50: #2a2a1c;
+  --color-fairway-100: #38371f;
+  --color-fairway-200: #47452e;
+  --color-fairway-300: #565338;
+  --color-fairway-400: #5c5236;
+  --color-fairway-500: #8a7d5f;
+  --color-fairway-600: #a99a76;
+  --color-fairway-700: #cabf9f;
+  --color-fairway-800: #ddd3b6;
+  --color-fairway-900: #eee7d5;
+  --color-fairway-950: #e6ddc7;
+  --accent: #2f6b38;
+}
+:root[data-template='forest'][data-theme='light'] .surface,
+:root[data-template='forest'][data-theme='light'] .surface-1,
+:root[data-template='forest'][data-theme='light'] .key {
+  background-image: linear-gradient(180deg, #f6f0dd, #e9e0c6);
+  background-color: #f2ecd9;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 6px 16px -9px rgba(40, 50, 20, 0.4);
+}
+:root[data-template='forest'][data-theme='light'] .surface-sunk {
+  background-color: #e4dbc0;
+  border: 1px solid #b7a97f;
+  box-shadow: inset 0 2px 6px rgba(60, 55, 25, 0.25);
+}
+:root[data-template='forest'][data-theme='light'] .btn-accent {
+  background-image: linear-gradient(180deg, #4a9a48, #2f6b38);
+  border: 1px solid #234f27;
+  color: #f4ecd6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 4px 10px -5px rgba(25, 55, 20, 0.5);
+}
+:root[data-template='forest'][data-theme='light'] .tag-chip {
+  background-image: linear-gradient(180deg, #e7e0c4, #d6c9a0);
+  border: 1px solid #8a7a4a;
+  color: #2a2a1c;
+}
+:root[data-template='forest'][data-theme='light'] .hero-title {
+  color: #2f6b38;
+  text-shadow: 0 1px 3px rgba(246, 240, 221, 0.85), 0 1px 8px rgba(246, 240, 221, 0.6);
+}
+
+/* ——— FOREST DARK (same art over the breadth night glass, lighter title) ——— */
+:root[data-template='forest'][data-theme='dark'] .hero-title {
+  color: #a7d98a;
+  text-shadow: 0 1px 8px rgba(60, 120, 40, 0.55);
+}
+
 /* ═══════════════ THEME FONTS (typographic branding) ═══════════════
    Each theme maps a self-hosted display face to `--theme-font` (see
    src/fonts.ts); it's applied to titles, the hero, tile/course names, and
@@ -1674,7 +1800,7 @@ button {
 :root[data-template='underwater'] { --theme-font: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='fantasy'] { --theme-font: 'Cinzel', Georgia, serif; }
 :root[data-template='cyberpunk'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
-:root[data-template='forest'] { --theme-font: 'Uncial Antiqua', Georgia, serif; }
+:root[data-template='forest'] { --theme-font: 'Spectral', Georgia, serif; }
 :root[data-template='steampunk'] { --theme-font: 'Cinzel Decorative', Georgia, serif; }
 :root[data-template='nautical'] { --theme-font: 'Pirata One', Georgia, serif; }
 :root[data-template='space'] { --theme-font: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
@@ -1693,6 +1819,13 @@ button {
 :root[data-template] .btn-accent .menu-emoji,
 :root[data-template] button.surface-1 {
   font-family: var(--theme-font, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+}
+
+/* Forest pairs its display face (Spectral) with a Source Sans 3 body, per the
+   kit's type system. Set on body only — the display elements above match
+   directly, so they keep Spectral; everything else inherits Source Sans 3. */
+:root[data-template='forest'] body {
+  font-family: 'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Keep disabled controls flat and inert under every skin. A skin's material
