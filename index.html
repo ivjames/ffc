@@ -33,15 +33,23 @@
         document.documentElement.dataset.theme = m;
 
         // Apply the saved visual template (skin) before first paint too, so the
-        // app never flashes the default candy skin. src/lib/skin.ts takes over.
+        // app never flashes the wrong skin. Default is the plain 'unstyled' look.
+        // src/lib/skin.ts takes over.
         var t;
         try {
           t = localStorage.getItem('ffc-skin');
         } catch (e) {
           t = null;
         }
-        if (t !== 'blocky' && t !== 'uv' && t !== 'glass' && t !== 'chrome') {
-          t = 'candy';
+        if (
+          t !== 'candy' &&
+          t !== 'blocky' &&
+          t !== 'uv' &&
+          t !== 'glass' &&
+          t !== 'chrome' &&
+          t !== 'unstyled'
+        ) {
+          t = 'unstyled';
         }
         document.documentElement.dataset.template = t;
       })();

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getSkin, setSkin, subscribeSkin, SKINS } from '../lib/skin';
 import { playClick } from '../lib/sound';
 
@@ -10,6 +11,7 @@ export default function SkinPicker() {
   const skin = useSyncExternalStore(subscribeSkin, getSkin, getSkin);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   // Dismiss on outside tap or Escape while the menu is open.
   useEffect(() => {
@@ -70,6 +72,32 @@ export default function SkinPicker() {
               </button>
             );
           })}
+
+          {/* Jump to the living component inventory — the theming reference. */}
+          <div className="my-1 border-t border-fairway-700/60" />
+          <button
+            role="menuitem"
+            onClick={() => {
+              playClick();
+              setOpen(false);
+              navigate('/style');
+            }}
+            className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors active:bg-fairway-800/60"
+          >
+            <span
+              className="flex h-4 w-4 flex-none items-center justify-center text-[11px] leading-none text-fairway-300"
+              aria-hidden="true"
+            >
+              ▦
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold leading-tight text-fairway-50">Style guide</span>
+              <span className="block truncate text-[11px] text-fairway-300">Every element, live</span>
+            </span>
+            <span className="flex-none text-fairway-400" aria-hidden="true">
+              ›
+            </span>
+          </button>
         </div>
       )}
       <button
