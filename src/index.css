@@ -1190,7 +1190,7 @@ button {
 :root[data-template='underwater'] .tile.tile-art .course-puck {
   display: none;
 }
-:root[data-template='underwater'] .tile.tile-art .tile-name {
+:root[data-template='underwater'] .tile.tile-art .tile-label {
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
 }
@@ -1295,7 +1295,7 @@ button {
   justify-content: flex-end;
   padding-bottom: 10px;
 }
-:root[data-template='fantasy'] .tile.tile-art .tile-name {
+:root[data-template='fantasy'] .tile.tile-art .tile-label {
   color: #f6ecd2;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
@@ -1381,6 +1381,65 @@ button {
   height: 28px;
   font-size: 0;
   background: center / contain no-repeat url('/themes/fantasy/pin.webp');
+}
+
+/* ——— FANTASY LIGHT MODE (daytime, Sheet-2 hi-res art) ————————————————————————
+   Bright castle background, parchment panels + dark ink text, and fully-composed
+   course cards (frame + daytime art + crest + name baked in). The gold frame,
+   title lockup, menu icons, and pin are reused (they read on the parchment). */
+:root[data-template='fantasy'][data-theme='light'] {
+  --color-fairway-50: #2a2012;
+  --color-fairway-100: #3a2e1a;
+  --color-fairway-200: #4a3c24;
+  --color-fairway-300: #5c4d32;
+  --color-fairway-400: #6e5d40;
+  --color-fairway-500: #a08a60;
+  --color-fairway-600: #c0aa7e;
+  --color-fairway-700: #d6c6a2;
+  --color-fairway-800: #e6dcc2;
+  --color-fairway-900: #f3ecda;
+  --color-fairway-950: #ece0c6;
+  --accent: #a5701f;
+}
+:root[data-template='fantasy'][data-theme='light'] body {
+  background-color: #e9ddc2;
+  background-image:
+    linear-gradient(rgba(250, 244, 228, 0.22), rgba(236, 224, 198, 0.4)),
+    url('/themes/fantasy/bg-stone-light.webp');
+  background-size: cover;
+  background-position: center;
+}
+:root[data-template='fantasy'][data-theme='light'] .surface,
+:root[data-template='fantasy'][data-theme='light'] .surface-1,
+:root[data-template='fantasy'][data-theme='light'] .key {
+  background-image: linear-gradient(180deg, #f5eed9, #e7d9ba);
+}
+:root[data-template='fantasy'][data-theme='light'] .btn-accent {
+  background-image: linear-gradient(180deg, #f0e4c6, #dcc898);
+  border: 1px solid #a5701f;
+  color: #3a2a12;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 4px 10px -5px rgba(90, 60, 20, 0.45);
+}
+:root[data-template='fantasy'][data-theme='light'] .tag-chip {
+  background-image: linear-gradient(180deg, #efe3c6, #d9c69a);
+  border-color: #a5701f;
+  color: #2a2012;
+}
+/* Composed course cards: the image is the whole card, so drop the frame/scrim/
+   label/puck the dark compositing adds. */
+:root[data-template='fantasy'][data-theme='light'] .tile.card-art {
+  background-image: var(--tile-img);
+  background-size: cover;
+  background-position: center bottom;
+  border: 0;
+  border-image: none;
+  box-shadow: 0 6px 16px -8px rgba(60, 40, 10, 0.5);
+  min-height: 168px;
+  padding: 0;
+}
+:root[data-template='fantasy'][data-theme='light'] .tile.card-art .tile-label,
+:root[data-template='fantasy'][data-theme='light'] .tile.card-art .course-puck {
+  display: none;
 }
 
 /* ═══════════════ IMAGE THEMES (breadth pass, light + dark) ═══════════════

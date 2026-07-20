@@ -13,6 +13,7 @@ import {
 import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
 import { getSkin, subscribeSkin } from '../../lib/skin';
+import { getMode, subscribeMode } from '../../lib/mode';
 import { courseArt } from '../../lib/skinAssets';
 import { playClick, playCup } from '../../lib/sound';
 import type { LocalRound } from '../../types';
@@ -20,9 +21,10 @@ import type { LocalRound } from '../../types';
 // §7 Home — start round, view maps/rules, resume an in-progress game.
 export default function Home() {
   const navigate = useNavigate();
-  // Re-read on skin change so image-based skins (underwater, fantasy) swap their
-  // course art; non-image skins fall back to the CSS puck/tile.
+  // Re-read on skin OR light/dark change so image-based skins (underwater,
+  // fantasy) swap their course art per mode; non-image skins fall back to CSS.
   const skin = useSyncExternalStore(subscribeSkin, getSkin, getSkin);
+  const mode = useSyncExternalStore(subscribeMode, getMode, getMode);
   const [resume, setResume] = useState<LocalRound | null>(null);
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
@@ -136,7 +138,7 @@ export default function Home() {
               // Image-based skins supply a painted scene (tile) and/or crest
               // (puck) per course; CSS gates them by data-template. Non-image
               // skins get neither and fall back to the CSS tile/puck.
-              const art = courseArt(skin, c.theme);
+              const art = courseArt(skin, c.theme, mode);
               return (
               <button
                 key={c.id}
@@ -145,8 +147,8 @@ export default function Home() {
                   navigate(`/courses/${c.id}/map`);
                 }}
                 className={`tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-4 text-center${
-                  art.tile ? ' tile-art' : ''
-                }${art.puck ? ' puck-art' : ''}`}
+                  art.tile && !art.card ? ' tile-art' : ''
+                }${art.puck ? ' puck-art' : ''}${art.card ? ' card-art' : ''}`}
                 style={
                   {
                     '--i': i,
@@ -166,7 +168,9 @@ export default function Home() {
                     {themeEmoji(c.theme)}
                   </span>
                 </span>
-                <span className="text-sm font-black leading-tight text-fairway-50">{c.name}</span>
+                <span className="tile-label text-sm font-black leading-tight text-fairway-50">
+                  {c.name}
+                </span>
               </button>
               );
             })}
