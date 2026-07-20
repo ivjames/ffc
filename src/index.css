@@ -1042,6 +1042,132 @@ button {
   text-shadow: none;
 }
 
+/* ——— UNDERWATER — deep-ocean glass; sunlit shallows in light mode ——————————
+   Recreated in pure CSS from the "underwater" art comp: a lit water column
+   (god-rays fading to an abyss floor), translucent glass panels rimmed and lit
+   in cyan, glossy dimpled course balls, and watery accent keys. Panels stay
+   dark in dark / light in light so the fairway text ramp reads; identity comes
+   from the water gradient + cyan glow + `--accent`/`--tile-accent`. */
+:root[data-template='underwater'][data-theme='dark'] {
+  --uw-glass: rgba(120, 190, 230, 0.08);
+  --uw-rim: rgba(120, 210, 255, 0.38);
+  --uw-hi: rgba(255, 255, 255, 0.16);
+  --uw-glow: rgba(56, 189, 248, 0.5);
+  --uw-cast: rgba(0, 0, 0, 0.7);
+  --uw-dimple: rgba(0, 0, 0, 0.16);
+}
+:root[data-template='underwater'][data-theme='light'] {
+  --uw-glass: rgba(255, 255, 255, 0.5);
+  --uw-rim: rgba(255, 255, 255, 0.82);
+  --uw-hi: rgba(255, 255, 255, 0.9);
+  --uw-glow: rgba(14, 116, 170, 0.28);
+  --uw-cast: rgba(20, 80, 120, 0.4);
+  --uw-dimple: rgba(10, 60, 90, 0.12);
+}
+:root[data-template='underwater'][data-theme='dark'] body {
+  background-color: #04121f;
+  background-image:
+    radial-gradient(120% 68% at 50% -12%, rgba(130, 205, 255, 0.24), transparent 55%),
+    radial-gradient(3px 3px at 18% 30%, rgba(190, 235, 255, 0.28), transparent 60%),
+    radial-gradient(2px 2px at 78% 22%, rgba(190, 235, 255, 0.22), transparent 60%),
+    radial-gradient(2px 2px at 62% 68%, rgba(190, 235, 255, 0.18), transparent 60%),
+    linear-gradient(180deg, #0a2b47 0%, #061d33 45%, #03101d 100%);
+}
+:root[data-template='underwater'][data-theme='light'] body {
+  background-color: #d7eefb;
+  background-image:
+    radial-gradient(120% 68% at 50% -12%, rgba(255, 255, 255, 0.9), transparent 55%),
+    radial-gradient(2px 2px at 20% 26%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(2px 2px at 74% 30%, rgba(255, 255, 255, 0.8), transparent 60%),
+    linear-gradient(180deg, #cfeefb 0%, #a9dcf0 55%, #7cc4e6 100%);
+}
+/* Frosted water-glass panels */
+:root[data-template='underwater'] .surface,
+:root[data-template='underwater'] .surface-1,
+:root[data-template='underwater'] .key {
+  background-image: none;
+  background-color: var(--uw-glass);
+  -webkit-backdrop-filter: blur(9px) saturate(1.25);
+  backdrop-filter: blur(9px) saturate(1.25);
+  border: 1px solid var(--uw-rim);
+  box-shadow:
+    0 8px 24px -12px var(--uw-cast),
+    0 0 18px -8px var(--uw-glow),
+    inset 0 1px 0 var(--uw-hi);
+}
+:root[data-template='underwater'] .surface-sunk {
+  background-color: color-mix(in srgb, var(--uw-glass), black 12%);
+  border: 1px solid var(--uw-rim);
+  box-shadow: inset 0 2px 8px var(--uw-cast);
+}
+/* Watery accent key — accent tinted into deep water so fairway-50 text holds */
+:root[data-template='underwater'][data-theme='dark'] .btn-accent {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, #0b2c46, var(--accent) 42%),
+    color-mix(in srgb, #06202f, var(--accent) 30%)
+  );
+  border: 1px solid color-mix(in srgb, var(--accent), white 25%);
+  box-shadow:
+    0 0 18px -5px color-mix(in srgb, var(--accent), transparent 35%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+:root[data-template='underwater'][data-theme='light'] .btn-accent {
+  background-image: none;
+  background-color: color-mix(in srgb, var(--color-fairway-700), var(--accent) 20%);
+  border: 1px solid color-mix(in srgb, var(--accent), white 30%);
+  box-shadow: 0 0 16px -6px var(--uw-glow), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+:root[data-template='underwater'] .btn-danger {
+  background-image: linear-gradient(180deg, #7f1d1d, #591414);
+  border: 1px solid #f87171;
+  box-shadow: 0 0 14px -5px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+/* Course tile — a watery scene tinted to the course, floor-shadowed */
+:root[data-template='underwater'] .tile {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--uw-glass), var(--tile-accent, var(--accent)) 30%),
+    color-mix(in srgb, var(--uw-glass), var(--tile-accent, var(--accent)) 14%)
+  );
+  -webkit-backdrop-filter: blur(9px) saturate(1.25);
+  backdrop-filter: blur(9px) saturate(1.25);
+  border: 1px solid color-mix(in srgb, var(--tile-accent, var(--accent)), var(--uw-rim) 55%);
+  box-shadow:
+    0 0 22px -10px color-mix(in srgb, var(--tile-accent, var(--accent)), transparent 45%),
+    inset 0 1px 0 var(--uw-hi),
+    inset 0 -22px 40px -22px var(--uw-cast);
+}
+/* Glossy dimpled golf ball */
+:root[data-template='underwater'] .course-puck {
+  background-color: var(--puck-accent, var(--accent));
+  background-image:
+    radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--puck-accent, var(--accent)), white 55%), transparent 68%),
+    radial-gradient(var(--uw-dimple) 1px, transparent 1.6px);
+  background-size: cover, 7px 7px;
+  box-shadow:
+    inset 0 2px 4px rgba(255, 255, 255, 0.45),
+    inset 0 -7px 11px rgba(0, 0, 0, 0.4),
+    0 4px 10px -3px rgba(0, 0, 0, 0.6),
+    0 0 16px -4px color-mix(in srgb, var(--puck-accent, var(--accent)), transparent 35%);
+}
+/* Watery tag pill — mode-aware text */
+:root[data-template='underwater'] .tag-chip {
+  background-image: none;
+  background-color: color-mix(in srgb, var(--uw-glass), var(--tag-accent, #166534) 45%);
+  border: 1px solid color-mix(in srgb, var(--tag-accent, #166534), var(--uw-rim) 55%);
+  box-shadow: 0 0 10px -3px color-mix(in srgb, var(--tag-accent, #166534), transparent 40%), inset 0 1px 0 var(--uw-hi);
+  color: var(--color-fairway-50);
+  text-shadow: none;
+}
+:root[data-template='underwater'] .btn-accent:active,
+:root[data-template='underwater'] .btn-danger:active,
+:root[data-template='underwater'] .key:active:not(:disabled),
+:root[data-template='underwater'] .tile:active {
+  transform: translateY(1px);
+  box-shadow: 0 0 12px -6px var(--uw-glow), inset 0 1px 0 var(--uw-hi);
+}
+
 /* Keep disabled controls flat and inert under every skin. A skin's material
    rule (e.g. `:root[data-template='blocky'] .key`) outranks the base
    `.key:disabled { box-shadow: none }` reset above, which would otherwise
