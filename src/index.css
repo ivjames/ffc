@@ -1195,6 +1195,73 @@ button {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
 }
 
+/* ——— UNDERWATER full-fidelity kit (frame, hero, menu/pin icons) ——————————————
+   Upgrades the frosted-glass theme with the hi-res ocean kit: a gold-bordered
+   panel frame, a painted ruins background (dark), a Cinzel wordmark, and the
+   shell/chest/hourglass/scroll/trophy + teardrop-pin icons. Course tiles keep
+   the tile-art path (the sheet's cards bake in non-matching names, so the app
+   still renders the real course name over the richer scene + crest). */
+:root[data-template='underwater'][data-theme='dark'] body {
+  background-color: #04121f;
+  background-image:
+    linear-gradient(rgba(4, 16, 28, 0.5), rgba(3, 14, 26, 0.72)),
+    url('/themes/underwater/bg-dark.webp');
+  background-size: cover;
+  background-position: center;
+}
+:root[data-template='underwater'] .surface,
+:root[data-template='underwater'] .surface-1 {
+  border: 9px solid transparent;
+  border-image: url('/themes/underwater/frame.webp') 22 / 9px / 0 stretch;
+}
+:root[data-template='underwater'] .surface-1 {
+  position: relative;
+}
+:root[data-template='underwater'] .hero-glyph {
+  display: none;
+}
+:root[data-template='underwater'][data-theme='dark'] .hero-title {
+  color: #7fdce6;
+  text-shadow: 0 0 10px rgba(24, 189, 199, 0.5), 0 1px 3px rgba(0, 30, 45, 0.7);
+}
+:root[data-template='underwater'][data-theme='light'] .hero-title {
+  color: #0d5b6e;
+  text-shadow: 0 1px 4px rgba(230, 245, 250, 0.8);
+}
+:root[data-template='underwater'] .menu-ico {
+  display: block;
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  background: center / contain no-repeat;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+:root[data-template='underwater'] .menu-ico[data-ico='hunt'] {
+  background-image: url('/themes/underwater/menu-hunt.webp');
+}
+:root[data-template='underwater'] .menu-ico[data-ico='wait'] {
+  background-image: url('/themes/underwater/menu-wait.webp');
+}
+:root[data-template='underwater'] .menu-ico[data-ico='rules'] {
+  background-image: url('/themes/underwater/menu-rules.webp');
+}
+:root[data-template='underwater'] .menu-ico[data-ico='leaderboard'] {
+  background-image: url('/themes/underwater/menu-leaderboard.webp');
+}
+:root[data-template='underwater'] .menu-emoji {
+  display: none;
+}
+:root[data-template='underwater'] .loc-pin {
+  display: inline-block;
+  width: 20px;
+  height: 28px;
+  font-size: 0;
+  background: center / contain no-repeat url('/themes/underwater/pin.webp');
+}
+
 /* ——— FANTASY MEDIEVAL — illustrated adventure, wired from the asset kit ———————
    A committed dark-medieval world: the fairway ramp is retinted to parchment
    text on dark-stone surfaces (fixed across light/dark), a stone-&-vines page
@@ -2122,7 +2189,7 @@ button {
 :root[data-template='candy'] { --theme-font: 'Baloo 2', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='blocky'] { --theme-font: 'Luckiest Guy', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='uv'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
-:root[data-template='underwater'] { --theme-font: 'Exo 2', ui-sans-serif, system-ui, sans-serif; }
+:root[data-template='underwater'] { --theme-font: 'Cinzel', Georgia, serif; }
 :root[data-template='fantasy'] { --theme-font: 'Cinzel', Georgia, serif; }
 :root[data-template='cyberpunk'] { --theme-font: 'Orbitron', ui-sans-serif, system-ui, sans-serif; }
 :root[data-template='forest'] { --theme-font: 'Spectral', Georgia, serif; }
@@ -2153,7 +2220,8 @@ button {
    Source Sans 3. */
 :root[data-template='forest'] body,
 :root[data-template='nautical'] body,
-:root[data-template='zen'] body {
+:root[data-template='zen'] body,
+:root[data-template='underwater'] body {
   font-family: 'Source Sans 3', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 /* Space uses Orbitron for the header/title only (its `--theme-font`), with Exo 2
