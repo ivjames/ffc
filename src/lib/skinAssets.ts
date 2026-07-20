@@ -43,9 +43,8 @@ export function courseArt(skin: string, theme: string, mode: Mode): CourseArt {
     return { tile: `/themes/fantasy/tile-${m.scene}.webp`, puck: `/themes/fantasy/crest-${m.crest}.webp` };
   }
   if (skin === 'cyberpunk') {
-    // Dark ships fully-composed neon cards (hi-res sheet); light stays the
-    // breadth background + CSS tile until a light sheet lands.
-    if (mode !== 'dark') return {};
+    // Fully-composed neon cards in both modes: the dark neon "billboards" read
+    // over the night skyline (dark) and pop against the day street (light).
     const n = UNDERWATER[theme]; // same theme→blue/green/dragon/western keys
     return n ? { tile: `/themes/cyberpunk/card-${n}.webp`, card: true } : {};
   }

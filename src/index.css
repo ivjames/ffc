@@ -1527,8 +1527,8 @@ button {
   --t-panel: rgba(22, 10, 44, 0.5); --t-line: #22d3ee; --t-hi: rgba(255, 255, 255, 0.14); --accent: #ff2fd0;
 }
 :root[data-template='cyberpunk'][data-theme='light'] {
-  --t-bg: url('/themes/cyberpunk/bg-light.webp'); --t-floor: #ece9f7; --t-veil: rgba(255, 255, 255, 0.42);
-  --t-panel: rgba(255, 255, 255, 0.5); --t-line: #0891b2; --t-hi: rgba(255, 255, 255, 0.85); --accent: #c026d3;
+  --t-bg: url('/themes/cyberpunk/bg-light.webp'); --t-floor: #e7e2f6; --t-veil: rgba(233, 228, 250, 0.26);
+  --t-panel: rgba(252, 250, 255, 0.62); --t-line: #0891b2; --t-hi: rgba(255, 255, 255, 0.85); --accent: #c026d3;
 }
 :root[data-template='forest'][data-theme='dark'] {
   --t-bg: url('/themes/forest/bg-dark.webp'); --t-floor: #0c1508; --t-veil: rgba(6, 14, 4, 0.5);
@@ -1571,23 +1571,25 @@ button {
   --t-panel: rgba(255, 252, 246, 0.62); --t-line: #c2a888; --t-hi: rgba(255, 255, 255, 0.85); --accent: #c0392b;
 }
 
-/* ——— CYBERPUNK DARK MODE (neon, hi-res sheet) ————————————————————————————————
-   Full-fidelity upgrade over the breadth glass above: a sliced neon frame on the
-   headline panels/menu buttons, fully-composed neon course cards, a gradient
-   wordmark, and glowing menu/pin icons. Light mode keeps the breadth material
-   until a light sheet lands (courseArt returns none for non-dark). */
-:root[data-template='cyberpunk'][data-theme='dark'] .surface,
-:root[data-template='cyberpunk'][data-theme='dark'] .surface-1 {
+/* ——— CYBERPUNK — full-fidelity neon skin (both modes) ————————————————————————
+   The neon assets carry the brand in BOTH modes, per the "home page carries the
+   branding" rule: a sliced neon frame on the headline panels/menu buttons, the
+   fully-composed neon course cards, a gradient wordmark, and glowing menu/pin
+   icons. Dark is neon-on-night; light keeps the same neon art as bright "day
+   billboards" over a day skyline with dark-legible glass + a darker title
+   gradient. Only the wordmark gradient and background veil differ by mode. */
+:root[data-template='cyberpunk'] .surface,
+:root[data-template='cyberpunk'] .surface-1 {
   border: 8px solid transparent;
   border-image: url('/themes/cyberpunk/frame.webp') 22 / 8px / 0 stretch;
 }
 /* Ghost menu buttons (.surface-1) anchor their absolute icon. */
-:root[data-template='cyberpunk'][data-theme='dark'] .surface-1 {
+:root[data-template='cyberpunk'] .surface-1 {
   position: relative;
 }
 /* Composed neon course cards — the image is the whole card, so drop the glass
    fill, border, scrim label and emoji puck the breadth material adds. */
-:root[data-template='cyberpunk'][data-theme='dark'] .tile.card-art {
+:root[data-template='cyberpunk'] .tile.card-art {
   background-image: var(--tile-img);
   background-size: cover;
   background-position: center bottom;
@@ -1600,26 +1602,33 @@ button {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
-:root[data-template='cyberpunk'][data-theme='dark'] .tile.card-art .tile-label,
-:root[data-template='cyberpunk'][data-theme='dark'] .tile.card-art .course-puck {
+:root[data-template='cyberpunk'] .tile.card-art .tile-label,
+:root[data-template='cyberpunk'] .tile.card-art .course-puck {
   display: none;
 }
 /* Hero: neon-gradient wordmark (the emoji glyph is hidden; the <h1> stays for
-   screen readers and is painted as the lockup). */
-:root[data-template='cyberpunk'][data-theme='dark'] .hero-glyph {
+   screen readers and is painted as the lockup). The gradient stops differ by
+   mode so the type reads on night (bright cyan) vs. day (deeper cyan). */
+:root[data-template='cyberpunk'] .hero-glyph {
   display: none;
 }
-:root[data-template='cyberpunk'][data-theme='dark'] .hero-title {
-  background: linear-gradient(92deg, #ff2ed1 0%, #7a00ff 46%, #00f5ff 100%);
+:root[data-template='cyberpunk'] .hero-title {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 10px rgba(0, 245, 255, 0.55))
-    drop-shadow(0 0 18px rgba(255, 46, 209, 0.35));
   letter-spacing: 0.02em;
 }
+:root[data-template='cyberpunk'][data-theme='dark'] .hero-title {
+  background-image: linear-gradient(92deg, #ff2ed1 0%, #7a00ff 46%, #00f5ff 100%);
+  filter: drop-shadow(0 0 10px rgba(0, 245, 255, 0.55))
+    drop-shadow(0 0 18px rgba(255, 46, 209, 0.35));
+}
+:root[data-template='cyberpunk'][data-theme='light'] .hero-title {
+  background-image: linear-gradient(92deg, #db1f8f 0%, #6d28d9 50%, #0e7490 100%);
+  filter: drop-shadow(0 1px 6px rgba(109, 40, 217, 0.28));
+}
 /* Glowing menu icons pinned to each button's left edge. */
-:root[data-template='cyberpunk'][data-theme='dark'] .menu-ico {
+:root[data-template='cyberpunk'] .menu-ico {
   display: block;
   position: absolute;
   left: 12px;
@@ -1630,22 +1639,22 @@ button {
   background: center / contain no-repeat;
   filter: drop-shadow(0 0 5px rgba(0, 245, 255, 0.7));
 }
-:root[data-template='cyberpunk'][data-theme='dark'] .menu-ico[data-ico='hunt'] {
+:root[data-template='cyberpunk'] .menu-ico[data-ico='hunt'] {
   background-image: url('/themes/cyberpunk/menu-hunt.webp');
 }
-:root[data-template='cyberpunk'][data-theme='dark'] .menu-ico[data-ico='wait'] {
+:root[data-template='cyberpunk'] .menu-ico[data-ico='wait'] {
   background-image: url('/themes/cyberpunk/menu-wait.webp');
 }
-:root[data-template='cyberpunk'][data-theme='dark'] .menu-ico[data-ico='rules'] {
+:root[data-template='cyberpunk'] .menu-ico[data-ico='rules'] {
   background-image: url('/themes/cyberpunk/menu-rules.webp');
 }
-:root[data-template='cyberpunk'][data-theme='dark'] .menu-ico[data-ico='leaderboard'] {
+:root[data-template='cyberpunk'] .menu-ico[data-ico='leaderboard'] {
   background-image: url('/themes/cyberpunk/menu-leaderboard.webp');
 }
-:root[data-template='cyberpunk'][data-theme='dark'] .menu-emoji {
+:root[data-template='cyberpunk'] .menu-emoji {
   display: none;
 }
-:root[data-template='cyberpunk'][data-theme='dark'] .loc-pin {
+:root[data-template='cyberpunk'] .loc-pin {
   display: inline-block;
   width: 20px;
   height: 28px;
