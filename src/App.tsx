@@ -28,7 +28,7 @@ import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
-import { SHOW_DEV_CHROME } from './lib/flags';
+import { DEV_MODE } from './lib/flags';
 
 // §7 Routes / screens.
 export default function App() {
@@ -68,11 +68,11 @@ export default function App() {
         <Route path="*" element={<Home />} />
       </Routes>
 
-      {/* Temporary dev chrome — build stamp (bottom-right) and skin picker
-          (bottom-left). Both are gated behind SHOW_DEV_CHROME and will be
-          removed once the app ships; the light/dark and mute switches that used
-          to share these corners now ride in each screen's header. */}
-      {SHOW_DEV_CHROME && (
+      {/* Dev-only chrome — build stamp (bottom-right) and skin picker
+          (bottom-left). Gated behind DEV_MODE alongside the app's other
+          development affordances; the light/dark and mute switches that used to
+          share these corners now ride in each screen's header. */}
+      {DEV_MODE && (
         <>
           {/* Build stamp on every page — fixed, non-interactive so it never
               blocks a tap. Confirms which build the browser actually loaded. */}
