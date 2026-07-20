@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
 import HeaderControls from '../../ui/HeaderControls';
@@ -12,13 +12,17 @@ import {
 } from '../../lib/geolocate';
 import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
-import { tileArt } from '../../lib/skinAssets';
+import { getSkin, subscribeSkin } from '../../lib/skin';
+import { courseArt } from '../../lib/skinAssets';
 import { playClick, playCup } from '../../lib/sound';
 import type { LocalRound } from '../../types';
 
 // §7 Home — start round, view maps/rules, resume an in-progress game.
 export default function Home() {
   const navigate = useNavigate();
+  // Re-read on skin change so image-based skins (underwater, fantasy) swap their
+  // course art; non-image skins fall back to the CSS puck/tile.
+  const skin = useSyncExternalStore(subscribeSkin, getSkin, getSkin);
   const [resume, setResume] = useState<LocalRound | null>(null);
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
@@ -121,10 +125,10 @@ export default function Home() {
         ) : (
           <div className="mb-4 grid grid-cols-2 gap-2">
             {courses.map((c, i) => {
-              // Some skins (e.g. underwater) supply a painted scene per course
-              // as the tile art; the value is set regardless of active skin and
-              // gated in CSS by data-template (see src/lib/skinAssets.ts).
-              const art = tileArt(c.theme);
+              // Image-based skins supply a painted scene (tile) and/or crest
+              // (puck) per course; CSS gates them by data-template. Non-image
+              // skins get neither and fall back to the CSS tile/puck.
+              const art = courseArt(skin, c.theme);
               return (
               <button
                 key={c.id}
@@ -133,13 +137,14 @@ export default function Home() {
                   navigate(`/courses/${c.id}/map`);
                 }}
                 className={`tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-4 text-center${
-                  art ? ' tile-art' : ''
-                }`}
+                  art.tile ? ' tile-art' : ''
+                }${art.puck ? ' puck-art' : ''}`}
                 style={
                   {
                     '--i': i,
                     '--tile-accent': c.accent,
-                    ...(art ? { '--tile-img': `url(${art})` } : {}),
+                    ...(art.tile ? { '--tile-img': `url(${art.tile})` } : {}),
+                    ...(art.puck ? { '--puck-img': `url(${art.puck})` } : {}),
                   } as CSSProperties
                 }
               >

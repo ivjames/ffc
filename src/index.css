@@ -1195,6 +1195,119 @@ button {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
 }
 
+/* ——— FANTASY MEDIEVAL — illustrated adventure, wired from the asset kit ———————
+   A committed dark-medieval world: the fairway ramp is retinted to parchment
+   text on dark-stone surfaces (fixed across light/dark), a stone-&-vines page
+   background, gold-framed panels, and per-course PAINTED tiles + heraldic crest
+   markers (real image assets in public/themes/fantasy/, wired via Home). */
+:root[data-template='fantasy'] {
+  --color-fairway-50: #f4e8cc;
+  --color-fairway-100: #e6d5aa;
+  --color-fairway-200: #d6c088;
+  --color-fairway-300: #b7a06e;
+  --color-fairway-400: #a68f5f;
+  --color-fairway-500: #6d5a37;
+  --color-fairway-600: #4c4029;
+  --color-fairway-700: #3c3220;
+  --color-fairway-800: #2b2418;
+  --color-fairway-900: #211a12;
+  --color-fairway-950: #150f09;
+  --accent: #c8a24a;
+}
+:root[data-template='fantasy'] body {
+  background-color: #120d08;
+  background-image:
+    linear-gradient(rgba(10, 7, 3, 0.62), rgba(10, 7, 3, 0.82)),
+    url('/themes/fantasy/bg-stone.webp');
+  background-size: cover;
+  background-position: center;
+}
+:root[data-template='fantasy'] .surface,
+:root[data-template='fantasy'] .surface-1,
+:root[data-template='fantasy'] .key {
+  background-image: linear-gradient(180deg, #2a2318, #1c160e);
+  border: 1px solid #7c6330;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(226, 196, 120, 0.18),
+    0 6px 16px -8px rgba(0, 0, 0, 0.7);
+}
+:root[data-template='fantasy'] .surface-sunk {
+  background-color: #140f08;
+  border: 1px solid #4a3c1e;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
+}
+:root[data-template='fantasy'] .btn-accent {
+  background-image: linear-gradient(180deg, #3a2f18, #241b0d);
+  border: 1px solid #b78a34;
+  box-shadow:
+    inset 0 1px 0 rgba(240, 210, 130, 0.35),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 6px 14px -6px rgba(0, 0, 0, 0.7);
+  color: #f4e6c2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+:root[data-template='fantasy'] .btn-danger {
+  background-image: linear-gradient(180deg, #5a1f1a, #3a1210);
+  border: 1px solid #b78a34;
+  box-shadow: inset 0 1px 0 rgba(240, 210, 130, 0.3), 0 6px 14px -6px rgba(0, 0, 0, 0.7);
+}
+:root[data-template='fantasy'] .tag-chip {
+  background-image: linear-gradient(180deg, #2a2318, #191309);
+  border: 1px solid #8a6d2f;
+  box-shadow: inset 0 1px 0 rgba(240, 210, 130, 0.25);
+  color: #f4e8cc;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+/* Tile fallback (courses without art) */
+:root[data-template='fantasy'] .tile {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, #2a2318, var(--tile-accent, var(--accent)) 18%),
+    color-mix(in srgb, #1a140c, var(--tile-accent, var(--accent)) 10%)
+  );
+  border: 1px solid #8a6d2f;
+  box-shadow: inset 0 1px 0 rgba(240, 210, 130, 0.2), 0 6px 16px -8px rgba(0, 0, 0, 0.7);
+}
+/* Painted course tile + heraldic crest (real image assets) */
+:root[data-template='fantasy'] .tile.tile-art {
+  background-image:
+    linear-gradient(to top, rgba(10, 7, 3, 0.92) 0%, rgba(10, 7, 3, 0.25) 42%, transparent 66%),
+    var(--tile-img);
+  background-size: cover, cover;
+  background-position: center 40%;
+  border: 2px solid #8a6d2f;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(240, 210, 130, 0.25),
+    0 6px 16px -8px rgba(0, 0, 0, 0.7);
+  min-height: 150px;
+  justify-content: flex-end;
+  padding-bottom: 10px;
+}
+:root[data-template='fantasy'] .tile.tile-art .tile-name {
+  color: #f6ecd2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+:root[data-template='fantasy'] .tile.puck-art .course-puck {
+  background-color: transparent;
+  background-image: var(--puck-img);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  box-shadow: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.7));
+}
+:root[data-template='fantasy'] .tile.puck-art .course-puck > span {
+  display: none;
+}
+:root[data-template='fantasy'] .btn-accent:active,
+:root[data-template='fantasy'] .btn-danger:active,
+:root[data-template='fantasy'] .key:active:not(:disabled),
+:root[data-template='fantasy'] .tile:active {
+  transform: translateY(1px);
+}
+
 /* Keep disabled controls flat and inert under every skin. A skin's material
    rule (e.g. `:root[data-template='blocky'] .key`) outranks the base
    `.key:disabled { box-shadow: none }` reset above, which would otherwise

@@ -15,7 +15,15 @@
 // BEFORE first paint (no flash of the wrong skin); this module reads it back and
 // takes over.
 
-export type Skin = 'unstyled' | 'candy' | 'blocky' | 'uv' | 'glass' | 'chrome' | 'underwater';
+export type Skin =
+  | 'unstyled'
+  | 'candy'
+  | 'blocky'
+  | 'uv'
+  | 'glass'
+  | 'chrome'
+  | 'underwater'
+  | 'fantasy';
 
 /** The selectable skins, in picker order, with a label, one-liner, and a
  *  representative swatch color for the picker dot. */
@@ -27,6 +35,7 @@ export const SKINS: { id: Skin; label: string; blurb: string; dot: string }[] = 
   { id: 'glass', label: 'Glassy', blurb: 'Frosted glass', dot: '#7c9cff' },
   { id: 'chrome', label: 'Chrome', blurb: 'Liquid metal', dot: '#c9d2db' },
   { id: 'underwater', label: 'Underwater', blurb: 'Deep-ocean glass', dot: '#22d3ee' },
+  { id: 'fantasy', label: 'Fantasy Medieval', blurb: 'Illustrated adventure', dot: '#c8a24a' },
 ];
 
 const KEY = 'ffc-skin';
