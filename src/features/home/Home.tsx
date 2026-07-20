@@ -12,6 +12,7 @@ import {
 } from '../../lib/geolocate';
 import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
+import { tileArt } from '../../lib/skinAssets';
 import { playClick, playCup } from '../../lib/sound';
 import type { LocalRound } from '../../types';
 
@@ -119,15 +120,28 @@ export default function Home() {
           </p>
         ) : (
           <div className="mb-4 grid grid-cols-2 gap-2">
-            {courses.map((c, i) => (
+            {courses.map((c, i) => {
+              // Some skins (e.g. underwater) supply a painted scene per course
+              // as the tile art; the value is set regardless of active skin and
+              // gated in CSS by data-template (see src/lib/skinAssets.ts).
+              const art = tileArt(c.theme);
+              return (
               <button
                 key={c.id}
                 onClick={() => {
                   playClick();
                   navigate(`/courses/${c.id}/map`);
                 }}
-                className="tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-4 text-center"
-                style={{ '--i': i, '--tile-accent': c.accent } as CSSProperties}
+                className={`tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-4 text-center${
+                  art ? ' tile-art' : ''
+                }`}
+                style={
+                  {
+                    '--i': i,
+                    '--tile-accent': c.accent,
+                    ...(art ? { '--tile-img': `url(${art})` } : {}),
+                  } as CSSProperties
+                }
               >
                 {/* Domed emoji puck — a radial highlight + inner shade make the
                     disc read as a glossy 3D button cap in the course color. */}
@@ -141,7 +155,8 @@ export default function Home() {
                 </span>
                 <span className="text-sm font-black leading-tight text-fairway-50">{c.name}</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         )}
 

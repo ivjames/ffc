@@ -1167,6 +1167,33 @@ button {
   transform: translateY(1px);
   box-shadow: 0 0 12px -6px var(--uw-glow), inset 0 1px 0 var(--uw-hi);
 }
+/* Painted course scenes (real image assets) replace the CSS tint where a skin
+   ships tile art (`--tile-img` + `.tile-art`, set in Home). The scene already
+   contains the ball, so the CSS puck is hidden; a bottom scrim keeps the label
+   legible over the dark artwork in both modes. */
+:root[data-template='underwater'] .tile.tile-art {
+  background-image:
+    linear-gradient(to top, rgba(2, 12, 22, 0.9) 0%, rgba(2, 12, 22, 0.28) 30%, rgba(2, 12, 22, 0) 55%),
+    var(--tile-img);
+  background-size: cover, cover;
+  background-position: center 45%;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  min-height: 142px;
+  justify-content: flex-end;
+  padding-bottom: 12px;
+  border: 1px solid var(--uw-rim);
+  box-shadow:
+    0 0 22px -10px color-mix(in srgb, var(--tile-accent, var(--accent)), transparent 45%),
+    inset 0 1px 0 var(--uw-hi);
+}
+:root[data-template='underwater'] .tile.tile-art .course-puck {
+  display: none;
+}
+:root[data-template='underwater'] .tile.tile-art .tile-name {
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+}
 
 /* Keep disabled controls flat and inert under every skin. A skin's material
    rule (e.g. `:root[data-template='blocky'] .key`) outranks the base
