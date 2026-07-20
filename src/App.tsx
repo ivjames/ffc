@@ -24,6 +24,7 @@ import BattingCages from './features/fun/BattingCages';
 import Bowling from './features/fun/Bowling';
 import GoKarts from './features/fun/GoKarts';
 import Install from './features/install/Install';
+import StyleGuide from './features/style/StyleGuide';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
 import SoundToggle from './ui/SoundToggle';
@@ -66,6 +67,8 @@ export default function App() {
         <Route path="/fun/karts" element={<GoKarts />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
+        {/* Living component inventory / style guide — the theming reference. */}
+        <Route path="/style" element={<StyleGuide />} />
         <Route path="*" element={<Home />} />
       </Routes>
 
