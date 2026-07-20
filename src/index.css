@@ -1308,6 +1308,71 @@ button {
   transform: translateY(1px);
 }
 
+/* Themed Home art hooks — off by default so non-image skins are unaffected;
+   image skins switch them on. (Home renders the .hero-art / .menu-ico / .loc-pin
+   elements unconditionally.) */
+.hero-art {
+  display: none;
+}
+.menu-ico {
+  display: none;
+}
+/* Fantasy: the real title lockup replaces the emoji+text hero (the <h1> stays
+   for screen readers), framed menu icons pin to each button's left edge, and the
+   location pin becomes the gold marker. */
+:root[data-template='fantasy'] .hero-glyph {
+  display: none;
+}
+:root[data-template='fantasy'] .hero-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+:root[data-template='fantasy'] .hero-art {
+  display: block;
+  width: 100%;
+  height: 128px;
+  background: center / contain no-repeat url('/themes/fantasy/title.webp');
+}
+:root[data-template='fantasy'] .surface-1 {
+  position: relative;
+}
+:root[data-template='fantasy'] .menu-ico {
+  display: block;
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  background: center / contain no-repeat;
+}
+:root[data-template='fantasy'] .menu-ico[data-ico='hunt'] {
+  background-image: url('/themes/fantasy/menu-hunt.webp');
+}
+:root[data-template='fantasy'] .menu-ico[data-ico='wait'] {
+  background-image: url('/themes/fantasy/menu-wait.webp');
+}
+:root[data-template='fantasy'] .menu-ico[data-ico='rules'] {
+  background-image: url('/themes/fantasy/menu-rules.webp');
+}
+:root[data-template='fantasy'] .menu-ico[data-ico='leaderboard'] {
+  background-image: url('/themes/fantasy/menu-leaderboard.webp');
+}
+:root[data-template='fantasy'] .menu-emoji {
+  display: none;
+}
+:root[data-template='fantasy'] .loc-pin {
+  display: inline-block;
+  width: 20px;
+  height: 28px;
+  font-size: 0;
+  background: center / contain no-repeat url('/themes/fantasy/pin.webp');
+}
+
 /* Keep disabled controls flat and inert under every skin. A skin's material
    rule (e.g. `:root[data-template='blocky'] .key`) outranks the base
    `.key:disabled { box-shadow: none }` reset above, which would otherwise

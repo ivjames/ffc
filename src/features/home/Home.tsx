@@ -63,8 +63,14 @@ export default function Home() {
           <HeaderControls />
         </div>
         <div className="mb-4 text-center">
-          <div className="animate-wiggle inline-block text-5xl leading-none drop-shadow">⛳️</div>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-fairway-50">Mini Golf</h1>
+          {/* Themed title lockup (image skins swap in real art; hidden otherwise). */}
+          <div className="hero-art" aria-hidden="true" />
+          <div className="hero-glyph animate-wiggle inline-block text-5xl leading-none drop-shadow">
+            ⛳️
+          </div>
+          <h1 className="hero-title mt-2 text-3xl font-black tracking-tight text-fairway-50">
+            Mini Golf
+          </h1>
           <p className="mt-0.5 text-sm text-fairway-100/70">
             {courseCount} {courseCount === 1 ? 'course' : 'courses'} · eighteen holes each
           </p>
@@ -78,7 +84,9 @@ export default function Home() {
             className="surface-1 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-2.5 text-left transition-transform active:translate-y-px"
           >
             <span className="flex items-center gap-2">
-              <span className="text-lg">📍</span>
+              <span className="loc-pin text-lg" aria-hidden="true">
+                📍
+              </span>
               <span className="min-w-0">
                 <span className="block text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
                   Location
@@ -167,15 +175,19 @@ export default function Home() {
 
         <div className="space-y-2">
           <Button variant="ghost" onClick={() => navigate('/hunt')}>
+            <span className="menu-ico" data-ico="hunt" aria-hidden="true" />
             Scavenger hunt
           </Button>
           <Button variant="ghost" onClick={() => navigate('/fun')}>
-            🎡 While You Wait
+            <span className="menu-ico" data-ico="wait" aria-hidden="true" />
+            <span className="menu-emoji">🎡 </span>While You Wait
           </Button>
           <Button variant="ghost" onClick={() => navigate('/rules')}>
+            <span className="menu-ico" data-ico="rules" aria-hidden="true" />
             Rules
           </Button>
           <Button variant="ghost" onClick={() => navigate('/tv')}>
+            <span className="menu-ico" data-ico="leaderboard" aria-hidden="true" />
             See the leaderboard
           </Button>
           {/* Only worth showing when we're running in a browser tab, not the
