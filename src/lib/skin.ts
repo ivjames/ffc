@@ -15,7 +15,21 @@
 // BEFORE first paint (no flash of the wrong skin); this module reads it back and
 // takes over.
 
-export type Skin = 'unstyled' | 'candy' | 'blocky' | 'uv' | 'glass' | 'chrome';
+export type Skin =
+  | 'unstyled'
+  | 'candy'
+  | 'blocky'
+  | 'uv'
+  | 'glass'
+  | 'chrome'
+  | 'underwater'
+  | 'fantasy'
+  | 'cyberpunk'
+  | 'forest'
+  | 'steampunk'
+  | 'nautical'
+  | 'space'
+  | 'zen';
 
 /** The selectable skins, in picker order, with a label, one-liner, and a
  *  representative swatch color for the picker dot. */
@@ -26,6 +40,14 @@ export const SKINS: { id: Skin; label: string; blurb: string; dot: string }[] = 
   { id: 'uv', label: 'UV Party', blurb: 'Blacklight neon', dot: '#16f2e3' },
   { id: 'glass', label: 'Glassy', blurb: 'Frosted glass', dot: '#7c9cff' },
   { id: 'chrome', label: 'Chrome', blurb: 'Liquid metal', dot: '#c9d2db' },
+  { id: 'underwater', label: 'Underwater', blurb: 'Deep-ocean glass', dot: '#22d3ee' },
+  { id: 'fantasy', label: 'Fantasy Medieval', blurb: 'Illustrated adventure', dot: '#c8a24a' },
+  { id: 'cyberpunk', label: 'Cyberpunk Neon', blurb: 'Rain-slick neon city', dot: '#ff2fd0' },
+  { id: 'forest', label: 'Enchanted Forest', blurb: 'Glowing woodland', dot: '#86efac' },
+  { id: 'steampunk', label: 'Steampunk Victorian', blurb: 'Brass & clockwork', dot: '#c8912f' },
+  { id: 'nautical', label: 'Nautical / Pirate', blurb: 'Moonlit harbor', dot: '#3fa7c4' },
+  { id: 'space', label: 'Space / Galactic', blurb: 'Crystal cosmos', dot: '#a855f7' },
+  { id: 'zen', label: 'Zen Garden', blurb: 'Cherry-blossom calm', dot: '#d98a8a' },
 ];
 
 const KEY = 'ffc-skin';
