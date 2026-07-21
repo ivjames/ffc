@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { getToken, setToken, clearToken } from './api';
-import { Button, Card, Field, Input } from './ui';
+import { Button, Card, Field, Input, ADMIN_TZ_LABEL } from './ui';
 import Overview from './Overview';
 import Orgs from './Orgs';
 import OrgDetail from './OrgDetail';
@@ -74,6 +74,7 @@ function Shell({ onLock }: { onLock: () => void }) {
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6">
+        <div className="mb-4 text-right text-xs text-slate-400">Times shown in {ADMIN_TZ_LABEL}</div>
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/orgs" element={<Orgs />} />

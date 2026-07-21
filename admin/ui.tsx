@@ -3,6 +3,26 @@
 import type { ReactNode, ButtonHTMLAttributes, InputHTMLAttributes } from 'react';
 import { useEffect, useState, useCallback } from 'react';
 
+// Master Control operates in a single HQ/operator timezone (Pacific), distinct
+// from each venue's own tz (which drives that venue's leaderboard). Every
+// timestamp the console shows is formatted in ADMIN_TZ so the operator reads one
+// consistent clock regardless of which venue's data they're looking at.
+export const ADMIN_TZ = 'America/Los_Angeles';
+export const ADMIN_TZ_LABEL = 'Pacific Time (PT)';
+
+const dateTimeFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: ADMIN_TZ,
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+/** Format an ISO timestamp in the admin's Pacific timezone (empty string if null). */
+export function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : dateTimeFmt.format(d);
+}
+
 export function Button({
   variant = 'primary',
   className = '',

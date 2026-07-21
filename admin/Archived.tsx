@@ -1,5 +1,5 @@
 import { api } from './api';
-import { Button, Card, Banner, Spinner, useAsync } from './ui';
+import { Button, Card, Banner, Spinner, useAsync, fmtDateTime, ADMIN_TZ_LABEL } from './ui';
 
 export default function Archived() {
   const orgs = useAsync(() => api.listOrgs(true), []);
@@ -13,7 +13,7 @@ export default function Archived() {
       <h1 className="text-lg font-semibold">Archived</h1>
       <p className="text-sm text-slate-500">
         Archived items are hidden from players and the main lists, but nothing is deleted — history stays intact.
-        Unarchive to restore.
+        Unarchive to restore. Times shown in {ADMIN_TZ_LABEL}.
       </p>
 
       <section className="space-y-2">
@@ -25,6 +25,9 @@ export default function Archived() {
           <Card key={o.id} className="flex items-center gap-3">
             <span className="flex-1 font-medium">
               {o.name} <span className="text-xs text-slate-400">/{o.slug}</span>
+              {o.archivedAt && (
+                <span className="ml-2 text-xs font-normal text-slate-400">archived {fmtDateTime(o.archivedAt)}</span>
+              )}
             </span>
             <Button
               variant="ghost"
@@ -48,6 +51,9 @@ export default function Archived() {
           <Card key={l.id} className="flex items-center gap-3">
             <span className="flex-1 font-medium">
               {l.name} <span className="text-xs text-slate-400">/{l.slug}</span>
+              {l.archivedAt && (
+                <span className="ml-2 text-xs font-normal text-slate-400">archived {fmtDateTime(l.archivedAt)}</span>
+              )}
             </span>
             <Button
               variant="ghost"
