@@ -277,10 +277,9 @@ export default function Scorecard() {
       )}
 
       <Content>
-        {/* Hole header — centered hole label with the par medallion beneath it,
-            per the §6 wireframe. */}
-        <div className="mb-5 flex flex-col items-center gap-3">
-          <div className="text-center">
+        {/* Hole header — hole label on the left, par medallion on the right. */}
+        <div className="mb-4 flex items-center justify-between">
+          <div>
             {holeName ? (
               <>
                 <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">

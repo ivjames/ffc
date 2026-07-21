@@ -131,9 +131,8 @@ screen(id="play", name="Scorecard (play screen)", route="/play/:clientId", tint=
  body="".join([
    (lambda cluster: f'<div class="wf-top">{icon("‹")}<span class="wf-ttl">Course</span><span class="wf-sp"></span>{cluster}{CTRL()}</div>')(
        group(icon()+icon()+'<span class="wf-mini">Holes</span>', 1)),
-   txt("HOLE n · hole name","center"),
+   row(txt("HOLE n · hole name","inline"), box("par","med",n=3), cls="hud"),
    box("hole-jump grid — 6-col keys","wide small","toggled",n=2),
-   f'<div class="wf-centered">{box("par","med",n=3)}</div>',
    row(box("tag","tagb",n=4), box("−","key"), box("score well","well",n=5), box("+","key",n=6), cls="prow"),
    row(box("tag","tagb"), box("−","key"), box("score well","well"), box("+","key"), cls="prow"),
    row(box("tag","tagb"), box("−","key"), box("score well","well"), box("+","key"), cls="prow"),
@@ -373,6 +372,7 @@ tr{break-inside:avoid}
 .wf-row.ftiles{display:grid;grid-template-columns:1fr 1fr;gap:5px} .wf-row.ftiles .wf-box{margin:0;min-height:38px}
 .wf-box.seg{margin:0} .wf-box.seg.on{background:var(--fill2);border-color:var(--wire);font-weight:800}
 .wf-box.med{width:40px;height:40px;border-radius:999px;margin:2px auto 6px;justify-content:center;min-height:0}
+.wf-row.hud .wf-box.med{margin:0}
 .wf-box.tagb{font-family:"SF Mono",monospace;letter-spacing:.1em;font-weight:800}
 .wf-box.tagb.sel{border-color:var(--wire);border-width:2px} .wf-box.tagb.dim{opacity:.5}
 .wf-box.inp{font-family:"SF Mono",monospace;letter-spacing:.15em}
