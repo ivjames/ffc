@@ -655,7 +655,11 @@ export default function PuttGolf() {
   const result = phase === 'sunk' && hole ? holeResult(strokes, hole.par) : null;
 
   // Fill the play area: size the canvas to fit its stage (see useFitCanvas).
-  useFitCanvas(canvasRef, W, H, phase !== 'done');
+  // Gate on `mode` too: the play view (and its canvas) only mounts once a mode
+  // is picked, and `phase` is already 'aim' during the mode picker — so without
+  // `mode` the effect would run canvas-less and never re-run when the canvas
+  // actually mounts, leaving the first round's canvas unfitted.
+  useFitCanvas(canvasRef, W, H, mode !== null && phase !== 'done');
 
   const hint =
     phase === 'aim'
