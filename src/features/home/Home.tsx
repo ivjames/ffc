@@ -178,10 +178,6 @@ export default function Home() {
         )}
 
         <div className="space-y-2">
-          <Button variant="ghost" onClick={() => navigate('/hunt')}>
-            <span className="menu-ico" data-ico="hunt" aria-hidden="true" />
-            Scavenger hunt
-          </Button>
           <Button variant="ghost" onClick={() => navigate('/fun')}>
             <span className="menu-ico" data-ico="wait" aria-hidden="true" />
             <span className="menu-emoji">🎡 </span>While You Wait
