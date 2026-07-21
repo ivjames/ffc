@@ -196,24 +196,31 @@ function project(
   let bestX = x;
   let bestY = y;
   let bestI = seg;
-  for (let d = -WIN; d <= WIN; d++) {
-    const i = (((seg + d) % N) + N) % N;
-    const p = track.pts[i];
-    const q = track.pts[(i + 1) % N];
-    const dx = q.x - p.x;
-    const dy = q.y - p.y;
-    const segLen2 = dx * dx + dy * dy || 1;
-    let u = ((x - p.x) * dx + (y - p.y) * dy) / segLen2;
-    u = u < 0 ? 0 : u > 1 ? 1 : u;
-    const px = p.x + u * dx;
-    const py = p.y + u * dy;
-    const dd = Math.hypot(x - px, y - py);
-    if (dd < best) {
-      best = dd;
-      bestS = track.cum[i] + u * Math.hypot(dx, dy);
-      bestX = px;
-      bestY = py;
-      bestI = i;
+  // Search outward from d = 0 (the kart's own segment) rather than left-to-right,
+  // so an exact tie — e.g. the kart parked precisely on the shared start/finish
+  // vertex, equidistant from the last and first segments — resolves to the
+  // current segment instead of silently snapping to the one before it (which
+  // reads as sitting just past the finish line and corrupts lap detection).
+  for (let ad = 0; ad <= WIN; ad++) {
+    for (const d of ad === 0 ? [0] : [-ad, ad]) {
+      const i = (((seg + d) % N) + N) % N;
+      const p = track.pts[i];
+      const q = track.pts[(i + 1) % N];
+      const dx = q.x - p.x;
+      const dy = q.y - p.y;
+      const segLen2 = dx * dx + dy * dy || 1;
+      let u = ((x - p.x) * dx + (y - p.y) * dy) / segLen2;
+      u = u < 0 ? 0 : u > 1 ? 1 : u;
+      const px = p.x + u * dx;
+      const py = p.y + u * dy;
+      const dd = Math.hypot(x - px, y - py);
+      if (dd < best) {
+        best = dd;
+        bestS = track.cum[i] + u * Math.hypot(dx, dy);
+        bestX = px;
+        bestY = py;
+        bestI = i;
+      }
     }
   }
   return { dist: best, f: bestS / track.total, px: bestX, py: bestY, seg: bestI };
