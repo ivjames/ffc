@@ -21,8 +21,9 @@ def img(label, n=None, fill=False):
     return f'<div class="wf-img{" fill" if fill else ""}">{cn(n)}<span>{label}</span></div>'
 def icon(label="", n=None):
     return f'<div class="wf-icon">{cn(n)}{label}</div>'
-def txt(label, cls=""):   return f'<div class="wf-txt {cls}">{label}</div>'
-def row(*items, cls=""):  return f'<div class="wf-row {cls}">'+"".join(items)+'</div>'
+def txt(label, cls="", n=None):   return f'<div class="wf-txt {cls}">{cn(n)}{label}</div>'
+def row(*items, cls="", n=None):  return f'<div class="wf-row {cls}">'+cn(n)+"".join(items)+'</div>'
+def repeat(label):        return f'<div class="wf-box wide repeat"><span>{label}</span></div>'
 def group(inner, n, cls=""):  # a labelled cluster carrying one badge
     return f'<div class="wf-group {cls}">{cn(n)}{inner}</div>'
 
@@ -58,7 +59,7 @@ screen(id="loc", name="Location Picker", route="/locations",
  body="".join([
    topbar("Choose a location", right=CTRL()),
    btn("Use my location (GPS)","wbtn",n=1),
-   txt("status message (detecting / error)","muted"),
+   txt("status message (detecting / error)","muted",n=2),
    row(box("marker","chip",n=3), box("venue name · course count","grow"), box("Current / ›","trail",n=4), cls="lrow sel"),
    row(box("marker","chip"), box("venue name · course count","grow"), box("›","trail"), cls="lrow"),
    row(box("marker","chip"), box("venue name · course count","grow"), box("›","trail"), cls="lrow"),
@@ -77,7 +78,7 @@ screen(id="pick", name="Course Picker", route="/new",
  body="".join([
    topbar("Pick a course", right=CTRL()),
    box("Location switcher — pin · venue · Change","wide",n=1),
-   row(box("mkr","chip",n=2), box("name · “holes · par”","grow"), box("›","trail",n=4), cls="lrow"),
+   row(box("mkr","chip",n=2), box("course row — name · “holes · par”","grow",n=3), box("›","trail",n=4), cls="lrow"),
    row(box("mkr","chip"), box("name · “holes · par”","grow"), box("›","trail"), cls="lrow"),
    row(box("mkr","chip"), box("name · “holes · par”","grow"), box("›","trail"), cls="lrow"),
    row(box("mkr","chip"), box("name · “holes · par”","grow"), box("›","trail"), cls="lrow"),
@@ -100,11 +101,12 @@ screen(id="setup", name="Player Setup", route="/new/setup",
    row(icon("1"), box("tag input","inp grow",n=2), cls="tagrow"),
    row(icon("2"), box("tag input — error","inp grow err",n=3), cls="tagrow"),
    txt("inline error message","muted"),
+   repeat("＋ up to 2 more tag inputs — one per player (1–4)"),
    btn("Start round","primary",n=4),
- ]),
+ ]), scales=True,
  specs=[
   (1,"Player-count selector","1–4 buttons","4-col grid; each ≥44px tall","selected vs unselected","—","selected/unselected states"),
-  (2,"Tag input","Arcade text field, one per player","full-width row, ~44 tall","empty (placeholder) / filled / invalid","an arcade/mono type role","field surface; the arcade type face"),
+  (2,"Tag input","Arcade text field — one row per player (1–4)","full-width row, ~44 tall","empty (placeholder) / filled / invalid; row count = selected players","an arcade/mono type role","field surface; the arcade type face"),
   (3,"Invalid-tag state","On a bad tag","—","red border + inline error","(error emphasis)","error treatment"),
   (4,"Start round","Primary CTA → play","full-width, ~52 tall, radius 16","disabled until roster valid; busy label while starting","--accent","the primary button surface"),
  ]),
@@ -131,6 +133,7 @@ screen(id="play", name="Scorecard (play screen)", route="/play/:clientId", tint=
    f'<div class="wf-centered">{box("par","med",n=3)}</div>',
    row(box("tag","tagb",n=4), box("−","key"), box("score well","well",n=5), box("+","key",n=6), cls="prow"),
    row(box("tag","tagb"), box("−","key"), box("score well","well"), box("+","key"), cls="prow"),
+   repeat("＋ up to 2 more player rows — one per player (1–4)"),
    row(btn("‹ Prev","ghost sm"), btn("Next › / Finish","ghost sm",n=7), cls="nav"),
    txt("stroke-cap footer","muted"),
  ]),
@@ -151,13 +154,14 @@ screen(id="sum", name="Summary (final scorecard)", route="/play/:clientId/summar
    topbar("Final scorecard", right=CTRL()),
    box("Winner hero — trophy · “Winner” · winner tag · total / over-under","wide tall","card",n=1),
    box("Standings row — rank · tag · total","wide","row",n=2),
-   box("Nine-grid table — Front/Back · par row · per-player score cells","wide","tbl",n=3),
-   txt("sync status line","muted"),
+   repeat("＋ up to 2 more standings rows — one per non-winner (up to 4 players)"),
+   box("Nine-grid table — Front/Back · par row · one score row per player","wide","tbl",n=3),
+   txt("sync status line","muted",n=4),
    row(btn("View leaderboard","ghost sm"), btn("Done","primary sm",n=5), cls="nav"),
  ]),
  specs=[
   (1,"Winner hero","Celebration card","full-width card, radius 24; trophy ~48px","celebratory entrance; a “tied” variant","--glow accent; winner tag in course ink","a trophy/celebration mark + the hero surface"),
-  (2,"Standings row","One per non-winner","full-width, radius 16","staggered entrance","rank + arcade tag in course ink","the row surface"),
+  (2,"Standings row","One per non-winner (up to 4 players total)","full-width, radius 16","staggered entrance","rank + arcade tag in course ink","the row surface"),
   (3,"Nine-grid table","Hole-by-hole scores, Front & Back","full-width table","cells signal under / over / at par; empty cell","--score-under / --score-over","the table surface + the score-signal colors"),
   (4,"Sync note","Leaderboard save status","text","synced / failed / saving / offline","(failure emphasis)","a confirmation tick"),
   (5,"Action buttons","View leaderboard (secondary) · Done (primary)","full-width","—","--accent","ghost + primary surfaces"),
@@ -168,7 +172,7 @@ screen(id="rules", name="Rules", route="/rules",
  purpose="Static, offline general rules + optional per-course notes. Read-only.",
  body="".join([
    topbar("Rules", right=CTRL()),
-   txt("heading: GENERAL","eyebrow"),
+   txt("heading: GENERAL","eyebrow",n=1),
    row(icon("1"), box("rule text","line",n=2), cls="rule"),
    row(icon("2"), box("rule text","line"), cls="rule"),
    row(icon("3"), box("rule text","line"), cls="rule"),
@@ -203,7 +207,7 @@ screen(id="tv", name="TV Leaderboard", route="/tv",
  body="".join([
    topbar("Leaderboard", right=CTRL()),
    row(box("Day","seg on",n=1),box("Week","seg"),box("Month","seg"),box("All","seg"),cls="segs"),
-   row(box("rank","chip",n=2), box("tag · course","grow"), box("You","trail",n=3), box("total","tot"), cls="lb hl"),
+   row(box("rank","chip",n=2), box("standings row — tag · course","grow",n=4), box("You","trail",n=3), box("total","tot"), cls="lb hl"),
    row(box("rank","chip"), box("tag · course","grow"), box("total","tot"), cls="lb"),
    row(box("rank","chip"), box("tag · course","grow"), box("total","tot"), cls="lb"),
  ]),
@@ -219,13 +223,13 @@ screen(id="hunt", name="Scavenger Hunt", route="/hunt",
  purpose="Snap-a-photo hunt; a vision model verifies each find. Reached from the in-round bar (not Home). Gated on an active round.",
  body="".join([
    topbar("Scavenger hunt", right=CTRL()),
-   row(txt("Playing as","inline"), box("tag","tagb sel",n=1), box("tag","tagb dim"), cls="playas"),
+   row(txt("Playing as","inline"), box("tag","tagb sel",n=1), box("tag","tagb dim"), box("＋ 1–4","tagb repeat"), cls="playas"),
    row(box("item — title · hint · count/✓","item",n=2), btn("Snap","snap",n=3), cls="itemrow"),
    row(box("item","item",n=5), btn("Snap","snap"), cls="itemrow"),
    box("result banner (verified / flagged / rejected)","wide small",n=4),
  ]),
  specs=[
-  (1,"“Playing as” selector","Player chips","radius 8 pills","selected (ring) vs dimmed","--tag-accent","tag surface + selected-state treatment"),
+  (1,"“Playing as” selector","Player chips — one per player (1–4)","radius 8 pills","selected (ring) vs dimmed","--tag-accent","tag surface + selected-state treatment"),
   (2,"Item hint / count / check","On each item","small","hint show/hide toggle; ×N count or a found check","—","hint, count, and check icons"),
   (3,"Snap button","Photo capture (opens the camera)","compact button","label cycles Snap / Snap another / Checking / Found (locked)","—","a camera icon + button surface"),
   (4,"Result banner","Verify outcome","full-width, radius 12","verified / flagged (photo-of-screen) / rejected; plus a load-error box","(flag/error emphasis)","banner treatments"),
@@ -237,7 +241,7 @@ screen(id="putt", name="Arcade Putt", route="/putt", fill=True,
  purpose="Playable canvas mini-golf — the playfield fills the screen between the HUD and buttons. Offline.",
  body="".join([
    topbar("Arcade Putt", right=CTRL()),
-   row(txt("Hole n / 9","inline"), txt("Par · Strokes","inline r"), cls="hud"),
+   row(txt("Hole n / 9","inline"), txt("Par · Strokes","inline r"), cls="hud", n=1),
    img("Canvas playfield — FILLS the screen between HUD and buttons. Drag-to-aim slingshot; aim/power markers, ball, cup+flag, bumpers, greens, hazards, splash.", n=2, fill=True),
    txt("hint line","center muted"),
    row(btn("Next hole →","primary sm"), btn("Reset / End run","ghost sm",n=3), cls="nav"),
@@ -253,7 +257,9 @@ screen(id="fun", name="Fun Zone hub", route="/fun",
  purpose="Grid landing routing to every mini-game. Each tile = an icon + title (11 games).",
  body="".join([
    topbar("While You Wait", right=CTRL()),
-   row(*[box("game tile — icon · title","ftile",n=(1 if i==0 else None)) for i in range(6)], cls="ftiles"),
+   row(
+     f'<div class="wf-box ftile">{cn(1)}{icon(n=2)}<span>game tile — icon · title</span></div>',
+     *[box("game tile — icon · title","ftile") for _ in range(5)], cls="ftiles"),
  ]),
  specs=[
   (1,"Activity tile","One per game → its route (11 games)","2-col, radius 16","entrance stagger; press feedback","accent-tinted per tile","the tile surface"),
@@ -267,7 +273,7 @@ screen(id="game", name="Minigame shell (covers the 8 canvas games)",
  purpose="Shared shell for every canvas game — the playfield fills the screen between the HUD and any footer.",
  body="".join([
    topbar("Game name", right=CTRL()),
-   row(txt("count (ball / frame / pitch)","inline"), txt("score / timer","inline r"), cls="hud"),
+   row(txt("count (ball / frame / pitch)","inline"), txt("score / timer","inline r"), cls="hud", n=1),
    img("Canvas playfield — FILLS the screen between HUD and footer. Per-game sprites & interaction; game-over overlay draws over it.", n=2, fill=True),
    txt("hint line","center muted"),
  ]),
@@ -275,6 +281,10 @@ screen(id="game", name="Minigame shell (covers the 8 canvas games)",
   (1,"HUD counter row","Per-game counters / score / timer","text row","labels vary by game; a timer can signal time pressure","—","—"),
   (2,"Canvas playfield","The game itself","fills the screen barring HUD + footer (≈448px wide × remaining height)","aim / play / result; impact + shake feedback; a celebratory game-over overlay","--accent on the overlay's Play-again","per-game background + sprites (ball, puck, kart, target, pins, axe, bumper) as sprite sheets / SVGs; a result mark per game"),
  ]),
+
+# screens whose layout grows by one row/chip per player (1–4)
+for _s in SCREENS:
+    if _s["id"] in ("setup","play","sum","hunt"): _s["scales"] = True
 
 # ---------------------------------------------------------------- CSS
 CSS = r"""
@@ -336,6 +346,8 @@ tr{break-inside:avoid}
 .wf-box.tall{min-height:48px} .wf-box.xtall{min-height:120px}
 .wf-box.card{align-items:flex-start} .wf-box.tbl{min-height:52px}
 .wf-box.small{min-height:0;padding:5px 9px;font-style:italic;color:var(--muted)}
+.wf-box.repeat{min-height:0;padding:6px 9px;border-style:dashed;background:#fbfcfd;color:var(--muted);font-style:italic}
+.wf-box.tagb.repeat{border-style:dashed;opacity:1;font-style:italic}
 .wf-box.sel,.wf-box.hl{border-style:solid;border-color:var(--wire);background:var(--fill2)}
 .wf-box.err{border-color:#c98}
 .wf-row{display:flex;gap:6px;margin:6px 9px;align-items:center}
@@ -367,7 +379,8 @@ tr{break-inside:avoid}
 .wf-btn.snap{margin:0;padding:0 10px;font-size:8.5px;flex:0 0 auto}
 .wf-img{position:relative;border:1px solid var(--wireln);border-radius:11px;margin:8px 9px;min-height:150px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;font-size:9px;color:var(--muted);font-weight:700;background:repeating-linear-gradient(135deg,#fbfcfd,#fbfcfd 9px,var(--hatch) 9px,var(--hatch) 10px)}
 .wf-img.fill{flex:1 1 auto;min-height:0}
-.wf-txt{margin:5px 9px;font-size:9px;color:#48525d}
+.wf-txt{position:relative;margin:5px 9px;font-size:9px;color:#48525d}
+.wf-row{position:relative}
 .wf-txt.muted{color:var(--muted);font-style:italic} .wf-txt.center{text-align:center}
 .wf-txt.eyebrow{font-weight:800;font-size:8px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .wf-txt.inline{margin:0;font-weight:700} .wf-txt.inline.r{color:var(--muted)}
@@ -384,7 +397,7 @@ def render_screen(sc, idx):
  <h2><span>{idx}. {sc['name']}</span><span class="rt">{sc['route']}</span>{tb}</h2>
  <p class="purpose">{sc['purpose']}</p>
  <div class="layout">
-   <div class="framewrap">{frame}<div class="viewcap">wireframe · schematic</div></div>
+   <div class="framewrap">{frame}<div class="viewcap">wireframe · schematic{" · +1 row/chip per player (1–4)" if sc.get("scales") else ""}</div></div>
    <div class="specwrap">
      <table><tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size (current)</th><th>Interaction / states</th><th>Theming hooks</th><th>Art / assets needed</th></tr>
      {rows}</table>
@@ -408,6 +421,7 @@ cover = """<div class="page cover">
    <li>That number maps to the <b>spec table</b>: role, current <b>size</b>, interaction/states, the <b>theming hooks</b> it keys to (accent / course-color variables), and the <b>art it needs</b>.</li>
    <li><b>Light &amp; dark:</b> the app has no fixed default — it follows the device setting. Design every element for <b>both</b>, clearing contrast on each (≥4.5:1 text / ≥3:1 large &amp; UI).</li>
    <li><b>Full-bleed screens:</b> the Course Map and every game playfield <b>fill the screen</b> below the bar (barring the HUD/buttons) — design them edge-to-edge.</li>
+   <li><b>Player-scaled screens</b> (Player Setup, Scorecard, Summary, Scavenger Hunt) add <b>one row/chip per player, up to 4</b> — shown by a dashed “repeat” placeholder.</li>
    <li>Deeper token / motion / skin reference lives in <code>docs/art-spec.md</code>; the live element inventory is the <code>/style</code> route.</li>
   </ol>
  </div>
