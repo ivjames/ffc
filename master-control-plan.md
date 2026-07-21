@@ -41,7 +41,7 @@ Org (owner / franchise)          ← NEW
 | Auth (v1) | **Super-admin behind `APP_TOKEN`** ✅ decided; schema still pre-wired for accounts later | No RBAC/logins in v1 (no franchisee self-serve to support) |
 | Delete semantics | **Archive / hide (soft), never hard-delete played data** ✅ decided | Archived rows hidden from players + default admin lists; unarchive available |
 | Course art | **Deferred — map art/themes stay bundled assets** ✅ decided | Console edits data fields only; no upload/media pipeline in v1 |
-| Content source of truth | **OPEN — see §5 / §10** (recommended default: locations live via API, courses bundled) | Franchisee-self-serve is off the table, so the decision is purely: does operator onboarding go live to players, or need a build? |
+| Content pipeline | **DB is source of truth; player app stays bundled; a rebuild publishes** ✅ decided | No live API content fetch in v1. Build-time export from DB → generated data module avoids double data-entry (§5) |
 | v1 admin scope | **Orgs + Locations + Courses management**, plus a light read-only rollup | Hunt-list editing & rich dashboards are Phase 2 |
 | Delivery | **Separate admin build served on its own vhost (`admin.ffc.lab980.com`)** — not part of the player PWA | No service worker, no offline, no admin code in the player bundle |
 | Admin TLS | **Wildcard `*.ffc.lab980.com` cert via certbot DNS-01, backed by `doctl`** | One admin subdomain now; wildcard so future subdomains need no cert work. Plugin-free — reuses the droplet's existing doctl auth, no token to mint |
@@ -209,39 +209,43 @@ tz via `isValidTz`, pars). Responses keep the current JSON casing
 
 ---
 
-## 5. Making admin edits actually reach players (the split-brain fix)
+## 5. Content pipeline — DB is source of truth, rebuild publishes
 
-This is the crux. Right now `src/data/courses.ts` is what players see. Three ways to
-close the gap, in increasing ambition:
+**Decided:** the player app stays **fully bundled** — no live API content fetch for
+locations or courses in v1. Master Control writes to Postgres; **a rebuild publishes**
+player-visible changes. This keeps the PWA's offline-first model untouched (no new
+runtime read path, no cache/fallback wiring, no service-worker implications) and
+keeps the DB authoritative for the leaderboard/hunt/geo it already drives.
 
-- **Alt B — admin writes DB only (lowest risk).** Master Control manages Postgres;
-  player-visible location/course changes still require editing `courses.ts` + a
-  build. Admin fully drives leaderboard/hunt/geo, but onboarding a location is *not*
-  live for players. Rejected as the primary path: it doesn't deliver the core
-  promise ("onboard a location" should light it up).
+The one thing that must NOT happen is **double data-entry** — editing a location in
+the console *and* hand-editing `src/data/courses.ts`. So the mechanism that makes
+"rebuild to publish" coherent is a **build-time export from the DB**:
 
-- **Recommended — locations live via API, courses bundled for now.** Add **public
-  read endpoints** the player app already half-has (`GET /api/locations` exists):
-  - `GET /api/locations` (public, cached, **`archived_at is null` only**) → the
-    location list + geo/tz/accent the app uses for location detect and picking. The
-    app fetches this on load, **falls back to the bundled `LOCATIONS` when offline**
-    (PWA requirement), and caches the last good response in IndexedDB. Onboarding a
-    location in Master Control makes it appear to players without a redeploy; archiving
-    one removes it from the public list.
-  - **Courses stay bundled** because a course also carries art (`mapAsset`), themed
-    rules, and accent that live in the frontend. Master Control edits course rows in
-    the DB (names/pars/theme for leaderboard/hunt correctness); shipping new
-    player-visible course *art* remains a build. This matches reality: pars are
-    still placeholders and per-course art is pending (§11 of the base plan).
+- A generator (`scripts/export-content.ts`, run in `npm run build` before `vite
+  build`) reads the current `org` / `location` / `course` rows (via the API or a
+  direct `pg` query) **where `archived_at is null`**, and writes a generated data
+  module the app imports — e.g. `src/data/content.generated.ts` (locations + courses:
+  names, slugs, coords, tz, geofence, accent, pars, theme, sort order).
+- `src/data/courses.ts` keeps only what genuinely lives in the frontend and can't
+  come from the DB: per-course **map art** (`mapAsset`) and themed **rules**/accents
+  (the deferred-art decision). The generated file supplies everything data-shaped;
+  `courses.ts` merges art/rules on top by id/theme.
+- Net effect: the operator edits **only** in Master Control. `ffc deploy` runs the
+  export → build → atomic swap, and the new content goes live. Onboarding a location
+  or archiving one reaches players on the next deploy — deliberately a publish step,
+  not instant, which is fine for venue/course changes (they're infrequent and want a
+  review gate anyway).
 
-- **Alt A — flip the whole app to API-driven content.** Cleanest long-term, biggest
-  change: every screen sources locations+courses from the API with an offline cache
-  and a bundled seed as first-paint fallback. Worth a dedicated later phase; out of
-  scope for v1 because of the PWA offline + service-worker-precache implications.
+**Fallback / safety:** if the DB is unreachable at build time, the export **fails the
+build** rather than shipping an empty catalog (or, gentler: reuses the last committed
+`content.generated.ts`). The generated file is committed so a build is always
+reproducible offline from the repo alone.
 
-**Decision:** build the recommended middle path. Concretely, a small
-`src/data/locations-source.ts` that returns API data when fresh, bundle otherwise,
-so the switch is one module and the rest of the app is unchanged.
+**Not in v1 (noted for later):** a live API read path (`GET /api/locations` consumed
+by the app with an offline cache) would make onboarding instant without a deploy.
+The public `GET /api/locations` endpoint still exists and is handy for the exporter
+and admin, but the player app does not consume it live. Flipping to live is a clean
+later step precisely because the DB is already the source of truth.
 
 ---
 
@@ -374,9 +378,13 @@ server/
     seed.js              unchanged, now imports validateCourse
   schema.sql             + org, location.org_id, admin_audit, admin_user, seeds
 
+scripts/
+  export-content.ts      build-time: DB (archived_at is null) -> generated data (§5)
+
 src/
   data/
-    locations-source.ts  API-with-bundle-fallback resolver (§5)
+    content.generated.ts committed build output: locations + course data fields
+    courses.ts           now only frontend-owned art/rules, merged onto generated
 
 admin/                   the separate admin SPA (own bundle)
   index.html             admin entry (no PWA plugin)
@@ -407,8 +415,10 @@ Vite tree-shakes the two bundles apart.
    keep `/api/locations` + `/api/seed` green.
 3. **Admin API** — `/api/admin/orgs|locations|courses|overview` + archive/unarchive
    endpoints (no hard delete); reads default to `archived_at is null`.
-4. **Public location read** — confirm `GET /api/locations` shape + `locations-source.ts`
-   fallback wiring.
+4. **Content export** — `scripts/export-content.ts` reads `org`/`location`/`course`
+   (`archived_at is null`) → commits `src/data/content.generated.ts`; wire it into
+   `npm run build` before `vite build`; refactor `courses.ts` to merge frontend-only
+   art/rules onto the generated data. Build fails (or reuses last commit) if DB is down.
 5. **Admin build + vhost** — second Vite entry (`vite.admin.config.ts` → `dist-admin/`);
    `bin/ffc` builds both bundles in the atomic release swap and (re)writes the
    `admin.ffc.lab980.com` vhost. TLS via a **wildcard `*.ffc.lab980.com` DNS-01 cert**
@@ -434,15 +444,16 @@ Vite tree-shakes the two bundles apart.
   available. §3.2b, §4, §6.
 - ✅ **Course art** — deferred; art/themes stay bundled assets. §5.
 
-**Still open:**
-- ⚠️ **Content source of truth (§5) — the one real remaining decision.** With
-  franchisee self-serve off the table, the question is purely: when the *operator*
-  onboards/edits a location, should it go **live to players via the API** (recommended
-  default: locations live, courses bundled), or is **admin-writes-DB-only** (changes
-  need a build to reach players) enough? This sets how much of the read path we build
-  in v1. Answer pending.
+- ✅ **Content pipeline (§5)** — DB is source of truth; player app stays bundled;
+  operator edits publish on a **rebuild** via a build-time export (no live API fetch,
+  no double data-entry). Live-to-players is a clean later step.
 
 **Risks / confirmations:**
+- **Build now needs the DB.** Folding the content export into `npm run build` means a
+  production build reads Postgres. `ffc deploy` runs on the droplet where the DB is
+  local, so this is fine — but a build in an environment without DB access must use
+  the committed `content.generated.ts` fallback (or the build fails loudly). Confirm
+  CI/local builds have either DB access or rely on the committed generated file.
 - **`APP_TOKEN` in prod.** Onboarding writes must not be world-open; the plan assumes
   `APP_TOKEN` is set in production. Worth confirming it currently is on the droplet.
 - **Per-tenant subdomains (deferred).** v1 ships exactly one admin subdomain, but the
