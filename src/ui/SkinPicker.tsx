@@ -99,10 +99,10 @@ export default function SkinPicker() {
               ›
             </span>
           </button>
-          {/* Static artist deliverables — open in a new tab so the app stays put. */}
+          {/* Static artist deliverables (PDF) — open in a new tab so the app stays put. */}
           {[
-            { href: '/docs/style-guide.html', glyph: '❏', label: 'Style guide · HTML', blurb: 'Wireframes & element specs' },
             { href: '/docs/style-guide.pdf', glyph: '⤓', label: 'Style guide · PDF', blurb: 'Printable artist reference' },
+            { href: '/docs/screens.pdf', glyph: '⤓', label: 'Screens · PDF', blurb: 'Every screen, at a glance' },
           ].map((doc) => (
             <a
               key={doc.href}
