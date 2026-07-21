@@ -292,7 +292,7 @@ export default function Scorecard() {
                 <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
                   Hole
                 </div>
-                <div className="text-4xl font-black text-fairway-50">{hole + 1}</div>
+                <div className="text-3xl font-black text-fairway-50">{hole + 1}</div>
               </>
             )}
           </div>
@@ -303,7 +303,7 @@ export default function Scorecard() {
             {/* Par medallion — a raised disc so the target reads as a physical
                 token rather than a loose number. */}
             <div
-              className="surface-1 flex h-14 w-14 items-center justify-center rounded-full text-3xl font-black"
+              className="surface-1 flex h-14 w-14 items-center justify-center rounded-full text-2xl font-black"
               style={{ color: ink }}
             >
               {par}
