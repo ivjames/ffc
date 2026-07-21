@@ -4,7 +4,9 @@ schematic layout, no colors/emoji/materials) with numbered badges anchored
 ON each element, mapping to a spec table incl. current dimensions. The current
 app art is NOT authoritative."""
 
+import re
 OUT = "/home/user/ffc/docs/style-guide.html"
+OUT2 = "/home/user/ffc/docs/screens.html"
 SCREENS = []
 def screen(**kw): SCREENS.append(kw)
 
@@ -384,6 +386,17 @@ tr{break-inside:avoid}
 .wf-img.fill{flex:1 1 auto;min-height:0}
 .wf-txt{position:relative;margin:5px 9px;font-size:9px;color:#48525d}
 .wf-row{position:relative}
+/* ---- screens-only contact sheet ---- */
+.sheethead{margin:0 0 12px} .sheethead h1{font-size:22px;font-weight:900;letter-spacing:-.01em}
+.sheethead p{font-size:10.5px;color:#444;margin:4px 0 0;max-width:170mm}
+.sheethead .note{border-left:3px solid #d97706;background:#fff7ed;border-radius:0 8px 8px 0;padding:7px 11px;margin-top:8px;font-size:9.5px}
+.sheethead .note b{color:#9a3412}
+.grid-screens{display:flex;flex-wrap:wrap;gap:16px 18px;justify-content:center;align-items:flex-start}
+.grid-screens .frame .scr{min-height:0}   /* size to content; fill screens keep their fixed height */
+.cell{break-inside:avoid;display:flex;flex-direction:column;align-items:center;gap:6px;width:250px}
+.celltitle{font-size:11px;font-weight:800;text-align:center;display:flex;gap:6px;align-items:baseline;justify-content:center;flex-wrap:wrap}
+.celltitle .rt{font-family:"SF Mono",monospace;font-size:8px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 6px;font-weight:700}
+.celltitle .tb{font:700 7.5px/1.6 "SF Mono",monospace;color:#9a3412;background:#fff2e6;border:1px solid #f6d3ad;border-radius:5px;padding:1px 5px}
 .wf-txt.muted{color:var(--muted);font-style:italic} .wf-txt.center{text-align:center}
 .wf-txt.eyebrow{font-weight:800;font-size:8px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .wf-txt.inline{margin:0;font-weight:700} .wf-txt.inline.r{color:var(--muted)}
@@ -436,3 +449,26 @@ html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <body>{cover}{pages}</body></html>"""
 open(OUT,"w").write(html)
 print("wrote", OUT, "screens:", len(SCREENS))
+
+# ---------------------------------------------------------------- screens-only sheet
+def render_cell(sc, idx):
+    body = re.sub(r'<span class="cn-badge">\d+</span>', '', sc["body"])   # drop markers
+    tb = '<span class="tb">course-tinted</span>' if sc.get("tint") else ''
+    scr = "scr fill" if sc.get("fill") else "scr"
+    route = sc["route"].split(" · ")[0] + (" …" if " · " in sc["route"] else "")
+    name = sc["name"].split(" (")[0]
+    return (f'<div class="cell"><div class="celltitle">{idx}. {name} '
+            f'<span class="rt">{route}</span>{tb}</div>'
+            f'<div class="frame"><div class="{scr}">{body}</div></div></div>')
+
+sheet_head = """<div class="sheethead">
+ <h1>Mini Golf — Screens</h1>
+ <p>Every screen's element layout, at a glance — no specs, no markers. Structural wireframes only; the current app art is not authoritative. Companion to the full <b>Screen &amp; Element Guide</b> (which adds dimensions, states, theming hooks, and the art needed per element).</p>
+ <div class="note"><b>Not the design.</b> No colors, type, icons, or materials are implied. Player-scaled screens are drawn at 4 players; the Course Map and game playfields fill the screen below the bar.</div>
+</div>"""
+cells = "".join(render_cell(sc, i+1) for i,sc in enumerate(SCREENS))
+html2 = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Mini Golf — Screens</title><style>{CSS}</style></head>
+<body>{sheet_head}<div class="grid-screens">{cells}</div></body></html>"""
+open(OUT2,"w").write(html2)
+print("wrote", OUT2)

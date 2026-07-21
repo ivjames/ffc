@@ -93,6 +93,17 @@ tr{break-inside:avoid}
 .wf-img.fill{flex:1 1 auto;min-height:0}
 .wf-txt{position:relative;margin:5px 9px;font-size:9px;color:#48525d}
 .wf-row{position:relative}
+/* ---- screens-only contact sheet ---- */
+.sheethead{margin:0 0 12px} .sheethead h1{font-size:22px;font-weight:900;letter-spacing:-.01em}
+.sheethead p{font-size:10.5px;color:#444;margin:4px 0 0;max-width:170mm}
+.sheethead .note{border-left:3px solid #d97706;background:#fff7ed;border-radius:0 8px 8px 0;padding:7px 11px;margin-top:8px;font-size:9.5px}
+.sheethead .note b{color:#9a3412}
+.grid-screens{display:flex;flex-wrap:wrap;gap:16px 18px;justify-content:center;align-items:flex-start}
+.grid-screens .frame .scr{min-height:0}   /* size to content; fill screens keep their fixed height */
+.cell{break-inside:avoid;display:flex;flex-direction:column;align-items:center;gap:6px;width:250px}
+.celltitle{font-size:11px;font-weight:800;text-align:center;display:flex;gap:6px;align-items:baseline;justify-content:center;flex-wrap:wrap}
+.celltitle .rt{font-family:"SF Mono",monospace;font-size:8px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 6px;font-weight:700}
+.celltitle .tb{font:700 7.5px/1.6 "SF Mono",monospace;color:#9a3412;background:#fff2e6;border:1px solid #f6d3ad;border-radius:5px;padding:1px 5px}
 .wf-txt.muted{color:var(--muted);font-style:italic} .wf-txt.center{text-align:center}
 .wf-txt.eyebrow{font-weight:800;font-size:8px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .wf-txt.inline{margin:0;font-weight:700} .wf-txt.inline.r{color:var(--muted)}
