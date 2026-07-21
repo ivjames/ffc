@@ -29,7 +29,11 @@ export default function TvLeaderboard() {
     r.courseId === highlightCourseId && highlightSet.has(`${r.tag}:${r.total}`);
   const hasHighlight = (highlightScores ?? []).length > 0;
 
-  const [period, setPeriod] = useState<Period>('day');
+  // Default to today's board, except when arriving from a finished round: the
+  // highlighted score may have been played just before the venue's local
+  // midnight, which the "day" filter (from local midnight) would exclude — so
+  // start on "all" to guarantee the just-played round is on the board.
+  const [period, setPeriod] = useState<Period>(hasHighlight ? 'all' : 'day');
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Celebrate exactly once, the first time the board loads with any scores on
