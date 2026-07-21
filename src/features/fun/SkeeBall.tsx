@@ -17,9 +17,10 @@ import {
 } from './fx';
 
 // §12 Skee-Ball — the first attraction mini-game. Swipe up the lane to roll a
-// ball into the target: land it in a scoring ring and it drops down into the
-// ring's hole under gravity. Thread the top corners for 100, nail the small
-// center ring for 50, or come up short for a gutter zero. Nine balls a game.
+// ball into the target: land it in a scoring ring and it rolls down the inside
+// of the ring into the hole at the bottom under gravity. Thread the top corners
+// for 100, nail the small center ring for 50, or come up short for a gutter
+// zero. Nine balls a game.
 //
 // The landing is deterministic from the swipe, but the aim trail FADES OUT before
 // the target — you commit to a line and power without a pinpoint preview, so
@@ -52,7 +53,7 @@ const MAX_V = 25;
 const MAX_DRAG = 300;
 const BALLS = 9;
 const FLIGHT_MS = 560; // arc-to-landing animation
-const SINK_MS = 360; // gravity drop into the hole after landing
+const SINK_MS = 440; // roll down the inside of the ring into the hole after landing
 const NEXT_DELAY_MS = 850; // pause on the result before the next ball
 const FADE_END_Y = 350; // the aim trail is fully faded above this y (before the target)
 
@@ -65,23 +66,29 @@ function holeDrop(h: Hole): { x: number; y: number } {
   return { x: h.cx, y: h.cy + h.R - HOLE_R - 4 };
 }
 
-/** Where the ball sits at progress `q` (0..1) as it drops into the hole under
- *  gravity: it falls straight down with an accelerating vertical motion
- *  (distance ∝ t², from rest) while easing sideways toward the hole's centre,
- *  then settles into the hole. Starts on the landing point (q=0).
- *
- *  Gravity only ever pulls down, so the fall targets the LOWER of the drop hole
- *  and the landing point — a ball that lands in the lower crescent of a ring
- *  (already below the drop hole) rolls sideways into the hole without visibly
- *  rising. */
+/** Where the ball sits at progress `q` (0..1) as it settles into the hole. It
+ *  rolls the short way down the *inside* of the ring toward the bottom, where the
+ *  drop hole sits — so an off-centre landing hugs the ring wall and curves down
+ *  to the hole instead of cutting straight across it. Modelled in polar terms
+ *  about the ring centre: the angle swings to the bottom (screen-down) while the
+ *  radius only ever grows outward toward the hole, so gravity never rolls the
+ *  ball back up (a floor at the landing height guards the rest). Starts on the
+ *  landing point (q=0). */
 function sinkPos(h: Hole, land: { x: number; y: number }, q: number): { x: number; y: number } {
-  const dp = holeDrop(h);
-  const targetY = Math.max(dp.y, land.y); // never rise — gravity pulls down only
-  const fall = q * q; // gravity from rest: vertical distance grows as t²
-  const settle = 1 - (1 - q) * (1 - q); // ease-out sideways roll to the hole centre
+  const r0 = Math.hypot(land.x - h.cx, land.y - h.cy);
+  const rHole = h.R - HOLE_R - 4; // the drop hole's distance from the ring centre
+  const th0 = Math.atan2(land.y - h.cy, land.x - h.cx);
+  const BOTTOM = Math.PI / 2; // screen-down — where the drop hole sits in the ring
+  // Swing the short way round to the bottom, so the ball rolls down the nearer wall.
+  const dth = ((((BOTTOM - th0 + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI) - Math.PI;
+  const e = q * q; // gravity from rest: the roll accelerates toward the bottom
+  const th = th0 + dth * e;
+  // Only ever roll outward toward the hole (never inward, which at the bottom
+  // would read as the ball climbing back up out of the ring).
+  const rad = r0 + Math.max(0, rHole - r0) * e;
   return {
-    x: land.x + (dp.x - land.x) * settle,
-    y: land.y + (targetY - land.y) * fall,
+    x: h.cx + Math.cos(th) * rad,
+    y: Math.max(h.cy + Math.sin(th) * rad, land.y), // never rise above the landing
   };
 }
 
