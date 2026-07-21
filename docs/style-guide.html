@@ -1,872 +1,521 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Mini Golf — Art &amp; UI Style Guide</title>
-<style>
-/* ============================================================
-   Mini Golf — Art & UI Style Guide (print / PDF)
-   A paper reference an artist follows to theme EVERY button and
-   EVERY interface in the app. Specimens below render the app's
-   real CSS "materials" so the look is authentic, not described.
-   Token values mirror src/index.css (dark set) + docs/art-spec.md.
-   ============================================================ */
-
-@page { size: Letter; margin: 14mm 14mm 16mm; }
-
-:root {
-  /* Neutral fairway ramp — DARK set (matches src/index.css :root) */
-  --f50:#f5f5f5; --f100:#e8e8e8; --f200:#cfcfcf; --f300:#ababab; --f400:#b0b0b0;
-  --f500:#6f6f6f; --f600:#5b5b5b; --f700:#4f4f4f; --f800:#464646; --f900:#3a3a3a; --f950:#2f2f2f;
-  --accent:#22c55e;
-  --ink:#111; --muted:#5b6470; --line:#e3e6ea; --line2:#eef1f4;
-  --paper:#ffffff; --panel:#f7f8fa;
-  --brand:#15803d; --brandsoft:#e7f6ec;
-  /* dark-material depth tokens (from index.css :root) */
-  --elev-1:0 1px 2px rgba(0,0,0,.45),0 2px 6px -2px rgba(0,0,0,.5);
-  --elev-2:0 2px 5px rgba(0,0,0,.4),0 10px 22px -8px rgba(0,0,0,.6);
-  --bevel:inset 0 1px 0 rgba(255,255,255,.09);
-  --bevel-strong:inset 0 1px 0 rgba(255,255,255,.14);
-  --sink:inset 0 2px 5px rgba(0,0,0,.5),inset 0 1px 0 rgba(0,0,0,.3);
-  --surface-hi:color-mix(in srgb,var(--f800),white 4%);
-  --surface-lo:var(--f950);
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Mini Golf — Screen &amp; Element Style Guide</title><style>
+@page { size: Letter; margin: 12mm 12mm 14mm; }
+:root{
+ --ink:#141a20; --muted:#5b6470; --line:#e4e7ea; --line2:#eef1f4; --panel:#f6f8fa;
+ --brand:#15803d; --brandsoft:#e7f6ec; --paper:#fff;
 }
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:var(--ink);font-size:10px;line-height:1.45;
+ -webkit-print-color-adjust:exact;print-color-adjust:exact;background:#fff}
+h1,h2,h3{margin:0;line-height:1.15}
+code{font-family:"SF Mono",ui-monospace,Menlo,monospace;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:9px;color:#0b3d1f}
+.page{page-break-after:always}
+.page:last-child{page-break-after:auto}
+small{color:inherit;opacity:.7}
 
-* { box-sizing:border-box; }
-html,body { margin:0; padding:0; }
-body {
-  font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
-  color:var(--ink); font-size:10.5px; line-height:1.5; background:var(--paper);
-  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+/* cover */
+.cover{height:246mm;display:flex;flex-direction:column}
+.cover .flag{font-size:60px}
+.eyebrow{font:700 11px/1 "SF Mono",monospace;letter-spacing:.28em;text-transform:uppercase;color:var(--brand)}
+.cover h1{font-size:38px;font-weight:900;letter-spacing:-.02em;margin:12px 0 6px}
+.cover .tag{font-size:14px;color:#333;max-width:150mm}
+.chip{display:inline-block;background:var(--brandsoft);color:var(--brand);border:1px solid #bfe3c9;border-radius:999px;padding:3px 11px;font-size:10px;font-weight:700;margin:0 6px 6px 0}
+.how{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--panel);margin-top:auto}
+.how h3{font-size:12px;margin-bottom:6px}
+.how ol{margin:0;padding-left:18px} .how li{margin-bottom:3px}
+.legend-inline{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:9.5px}
+.legend-inline b{color:#0b3d1f}
+
+/* screen page */
+.screenpage h2{font-size:15px;font-weight:800;border-bottom:2.5px solid var(--brand);padding-bottom:5px;margin-bottom:3px;display:flex;align-items:baseline;gap:8px}
+.screenpage h2 .rt{font-family:"SF Mono",monospace;font-size:10px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 8px;font-weight:700}
+.screenpage h2 .tintbadge{font:700 8px/1.6 "SF Mono",monospace;color:#9a3412;background:#fff2e6;border:1px solid #f6d3ad;border-radius:5px;padding:1px 6px}
+.purpose{color:#333;font-size:10px;margin:2px 0 8px}
+.views{display:flex;gap:16px;align-items:flex-start;margin-bottom:9px}
+.viewcol{display:flex;flex-direction:column;align-items:center;gap:4px}
+.viewcap{font:700 8.5px/1 "SF Mono",monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+
+/* phone frame */
+.phone{position:relative;width:224px;border-radius:20px;padding:5px;background:#c7ccd2;box-shadow:0 2px 8px rgba(0,0,0,.14)}
+.phone .screenwrap{border-radius:15px;overflow:hidden}
+.co{position:absolute;width:15px;height:15px;border-radius:999px;background:#e0362c;color:#fff;font:800 9px/15px "Segoe UI",sans-serif;text-align:center;
+ box-shadow:0 0 0 1.5px #fff,0 1px 2px rgba(0,0,0,.4);transform:translate(-50%,-50%);z-index:5}
+
+/* spec table */
+table{width:100%;border-collapse:collapse;font-size:9px}
+th,td{text-align:left;padding:3.5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--panel);font-weight:800;font-size:8px;text-transform:uppercase;letter-spacing:.03em;color:#334}
+td.cn{text-align:center;font-weight:800;color:#e0362c;width:16px}
+td b{color:#0b3d1f}
+tr{break-inside:avoid}
+.artc{color:#0b3d1f}
+
+/* ============ UNSTYLED MOCK KIT (reproduces src/index.css unstyled skin) ============ */
+.mock{
+ --f50:#f5f5f5;--f100:#e8e8e8;--f200:#cfcfcf;--f300:#ababab;--f400:#b0b0b0;--f500:#6f6f6f;
+ --f600:#5b5b5b;--f700:#4f4f4f;--f800:#464646;--f900:#3a3a3a;--f950:#2f2f2f;--accent:#22c55e;
+ background:var(--f950);color:var(--f50);font-family:system-ui,"Segoe UI",sans-serif;
+ width:224px;min-height:432px;font-size:9px;line-height:1.3;padding:0 0 8px;
 }
-h1,h2,h3,h4 { margin:0; line-height:1.15; }
-p { margin:0 0 6px; }
-small { color:var(--muted); }
-code, .mono { font-family:"SF Mono",ui-monospace,"Cascadia Code",Menlo,Consolas,monospace; }
-code { background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:9.5px; color:#0b3d1f; }
-
-/* —— structure —— */
-.page { page-break-after:always; }
-.page:last-child { page-break-after:auto; }
-section { break-inside:avoid-page; }
-.sec { margin:0 0 14px; }
-.sec > h2 {
-  font-size:15px; font-weight:800; letter-spacing:-.01em; color:var(--ink);
-  border-bottom:2.5px solid var(--brand); padding-bottom:5px; margin-bottom:9px;
-  display:flex; align-items:baseline; gap:8px;
+.mock.light{
+ --f50:#1a1a1a;--f100:#2c2c2c;--f200:#444;--f300:#5e5e5e;--f400:#585858;--f500:#8a8a8a;
+ --f600:#a3a3a3;--f700:#c2c2c2;--f800:#cccccc;--f900:#fbfbfb;--f950:#eaeaea;--accent:#1f9d55;
 }
-.sec > h2 .n { font:700 11px/1 "SF Mono",monospace; color:var(--brand); }
-h3.sub { font-size:11.5px; font-weight:800; margin:12px 0 5px; color:#0b3d1f; text-transform:uppercase; letter-spacing:.04em; }
-.lead { color:#333; font-size:11px; }
+.mock.tint{ --accent:var(--ta2,#22c55e); }
+.mock *{box-sizing:border-box}
+.mock b{font-weight:800}
+.mock small{font-size:7.5px;opacity:.75}
 
-/* —— cover —— */
-.cover { height:245mm; display:flex; flex-direction:column; }
-.cover .top { flex:1; }
-.cover .eyebrow { font:700 11px/1 "SF Mono",monospace; letter-spacing:.28em; text-transform:uppercase; color:var(--brand); }
-.cover h1 { font-size:41px; font-weight:900; letter-spacing:-.02em; margin:14px 0 6px; }
-.cover .tagline { font-size:15px; color:#333; max-width:150mm; }
-.cover .flag { font-size:64px; line-height:1; margin:0 0 6px; }
-.cover .metabar { margin-top:20px; display:flex; gap:10px; flex-wrap:wrap; }
-.chip { display:inline-block; background:var(--brandsoft); color:var(--brand); border:1px solid #bfe3c9;
-  border-radius:999px; padding:3px 11px; font-size:10px; font-weight:700; }
-.cover .how { border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--panel); }
-.cover .how h3 { font-size:12px; margin-bottom:6px; }
-.cover .how ol { margin:0; padding-left:18px; }
-.cover .how li { margin-bottom:3px; }
-.foot-note { color:var(--muted); font-size:9.5px; margin-top:10px; }
+.m-top,.m-topflush{display:flex;align-items:center;gap:5px;padding:8px 9px;border-bottom:1px solid color-mix(in srgb,var(--f800),transparent 40%);
+ background:color-mix(in srgb,var(--f900),transparent 6%)}
+.m-topflush{border-bottom:none;background:none;padding-bottom:2px}
+.m-back{font-size:16px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;background:var(--f800);border:1px solid var(--f700);border-radius:7px}
+.m-title{font-weight:800;font-size:11px}
+.m-sp{flex:1}
+.m-pill{width:16px;height:16px;border-radius:999px;border:1px solid color-mix(in srgb,var(--f800),transparent 30%);
+ background:color-mix(in srgb,var(--f950),transparent 20%);display:flex;align-items:center;justify-content:center;font-size:8px}
+.m-mini{font-size:11px} .m-mini.txt{font-size:9px;color:var(--f300);font-weight:700}
 
-/* —— generic cards / grids —— */
-.grid { display:grid; gap:9px; }
-.g2 { grid-template-columns:1fr 1fr; }
-.g3 { grid-template-columns:1fr 1fr 1fr; }
-.g4 { grid-template-columns:repeat(4,1fr); }
-.card { border:1px solid var(--line); border-radius:10px; padding:10px 11px; background:var(--paper); break-inside:avoid; }
-.card h4 { font-size:11px; font-weight:800; margin-bottom:3px; }
-.card .role { font-size:9px; color:var(--brand); font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
-.art { font-size:9.5px; color:#333; margin-top:5px; }
-.art b { color:#0b3d1f; }
+.m-hero{text-align:center;font-size:30px;padding:6px 0 2px}
+.m-hero2{text-align:center;font-size:30px;padding:10px 0 2px}
+.m-ct{text-align:center;font-weight:800;font-size:11px;padding:0 10px 6px}
 
-/* —— tables —— */
-table { width:100%; border-collapse:collapse; font-size:9.5px; }
-th,td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
-th { background:var(--panel); font-weight:800; font-size:9px; text-transform:uppercase; letter-spacing:.03em; color:#334; }
-tr { break-inside:avoid; }
-td.k { font-family:"SF Mono",monospace; color:#0b3d1f; white-space:nowrap; }
+.m-locbar,.m-resume,.m-card,.m-crow,.m-lrow,.m-notecard,.m-item,.m-lb{margin:6px 9px}
+.m-locbar{display:flex;justify-content:space-between;align-items:center;background:var(--f900);border:1px solid var(--f800);border-radius:11px;padding:7px 10px}
+.m-locbar.sm{padding:5px 9px}
+.m-locbar b{font-size:7px;letter-spacing:.05em;color:var(--f400)}
+.m-chg{color:var(--f400);font-weight:700}
+.m-resume{background:var(--f900);border:1px solid color-mix(in srgb,var(--f500),transparent 60%);border-radius:11px;padding:8px 10px}
+.m-eyebrow{font-size:7px;letter-spacing:.08em;color:var(--f400);font-weight:700}
+.m-row2{display:flex;justify-content:space-between;align-items:center;margin-top:3px}
+.m-tags{display:flex;gap:3px}
+.m-tag{font-family:"SF Mono",monospace;letter-spacing:.12em;font-weight:800;font-size:10px;color:#f0fdf4;background:var(--ga,#166534);border-radius:6px;padding:2px 6px}
+.m-tag.sel{outline:2px solid var(--f400)} .m-tag.dim{opacity:.55}
 
-/* —— swatches —— */
-.ramp { display:grid; grid-template-columns:repeat(11,1fr); gap:4px; }
-.sw { border-radius:6px; height:34px; border:1px solid rgba(0,0,0,.12); position:relative; }
-.sw span { position:absolute; bottom:2px; left:0; right:0; text-align:center; font:700 8px/1 "SF Mono",monospace;
-  color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.7); }
-.swrow { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0; }
-.dot { display:inline-flex; align-items:center; gap:5px; font-size:9px; font-weight:700; }
-.dot i { width:15px; height:15px; border-radius:4px; border:1px solid rgba(0,0,0,.15); display:inline-block; }
-.dotc i { border-radius:999px; }
+.m-tiles{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 9px}
+.m-tile{background:color-mix(in srgb,var(--f900),var(--ta) 16%);border:1px solid color-mix(in srgb,var(--f700),var(--ta) 30%);
+ border-radius:16px;padding:9px;text-align:center;font-weight:800;font-size:9px}
+.m-puck{width:34px;height:34px;border-radius:999px;background:var(--pa);margin:0 auto 4px;display:flex;align-items:center;justify-content:center;font-size:17px}
 
-/* ============================================================
-   DARK SPECIMEN STAGE — renders the app's real materials
-   ============================================================ */
-.stage {
-  background:
-    radial-gradient(130% 60% at 50% -10%, color-mix(in srgb,var(--f950),white 6%), transparent 60%),
-    linear-gradient(180deg, var(--f950), color-mix(in srgb,var(--f950),black 12%));
-  border:1px solid #1c1c1c; border-radius:12px; padding:14px; color:var(--f50);
-}
-.stage .cap { font:700 8.5px/1 "SF Mono",monospace; color:var(--f400); text-align:center; margin-top:6px; }
-.specs { display:grid; gap:12px; align-items:end; }
-.spec { display:flex; flex-direction:column; align-items:center; gap:2px; justify-content:flex-end; }
+.m-menu{display:flex;flex-direction:column;gap:5px;margin:8px 9px 0}
+.m-ghost{background:var(--f900);border:1px solid color-mix(in srgb,var(--f700),transparent 30%);border-radius:11px;padding:8px 10px;text-align:center;font-weight:700;font-size:9.5px}
+.m-ghost.sm{padding:6px;flex:1}
+.m-primary{background:color-mix(in srgb,var(--f700),var(--accent) 18%);color:var(--f50);border-radius:11px;padding:9px 10px;text-align:center;font-weight:800;margin:8px 9px 0;font-size:10px}
+.m-primary.sm{padding:6px;flex:1;margin:0}
 
-/* material classes — copied from src/index.css (dark base = "candy") */
-.surface { background-image:linear-gradient(180deg,var(--surface-hi),var(--surface-lo)); box-shadow:var(--bevel),var(--elev-2); }
-.surface-1 { background-image:linear-gradient(180deg,var(--surface-hi),var(--surface-lo)); box-shadow:var(--bevel),var(--elev-1); }
-.surface-sunk { background-color:var(--surface-lo); box-shadow:var(--sink); }
-.btn-accent {
-  background-image:linear-gradient(180deg,color-mix(in srgb,var(--f600),var(--accent) 18%),color-mix(in srgb,var(--f800),var(--accent) 18%));
-  box-shadow:var(--bevel-strong),0 4px 0 color-mix(in srgb,black,var(--accent) 45%),var(--elev-2); color:var(--f50);
-}
-.btn-danger { background-image:linear-gradient(180deg,#f2635b,#d5372e);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 4px 0 #8f1d17,var(--elev-2); color:#fff; }
-.ghost { background-image:linear-gradient(180deg,var(--surface-hi),var(--surface-lo)); border:1px solid rgba(79,79,79,.7);
-  box-shadow:var(--bevel),var(--elev-1); color:var(--f50); }
-.key { background-image:linear-gradient(180deg,var(--surface-hi),var(--surface-lo));
-  box-shadow:var(--bevel-strong),0 3px 0 var(--f950),var(--elev-1); color:var(--f100); }
-.tile { background-image:linear-gradient(180deg,color-mix(in srgb,var(--f900),var(--ta) 30%),color-mix(in srgb,var(--f950),var(--ta) 16%));
-  box-shadow:var(--bevel-strong),0 5px 0 color-mix(in srgb,black,var(--ta) 42%),var(--elev-2); }
-.course-puck { background-image:radial-gradient(circle at 50% 32%,color-mix(in srgb,var(--pa),white 42%),var(--pa) 78%);
-  box-shadow:inset 0 1px 2px rgba(255,255,255,.6),inset 0 -3px 6px rgba(0,0,0,.3),0 3px 6px -2px rgba(0,0,0,.45); }
-.tag-chip { background-image:linear-gradient(180deg,color-mix(in srgb,var(--ga,#166534),white 20%),var(--ga,#166534));
-  color:#f0fdf4; box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -2px 4px rgba(0,0,0,.28),0 2px 4px -1px rgba(0,0,0,.4);
-  text-shadow:0 1px 1px rgba(0,0,0,.4); font-family:"SF Mono",monospace; letter-spacing:.15em; }
+.m-gps{margin:8px 9px 2px;background:var(--f900);border:1px solid var(--f700);border-radius:10px;padding:7px;text-align:center;font-weight:700}
+.m-note{margin:0 9px;color:#d97706;font-size:8px}
+.m-lrow{display:flex;align-items:center;gap:7px;background:var(--f900);border:1px solid var(--f800);border-radius:12px;padding:7px 9px}
+.m-lrow.m-sel{border-color:color-mix(in srgb,var(--f500),transparent 40%);background:color-mix(in srgb,var(--f900),white 3%)}
+.m-lico,.m-badge{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;
+ background:color-mix(in srgb,var(--a),transparent 78%);border:1px solid color-mix(in srgb,var(--a),transparent 55%)}
+.m-lrow span:nth-child(2),.m-crow span:nth-child(2){flex:1}
+.m-cur{color:var(--f400);font-weight:700;font-size:8px}
+.m-chev{color:var(--f400);font-size:14px}
+.m-foot{color:var(--f400);font-size:7.5px;text-align:center;margin:8px 12px 0}
 
-.btn-full { width:150px; border-radius:16px; padding:11px 14px 15px; font-weight:800; font-size:12px; text-align:center; }
-.keycap { width:46px; height:46px; border-radius:14px; font-size:26px; font-weight:700; display:flex; align-items:center; justify-content:center; }
-.well { width:70px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:900; color:var(--f50); }
-.matbox { width:118px; height:52px; border-radius:16px; }
-.tilebox { width:118px; height:92px; border-radius:22px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
-.puck { width:52px; height:52px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:26px; }
-.chipbox { padding:5px 11px; border-radius:9px; font-size:16px; font-weight:700; }
-.medallion { width:52px; height:52px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:900; }
+.m-crow{display:flex;align-items:center;gap:8px;background:var(--f900);border:1px solid var(--f800);border-radius:12px;padding:7px 9px}
 
-/* —— checklist —— */
-.cl { list-style:none; margin:0; padding:0; }
-.cl li { position:relative; padding:2.5px 0 2.5px 20px; border-bottom:1px solid var(--line2); break-inside:avoid; font-size:10px; }
-.cl li:before { content:""; position:absolute; left:0; top:3px; width:11px; height:11px; border:1.4px solid #9aa4af; border-radius:3px; background:#fff; }
-.cl li b { color:#0b3d1f; }
-.cl li .tag { display:inline-block; font:700 8px/1.4 "SF Mono",monospace; color:var(--brand); background:var(--brandsoft);
-  border-radius:4px; padding:1px 5px; margin-left:4px; }
-.route { font-family:"SF Mono",monospace; font-size:9.5px; color:#fff; background:#0b3d1f; border-radius:5px; padding:1px 7px; font-weight:700; }
-.screen { border:1px solid var(--line); border-radius:10px; padding:9px 11px 6px; margin-bottom:9px; break-inside:avoid; background:var(--paper); }
-.screen > .hd { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:2px; }
-.screen > .hd h4 { font-size:11.5px; font-weight:800; }
-.screen > .purpose { font-size:9.5px; color:#444; margin:0 0 5px; }
+.m-lbl{margin:8px 9px 3px;font-weight:700;color:var(--f200);font-size:9px}
+.m-count{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:0 9px}
+.m-count span{background:var(--f900);border:1px solid var(--f800);border-radius:9px;padding:7px 0;text-align:center;font-weight:800}
+.m-count span.on{background:var(--f700);color:var(--f50);border-color:var(--f600)}
+.m-tagin{display:flex;align-items:center;gap:8px;margin:5px 9px}
+.m-idx{font-family:"SF Mono",monospace;color:var(--f400);width:10px;text-align:right}
+.m-inp{flex:1;background:var(--f900);border:1px solid var(--f700);border-radius:9px;padding:6px;text-align:center;font-family:"SF Mono",monospace;letter-spacing:.2em;font-weight:800}
+.m-inp.err{border-color:#ef4444}
+.m-errln{color:#ef4444;font-size:8px;margin:1px 9px 0 27px}
 
-.glyphset { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
-.glyph { border:1px solid var(--line); background:var(--panel); border-radius:6px; min-width:22px; height:22px;
-  display:inline-flex; align-items:center; justify-content:center; font-size:13px; padding:0 3px; }
+.m-mapframe{margin:8px 9px;border:1px solid var(--f800);background:var(--f900);border-radius:14px;height:230px;display:flex;align-items:center;justify-content:center}
+.m-mapfallback{width:110px;height:110px;border-radius:14px;background:color-mix(in srgb,var(--a),transparent 78%);border:1px solid color-mix(in srgb,var(--a),transparent 45%);display:flex;align-items:center;justify-content:center;font-size:46px}
+.m-tapbegin{text-align:center;padding:6px} .m-tapbegin b{font-size:12px;letter-spacing:.03em}
 
-.callout { border-left:3px solid var(--brand); background:var(--brandsoft); border-radius:0 8px 8px 0; padding:8px 11px; font-size:10px; margin:8px 0; }
-.callout b { color:#0b3d1f; }
-.warn { border-left:3px solid #d97706; background:#fff7ed; }
-.warn b { color:#9a3412; }
+.m-holehdr{text-align:center;padding:6px 0 2px}
+.m-holename{font-size:15px;font-weight:900}
+.m-parmed{width:38px;height:38px;border-radius:999px;background:var(--f900);border:1px solid var(--f800);margin:2px auto 6px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:var(--f100)}
+.m-prow{display:flex;align-items:center;gap:8px;background:var(--f900);border:1px solid var(--f800);border-radius:16px;padding:8px 10px;margin:5px 9px}
+.m-prow .m-tag{flex:0 0 auto}
+.m-key{width:30px;height:30px;border-radius:9px;background:var(--f800);border:1px solid var(--f700);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800}
+.m-well{flex:1;background:var(--f950);border:1px solid var(--f800);border-radius:10px;text-align:center;font-size:19px;font-weight:900;padding:3px}
+.m-nav{display:flex;gap:6px;margin:8px 9px 0}
 
-.skincard { border:1px solid var(--line); border-radius:10px; padding:8px 10px; break-inside:avoid; }
-.skincard .top { display:flex; align-items:center; gap:7px; }
-.skincard .sd { width:16px; height:16px; border-radius:999px; border:1px solid rgba(0,0,0,.2); flex:none; }
-.skincard h4 { font-size:10.5px; font-weight:800; }
-.skincard .id { font:700 8px/1 "SF Mono",monospace; color:var(--muted); }
-.skincard p { font-size:9px; color:#444; margin:5px 0 0; }
-.skincard .asset { font-size:8.5px; font-weight:700; margin-top:5px; }
-.asset-img { color:#9a3412; } .asset-css { color:var(--brand); }
+.m-winner{display:flex;align-items:center;gap:8px;background:var(--f900);border:1px solid color-mix(in srgb,var(--f500),transparent 55%);border-radius:16px;padding:9px 10px;margin:8px 9px}
+.m-trophy{font-size:26px}
+.m-wname{font-family:"SF Mono",monospace;letter-spacing:.1em;font-size:15px;font-weight:900;color:#157a3c}
+.mock:not(.light) .m-wname{color:#85e0a5}
+.m-wscore{margin-left:auto;font-weight:900;font-size:14px}
+.m-stand{display:flex;align-items:center;gap:8px;background:var(--f900);border:1px solid var(--f800);border-radius:12px;padding:6px 10px;margin:0 9px}
+.m-rank{font-family:"SF Mono",monospace;font-weight:900;color:var(--f400)}
+.m-sname{flex:1;font-family:"SF Mono",monospace;font-weight:800;color:#3f5c7a}
+.mock:not(.light) .m-sname{color:#b1c3d8}
+.m-grid{display:flex;gap:2px;margin:8px 9px;background:var(--f900);border:1px solid var(--f800);border-radius:10px;padding:6px}
+.m-gh{font-size:8px;font-weight:800;flex:0 0 34px;align-self:center}
+.m-gc{flex:1;text-align:center;font-weight:700;color:var(--f100)}
+.m-gc.u{color:#0a7a40} .mock:not(.light) .m-gc.u{color:#34d399}
+.m-gc.o{color:#a34a08} .mock:not(.light) .m-gc.o{color:#fbbf24}
+.m-sync{text-align:center;font-size:8px;color:var(--f400);margin:6px 9px 0}
 
-.legend { font-size:9px; color:var(--muted); margin-top:6px; }
-.two { columns:2; column-gap:16px; }
-.two > * { break-inside:avoid; }
-</style>
-</head>
-<body>
+.m-eyebrow2{font-size:8px;letter-spacing:.08em;color:var(--f400);font-weight:800;margin:9px 10px 3px}
+.m-rule{display:flex;gap:6px;margin:3px 10px}
+.m-num{font-family:"SF Mono",monospace;color:var(--f400)}
+.m-notecard{background:color-mix(in srgb,var(--f900),var(--a) 8%);border:1px solid color-mix(in srgb,var(--f700),transparent 30%);border-radius:12px;padding:8px 10px}
+.m-nch b{color:#a34a08} .mock:not(.light) .m-nch b{color:#fdba74}
+.m-nb{margin-top:3px;color:var(--f100)}
 
-<!-- ============================ COVER ============================ -->
-<div class="page cover">
-  <div class="top">
-    <div class="flag">⛳️</div>
-    <div class="eyebrow">Mini Golf Scorecard PWA</div>
-    <h1>Art &amp; UI Style Guide</h1>
-    <p class="tagline">A print reference for the artist theming the app. Every screen, every button, every
-      interface element — with the app's real materials rendered so you can match or deliberately diverge from them.</p>
-    <div class="metabar">
-      <span class="chip">14 skins</span>
-      <span class="chip">Light + Dark</span>
-      <span class="chip">Per-course tint</span>
-      <span class="chip">28 screens &amp; overlays</span>
-      <span class="chip">Full icon-slot set</span>
-    </div>
+.m-card{background:var(--f900);border:1px solid var(--f800);border-radius:14px;padding:9px 10px}
+.m-cardh{font-weight:800;margin-bottom:4px}
+.m-step{display:flex;align-items:center;gap:6px;margin:3px 0}
+.m-badge2{width:15px;height:15px;border-radius:999px;background:var(--f700);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;flex:none}
+.m-warnbox{margin:6px 9px;background:color-mix(in srgb,var(--f950),transparent 20%);border:1px solid var(--f800);border-radius:8px;padding:6px 9px;font-size:8px;color:var(--f300)}
+
+.m-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:8px 9px}
+.m-tabs span{border:1px solid var(--f700);border-radius:8px;padding:5px 0;text-align:center;font-weight:700;color:var(--f200)}
+.m-tabs span.on{background:var(--f700);color:var(--f50)}
+.m-lb{display:flex;align-items:center;gap:6px;background:var(--f900);border:1px solid var(--f800);border-radius:12px;padding:6px 9px}
+.m-lb.m-mine{border-color:var(--f400);background:color-mix(in srgb,var(--f500),transparent 82%)}
+.m-lbtag{font-family:"SF Mono",monospace;font-weight:800;font-size:12px;color:#3f5c7a}
+.mock:not(.light) .m-lbtag{color:#b1c3d8}
+.m-lbc{flex:1;font-size:8px;color:var(--f300)}
+.m-you{font-size:7px;font-weight:800;background:var(--f700);border-radius:999px;padding:1px 5px}
+
+.m-playas{margin:8px 9px;display:flex;align-items:center;gap:5px}
+.m-item{display:flex;align-items:center;gap:6px;background:var(--f950);border:1px solid var(--f800);border-radius:12px;padding:7px 9px}
+.m-item.found{background:var(--f900);border-color:color-mix(in srgb,var(--f500),transparent 40%)}
+.m-item span:first-child{flex:1}
+.m-hint{font-size:7.5px;color:var(--f400);font-weight:700}
+.m-check{color:var(--f400);font-weight:800}
+.m-badgeN{font-size:7.5px;background:color-mix(in srgb,var(--f500),transparent 80%);border-radius:999px;padding:1px 5px;color:var(--f300)}
+.m-snap{flex:0 0 auto;background:var(--f700);border-radius:8px;padding:5px 7px;font-size:8px;font-weight:700}
+.m-banner{margin:5px 9px 0;border-radius:9px;padding:5px 9px;font-size:8px}
+.m-banner.ok{background:color-mix(in srgb,var(--f500),transparent 84%);color:var(--f100)}
+.m-banner.warn{background:#fef3c7;color:#92400e} .mock:not(.light) .m-banner.warn{background:color-mix(in srgb,#f59e0b,transparent 82%);color:#fcd34d}
+
+.m-hudrow{display:flex;justify-content:space-between;margin:7px 10px 4px;font-weight:700;color:var(--f200)}
+.m-hintline{text-align:center;font-size:8px;color:var(--f300);margin:5px 9px 0}
+.m-canvas{position:relative;margin:0 9px;height:236px;border:1px solid var(--f800);border-radius:14px;overflow:hidden;
+ background:radial-gradient(120% 80% at 50% 0%,#0d3a22,#06120c)}
+.mock.light .m-canvas{background:radial-gradient(120% 80% at 50% 0%,#bfe6cd,#7cbd97)}
+.m-canvas.game{background:radial-gradient(120% 80% at 50% 0%,#12233f,#050b16)}
+.mock.light .m-canvas.game{background:radial-gradient(120% 80% at 50% 0%,#cfe0f5,#8faed6)}
+.m-cv-green{position:absolute;inset:22% 20% 10%;border-radius:40% 40% 12% 12%;background:#1a8f4a;box-shadow:inset 0 0 0 6px #2b7a43}
+.m-cv-ball{position:absolute;left:48%;bottom:18%;width:10px;height:10px;border-radius:999px;background:#f8fafc}
+.m-cv-ball2{position:absolute;left:47%;bottom:14%;width:12px;height:12px;border-radius:999px;background:#a855f7}
+.m-cv-aim{position:absolute;left:52%;bottom:22%;width:2px;height:44px;background:linear-gradient(#4ade80,#fbbf24,#ef4444);transform:rotate(24deg);transform-origin:bottom}
+.m-cv-cup{position:absolute;left:47%;top:26%;font-size:16px}
+.m-cv-pow{position:absolute;left:8px;bottom:8px;font:800 8px/1 "SF Mono",monospace;color:#e6faed;background:rgba(0,0,0,.35);padding:2px 4px;border-radius:4px}
+.m-cv-lane{position:absolute;inset:8% 30% 0;background:linear-gradient(#caa,transparent);opacity:.25}
+.m-cv-plus{position:absolute;left:50%;top:30%;transform:translateX(-50%);font:900 15px/1 sans-serif;color:#34d399}
+.m-gameover{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgba(0,0,0,.55)}
+.mock.light .m-gameover{background:rgba(255,255,255,.55)}
+.m-goemoji{font-size:40px} .m-goscore{font-size:26px;font-weight:900}
+
+.m-funtiles{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:8px 9px}
+.m-funtile{display:flex;align-items:center;gap:7px;background:color-mix(in srgb,var(--f900),var(--a) 12%);
+ border:1px solid color-mix(in srgb,var(--f700),var(--a) 26%);border-radius:12px;padding:7px;font-weight:800;font-size:8.5px}
+.m-funico{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;
+ background:color-mix(in srgb,var(--a),transparent 80%);flex:none}
+</style></head>
+<body><div class="page cover">
+  <div class="flag">⛳️</div>
+  <div class="eyebrow">Mini Golf Scorecard PWA</div>
+  <h1>Screen &amp; Element Style Guide</h1>
+  <p class="tag">Every screen shown in the app's default (<b>unstyled</b>) look — light and dark — with each interface element numbered and spec'd. Walk it to confirm every button and interface is covered before you theme.</p>
+  <div style="margin-top:16px">
+    <span class="chip">14 screens</span><span class="chip">Light + Dark</span><span class="chip">Numbered callouts</span><span class="chip">Per-element specs</span>
   </div>
-
+  <div class="legend-inline">
+    <span><b>Red circles</b> = element callouts, keyed to the spec table on the same page.</span>
+    <span><b>course-tinted</b> badge = the screen washes toward the course color (play/summary/map/rules).</span>
+  </div>
   <div class="how">
-    <h3>How to use this guide</h3>
+    <h3>How to read each page</h3>
     <ol>
-      <li><b>Read §1 (the theming contract) first.</b> Art plugs into three independent axes — skin × light/dark × course color. Respect the hooks and your art drops straight in.</li>
-      <li><b>§2–§4 are the kit:</b> palette, type, motion, and the shared <em>materials</em> (buttons, surfaces, tiles, pucks, tags) rendered as real specimens.</li>
-      <li><b>§5 is the coverage checklist.</b> Walk it screen by screen and tick every element — that's how we guarantee nothing's missed.</li>
-      <li><b>§6 is the icon-slot set</b> (every emoji is a placeholder for a designed icon). <b>§7</b> is delivery specs. <b>§8</b> is the one-page master checklist.</li>
-      <li><b>Validate live:</b> drop any asset into the running app at <code>/style</code> and cycle all skins × light/dark. Companion text spec: <code>docs/art-spec.md</code>.</li>
+      <li>The two phones are the <b>same screen</b> in the unstyled skin — dark (with numbered callouts) and light. Art must clear contrast on both grounds.</li>
+      <li>The <b>spec table</b> lists every element: its role, current size/shape, states, the <b>color hooks</b> it keys to, and the <b>art needed</b>.</li>
+      <li>Sizes, radii and the flat unstyled look are the current default — treat them as “e.g.” The <b>fixed</b> parts are the element slots, the color hooks, and the constraints (tap-target ≥44px, safe areas, contrast ≥4.5:1).</li>
+      <li>Emoji are placeholders for designed icons. Full token palette, motion catalogue, the 14 skins, and the icon-slot set are in the companion <code>docs/art-spec.md</code>; validate live at <code>/style</code>.</li>
     </ol>
-    <p class="foot-note">Concrete sizes, colors, radii and fonts below describe what the app ships <em>today</em> — treat them as “e.g.” and a starting palette, not a mandate. What is <b>fixed</b> is the structure: the theming hooks, the element slots, and the functional constraints (tap-target sizes, safe areas, contrast). Those are flagged <b>[constraint]</b>.</p>
   </div>
-</div>
-
-<!-- ============================ §1 CONTRACT ============================ -->
-<div class="page">
-<section class="sec">
-  <h2><span class="n">01</span> The theming contract — read first</h2>
-  <p class="lead">The app composes three independent visual axes on the page. Art must survive <b>every combination</b>, or ship one variant per relevant axis. A skin restyles only the shared <em>material</em> classes, so changing it re-skins every screen at once.</p>
-
-  <h3 class="sub">The three axes</h3>
+</div><div class="page screenpage">
+  <h2><span>1. Home</span><span class="rt">/</span></h2>
+  <p class="purpose">Landing hub — pick a course, resume a round, reach maps / rules / leaderboard / install.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-topflush"><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-hero">⛳️</div>
+<div class="m-locbar"><span>📍 <b>LOCATION</b><br>Upland</span><span class="m-chg">Change</span></div>
+<div class="m-resume"><div class="m-eyebrow">RESUME ROUND</div><div class="m-row2"><b>Green Course</b><span class="m-tags"><span class="m-tag" style="--ga:#22c55e">AVA</span><span class="m-tag" style="--ga:#22c55e">JZ</span></span></div></div>
+<div class="m-tiles"><div class="m-tile" style="--ta:#3b82f6"><div class="m-puck" style="--pa:#3b82f6">🔵</div>Blue</div><div class="m-tile" style="--ta:#22c55e"><div class="m-puck" style="--pa:#22c55e">🟢</div>Green</div><div class="m-tile" style="--ta:#ea580c"><div class="m-puck" style="--pa:#ea580c">🐉</div>Dragon</div><div class="m-tile" style="--ta:#b45309"><div class="m-puck" style="--pa:#b45309">🤠</div>Western</div></div>
+<div class="m-menu"><div class="m-ghost">Scavenger hunt</div><div class="m-ghost">🎡 While You Wait</div><div class="m-ghost">Rules</div><div class="m-ghost">See the leaderboard</div><div class="m-ghost">📲 Install app</div></div></div></div><div class="co" style="top:3%;left:86%">1</div><div class="co" style="top:11%;left:50%">2</div><div class="co" style="top:25%;left:18%">3</div><div class="co" style="top:36%;left:50%">4</div><div class="co" style="top:55%;left:30%">5</div><div class="co" style="top:78%;left:50%">6</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-topflush"><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-hero">⛳️</div>
+<div class="m-locbar"><span>📍 <b>LOCATION</b><br>Upland</span><span class="m-chg">Change</span></div>
+<div class="m-resume"><div class="m-eyebrow">RESUME ROUND</div><div class="m-row2"><b>Green Course</b><span class="m-tags"><span class="m-tag" style="--ga:#22c55e">AVA</span><span class="m-tag" style="--ga:#22c55e">JZ</span></span></div></div>
+<div class="m-tiles"><div class="m-tile" style="--ta:#3b82f6"><div class="m-puck" style="--pa:#3b82f6">🔵</div>Blue</div><div class="m-tile" style="--ta:#22c55e"><div class="m-puck" style="--pa:#22c55e">🟢</div>Green</div><div class="m-tile" style="--ta:#ea580c"><div class="m-puck" style="--pa:#ea580c">🐉</div>Dragon</div><div class="m-tile" style="--ta:#b45309"><div class="m-puck" style="--pa:#b45309">🤠</div>Western</div></div>
+<div class="m-menu"><div class="m-ghost">Scavenger hunt</div><div class="m-ghost">🎡 While You Wait</div><div class="m-ghost">Rules</div><div class="m-ghost">See the leaderboard</div><div class="m-ghost">📲 Install app</div></div></div></div></div></div><div class="viewcap">Light</div></div>
+  </div>
   <table>
-    <tr><th>Axis</th><th>Set via</th><th>Values</th><th>What it controls</th></tr>
-    <tr><td><b>Skin</b></td><td class="k">data-template</td><td>unstyled (default), candy, blocky, uv, glass, chrome, underwater, fantasy, cyberpunk, forest, steampunk, nautical, space, zen</td><td>The <b>material</b> every surface is painted with (bevels, borders, glow, metal, glass).</td></tr>
-    <tr><td><b>Mode</b></td><td class="k">data-theme</td><td>light, dark</td><td>The neutral ramp + inks invert. Panels stay dark in dark / light in light so text stays legible.</td></tr>
-    <tr><td><b>Course tint</b></td><td class="k">.course-tinted + --course-accent</td><td>any hex</td><td>Play / scorecard / rules screens wash their surfaces toward the course color (text stays neutral).</td></tr>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Header control pills</b></td><td>Global, top-right — light/dark + mute</td><td>36×36 circle each</td><td>☀️/🌙 · 🔊/🔇 toggle</td><td>translucent pill bg; glyph</td><td class="artc">pill bg + the two glyph pairs (icons)</td></tr><tr><td class="cn">2</td><td><b>Hero glyph</b></td><td>Brand mark, top of Home</td><td>48px, wiggles on mount</td><td>one-shot wiggle</td><td>—</td><td class="artc">brand hero mark (animatable, origin bottom)</td></tr><tr><td class="cn">3</td><td><b>Location bar</b></td><td>.surface-1 row → /locations</td><td>full-width, radius 16</td><td>press dip</td><td>📍 pin marker</td><td class="artc">pin icon; row material</td></tr><tr><td class="cn">4</td><td><b>Resume-round card</b></td><td>.surface CTA → resume play</td><td>full-width, radius 16</td><td>only when a round is live; glow-pulse</td><td>--glow = course accent</td><td class="artc">card material + pulsing halo</td></tr><tr><td class="cn">5</td><td><b>Course tiles</b></td><td>.tile grid → course map</td><td>~1:1, radius 24</td><td>pop-in stagger; press onto lip</td><td>--tile-accent, --puck-accent</td><td class="artc">tile face + colored lip + puck cap + marker</td></tr><tr><td class="cn">6</td><td><b>Menu (ghost buttons)</b></td><td>Secondary nav</td><td>full-width rows</td><td>press dip</td><td>—</td><td class="artc">ghost material; leading icon per row</td></tr>
   </table>
-
-  <h3 class="sub">Per-instance color hooks (set inline on each element — track these)</h3>
+</div><div class="page screenpage">
+  <h2><span>2. Location Picker</span><span class="rt">/locations</span></h2>
+  <p class="purpose">Choose the venue (manual or GPS); scopes which courses show.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Choose a location</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-gps">🧭 Use my location</div>
+<div class="m-note">Locating…</div>
+<div class="m-lrow m-sel"><span class="m-lico" style="--a:#38bdf8">📍</span><span><b>Upland</b><br><small>4 courses</small></span><span class="m-cur">Current</span></div>
+<div class="m-lrow"><span class="m-lico" style="--a:#f472b6">📍</span><span><b>Tukwila</b><br><small>3 courses</small></span><span class="m-chev">›</span></div>
+<div class="m-lrow"><span class="m-lico" style="--a:#facc15">📍</span><span><b>Wilsonville</b><br><small>2 courses</small></span><span class="m-chev">›</span></div>
+<div class="m-foot">Placeholder sites — the client's real locations swap in here.</div></div></div><div class="co" style="top:17%;left:50%">1</div><div class="co" style="top:27%;left:26%">2</div><div class="co" style="top:40%;left:50%">3</div><div class="co" style="top:55%;left:84%">4</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Choose a location</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-gps">🧭 Use my location</div>
+<div class="m-note">Locating…</div>
+<div class="m-lrow m-sel"><span class="m-lico" style="--a:#38bdf8">📍</span><span><b>Upland</b><br><small>4 courses</small></span><span class="m-cur">Current</span></div>
+<div class="m-lrow"><span class="m-lico" style="--a:#f472b6">📍</span><span><b>Tukwila</b><br><small>3 courses</small></span><span class="m-chev">›</span></div>
+<div class="m-lrow"><span class="m-lico" style="--a:#facc15">📍</span><span><b>Wilsonville</b><br><small>2 courses</small></span><span class="m-chev">›</span></div>
+<div class="m-foot">Placeholder sites — the client's real locations swap in here.</div></div></div></div></div><div class="viewcap">Light</div></div>
+  </div>
   <table>
-    <tr><th>Variable</th><th>Set on</th><th>Meaning</th></tr>
-    <tr><td class="k">--accent</td><td>root / .course-tinted</td><td>Interactive accent — house green, or the course color on themed screens.</td></tr>
-    <tr><td class="k">--tile-accent</td><td>each course tile</td><td>That course's hex (drives the tile body + colored lip).</td></tr>
-    <tr><td class="k">--puck-accent</td><td>each course puck</td><td>That course's hex (drives the domed cap).</td></tr>
-    <tr><td class="k">--tag-accent</td><td>each player tag</td><td>Course hex, or <code>#166534</code> house default.</td></tr>
-    <tr><td class="k">--glow</td><td>resume card, winner hero</td><td>Accent color for the looping halo.</td></tr>
-    <tr><td class="k">--i</td><td>list items / tiles</td><td>Zero-based index → drives the stagger delay of entrance animation.</td></tr>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>“Use my location”</b></td><td>GPS detect button</td><td>full-width, radius 12</td><td>disabled + “Locating…” while working; only if geolocation supported</td><td>🧭 compass</td><td class="artc">compass icon; button material</td></tr><tr><td class="cn">2</td><td><b>Detect status message</b></td><td>Feedback line</td><td>text</td><td>amber on error/progress</td><td>amber text</td><td class="artc">—</td></tr><tr><td class="cn">3</td><td><b>Location row</b></td><td>One per venue</td><td>full-width, radius 16</td><td>selected vs unselected</td><td>📍 chip tinted to location accent (--a)</td><td class="artc">pin chip icon; row material</td></tr><tr><td class="cn">4</td><td><b>Trailing marker</b></td><td>Row right edge</td><td>—</td><td>“Current” label (selected) / › chevron</td><td>location accent</td><td class="artc">chevron icon</td></tr>
   </table>
-
-  <div class="callout"><b>How art plugs in.</b> Most elements are pure CSS today. To theme with art, either (a) replace a material with an SVG/PNG/WEBP background, or (b) supply per-skin and/or per-mode variants. <b>Prefer inline SVG</b> that inherits <code>currentColor</code> and reads <code>--accent</code>/<code>--tile-accent</code> where a color must track the course. Provide a light + dark treatment unless one asset clears contrast on both grounds.</div>
-
-  <div class="callout warn"><b>Emoji are placeholders, not a standard option.</b> Every glyph you see (course markers, controls, activity icons) is a stand-in. Each real theme ships its own <b>image icon set — SVG preferred, WEBP/PNG for illustrative icons</b>. A dedicated “Emoji” theme is the only exception. Treat every emoji in §5–§6 as a <em>slot that needs designed art</em>.</div>
-</section>
-</div>
-
-<!-- ============================ §2 PALETTE ============================ -->
-<div class="page">
-<section class="sec">
-  <h2><span class="n">02</span> Color — the palette</h2>
-  <p class="lead">Current default palette. A theme may retint the whole thing, but keep enough light↔dark separation for text contrast.</p>
-
-  <h3 class="sub">Neutral “fairway” ramp — DARK (mode-aware; inverts in light)</h3>
-  <div class="ramp">
-    <div class="sw" style="background:#f5f5f5"><span style="color:#333;text-shadow:none">50</span></div>
-    <div class="sw" style="background:#e8e8e8"><span style="color:#333;text-shadow:none">100</span></div>
-    <div class="sw" style="background:#cfcfcf"><span style="color:#333;text-shadow:none">200</span></div>
-    <div class="sw" style="background:#ababab"><span>300</span></div>
-    <div class="sw" style="background:#b0b0b0"><span>400</span></div>
-    <div class="sw" style="background:#6f6f6f"><span>500</span></div>
-    <div class="sw" style="background:#5b5b5b"><span>600</span></div>
-    <div class="sw" style="background:#4f4f4f"><span>700</span></div>
-    <div class="sw" style="background:#464646"><span>800</span></div>
-    <div class="sw" style="background:#3a3a3a"><span>900</span></div>
-    <div class="sw" style="background:#2f2f2f"><span>950</span></div>
+</div><div class="page screenpage">
+  <h2><span>3. Course Picker</span><span class="rt">/new</span></h2>
+  <p class="purpose">Pick which course at the current location to score.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Pick a course</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-locbar sm"><span>📍 Upland</span><span class="m-chg">Change</span></div>
+<div class="m-crow"><span class="m-badge" style="--a:#3b82f6">🔵</span><span><b>Blue Course</b><br><small>18 holes · par 47</small></span><span class="m-chev">›</span></div>
+<div class="m-crow"><span class="m-badge" style="--a:#22c55e">🟢</span><span><b>Green Course</b><br><small>18 holes · par 48</small></span><span class="m-chev">›</span></div>
+<div class="m-crow"><span class="m-badge" style="--a:#ea580c">🐉</span><span><b>Dragon's Hollow</b><br><small>18 holes · par 52</small></span><span class="m-chev">›</span></div>
+<div class="m-crow"><span class="m-badge" style="--a:#b45309">🤠</span><span><b>Western</b><br><small>18 holes · par 50</small></span><span class="m-chev">›</span></div></div></div><div class="co" style="top:15%;left:50%">1</div><div class="co" style="top:30%;left:16%">2</div><div class="co" style="top:30%;left:50%">3</div><div class="co" style="top:30%;left:86%">4</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Pick a course</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-locbar sm"><span>📍 Upland</span><span class="m-chg">Change</span></div>
+<div class="m-crow"><span class="m-badge" style="--a:#3b82f6">🔵</span><span><b>Blue Course</b><br><small>18 holes · par 47</small></span><span class="m-chev">›</span></div>
+<div class="m-crow"><span class="m-badge" style="--a:#22c55e">🟢</span><span><b>Green Course</b><br><small>18 holes · par 48</small></span><span class="m-chev">›</span></div>
+<div class="m-crow"><span class="m-badge" style="--a:#ea580c">🐉</span><span><b>Dragon's Hollow</b><br><small>18 holes · par 52</small></span><span class="m-chev">›</span></div>
+<div class="m-crow"><span class="m-badge" style="--a:#b45309">🤠</span><span><b>Western</b><br><small>18 holes · par 50</small></span><span class="m-chev">›</span></div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-  <p class="legend">Text: 50 (primary) → 100 (secondary) → 400 (muted/eyebrow). Surfaces &amp; borders: 500 → 950. Light mode inverts (50=<code>#1a1a1a</code> … 950=<code>#eaeaea</code>).</p>
-
-  <h3 class="sub">Accent, inks &amp; score signals</h3>
-  <div class="grid g2">
-    <div class="card">
-      <h4>Interactive accent &amp; score</h4>
-      <div class="swrow">
-        <span class="dot"><i style="background:#22c55e"></i>--accent (dark) #22c55e</span>
-        <span class="dot"><i style="background:#1f9d55"></i>--accent (light) #1f9d55</span>
-      </div>
-      <div class="swrow">
-        <span class="dot"><i style="background:#34d399"></i>score-under (dark) #34d399</span>
-        <span class="dot"><i style="background:#fbbf24"></i>score-over (dark) #fbbf24</span>
-      </div>
-      <p class="art">Accent = house green on hub screens; the <b>course color</b> replaces it on themed screens. Par = neutral fairway-100. Under-par reads green, over-par amber (both darken in light mode).</p>
-    </div>
-    <div class="card">
-      <h4>Per-course accents</h4>
-      <div class="swrow">
-        <span class="dot"><i style="background:#3b82f6"></i>Blue #3b82f6</span>
-        <span class="dot"><i style="background:#22c55e"></i>Green #22c55e</span>
-        <span class="dot"><i style="background:#ea580c"></i>Dragon #ea580c</span>
-      </div>
-      <div class="swrow">
-        <span class="dot"><i style="background:#b45309"></i>Western #b45309</span>
-        <span class="dot"><i style="background:#ef4444"></i>Red #ef4444</span>
-      </div>
-      <h4 style="margin-top:7px">Per-location accents</h4>
-      <div class="swrow">
-        <span class="dot"><i style="background:#38bdf8"></i>Upland #38bdf8</span>
-        <span class="dot"><i style="background:#f472b6"></i>Tukwila #f472b6</span>
-        <span class="dot"><i style="background:#facc15"></i>Wilsonville #facc15</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="grid g2" style="margin-top:9px">
-    <div class="card">
-      <h4>Text inks (<code>--ink-*</code>, dark / light)</h4>
-      <table style="margin-top:3px">
-        <tr><th>Course</th><th>Dark</th><th>Light</th></tr>
-        <tr><td>default</td><td class="k">#86efac</td><td class="k">#157a3c</td></tr>
-        <tr><td>green</td><td class="k">#85e0a5</td><td class="k">#157a3c</td></tr>
-        <tr><td>blue</td><td class="k">#b1c3d8</td><td class="k">#3f5c7a</td></tr>
-        <tr><td>red</td><td class="k">#d7a49e</td><td class="k">#9b4a42</td></tr>
-        <tr><td>western</td><td class="k">#dcc396</td><td class="k">#7a5a2e</td></tr>
-        <tr><td>dragon</td><td class="k">#fdba74</td><td class="k">#a34a08</td></tr>
-      </table>
-      <p class="art">Inks color <b>text on the neutral chrome</b> — player tags, par numerals, winner names, rules headings. They auto-darken in light mode to hold WCAG-AA.</p>
-    </div>
-    <div class="card">
-      <h4>Confetti palette</h4>
-      <div class="swrow">
-        <span class="dot dotc"><i style="background:#22c55e"></i></span>
-        <span class="dot dotc"><i style="background:#f0fdf4;border-color:#ccc"></i></span>
-        <span class="dot dotc"><i style="background:#fbbf24"></i></span>
-        <span class="dot dotc"><i style="background:#38bdf8"></i></span>
-        <span class="dot dotc"><i style="background:#f472b6"></i></span>
-        <span class="dot dotc"><i style="background:#a78bfa"></i></span>
-        <span class="dot dotc"><i style="background:#fb923c"></i></span>
-      </div>
-      <p class="art mono" style="margin-top:4px">#22c55e #f0fdf4 #fbbf24 #38bdf8 #f472b6 #a78bfa #fb923c</p>
-      <p class="art">Fired on round-complete &amp; on landing on the leaderboard. Three particle shapes (rect / streamer strip / circle). Themed particle shapes are optional art.</p>
-      <div class="callout warn" style="margin-top:6px"><b>Contrast [constraint].</b> Text/icons on their ground ≥ <b>4.5:1</b> (normal) / <b>3:1</b> (large ≥24px or bold ≥18.66px, and non-text UI). Player tags on bright course accents are the known tight spot — verify each.</div>
-    </div>
-  </div>
-</section>
-</div>
-
-<!-- ============================ §3 TYPE + MOTION ============================ -->
-<div class="page">
-<section class="sec">
-  <h2><span class="n">03</span> Typography &amp; motion</h2>
-  <p class="lead">The app ships system font stacks today for zero-download performance, but <b>typography is one of the biggest levers a theme has</b> — you're expected to bring your own faces. Fill both roles; the families are open.</p>
-
-  <div class="grid g2">
-    <div class="card">
-      <h4>Two type roles</h4>
-      <ul style="margin:4px 0 0; padding-left:16px; font-size:9.5px">
-        <li><b>UI / body face</b> — screens, buttons, copy. Current default: system sans (a chunky display weight for headings suits the arcade tone).</li>
-        <li><b>Mono / “arcade” face</b> — player tags, winner names, the scorecard tag column, rank numerals. Current default: system mono + <code>.font-arcade</code> (letter-spacing 0.15em). Keep it monospaced enough to align in columns.</li>
-      </ul>
-      <p class="art"><b>Scale (px, current):</b> 48 · 36 · 30 · 24 · 20 · 18 · 16 (body) · 14 · 12 (eyebrow) · 11/10/9.5 (micro). Re-scale freely; preserve the hierarchy.</p>
-      <p class="art"><b>Weights:</b> display <em>black</em> (900), body <em>bold</em> (700), eyebrows uppercase + wide tracking.</p>
-      <p class="art warn" style="color:#9a3412"><b>Custom fonts must be self-hosted / bundled</b> — the app avoids external font CDNs. Ship the files with the theme.</p>
-    </div>
-    <div class="card">
-      <h4>Motion catalogue — art must hold up mid-animation</h4>
-      <table style="margin-top:3px">
-        <tr><th>Class</th><th>Trigger</th><th>Reduced-motion</th></tr>
-        <tr><td class="k">page-in</td><td>route mount</td><td>fade</td></tr>
-        <tr><td class="k">rise-in</td><td>list rows (+--i)</td><td>fade</td></tr>
-        <tr><td class="k">pop-in</td><td>hero tiles/cards</td><td>fade</td></tr>
-        <tr><td class="k">score-punch</td><td>stroke ±</td><td>none</td></tr>
-        <tr><td class="k">trophy-pop</td><td>winner / game over</td><td>none</td></tr>
-        <tr><td class="k">result-swell</td><td>spinner landing</td><td>fade</td></tr>
-        <tr><td class="k">glow-pulse</td><td>resume / winner CTA</td><td>dropped</td></tr>
-        <tr><td class="k">wiggle</td><td>Home hero ⛳️</td><td>none</td></tr>
-        <tr><td class="k">btn-sheen</td><td>primary btn mount</td><td>dropped</td></tr>
-      </table>
-    </div>
-  </div>
-
-  <h3 class="sub">Layout &amp; metrics</h3>
-  <div class="grid g2">
-    <div class="card">
-      <h4>Column &amp; radii</h4>
-      <p class="art"><b>Column:</b> <code>max-w-md</code> = <b>448px</b> portrait, centered, 16px content padding. Compose art to a ~448px column.</p>
-      <p class="art"><b>Radii (current example):</b> 8 (lg) · 12 (xl) · 16 (2xl) · 24 (3xl) · full. A theme may pick its own corner language (sharp, pill, etc.).</p>
-    </div>
-    <div class="card">
-      <h4>Constraints — honor these</h4>
-      <p class="art"><b>[constraint] Safe areas:</b> body pads <code>env(safe-area-inset-*)</code>; the top bar pins below the notch. Keep art clear of notch / home-indicator zones.</p>
-      <p class="art"><b>[constraint] Tap targets:</b> interactive elements ≥ ~44px hit area — current keys 56×56, back 40×40, control pills 36×36, buttons ~52 tall. Style freely but don't shrink below a comfortable touch target.</p>
-    </div>
-  </div>
-</section>
-</div>
-
-<!-- ============================ §4 MATERIAL KIT ============================ -->
-<div class="page">
-<section class="sec">
-  <h2><span class="n">04</span> The material kit — shared surfaces &amp; controls</h2>
-  <p class="lead">These are the highest-leverage things to theme: a handful of <em>material</em> classes back nearly every card, panel and control on every screen. Below they're rendered with the app's real <b>candy</b> (dark) treatment. Re-theming these re-skins the whole app.</p>
-
-  <h3 class="sub">Buttons</h3>
-  <div class="stage">
-    <div class="specs g3">
-      <div class="spec"><div class="btn-accent btn-full">Primary action</div><div class="cap">.btn-accent · catches a one-shot sheen; drops 3px onto its lip on press</div></div>
-      <div class="spec"><div class="ghost btn-full">Ghost action</div><div class="cap">ghost = .surface-1 + border; dips 1px</div></div>
-      <div class="spec"><div class="btn-danger btn-full">Danger action</div><div class="cap">.btn-danger · destructive, red lip</div></div>
-    </div>
-  </div>
-  <p class="art"><b>Art needed:</b> the button “face” material + optional pressed state, for each variant. Label is <code>fairway-50</code> text (keep ≥4.5:1). Disabled = flat, no lip, 40% opacity.</p>
-
-  <h3 class="sub">Surfaces (materials, not shapes) &amp; the stepper key</h3>
-  <div class="stage">
-    <div class="specs g4">
-      <div class="spec"><div class="surface matbox"></div><div class="cap">.surface · raised card</div></div>
-      <div class="spec"><div class="surface-1 matbox"></div><div class="cap">.surface-1 · flatter tile/panel</div></div>
-      <div class="spec"><div class="surface-sunk matbox"></div><div class="cap">.surface-sunk · carved well</div></div>
-      <div class="spec">
-        <div style="display:flex;gap:8px;align-items:center">
-          <div class="key keycap">−</div>
-          <div class="surface-sunk well">2</div>
-          <div class="key keycap">+</div>
-        </div>
-        <div class="cap">.key steppers around a .surface-sunk score well</div>
-      </div>
-    </div>
-  </div>
-  <p class="art"><b>Art needed:</b> three material treatments — raised (<code>.surface</code>), semi-raised (<code>.surface-1</code>), carved (<code>.surface-sunk</code>) — that read in light + dark; plus a neutral key face with its <code>+ / −</code> marks. The score number punches on each tap (<code>score-punch</code>).</p>
-
-  <h3 class="sub">Course identity — tile, puck, tag, medallion</h3>
-  <div class="stage">
-    <div class="specs g4">
-      <div class="spec"><div class="tile tilebox" style="--ta:#ea580c"><div class="puck course-puck" style="--pa:#ea580c">🐉</div><div style="font-weight:900;font-size:11px">Dragon</div></div><div class="cap">.tile (course-tinted) + .course-puck</div></div>
-      <div class="spec"><div class="course-puck puck" style="--pa:#3b82f6">🔵</div><div class="cap">.course-puck · domed cap in --puck-accent</div></div>
-      <div class="spec">
-        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
-          <span class="tag-chip chipbox" style="--ga:#22c55e">AVA</span>
-          <span class="tag-chip chipbox" style="--ga:#3b82f6">JZ</span>
-          <span class="tag-chip chipbox" style="--ga:#166534">···</span>
-        </div>
-        <div class="cap">.tag-chip · arcade 3-char pill (empty = ···)</div>
-      </div>
-      <div class="spec"><div class="surface-1 medallion" style="color:#fdba74">3</div><div class="cap">par medallion · .surface-1 disc, ink numeral</div></div>
-    </div>
-  </div>
-  <p class="art"><b>Art needed:</b> the tile face material + colored lip (course-tinted), the domed puck cap, the tag pill (text must stay ≥4.5:1 on bright accents), and the par disc. The <b>puck center is the #1 place a bespoke course-icon replaces emoji</b> — see §5 &amp; §6.</p>
-
-  <div class="callout"><b>Every material also has a per-skin restyle.</b> The specimens above are the <code>candy</code> look. The same classes become fat-inked (blocky), neon-glow (uv), frosted (glass/underwater), brushed-metal (chrome), or fully-illustrated (fantasy, forest, nautical, space, zen, steampunk, cyberpunk). See §4b.</p>
-</section>
-</div>
-
-<!-- ============================ §4b SKINS ============================ -->
-<div class="page">
-<section class="sec">
-  <h2><span class="n">04b</span> The 14 skins</h2>
-  <p class="lead">A skin is a <em>material</em> layer selected with the 🎨 picker. Each keeps panels dark-in-dark / light-in-light so the text ramp stays legible; its identity comes from structure (bevels, outlines, glow, glass, metal, painted scenes) + the accent. <span class="asset-css">■ CSS-only</span> skins need no image assets; <span class="asset-img">■ image-kit</span> skins already ship painted course cards / frames / menu icons under <code>public/themes/&lt;skin&gt;/</code> and are where new illustrative art lives.</p>
-
-  <div class="grid g2">
-    <div class="skincard"><div class="top"><span class="sd" style="background:#9ca3af"></span><h4>Unstyled</h4><span class="id">default</span></div><p>Plain &amp; flat baseline — flat fills from the neutral ramp, hairline borders, no bevels/gloss.</p><div class="asset asset-css">■ CSS-only</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#22c55e"></span><h4>Candy</h4><span class="id">candy</span></div><p>Glossy arcade keys — the base look rendered in §4. 3D lips, bevels, one-shot sheen.</p><div class="asset asset-css">■ CSS-only</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#ff5d5d"></span><h4>Quirky Blocky</h4><span class="id">blocky</span></div><p>Toybox neubrutalism — fat ink outlines + hard offset shadows on a dotted paper ground.</p><div class="asset asset-css">■ CSS-only</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#16f2e3"></span><h4>UV Party</h4><span class="id">uv</span></div><p>Blacklight neon — dark glass rimmed in neon (dark) / neon-on-white (light), glowing pucks.</p><div class="asset asset-css">■ CSS-only</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#7c9cff"></span><h4>Glassy</h4><span class="id">glass</span></div><p>Frosted translucent panels over an aurora gradient; backdrop-blur, bright top highlight.</p><div class="asset asset-css">■ CSS-only</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#c9d2db"></span><h4>Chrome</h4><span class="id">chrome</span></div><p>Liquid metal — gunmetal (dark) / brushed aluminium (light), polished bevels &amp; metal caps.</p><div class="asset asset-css">■ CSS-only</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#22d3ee"></span><h4>Underwater</h4><span class="id">underwater</span></div><p>Deep-ocean glass — god-rays &amp; abyss floor, cyan-lit glass panels, glossy dimpled golf balls. Ships painted course tiles.</p><div class="asset asset-img">■ image-kit (tiles, frame, menu icons)</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#c8a24a"></span><h4>Fantasy Medieval</h4><span class="id">fantasy</span></div><p>Illustrated adventure — heraldic crests, stone panels; light ships fully-composed course cards.</p><div class="asset asset-img">■ image-kit (cards, crests, scenes)</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#ff2fd0"></span><h4>Cyberpunk Neon</h4><span class="id">cyberpunk</span></div><p>Rain-slick neon city — glowing “billboard” course cards over a night skyline / day street.</p><div class="asset asset-img">■ image-kit (cards, bg, menu icons)</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#86efac"></span><h4>Enchanted Forest</h4><span class="id">forest</span></div><p>Glowing woodland — parchment panels, fully-composed forest course cards, both modes.</p><div class="asset asset-img">■ image-kit (cards, frame, bg)</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#c8912f"></span><h4>Steampunk Victorian</h4><span class="id">steampunk</span></div><p>Brass &amp; clockwork — brass-framed Victorian-city course cards, both modes.</p><div class="asset asset-img">■ image-kit (cards, frame, bg)</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#3fa7c4"></span><h4>Nautical / Pirate</h4><span class="id">nautical</span></div><p>Moonlit harbor — wood-framed pirate-cove course cards, aged parchment panels.</p><div class="asset asset-img">■ image-kit (cards, frame, bg)</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#a855f7"></span><h4>Space / Galactic</h4><span class="id">space</span></div><p>Crystal cosmos — metal-framed space-colony course cards with hex crests.</p><div class="asset asset-img">■ image-kit (cards, frame, bg)</div></div>
-    <div class="skincard"><div class="top"><span class="sd" style="background:#d98a8a"></span><h4>Zen Garden</h4><span class="id">zen</span></div><p>Cherry-blossom calm — fret-corner framed garden course cards, paper panels.</p><div class="asset asset-img">■ image-kit (cards, frame, bg)</div></div>
-  </div>
-
-  <div class="callout"><b>Image-kit anatomy (per theme, per course).</b> A composed <code>card-&lt;course&gt;.webp</code> (frame + scene + crest + name baked in — the tile then hides its own label/puck), or a <code>tile-&lt;course&gt;.webp</code> scene + separate <code>puck/crest</code>. Plus a <code>frame.webp</code>, <code>bg-dark/light.webp</code>, and menu-icon set (<code>menu-hunt/wait/rules/leaderboard.webp</code>, <code>pin.webp</code>). Course keys: blue, green, dragon, western (Upland's Blue/Green map to california/classic).</div>
-</section>
-</div>
-
-<!-- ============================ §5 SCREEN COVERAGE ============================ -->
-<div class="page">
-<section class="sec">
-  <h2><span class="n">05</span> Screen-by-screen coverage checklist</h2>
-  <p class="lead">Every screen and overlay, with each interface element as a tick-box. Walk this list to confirm <b>every button and every interface is covered</b>. Shared frame on most screens: <code>Screen › TopBar (title + ‹ back) › Content</code>, with the global control pills at top-right.</p>
-
-  <h3 class="sub">A · Core scorecard flow</h3>
-
-  <div class="screen">
-    <div class="hd"><h4>Home</h4><span class="route">/</span></div>
-    <p class="purpose">Landing hub — pick a course, resume a round, reach maps / rules / leaderboard / install.</p>
-    <ul class="cl">
-      <li><b>Header control pills</b> — light/dark toggle + mute switch (top-right) <span class="tag">shared</span></li>
-      <li><b>Hero glyph</b> — brand mark ⛳️, wiggles on mount (transform-origin bottom) <span class="tag">art</span></li>
-      <li><b>Location bar</b> — <code>.surface-1</code> row: 📍 pin, “LOCATION” eyebrow, venue name, “Change” → /locations</li>
-      <li><b>Resume-round card</b> — <code>.surface</code> + glow-pulse (--glow=course accent): course name + player tags; only when a round is in progress</li>
-      <li><b>Course tiles grid</b> — <code>.tile</code> per course: course-puck + marker + name; pop-in stagger; art variants (tile-art / puck-art / card-art) by skin</li>
-      <li><b>Empty state</b> — “No courses at this location yet.”</li>
-      <li><b>Menu — ghost buttons</b> — Scavenger hunt · 🎡 While You Wait · Rules · See the leaderboard · 📲 Install (Install hidden when already installed)</li>
-    </ul>
-  </div>
-
-  <div class="screen">
-    <div class="hd"><h4>Location Picker</h4><span class="route">/locations</span></div>
-    <p class="purpose">Choose the venue (manual or GPS); scopes which courses show. Optional <code>?next=</code> chains onward.</p>
-    <ul class="cl">
-      <li><b>“Use my location” button</b> — 🧭 GPS detect; disabled + “Locating…” while working (only if geolocation supported)</li>
-      <li><b>Detect status message</b> — amber text (error / progress)</li>
-      <li><b>Location rows</b> — 📍 chip tinted to the location accent, name, “N courses”, and a trailing “Current” label (selected) or › chevron</li>
-      <li><b>Selected vs unselected row states</b> — brighter border/fill + “Current” vs muted + chevron</li>
-      <li><b>Footer note</b> — placeholder-sites caption</li>
-    </ul>
-  </div>
-
-  <div class="screen">
-    <div class="hd"><h4>Course Picker</h4><span class="route">/new</span></div>
-    <p class="purpose">Pick which course at the current location to score (one round = one course).</p>
-    <ul class="cl">
-      <li><b>Location switcher row</b> — 📍 + name + “Change” → /locations?next=/new</li>
-      <li><b>Course tiles</b> — emoji badge (accent-tinted square) + course name + “N holes · par N” + › chevron → /new/setup</li>
-      <li><b>Empty state</b> — “No courses at this location yet.”</li>
-    </ul>
-  </div>
-
-  <div class="screen">
-    <div class="hd"><h4>Player Setup</h4><span class="route">/new/setup</span></div>
-    <p class="purpose">Choose player count (1–4) and enter three-character arcade tags, then start.</p>
-    <ul class="cl">
-      <li><b>Player-count selector</b> — 1 / 2 / 3 / 4 buttons; selected vs unselected states</li>
-      <li><b>Tag inputs</b> — arcade uppercase text field, 3 chars, “ABC” placeholder; one per active player; row index numeral</li>
-      <li><b>Invalid-tag error</b> — red border + inline message on a bad 3-char tag</li>
-      <li><b>Start round button</b> — primary; disabled until roster valid; “Starting…” while submitting</li>
-      <li><b>Form error line</b> — red, above Start</li>
-      <li><b>Dev-only</b> — ▶ Auto play · ⏭ Fast forward (ghost); course-not-found fallback screen</li>
-    </ul>
-  </div>
-
-  <div class="screen">
-    <div class="hd"><h4>Course Map</h4><span class="route">/courses/:id/map</span><span class="tag">course-tinted</span></div>
-    <p class="purpose">Opening course screen — the map, and a giant “tap to begin” target that starts the round.</p>
-    <ul class="cl">
-      <li><b>Full-screen “begin” button</b> — the whole panel is one tap target → /new/setup</li>
-      <li><b>Map illustration</b> — full-bleed course map in a framed container <span class="tag">art</span></li>
-      <li><b>Emoji fallback panel</b> — large theme marker on an accent-tinted panel when no map asset exists</li>
-      <li><b>Prompt block</b> — “TAP ANYWHERE TO BEGIN” (pulsing) + “N holes · course name”</li>
-      <li><b>Not-found fallback</b> — “Course not found.”</li>
-    </ul>
-  </div>
-</section>
-</div>
-
-<div class="page">
-<section class="sec">
-  <div class="screen">
-    <div class="hd"><h4>Scorecard (play screen)</h4><span class="route">/play/:clientId</span><span class="tag">course-tinted</span></div>
-    <p class="purpose">The core loop — score one hole at a time for every player, with hole navigation; each edit persists instantly.</p>
-    <ul class="cl">
-      <li><b>TopBar right cluster</b> — 🔍 Scavenger hunt → /hunt · 🎡 Challenge spinner → /fun/spinner · “Holes” toggle</li>
-      <li><b>Hole-jump grid</b> — 6-col keys: current = <code>.btn-accent</code>, done = <code>.surface-1</code>, unplayed = outline</li>
-      <li><b>Hole header</b> — “Hole N” eyebrow + big hole name (or big number if unnamed)</li>
-      <li><b>Par medallion</b> — <code>.surface-1</code> disc, par numeral in course ink</li>
-      <li><b>Player rows</b> — <code>.surface</code> card each: TagChip · <b>− key</b> · <b><code>.surface-sunk</code> score well</b> (punch animation) · <b>+ key</b> · hint line</li>
-      <li><b>Disabled ± states</b> — minus at floor, plus at stroke-cap (flat, 30% opacity)</li>
-      <li><b>Hole navigation</b> — ‹ Prev (ghost) · Next › (ghost) — or — <b>Finish</b> (primary, cup sound) on the last hole; disabled until the hole/round is complete</li>
-      <li><b>Gating hints &amp; stroke-cap footer</b> — “Score every player…”, “Max N strokes per hole”</li>
-      <li><b>Dev-only auto-play</b> — ⏸ Pause (danger) · ▶ / ⏭ (ghost) · status line</li>
-    </ul>
-  </div>
-
-  <div class="screen">
-    <div class="hd"><h4>Summary (final scorecard)</h4><span class="route">/play/:clientId/summary</span><span class="tag">course-tinted</span></div>
-    <p class="purpose">Celebrates the winner, shows standings + hole-by-hole grid, syncs to the leaderboard.</p>
-    <ul class="cl">
-      <li><b>Confetti overlay</b> — fires once on arrival <span class="tag">shared</span></li>
-      <li><b>Winner hero</b> — <code>.surface</code> + glow: 🏆 trophy (trophy-pop), “Winner” / “Tied for the win”, winner tag in ink, total + over/under</li>
-      <li><b>Standings rows</b> — <code>.surface-1</code>: mono rank · arcade tag in ink · total + over/under</li>
-      <li><b>Nine-grid tables</b> — Front (1–9) &amp; Back (10–18): par row, per-player rows; cells colored under-par (green) / over-par (amber) / par (neutral); empty = ·</li>
-      <li><b>Sync note</b> — “Saved to leaderboard ✓” / amber failure / “Saving…” / offline states</li>
-      <li><b>Action buttons</b> — 🏆 View leaderboard (ghost) → /tv · Done (primary) → /</li>
-    </ul>
-  </div>
-
-  <div class="screen">
-    <div class="hd"><h4>Rules</h4><span class="route">/rules</span></div>
-    <p class="purpose">Static, offline general rules + optional per-course notes. Read-only (only the back control is interactive).</p>
-    <ul class="cl">
-      <li><b>General section</b> — “General” eyebrow + numbered list (mono numerals)</li>
-      <li><b>Course-note cards</b> — one <code>.course-tinted</code> card per course: accent corner-glow, theme marker + course name in ink, • bulleted notes (accent bullets)</li>
-    </ul>
-  </div>
-
-  <div class="screen">
-    <div class="hd"><h4>Install</h4><span class="route">/install</span></div>
-    <p class="purpose">PWA install landing (QR-code target); shows the right path per platform.</p>
-    <ul class="cl">
-      <li><b>Hero</b> — ⛳️ + “Add Mini Golf to your phone”</li>
-      <li><b>Installed branch</b> — ✅ “You're all set” + “Open the app” button</li>
-      <li><b>iOS branch</b> — 3 numbered steps (circular badges), ↑︎ Share &amp; ➕ Add-to-Home glyphs, Safari-only warning box</li>
-      <li><b>Can-prompt branch</b> — “Install this on my device” button (native prompt) + dismissed-retry hint</li>
-      <li><b>Generic branch</b> — 3 numbered steps referencing ⋮ / ⋯ menu, warning box</li>
-      <li><b>Footer note</b> — “Nothing to download from a store…”</li>
-    </ul>
-  </div>
-</section>
-</div>
-
-<div class="page">
-<section class="sec">
-  <h3 class="sub">B · Leaderboard &amp; Scavenger Hunt</h3>
-
-  <div class="screen">
-    <div class="hd"><h4>TV Leaderboard</h4><span class="route">/tv</span></div>
-    <p class="purpose">Live high-score board (polls every 5s); highlights the just-played round on arrival.</p>
-    <ul class="cl">
-      <li><b>Confetti</b> — fires once on first populated load</li>
-      <li><b>Period tabs</b> — Day / Week / Month / All; active vs inactive states</li>
-      <li><b>Standings rows</b> — rank (mono) · arcade tag · course name · total (black); <b>“You” pill</b> + ring highlight on your rows</li>
-      <li><b>“Your last round” pinned section</b> — capped-height list above the board when arriving from a summary</li>
-      <li><b>States</b> — amber error box (“needs the backend API”), empty (“No scores yet…”), loading</li>
-    </ul>
-  </div>
-
-  <div class="screen">
-    <div class="hd"><h4>Scavenger Hunt</h4><span class="route">/hunt</span></div>
-    <p class="purpose">Snap-a-photo hunt; a vision model verifies each find, tracked per player and per group. Gated on an in-progress round.</p>
-    <ul class="cl">
-      <li><b>Gate / empty state</b> — 🔍 + “Start a round to play” + “Start new round” button (primary) → /new</li>
-      <li><b>Camera capture</b> — hidden file input, rear camera forced in prod (photo library allowed in dev) <span class="tag">art</span> (the 📷 Snap trigger)</li>
-      <li><b>“Playing as” selector</b> — TagChip buttons; selected = ring, others dimmed</li>
-      <li><b>Per-item cards</b> — found vs not-found states (border/fill)</li>
-      <li><b>💡 Hint toggle</b> — “💡 Hint” ↔ “Hide hint” (only if the item has a hint)</li>
-      <li><b>Count badge / found check</b> — ×N pill (countable) or ✓ (one-off found)</li>
-      <li><b>“Found by” row</b> — small TagChip per finder</li>
-      <li><b>📷 Snap button</b> — “Snap” / “Snap another” / “Checking…” / “Found” (locked)</li>
-      <li><b>Result banner</b> — verified · flagged (amber “photo of a screen”) · rejected</li>
-      <li><b>Load error box</b> — red</li>
-    </ul>
-  </div>
-
-  <h3 class="sub">C · Arcade Putt minigame</h3>
-  <div class="screen">
-    <div class="hd"><h4>Arcade Putt</h4><span class="route">/putt</span></div>
-    <p class="purpose">A playable canvas mini-golf — drag-to-aim slingshot; 9-hole authored Course or procedural Endless. Fully offline.</p>
-    <ul class="cl">
-      <li><b>Mode picker</b> — ⛳️ + 🏁 “9-Hole Course” (primary) + ♾️ “Endless” (ghost)</li>
-      <li><b>Status header</b> — “Hole N / 9” · “Par X · Strokes Y”</li>
-      <li><b>Canvas playfield</b> — drag back from the ball to aim/power (slingshot) <span class="tag">art</span></li>
-      <li><b>Canvas markers</b> — aim arrow (green→amber→red by power) · POWER% meter · idle “grab me” ring · ball · cup + red flag · candy bumpers · greens/collar · hazards (rough / water / sand) · 💦 splash</li>
-      <li><b>Hint line</b> — dynamic (note style when a course note is active)</li>
-      <li><b>Play buttons</b> — “Next hole →” / “See scorecard →” (primary) · “Reset hole” (ghost) · “End run” (ghost, endless)</li>
-      <li><b>Complete screen</b> — 🏆 + per-hole scorecard list with result emoji (🏌️ ace · 🦅 · 🐦 · ⛳️ par · 😬 · 😵) · “Play again” / “New run” · “Change mode” (ghost)</li>
-    </ul>
-  </div>
-</section>
-</div>
-
-<div class="page">
-<section class="sec">
-  <h3 class="sub">D · While-You-Wait Fun Zone</h3>
-
-  <div class="screen">
-    <div class="hd"><h4>Fun Zone hub</h4><span class="route">/fun</span></div>
-    <p class="purpose">Grid landing routing to every mini-game. Each tile = a rounded emoji chip + title, tinted to its own accent.</p>
-    <ul class="cl">
-      <li><b>11 activity tiles</b> (rise-in stagger) — 💡 Fun Facts · 🧠 Trivia · ⛳️ Arcade Putt · 🎳 Skee-Ball · 🏒 Air Hockey · 🚗 Bumper Cars · 🚤 Bumper Boats · 🪓 Axe Throwing · ⚾️ Batting Cages · 🎳 Bowling · 🏁 Go-Karts <span class="tag">art: 1 icon each</span></li>
-    </ul>
-  </div>
-
-  <div class="callout"><b>Shared minigame shell</b> (Skee-Ball, Air Hockey, Bumper Cars/Boats, Axe, Batting, Bowling, Go-Karts, Arcade Putt): a HUD counter row (score / ball / frame / timer) · a <code>&lt;canvas&gt;</code> playfield (rounded-2xl, <code>border-fairway-800</code>) · a mono hint line · a game-over screen (trophy-pop, 60px emoji, big score, <b>“Play again”</b>). Shared canvas FX: neon rims, radial sheen, corner vignette, particle bursts, screen-shake, flash overlays. <b>Art needed per game:</b> playfield background + sprites, drawn into the canvas (supply as sprite sheets / SVGs).</div>
-
   <table>
-    <tr><th>Game · route</th><th>Interaction</th><th>Interface elements &amp; states</th><th>Signature glyphs</th></tr>
-    <tr><td><b>Fun Facts</b> <span class="k">/fun/facts</span></td><td>tap flashcard</td><td>Big card (6xl emoji + fact) → next; “Next fact →” button. Infinite, no win/lose.</td><td>→</td></tr>
-    <tr><td><b>Trivia</b> <span class="k">/fun/trivia</span></td><td>tap answer</td><td>“Q n of 10 · Score n”; answer buttons → correct (green ✓) / wrong (red ✗) / dimmed; “Next question →” / “See results”; results screen 🧠 + score + “Play again”.</td><td>✓ ✗ 🧠 🏆 🎉 👍 🎮</td></tr>
-    <tr><td><b>Challenge Spinner</b> <span class="k">/fun/spinner</span></td><td>tap to spin</td><td>SVG wheel (🔻 pointer, colored wedges + emoji, hub cap); result card (⛳️ “Next-shot twist” / 🎉 “Just for fun”); Spin button (“Spin” / “Spinning…” / “Spin again”). <em>Reached mid-round, not on the hub.</em></td><td>🔻 ⛳️ 🎉</td></tr>
-    <tr><td><b>Skee-Ball</b> <span class="k">/fun/skeeball</span></td><td>swipe to roll</td><td>“Ball n/9 · Score”; scoring holes 100/50/40/30/20/10; “+N” / “MISS”; over → 🎳.</td><td>🎳 🧙 🎯 👍</td></tr>
-    <tr><td><b>Air Hockey</b> <span class="k">/fun/airhockey</span></td><td>drag mallet</td><td>“CPU n · First to 7 · You n”; drag green mallet (bottom half); goal flash; over → 🏆 win / 🤖 lose.</td><td>🏆 🤖</td></tr>
-    <tr><td><b>Bumper Cars</b> <span class="k">/fun/bumper</span><br><b>Bumper Boats</b> <span class="k">/fun/boats</span></td><td>drag to lead</td><td>“Bumps · ⏱ Ns” (timer reddens ≤5s); drag anywhere to lead your unit (★ marker + lure dot); ram AI to score; over → 🚗 / 🚤.</td><td>⏱ ★ 🚗 🚤 🏆 👍</td></tr>
-    <tr><td><b>Axe Throwing</b> <span class="k">/fun/axe</span></td><td>two taps (X then Y)</td><td>“Throw n/5 · Score”; tap to lock horizontal, tap to lock height; target rings 1–5 + clutch dots (7); BULLSEYE! / CLUTCH!; over → 🪓.</td><td>🪓 🎯 👍</td></tr>
-    <tr><td><b>Batting Cages</b> <span class="k">/fun/batting</span></td><td>hold / release</td><td>“Pitch n/10 · Runs”; hold to pitch, release to swing; 💥 HOME RUN / Base hit / Foul / Strike; over → ⚾️.</td><td>💥 ⚾️ 🏆 👍</td></tr>
-    <tr><td><b>Bowling</b> <span class="k">/fun/bowling</span></td><td>swipe to roll</td><td>“Frame n/10 · Score”; drag up-lane to aim/hook; 10-pin physics; STRIKE! / SPARE! ✅; over → 🎳.</td><td>🎳 ✅ 🦃 👍</td></tr>
-    <tr><td><b>Go-Karts</b> <span class="k">/fun/karts</span></td><td>drag to lead</td><td>Track picker (8 tracks: SVG thumbnail + name + blurb + best lap + › ); race “Lap n/3”, countdown 3/2/1/GO!, drag-lead kart; results 🏁 + total time + “Race again” + “Pick another track” (ghost).</td><td>🏁 › ·</td></tr>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Location switcher</b></td><td>Row → /locations?next=/new</td><td>full-width, radius 12</td><td>press dip</td><td>📍 pin</td><td class="artc">pin icon; row material</td></tr><tr><td class="cn">2</td><td><b>Course marker badge</b></td><td>Left of each course</td><td>12×12 rounded square</td><td>—</td><td>tinted from course accent (--a)</td><td class="artc">the course marker icon</td></tr><tr><td class="cn">3</td><td><b>Course row</b></td><td>Tap → player setup</td><td>full-width, radius 16</td><td>press dip; empty state “No courses…”</td><td>—</td><td class="artc">row material</td></tr><tr><td class="cn">4</td><td><b>Chevron</b></td><td>Row right edge</td><td>—</td><td>—</td><td>muted</td><td class="artc">forward chevron icon</td></tr>
   </table>
-</section>
-</div>
-
-<div class="page">
-<section class="sec">
-  <h3 class="sub">E · Global chrome &amp; overlays (appear across the app)</h3>
-
-  <div class="grid g2">
-    <div class="screen">
-      <div class="hd"><h4>Header control pills</h4><span class="tag">top-right, most screens</span></div>
-      <ul class="cl">
-        <li><b>Light/dark toggle</b> — 36px round pill; shows the mode you'd switch TO: ☀️ (in dark) / 🌙 (in light)</li>
-        <li><b>Mute toggle</b> — same pill: 🔊 (on) / 🔇 (muted)</li>
-        <li><b>Shared pill spec</b> — 36×36 circle, subtle border, translucent fill, backdrop-blur <span class="tag">art</span></li>
-      </ul>
-    </div>
-    <div class="screen">
-      <div class="hd"><h4>Skin picker</h4><span class="route">🎨</span><span class="tag">bottom-left (dev)</span></div>
-      <ul class="cl">
-        <li><b>🎨 trigger pill</b> — same 36px pill; opens the menu</li>
-        <li><b>Skin menu</b> — <code>.surface-1</code> popup: one radio row per skin (color-dot swatch + label + blurb; active row shows ✓)</li>
-        <li><b>Divider + “Style guide” item</b> — ▦ icon → /style, › chevron</li>
-      </ul>
-    </div>
-    <div class="screen">
-      <div class="hd"><h4>Update modal</h4><span class="tag">blocking overlay</span></div>
-      <ul class="cl">
-        <li><b>Dimmed backdrop</b> — full-screen, backdrop-blur</li>
-        <li><b>Card</b> — 🔄 + “A new version is ready” + <b>“Click here to reload”</b> button (→ “Reloading…”). No close (blocking by design).</li>
-      </ul>
-    </div>
-    <div class="screen">
-      <div class="hd"><h4>Rotate nudge</h4><span class="tag">landscape overlay</span></div>
-      <ul class="cl">
-        <li><b>Animated phone glyph</b> — SVG phone that tips upright on a loop <span class="tag">art</span></li>
-        <li><b>Copy</b> — “Rotate your phone” + body. Auto-hides in portrait; no dismiss control.</li>
-      </ul>
-    </div>
-    <div class="screen">
-      <div class="hd"><h4>Build stamp</h4><span class="tag">dev, corner</span></div>
-      <ul class="cl">
-        <li><b>Tiny pill</b> — “build … · api …”; amber “(mismatch)” flag; “copied ✓” for 1.2s after tap. Text-only.</li>
-      </ul>
-    </div>
-    <div class="screen">
-      <div class="hd"><h4>Confetti &amp; Course tint</h4><span class="tag">wrappers</span></div>
-      <ul class="cl">
-        <li><b>Confetti</b> — full-screen particle canvas; palette in §2; optional themed particle shapes</li>
-        <li><b>CourseTheme</b> — no UI; lays a course-accent radial glow + surface tint over play/summary/map/rules screens</li>
-      </ul>
-    </div>
+</div><div class="page screenpage">
+  <h2><span>4. Player Setup</span><span class="rt">/new/setup</span></h2>
+  <p class="purpose">Choose player count (1–4) and enter three-character arcade tags, then start.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Green Course</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-lbl">Players</div>
+<div class="m-count"><span>1</span><span class="on">2</span><span>3</span><span>4</span></div>
+<div class="m-lbl">Tags (3 letters/numbers, arcade style)</div>
+<div class="m-tagin"><span class="m-idx">1</span><span class="m-inp">AVA</span></div>
+<div class="m-tagin"><span class="m-idx">2</span><span class="m-inp err">J@</span></div>
+<div class="m-errln">Use letters or numbers only.</div>
+<div class="m-primary">Start round</div></div></div><div class="co" style="top:17%;left:50%">1</div><div class="co" style="top:34%;left:26%">2</div><div class="co" style="top:45%;left:72%">3</div><div class="co" style="top:66%;left:50%">4</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Green Course</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-lbl">Players</div>
+<div class="m-count"><span>1</span><span class="on">2</span><span>3</span><span>4</span></div>
+<div class="m-lbl">Tags (3 letters/numbers, arcade style)</div>
+<div class="m-tagin"><span class="m-idx">1</span><span class="m-inp">AVA</span></div>
+<div class="m-tagin"><span class="m-idx">2</span><span class="m-inp err">J@</span></div>
+<div class="m-errln">Use letters or numbers only.</div>
+<div class="m-primary">Start round</div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-</section>
-</div>
-
-<!-- ============================ §6 ICON SLOTS ============================ -->
-<div class="page">
-<section class="sec">
-  <h2><span class="n">06</span> Icon-marker slots — the full set to design</h2>
-  <p class="lead"><b>Emoji is not a delivery format</b> for standard themes. Each theme (except an optional “Emoji” theme) ships an image icon set — <b>SVG preferred</b> for UI marks (single-color/duotone, taking <code>currentColor</code> + <code>--accent</code> so one asset serves light/dark + course tint), WEBP/PNG for illustrative icons. Below is the master list of marker <em>slots</em> every set must fill. Design each crisp at the listed size.</p>
-
-  <h3 class="sub">Course identity — replaces emoji inside the 56px puck (24–28px)</h3>
-  <div class="glyphset">
-    <span class="glyph">🟢</span><span class="glyph">🔵</span><span class="glyph">🔴</span><span class="glyph">🐉</span><span class="glyph">🤠</span><span class="glyph">🌴</span><span class="glyph">⛳️</span>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Player-count selector</b></td><td>1–4 buttons</td><td>4-col grid</td><td>selected vs unselected</td><td>—</td><td class="artc">selected/unselected states</td></tr><tr><td class="cn">2</td><td><b>Tag input</b></td><td>Arcade text field, one per player</td><td>maxLength 3</td><td>empty (ABC placeholder) / filled / invalid</td><td>arcade/mono face</td><td class="artc">field material; the arcade face</td></tr><tr><td class="cn">3</td><td><b>Invalid-tag state</b></td><td>On a bad 3-char tag</td><td>—</td><td>red border + inline error</td><td>red</td><td class="artc">error color</td></tr><tr><td class="cn">4</td><td><b>Start round</b></td><td>Primary CTA → play</td><td>full-width, ~52 tall</td><td>disabled until roster valid; “Starting…”</td><td>--accent</td><td class="artc">primary button material</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>5. Course Map</span><span class="rt">/courses/:id/map</span><span class="tintbadge">course-tinted</span></h2>
+  <p class="purpose">Opening course screen — the map, and a giant “tap to begin” target that starts the round.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock tint" style="--ta2:#ea580c"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Dragon's Hollow</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-mapframe"><div class="m-mapfallback" style="--a:#ea580c">🐉</div></div>
+<div class="m-tapbegin"><b>TAP ANYWHERE TO BEGIN</b><br><small>18 holes · Dragon's Hollow</small></div></div></div><div class="co" style="top:34%;left:50%">1</div><div class="co" style="top:74%;left:50%">2</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light tint" style="--ta2:#ea580c"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Dragon's Hollow</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-mapframe"><div class="m-mapfallback" style="--a:#ea580c">🐉</div></div>
+<div class="m-tapbegin"><b>TAP ANYWHERE TO BEGIN</b><br><small>18 holes · Dragon's Hollow</small></div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-  <p class="legend">green · blue · red · dragon · western · california/jungle · classic/default. (Legacy: 🏴‍☠️ pirate · 🚀 space · 👻 haunted.) This is the #1 bespoke-icon slot.</p>
-
-  <h3 class="sub">Navigation &amp; chrome (16–24px)</h3>
-  <div class="glyphset">
-    <span class="glyph">⛳️</span><span class="glyph">📍</span><span class="glyph">‹</span><span class="glyph">›</span><span class="glyph">•</span><span class="glyph">·</span><span class="glyph">🔄</span><span class="glyph">▦</span><span class="glyph">🧭</span>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Map illustration</b></td><td>Full-bleed course map (whole panel is one tap target → setup)</td><td>framed container</td><td>real map art, OR emoji fallback panel (accent-tinted) when no map</td><td>--course-accent tint on the screen</td><td class="artc">top-down hole map per course; keep center/edges calm for the overlay</td></tr><tr><td class="cn">2</td><td><b>“Tap to begin” prompt</b></td><td>Overlay call-to-action</td><td>—</td><td>pulsing</td><td>—</td><td class="artc">legible over the map art in both modes</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>6. Scorecard (play screen)</span><span class="rt">/play/:clientId</span><span class="tintbadge">course-tinted</span></h2>
+  <p class="purpose">The core loop — score one hole at a time for every player; each edit persists instantly.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock tint" style="--ta2:#ea580c"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Green Course</span><span class="m-sp"></span><span class="m-mini">🔍</span><span class="m-mini">🎡</span><span class="m-mini txt">Holes</span></div>
+<div class="m-holehdr"><div class="m-eyebrow">HOLE 3</div><div class="m-holename">The Windmill</div></div>
+<div class="m-parmed">3</div>
+<div class="m-prow"><span class="m-tag" style="--ga:#22c55e">AVA</span><span class="m-key">−</span><span class="m-well">2</span><span class="m-key">+</span></div>
+<div class="m-prow"><span class="m-tag" style="--ga:#22c55e">JZ</span><span class="m-key">−</span><span class="m-well">–</span><span class="m-key">+</span></div>
+<div class="m-nav"><span class="m-ghost sm">‹ Prev</span><span class="m-ghost sm">Next ›</span></div>
+<div class="m-foot">Max 8 strokes per hole</div></div></div><div class="co" style="top:7%;left:80%">1</div><div class="co" style="top:20%;left:50%">2</div><div class="co" style="top:33%;left:50%">3</div><div class="co" style="top:47%;left:17%">4</div><div class="co" style="top:47%;left:50%">5</div><div class="co" style="top:47%;left:83%">6</div><div class="co" style="top:68%;left:50%">7</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light tint" style="--ta2:#ea580c"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Green Course</span><span class="m-sp"></span><span class="m-mini">🔍</span><span class="m-mini">🎡</span><span class="m-mini txt">Holes</span></div>
+<div class="m-holehdr"><div class="m-eyebrow">HOLE 3</div><div class="m-holename">The Windmill</div></div>
+<div class="m-parmed">3</div>
+<div class="m-prow"><span class="m-tag" style="--ga:#22c55e">AVA</span><span class="m-key">−</span><span class="m-well">2</span><span class="m-key">+</span></div>
+<div class="m-prow"><span class="m-tag" style="--ga:#22c55e">JZ</span><span class="m-key">−</span><span class="m-well">–</span><span class="m-key">+</span></div>
+<div class="m-nav"><span class="m-ghost sm">‹ Prev</span><span class="m-ghost sm">Next ›</span></div>
+<div class="m-foot">Max 8 strokes per hole</div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-  <p class="legend">hero mark · location pin · back / forward chevrons · bullets · reload · style-guide grid · GPS compass.</p>
-
-  <h3 class="sub">Controls — inside the 36px pill (18px)</h3>
-  <div class="glyphset">
-    <span class="glyph">🎨</span><span class="glyph">☀️</span><span class="glyph">🌙</span><span class="glyph">🔊</span><span class="glyph">🔇</span>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>TopBar right cluster</b></td><td>Play-screen shortcuts</td><td>glyph buttons</td><td>toggle “Holes” grid</td><td>🔍 hunt · 🎡 spinner</td><td class="artc">the two icons</td></tr><tr><td class="cn">2</td><td><b>Hole header / hole-jump grid</b></td><td>Hole title; toggled 6-col grid of keys</td><td>32–36px cells</td><td>current=.btn-accent · done=.surface-1 · unplayed=outline</td><td>--accent</td><td class="artc">key states</td></tr><tr><td class="cn">3</td><td><b>Par medallion</b></td><td>.surface-1 disc</td><td>56×56 circle</td><td>—</td><td>par numeral in course ink</td><td class="artc">disc material</td></tr><tr><td class="cn">4</td><td><b>Player tag</b></td><td>TagChip on each row</td><td>radius 8 pill</td><td>empty = ···</td><td>--tag-accent</td><td class="artc">pill material (contrast-checked)</td></tr><tr><td class="cn">5</td><td><b>Score well</b></td><td>.surface-sunk readout</td><td>.surface-sunk, radius 14</td><td>punches on each edit (score-punch); “–” unscored</td><td>—</td><td class="artc">carved-well material</td></tr><tr><td class="cn">6</td><td><b>± stepper keys</b></td><td>.key +/−</td><td>56×56, radius 16</td><td>press dip; disabled at floor / stroke-cap (flat, 30%)</td><td>—</td><td class="artc">key face + the +/− marks</td></tr><tr><td class="cn">7</td><td><b>Hole navigation</b></td><td>‹ Prev / Next › (ghost) — or Finish (primary) on last hole</td><td>full-width</td><td>disabled until hole/round complete; Finish plays cup sound</td><td>—</td><td class="artc">ghost + primary materials</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>7. Summary (final scorecard)</span><span class="rt">/play/:clientId/summary</span><span class="tintbadge">course-tinted</span></h2>
+  <p class="purpose">Celebrates the winner, shows standings + hole-by-hole grid, syncs to the leaderboard.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock tint"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Final scorecard</span><span class="m-sp"></span></div>
+<div class="m-winner"><span class="m-trophy">🏆</span><div><div class="m-eyebrow">WINNER</div><div class="m-wname">AVA</div></div><span class="m-wscore">41 <small>−4</small></span></div>
+<div class="m-stand"><span class="m-rank">2</span><span class="m-sname">JZ</span><span>45 <small>E</small></span></div>
+<div class="m-grid"><div class="m-gh">Front</div><div class="m-gc u">2</div><div class="m-gc">2</div><div class="m-gc o">6</div><div class="m-gc">3</div><div class="m-gc u">2</div></div>
+<div class="m-sync">Saved to leaderboard ✓</div>
+<div class="m-nav"><span class="m-ghost sm">🏆 View leaderboard</span><span class="m-primary sm">Done</span></div></div></div><div class="co" style="top:16%;left:50%">1</div><div class="co" style="top:36%;left:50%">2</div><div class="co" style="top:52%;left:50%">3</div><div class="co" style="top:66%;left:50%">4</div><div class="co" style="top:78%;left:50%">5</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light tint"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Final scorecard</span><span class="m-sp"></span></div>
+<div class="m-winner"><span class="m-trophy">🏆</span><div><div class="m-eyebrow">WINNER</div><div class="m-wname">AVA</div></div><span class="m-wscore">41 <small>−4</small></span></div>
+<div class="m-stand"><span class="m-rank">2</span><span class="m-sname">JZ</span><span>45 <small>E</small></span></div>
+<div class="m-grid"><div class="m-gh">Front</div><div class="m-gc u">2</div><div class="m-gc">2</div><div class="m-gc o">6</div><div class="m-gc">3</div><div class="m-gc u">2</div></div>
+<div class="m-sync">Saved to leaderboard ✓</div>
+<div class="m-nav"><span class="m-ghost sm">🏆 View leaderboard</span><span class="m-primary sm">Done</span></div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-  <p class="legend">skin picker · light · dark · sound on · muted.</p>
-
-  <h3 class="sub">Play controls (24–36px)</h3>
-  <div class="glyphset">
-    <span class="glyph">＋</span><span class="glyph">−</span><span class="glyph">🔍</span><span class="glyph">🎡</span><span class="glyph">⏸</span><span class="glyph">▶</span><span class="glyph">⏭</span><span class="glyph">🏆</span><span class="glyph">✓</span><span class="glyph">📷</span>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Winner hero</b></td><td>.surface card + glow</td><td>full-width, radius 24</td><td>trophy-pop; “Tied for the win” variant</td><td>--glow accent; winner tag in ink</td><td class="artc">trophy/celebration mark; card + halo</td></tr><tr><td class="cn">2</td><td><b>Standings row</b></td><td>.surface-1 per non-winner</td><td>full-width, radius 16</td><td>rise-in stagger</td><td>mono rank; arcade tag in course ink</td><td class="artc">row material</td></tr><tr><td class="cn">3</td><td><b>Nine-grid table</b></td><td>Front (1–9) & Back (10–18)</td><td>.surface-1 table</td><td>cells: under=green · over=amber · par=neutral · empty=·</td><td>--score-under / --score-over</td><td class="artc">table material; the score-signal colors</td></tr><tr><td class="cn">4</td><td><b>Sync note</b></td><td>Leaderboard status</td><td>text</td><td>synced ✓ / amber fail / saving / offline</td><td>amber on fail</td><td class="artc">the ✓ tick</td></tr><tr><td class="cn">5</td><td><b>Action buttons</b></td><td>🏆 View leaderboard (ghost) · Done (primary)</td><td>full-width</td><td>—</td><td>--accent</td><td class="artc">ghost + primary materials</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>8. Rules</span><span class="rt">/rules</span></h2>
+  <p class="purpose">Static, offline general rules + optional per-course notes. Read-only.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Rules</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-eyebrow2">GENERAL</div>
+<div class="m-rule"><span class="m-num">1.</span> One player putts at a time; honors to the lowest last score.</div>
+<div class="m-rule"><span class="m-num">2.</span> Max 8 strokes per hole, then pick up and record the cap.</div>
+<div class="m-eyebrow2">COURSE NOTES</div>
+<div class="m-notecard" style="--a:#ea580c"><div class="m-nch">🐉 <b>Dragon's Hollow</b></div><div class="m-nb">• Putt through while the jaws are open.<br>• Give downhill putts extra room.</div></div></div></div><div class="co" style="top:20%;left:30%">1</div><div class="co" style="top:32%;left:50%">2</div><div class="co" style="top:58%;left:50%">3</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Rules</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-eyebrow2">GENERAL</div>
+<div class="m-rule"><span class="m-num">1.</span> One player putts at a time; honors to the lowest last score.</div>
+<div class="m-rule"><span class="m-num">2.</span> Max 8 strokes per hole, then pick up and record the cap.</div>
+<div class="m-eyebrow2">COURSE NOTES</div>
+<div class="m-notecard" style="--a:#ea580c"><div class="m-nch">🐉 <b>Dragon's Hollow</b></div><div class="m-nb">• Putt through while the jaws are open.<br>• Give downhill putts extra room.</div></div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-  <p class="legend">stroke + / − · hunt · spinner · pause / play / fast-forward · trophy · confirm · camera snap.</p>
-
-  <h3 class="sub">Fun zone &amp; game results (24–60px)</h3>
-  <div class="glyphset">
-    <span class="glyph">💡</span><span class="glyph">🧠</span><span class="glyph">🎳</span><span class="glyph">🏒</span><span class="glyph">🚗</span><span class="glyph">🚤</span><span class="glyph">🪓</span><span class="glyph">⚾️</span><span class="glyph">🏁</span><span class="glyph">🔻</span><span class="glyph">🤖</span><span class="glyph">🏌️</span><span class="glyph">🦅</span><span class="glyph">🐦</span><span class="glyph">😬</span><span class="glyph">😵</span><span class="glyph">♾️</span><span class="glyph">💦</span><span class="glyph">💥</span><span class="glyph">✅</span>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Section heading</b></td><td>“General” / “Course notes” eyebrow</td><td>uppercase, tracked</td><td>—</td><td>muted</td><td class="artc">—</td></tr><tr><td class="cn">2</td><td><b>Numbered rule list</b></td><td>General rules</td><td>mono numerals</td><td>—</td><td>—</td><td class="artc">—</td></tr><tr><td class="cn">3</td><td><b>Course-note card</b></td><td>.course-tinted card per course</td><td>radius 16</td><td>—</td><td>--course-accent corner glow; name + marker in ink; • bullets in ink</td><td class="artc">tinted card material; the course marker</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>9. Install</span><span class="rt">/install</span></h2>
+  <p class="purpose">PWA install landing (QR-code target); shows the right path per platform.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Install the app</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-hero2">⛳️</div>
+<div class="m-ct">Add Mini Golf to your phone</div>
+<div class="m-card"><div class="m-cardh">On iPhone &amp; iPad (Safari)</div><div class="m-step"><span class="m-badge2">1</span> Tap the Share button ↑︎</div><div class="m-step"><span class="m-badge2">2</span> Choose “Add to Home Screen” ➕</div><div class="m-step"><span class="m-badge2">3</span> Open Mini Golf ⛳️ from your home screen</div></div>
+<div class="m-warnbox">Install works from Safari only.</div></div></div><div class="co" style="top:15%;left:50%">1</div><div class="co" style="top:33%;left:50%">2</div><div class="co" style="top:44%;left:20%">3</div><div class="co" style="top:72%;left:50%">4</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Install the app</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-hero2">⛳️</div>
+<div class="m-ct">Add Mini Golf to your phone</div>
+<div class="m-card"><div class="m-cardh">On iPhone &amp; iPad (Safari)</div><div class="m-step"><span class="m-badge2">1</span> Tap the Share button ↑︎</div><div class="m-step"><span class="m-badge2">2</span> Choose “Add to Home Screen” ➕</div><div class="m-step"><span class="m-badge2">3</span> Open Mini Golf ⛳️ from your home screen</div></div>
+<div class="m-warnbox">Install works from Safari only.</div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-  <p class="legend">activity icons · wheel pointer · CPU-win robot · putt result faces (ace/eagle/birdie/bogey/worse) · endless · splash · home-run impact · spare/tick.</p>
-
-  <h3 class="sub">Install &amp; system (varies)</h3>
-  <div class="glyphset">
-    <span class="glyph">📲</span><span class="glyph">✅</span><span class="glyph">↑︎</span><span class="glyph">➕</span><span class="glyph">⋮</span><span class="glyph">⋯</span>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Hero</b></td><td>⛳️ + heading</td><td>48px glyph</td><td>—</td><td>—</td><td class="artc">brand mark</td></tr><tr><td class="cn">2</td><td><b>Branch card</b></td><td>One of: Installed (✅ + Open button) / iOS steps / Can-prompt (Install button) / Generic (⋮ ⋯ steps)</td><td>radius 16</td><td>platform-dependent branch; dismissed-retry hint</td><td>—</td><td class="artc">card material</td></tr><tr><td class="cn">3</td><td><b>Numbered step badge</b></td><td>Instruction steps</td><td>circular badge</td><td>—</td><td>—</td><td class="artc">badge; step glyphs ↑︎ ➕ ⋮ ⋯</td></tr><tr><td class="cn">4</td><td><b>Warning box</b></td><td>Inset caveat</td><td>radius 8</td><td>—</td><td>—</td><td class="artc">inset material</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>10. TV Leaderboard</span><span class="rt">/tv</span></h2>
+  <p class="purpose">Live high-score board (polls every 5s); highlights the just-played round on arrival.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Leaderboard</span><span class="m-sp"></span></div>
+<div class="m-tabs"><span class="on">Day</span><span>Week</span><span>Month</span><span>All</span></div>
+<div class="m-lb m-mine"><span class="m-rank">1</span><span class="m-lbtag">AVA</span><span class="m-lbc">Green · Upland</span><span class="m-you">You</span><b>41</b></div>
+<div class="m-lb"><span class="m-rank">2</span><span class="m-lbtag">JZ</span><span class="m-lbc">Green · Upland</span><b>45</b></div>
+<div class="m-lb"><span class="m-rank">3</span><span class="m-lbtag">MAX</span><span class="m-lbc">Blue · Tukwila</span><b>49</b></div></div></div><div class="co" style="top:17%;left:50%">1</div><div class="co" style="top:33%;left:16%">2</div><div class="co" style="top:33%;left:70%">3</div><div class="co" style="top:46%;left:50%">4</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Leaderboard</span><span class="m-sp"></span></div>
+<div class="m-tabs"><span class="on">Day</span><span>Week</span><span>Month</span><span>All</span></div>
+<div class="m-lb m-mine"><span class="m-rank">1</span><span class="m-lbtag">AVA</span><span class="m-lbc">Green · Upland</span><span class="m-you">You</span><b>41</b></div>
+<div class="m-lb"><span class="m-rank">2</span><span class="m-lbtag">JZ</span><span class="m-lbc">Green · Upland</span><b>45</b></div>
+<div class="m-lb"><span class="m-rank">3</span><span class="m-lbtag">MAX</span><span class="m-lbc">Blue · Tukwila</span><b>49</b></div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-  <p class="legend">install · installed-ok · iOS Share · add-to-home · browser menus.</p>
-
-  <h3 class="sub">App identity — real raster assets (highest priority)</h3>
-  <ul class="cl">
-    <li><b>App icon set</b> — <code>public/icons/</code>: icon-512 (maskable — keep the mark within ⌀≈410), icon-192, apple-touch-icon 180² (no transparency/rounding), favicon-32. The brand mark, legible at 32px.</li>
-    <li><b>Course map illustrations</b> — <code>public/maps/*.svg</code>: a top-down hole map per course; keep center/edges calm for the “Tap to begin” overlay.</li>
-  </ul>
-</section>
-</div>
-
-<!-- ============================ §7 DELIVERABLES ============================ -->
-<div class="page">
-<section class="sec">
-  <h2><span class="n">07</span> Deliverables &amp; conventions</h2>
-  <div class="grid g2">
-    <div class="card">
-      <h4>Format</h4>
-      <p class="art"><b>SVG preferred</b> for UI markers — single-color/duotone, <code>fill="currentColor"</code> where it should track text, reading <code>var(--accent)</code> / <code>var(--tile-accent)</code> where it must track the course. <b>WEBP</b> (or PNG) for richer illustrative icons and photographic art. Raster app icons at <b>@1× / @2× / @3×</b>. (Emoji only for an optional “Emoji” theme.)</p>
-    </div>
-    <div class="card">
-      <h4>Variants</h4>
-      <p class="art">Ship <b>light + dark</b> whenever one asset can't clear contrast on both grounds. If an asset is skin-specific (e.g. a candy-only gloss), name the skin; otherwise design skin-agnostic so it inherits the skin's material.</p>
-    </div>
-    <div class="card">
-      <h4>Sizing &amp; contrast <span class="asset-css">[constraint]</span></h4>
-      <p class="art">Author on the pixel sizes in §3 / §5–§6; keep strokes optically consistent. Contrast ≥ <b>4.5:1</b> (normal) / <b>3:1</b> (large ≥24px or bold ≥18.66px, non-text UI) — hard requirement regardless of aesthetics. Tags on bright accents = known tight spot.</p>
-    </div>
-    <div class="card">
-      <h4>Where assets live</h4>
-      <p class="art">App icons → <code>public/icons/</code> · maps → <code>public/maps/</code> · per-theme art → <code>public/themes/&lt;skin&gt;/</code> · new icon sets under <code>public/</code> (or inline SVG in components). Materials/skins are CSS in <code>src/index.css</code> under <code>:root[data-template='…']</code>.</p>
-    </div>
-    <div class="card">
-      <h4>Naming</h4>
-      <p class="art mono">element[-variant][-skin][-mode]@scale.ext<br>e.g. puck-dragon.svg · card-castle.webp · app-icon-512.png · wheel-pointer.svg</p>
-    </div>
-    <div class="card">
-      <h4>Validate</h4>
-      <p class="art">Open the app at <code>/style</code> (the live guide), cycle all 14 skins × light/dark, and confirm the asset reads and holds through its animation. Keep the companion <code>docs/art-spec.md</code> in sync when elements change.</p>
-    </div>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Period tabs</b></td><td>Day / Week / Month / All</td><td>4-col</td><td>active vs inactive</td><td>—</td><td class="artc">tab states</td></tr><tr><td class="cn">2</td><td><b>Rank / tag</b></td><td>Row left</td><td>mono rank + arcade tag</td><td>—</td><td>tag in ink</td><td class="artc">the arcade face</td></tr><tr><td class="cn">3</td><td><b>“You” pill + highlight</b></td><td>Your rows</td><td>rounded-full pill + ring</td><td>only on your rows</td><td>ring accent</td><td class="artc">pill + ring treatment</td></tr><tr><td class="cn">4</td><td><b>Standings row</b></td><td>One per score</td><td>full-width, radius 16</td><td>rise-in; error/empty/loading states</td><td>—</td><td class="artc">row material</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>11. Scavenger Hunt</span><span class="rt">/hunt</span></h2>
+  <p class="purpose">Snap-a-photo hunt; a vision model verifies each find. Gated on an in-progress round.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Scavenger hunt</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-playas"><small>Playing as</small> <span class="m-tag sel" style="--ga:#22c55e">AVA</span> <span class="m-tag dim" style="--ga:#22c55e">JZ</span></div>
+<div class="m-item found"><span>Find the windmill <span class="m-hint">💡 Hint</span></span><span class="m-check">✓</span><span class="m-snap">📷 Snap another</span></div>
+<div class="m-item"><span>Spot a red flag <span class="m-badgeN">×0</span></span><span class="m-snap">📷 Snap</span></div>
+<div class="m-banner ok">Nice — AVA found it!</div>
+<div class="m-banner warn">That looks like a photo of a screen — take a real one.</div></div></div><div class="co" style="top:15%;left:40%">1</div><div class="co" style="top:30%;left:20%">2</div><div class="co" style="top:30%;left:86%">3</div><div class="co" style="top:44%;left:72%">4</div><div class="co" style="top:63%;left:50%">5</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Scavenger hunt</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-playas"><small>Playing as</small> <span class="m-tag sel" style="--ga:#22c55e">AVA</span> <span class="m-tag dim" style="--ga:#22c55e">JZ</span></div>
+<div class="m-item found"><span>Find the windmill <span class="m-hint">💡 Hint</span></span><span class="m-check">✓</span><span class="m-snap">📷 Snap another</span></div>
+<div class="m-item"><span>Spot a red flag <span class="m-badgeN">×0</span></span><span class="m-snap">📷 Snap</span></div>
+<div class="m-banner ok">Nice — AVA found it!</div>
+<div class="m-banner warn">That looks like a photo of a screen — take a real one.</div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-
-  <h2 class="n" style="margin-top:16px"></h2>
-  <div class="sec">
-  <h2><span class="n">08</span> Master coverage checklist</h2>
-  <p class="lead">One page to confirm nothing's missed. Tick a box when that screen/element has art (or a deliberate decision to inherit the material).</p>
-  <div class="two">
-    <h3 class="sub">Foundations</h3>
-    <ul class="cl">
-      <li>Neutral ramp retint (light + dark)</li>
-      <li>Accent + score-signal colors</li>
-      <li>Course inks (6) &amp; per-course/-location accents</li>
-      <li>Typography — UI face + arcade/mono face</li>
-      <li>Materials: .surface / .surface-1 / .surface-sunk</li>
-      <li>Buttons: primary / ghost / danger (+ pressed)</li>
-      <li>.key stepper (+ / −) &amp; score well</li>
-      <li>.tile face + colored lip</li>
-      <li>.course-puck cap</li>
-      <li>.tag-chip pill (contrast-checked)</li>
-      <li>Confetti particle shapes (optional)</li>
-    </ul>
-    <h3 class="sub">Screens — core flow</h3>
-    <ul class="cl">
-      <li>Home (hero, location bar, resume, tiles, menu)</li>
-      <li>Location Picker</li>
-      <li>Course Picker</li>
-      <li>Player Setup (count, tag inputs, Start)</li>
-      <li>Course Map (map art + fallback)</li>
-      <li>Scorecard (hole grid, rows, steppers, nav)</li>
-      <li>Summary (winner, standings, nine-grid)</li>
-      <li>Rules (general + course-note cards)</li>
-      <li>Install (4 branches)</li>
-    </ul>
-    <h3 class="sub">Screens — extras</h3>
-    <ul class="cl">
-      <li>TV Leaderboard (tabs, rows, You pill)</li>
-      <li>Scavenger Hunt (gate, snap, item cards, banners)</li>
-      <li>Arcade Putt (picker, canvas, results)</li>
-      <li>Fun Zone hub — 11 activity icons</li>
-      <li>Fun Facts / Trivia / Spinner</li>
-      <li>Skee-Ball / Air Hockey / Bumper Cars / Boats</li>
-      <li>Axe / Batting / Bowling / Go-Karts</li>
-    </ul>
-    <h3 class="sub">Global chrome &amp; icons</h3>
-    <ul class="cl">
-      <li>Control pills (☀️/🌙, 🔊/🔇, 🎨)</li>
-      <li>Skin-picker menu rows</li>
-      <li>Update modal · Rotate nudge · Build stamp</li>
-      <li>Icon set: course identity (7)</li>
-      <li>Icon set: nav &amp; chrome (9)</li>
-      <li>Icon set: controls (5) &amp; play (10)</li>
-      <li>Icon set: fun zone &amp; results (20)</li>
-      <li>Icon set: install &amp; system (6)</li>
-      <li>App icons (512 maskable, 192, apple-touch, favicon)</li>
-      <li>Course map illustrations</li>
-    </ul>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>“Playing as” selector</b></td><td>TagChip buttons</td><td>pills</td><td>selected = ring; others dimmed</td><td>--tag-accent</td><td class="artc">pill + selected ring</td></tr><tr><td class="cn">2</td><td><b>Hint toggle / count / check</b></td><td>On each item</td><td>small</td><td>“💡 Hint” ↔ “Hide hint”; ×N badge (countable) or ✓ (one-off found)</td><td>muted</td><td class="artc">hint, count, check icons</td></tr><tr><td class="cn">3</td><td><b>📷 Snap button</b></td><td>Capture trigger (hidden file input; rear camera in prod)</td><td>radius 12</td><td>“Snap” / “Snap another” / “Checking…” / “Found”</td><td>—</td><td class="artc">camera icon; button material</td></tr><tr><td class="cn">4</td><td><b>Result banner</b></td><td>After verify</td><td>radius 12</td><td>verified / flagged (amber) / rejected</td><td>amber on flag</td><td class="artc">banner materials</td></tr><tr><td class="cn">5</td><td><b>Item card</b></td><td>Per find</td><td>radius 16</td><td>found vs not-found; load-error box (red); gate state (🔍 + Start round)</td><td>—</td><td class="artc">card material</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>12. Arcade Putt</span><span class="rt">/putt</span></h2>
+  <p class="purpose">Playable canvas mini-golf — drag-to-aim slingshot; 9-hole or endless. Offline.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Arcade Putt</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-hudrow"><span>Hole 3 / 9</span><span>Par 3 · Strokes 2</span></div>
+<div class="m-canvas"><div class="m-cv-green"></div><div class="m-cv-ball"></div><div class="m-cv-aim"></div><div class="m-cv-cup">⛳</div><div class="m-cv-pow">POWER 60%</div></div>
+<div class="m-hintline">Drag back from the ball to aim.</div>
+<div class="m-nav"><span class="m-primary sm">Next hole →</span><span class="m-ghost sm">Reset hole</span></div></div></div><div class="co" style="top:15%;left:50%">1</div><div class="co" style="top:40%;left:50%">2</div><div class="co" style="top:40%;left:20%">3</div><div class="co" style="top:66%;left:50%">4</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Arcade Putt</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-hudrow"><span>Hole 3 / 9</span><span>Par 3 · Strokes 2</span></div>
+<div class="m-canvas"><div class="m-cv-green"></div><div class="m-cv-ball"></div><div class="m-cv-aim"></div><div class="m-cv-cup">⛳</div><div class="m-cv-pow">POWER 60%</div></div>
+<div class="m-hintline">Drag back from the ball to aim.</div>
+<div class="m-nav"><span class="m-primary sm">Next hole →</span><span class="m-ghost sm">Reset hole</span></div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Status header</b></td><td>Hole / par / strokes</td><td>text row</td><td>course vs endless</td><td>—</td><td class="artc">—</td></tr><tr><td class="cn">2</td><td><b>Canvas playfield</b></td><td>Drag-to-aim slingshot</td><td>aspect-locked, radius 16</td><td>aim / rolling / splash / sunk</td><td>—</td><td class="artc">playfield bg + sprites (ball, cup+flag, bumpers, greens, hazards, splash) drawn into canvas</td></tr><tr><td class="cn">3</td><td><b>Canvas markers</b></td><td>Rendered, not DOM</td><td>—</td><td>aim arrow green→amber→red; POWER% meter; idle grab-ring</td><td>aim color ramp</td><td class="artc">aim arrow, power meter, flag</td></tr><tr><td class="cn">4</td><td><b>Play buttons</b></td><td>Next/See scorecard (primary) · Reset/End run (ghost)</td><td>full-width</td><td>mode-dependent</td><td>--accent</td><td class="artc">primary + ghost materials</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>13. Fun Zone hub</span><span class="rt">/fun</span></h2>
+  <p class="purpose">Grid landing routing to every mini-game. Each tile = a rounded emoji chip + title.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">While You Wait</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-funtiles"><div class="m-funtile" style="--a:#f59e0b"><span class="m-funico">💡</span>Fun Facts</div><div class="m-funtile" style="--a:#3b82f6"><span class="m-funico">🧠</span>Trivia</div><div class="m-funtile" style="--a:#16a34a"><span class="m-funico">⛳️</span>Arcade Putt</div><div class="m-funtile" style="--a:#22c55e"><span class="m-funico">🎳</span>Skee-Ball</div><div class="m-funtile" style="--a:#38bdf8"><span class="m-funico">🏒</span>Air Hockey</div><div class="m-funtile" style="--a:#f97316"><span class="m-funico">🚗</span>Bumper Cars</div><div class="m-funtile" style="--a:#0ea5e9"><span class="m-funico">🚤</span>Bumper Boats</div><div class="m-funtile" style="--a:#eab308"><span class="m-funico">🪓</span>Axe Throw</div><div class="m-funtile" style="--a:#ef4444"><span class="m-funico">⚾️</span>Batting</div><div class="m-funtile" style="--a:#a855f7"><span class="m-funico">🎳</span>Bowling</div><div class="m-funtile" style="--a:#06b6d4"><span class="m-funico">🏁</span>Go-Karts</div></div></div></div><div class="co" style="top:18%;left:25%">1</div><div class="co" style="top:18%;left:75%">2</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">While You Wait</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-funtiles"><div class="m-funtile" style="--a:#f59e0b"><span class="m-funico">💡</span>Fun Facts</div><div class="m-funtile" style="--a:#3b82f6"><span class="m-funico">🧠</span>Trivia</div><div class="m-funtile" style="--a:#16a34a"><span class="m-funico">⛳️</span>Arcade Putt</div><div class="m-funtile" style="--a:#22c55e"><span class="m-funico">🎳</span>Skee-Ball</div><div class="m-funtile" style="--a:#38bdf8"><span class="m-funico">🏒</span>Air Hockey</div><div class="m-funtile" style="--a:#f97316"><span class="m-funico">🚗</span>Bumper Cars</div><div class="m-funtile" style="--a:#0ea5e9"><span class="m-funico">🚤</span>Bumper Boats</div><div class="m-funtile" style="--a:#eab308"><span class="m-funico">🪓</span>Axe Throw</div><div class="m-funtile" style="--a:#ef4444"><span class="m-funico">⚾️</span>Batting</div><div class="m-funtile" style="--a:#a855f7"><span class="m-funico">🎳</span>Bowling</div><div class="m-funtile" style="--a:#06b6d4"><span class="m-funico">🏁</span>Go-Karts</div></div></div></div></div></div><div class="viewcap">Light</div></div>
   </div>
-
-  <p class="foot-note" style="margin-top:14px">Living source of truth: the <code>/style</code> route (<code>src/features/style/StyleGuide.tsx</code>) renders every element and re-skins live. This guide + <code>docs/art-spec.md</code> are its paper companions — update them when elements are added or the material system changes.</p>
-</section>
-</div>
-
-</body>
-</html>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>Activity tile</b></td><td>One per game → its route</td><td>2-col, radius 16</td><td>rise-in stagger; press scale</td><td>accent-tinted per tile (--a)</td><td class="artc">tile material</td></tr><tr><td class="cn">2</td><td><b>Activity icon chip</b></td><td>Leading glyph on each tile</td><td>48×48 rounded chip</td><td>—</td><td>tinted to the tile accent</td><td class="artc">1 designed icon per activity (11 total)</td></tr>
+  </table>
+</div><div class="page screenpage">
+  <h2><span>14. Minigame shell (representative)</span><span class="rt">/fun/skeeball · /fun/bowling · /fun/karts · …</span></h2>
+  <p class="purpose">Shared shell for all 8 canvas games — HUD row, canvas playfield, hint line, game-over screen.</p>
+  <div class="views">
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Skee-Ball</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-hudrow"><span>Ball 4 / 9</span><span>Score 180</span></div>
+<div class="m-canvas game"><div class="m-cv-lane"></div><div class="m-cv-ball2"></div><div class="m-cv-plus">+50</div></div>
+<div class="m-hintline">Swipe up the lane to roll.</div>
+<div class="m-gameover"><div class="m-goemoji">🎳</div><div class="m-goscore">430</div><div class="m-primary sm">Play again</div></div></div></div><div class="co" style="top:15%;left:50%">1</div><div class="co" style="top:40%;left:50%">2</div><div class="co" style="top:72%;left:50%">3</div></div></div><div class="viewcap">Dark · numbered</div></div>
+    <div class="viewcol"><div class="phone-wrap"><div class="phone"><div class="screenwrap"><div class="mock light"><div class="m-top"><span class="m-back">‹</span><span class="m-title">Skee-Ball</span><span class="m-sp"></span><span class="m-pill">☀️</span><span class="m-pill">🔊</span></div>
+<div class="m-hudrow"><span>Ball 4 / 9</span><span>Score 180</span></div>
+<div class="m-canvas game"><div class="m-cv-lane"></div><div class="m-cv-ball2"></div><div class="m-cv-plus">+50</div></div>
+<div class="m-hintline">Swipe up the lane to roll.</div>
+<div class="m-gameover"><div class="m-goemoji">🎳</div><div class="m-goscore">430</div><div class="m-primary sm">Play again</div></div></div></div></div></div><div class="viewcap">Light</div></div>
+  </div>
+  <table>
+    <tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size / shape</th><th>States</th><th>Color hooks</th><th>Art needed</th></tr>
+    <tr><td class="cn">1</td><td><b>HUD counter row</b></td><td>Score / ball / frame / timer</td><td>text row</td><td>per-game labels; timer reddens ≤5s (bumper)</td><td>—</td><td class="artc">—</td></tr><tr><td class="cn">2</td><td><b>Canvas playfield</b></td><td>The game</td><td>aspect-locked, radius 16, border</td><td>aim / play / result; flash + screen-shake</td><td>—</td><td class="artc">per-game background + sprites (ball, puck, kart, target, pins, axe, bumper) as sprite sheets / SVGs</td></tr><tr><td class="cn">3</td><td><b>Game-over screen</b></td><td>Shared result</td><td>—</td><td>trophy-pop; 60px emoji; big score</td><td>—</td><td class="artc">result emoji per game; Play-again = primary material</td></tr>
+  </table>
+</div></body></html>
