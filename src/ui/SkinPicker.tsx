@@ -73,7 +73,8 @@ export default function SkinPicker() {
             );
           })}
 
-          {/* Jump to the living component inventory — the theming reference. */}
+          {/* Style-guide references: the live inventory plus the static artist
+              docs (wireframe HTML + printable PDF, served from /docs). */}
           <div className="my-1 border-t border-fairway-700/60" />
           <button
             role="menuitem"
@@ -98,6 +99,38 @@ export default function SkinPicker() {
               ›
             </span>
           </button>
+          {/* Static artist deliverables — open in a new tab so the app stays put. */}
+          {[
+            { href: '/docs/style-guide.html', glyph: '❏', label: 'Style guide · HTML', blurb: 'Wireframes & element specs' },
+            { href: '/docs/style-guide.pdf', glyph: '⤓', label: 'Style guide · PDF', blurb: 'Printable artist reference' },
+          ].map((doc) => (
+            <a
+              key={doc.href}
+              role="menuitem"
+              href={doc.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                playClick();
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors active:bg-fairway-800/60"
+            >
+              <span
+                className="flex h-4 w-4 flex-none items-center justify-center text-[11px] leading-none text-fairway-300"
+                aria-hidden="true"
+              >
+                {doc.glyph}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold leading-tight text-fairway-50">{doc.label}</span>
+                <span className="block truncate text-[11px] text-fairway-300">{doc.blurb}</span>
+              </span>
+              <span className="flex-none text-fairway-400" aria-hidden="true">
+                ↗
+              </span>
+            </a>
+          ))}
         </div>
       )}
       <button
