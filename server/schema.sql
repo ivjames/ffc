@@ -270,3 +270,75 @@ update hunt_find f
    set countable = true
   from hunt_item i
  where f.item_id = i.id and i.countable and f.countable = false;
+
+-- ---------------------------------------------------------------------------
+-- Master Control — org (owner/franchise) level above locations, plus the
+-- back-office scaffolding. See master-control-plan.md. All DDL here is
+-- idempotent and appended after the base tables/seeds so every referenced
+-- table + seed row already exists when these run.
+-- ---------------------------------------------------------------------------
+
+-- An org is the owner/franchise that operates one or more locations. A location
+-- belongs to exactly one org (nullable while existing rows migrate; backfilled
+-- to a default org just below).
+create table if not exists org (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  slug        text not null unique,            -- 'bullwinkles'
+  status      text not null default 'active',  -- active | suspended
+  archived_at timestamptz,                     -- soft-delete; null = live
+  created_at  timestamptz not null default now(),
+  sort_order  int  not null default 0
+);
+
+-- Link locations to their org.
+alter table location add column if not exists org_id      uuid references org(id);
+create index if not exists location_org_idx on location (org_id);
+
+-- Soft-delete (archive) columns. Deletes in Master Control are archives, never
+-- row removals: a non-null archived_at hides the row from players and from the
+-- default admin lists while keeping all history (rounds/scores/finds) intact.
+alter table location add column if not exists archived_at timestamptz;
+alter table course   add column if not exists archived_at timestamptz;
+-- Partial indexes over the live set (the common read path filters archived_at is null).
+create index if not exists location_active_idx on location (archived_at) where archived_at is null;
+create index if not exists course_active_idx   on course   (archived_at) where archived_at is null;
+
+-- Append-only audit trail: one row per successful admin mutation.
+create table if not exists admin_audit (
+  id         uuid primary key default gen_random_uuid(),
+  actor      text,               -- token label / admin_user id once accounts exist
+  action     text not null,      -- 'org.create', 'location.update', 'course.archive'
+  entity     text not null,      -- 'org' | 'location' | 'course'
+  entity_id  uuid,
+  detail     jsonb,              -- submitted payload / before+after
+  created_at timestamptz not null default now()
+);
+create index if not exists admin_audit_created_idx on admin_audit (created_at);
+
+-- Forward-compat for real accounts (Phase 2). Present so org-scoping has a home
+-- and org_id never needs re-plumbing later; UNUSED by v1 code (single APP_TOKEN).
+create table if not exists admin_user (
+  id            uuid primary key default gen_random_uuid(),
+  email         text not null unique,
+  role          text not null default 'org_admin',  -- super_admin | org_admin
+  org_id        uuid references org(id),             -- null for super_admin
+  password_hash text,
+  created_at    timestamptz not null default now()
+);
+
+-- Seed the default org for the current client (Bullwinkle's) and backfill the
+-- existing locations onto it. Fixed id so this is idempotent and mirrors the
+-- LOC_* / course id convention in src/data/courses.ts. ON CONFLICT keeps the
+-- name/slug authoritative on re-migrate; sort_order/status left to the update.
+insert into org (id, name, slug, sort_order) values
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'Bullwinkle''s', 'bullwinkles', 10)
+on conflict (id) do update
+  set name = excluded.name, slug = excluded.slug;
+
+-- Any location without an org yet joins the default org. Safe to run every
+-- migrate: it only touches rows where org_id is still null, so a later
+-- reassignment through Master Control is never overwritten.
+update location
+   set org_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+ where org_id is null;
