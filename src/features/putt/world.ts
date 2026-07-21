@@ -16,8 +16,8 @@
 
 export const W = 360;
 export const H = 540;
-export const BALL_R = 8;
-export const HOLE_R = 13;
+export const BALL_R = 6;
+export const HOLE_R = 10;
 
 // Physics tuning (per-frame at ~60fps).
 export const FRICTION = 0.985; // velocity retained each frame on fairway/green
