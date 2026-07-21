@@ -37,9 +37,9 @@ const START = { x: W / 2, y: H - 40 };
 
 const FIXED = 1000 / 120;
 const BALL_FRICTION = 0.996;
-const PIN_FRICTION = 0.86;
+const PIN_FRICTION = 0.93; // higher = pins slide farther, so they knock each other over more
 const REST = 0.5; // collision restitution
-const BALL_M = 4;
+const BALL_M = 6;
 const PIN_M = 1;
 const MIN_V = 4;
 const MAX_V = 9;
@@ -95,6 +95,76 @@ function computeScore(rolls: number[]): number {
     }
   }
   return score;
+}
+
+/** One frame's display on the scorecard: the ball marks (`X` `/` digit `-`) and
+ *  the running total, which stays null until the frame's bonus balls exist. */
+type FrameView = { balls: string[]; score: number | null };
+
+const rollLabel = (pins: number) => (pins === 0 ? '-' : String(pins));
+
+/** Turn the flat pinfall list into ten frames of marks + cumulative scores for
+ *  the on-screen scorecard, mirroring computeScore's standard 10-frame rules. */
+function frameViews(rolls: number[]): FrameView[] {
+  const views: FrameView[] = [];
+  const at = (k: number) => rolls[k] ?? 0;
+  const has = (k: number) => k < rolls.length;
+  let i = 0;
+  let running = 0;
+  for (let frame = 0; frame < 10; frame++) {
+    if (frame < 9) {
+      if (!has(i)) {
+        views.push({ balls: [], score: null });
+        continue;
+      }
+      if (at(i) === 10) {
+        // Strike: scored once the next two balls (its bonus) have been thrown.
+        let score: number | null = null;
+        if (has(i + 1) && has(i + 2)) {
+          running += 10 + at(i + 1) + at(i + 2);
+          score = running;
+        }
+        views.push({ balls: ['X'], score });
+        i += 1;
+      } else if (has(i + 1)) {
+        const spare = at(i) + at(i + 1) === 10;
+        const balls = [rollLabel(at(i)), spare ? '/' : rollLabel(at(i + 1))];
+        let score: number | null = null;
+        if (spare) {
+          if (has(i + 2)) {
+            running += 10 + at(i + 2);
+            score = running;
+          }
+        } else {
+          running += at(i) + at(i + 1);
+          score = running;
+        }
+        views.push({ balls, score });
+        i += 2;
+      } else {
+        // Only the first ball of this frame has been thrown so far.
+        views.push({ balls: [rollLabel(at(i))], score: null });
+        i += 1;
+      }
+    } else {
+      // 10th frame: up to three balls, with fresh racks after a strike/spare.
+      const rest = rolls.slice(i);
+      // A ball opens a fresh rack after a strike (reset) or after a spare closes
+      // the previous rack — so a '/' only marks two balls that share a rack.
+      const firstOfRack = (k: number) =>
+        k === 0 ? true : k === 1 ? rest[0] === 10 : rest[1] === 10 || (rest[0] !== 10 && rest[0] + rest[1] === 10);
+      const balls = rest.map((v, k) => {
+        if (v === 10) return 'X';
+        if (k > 0 && !firstOfRack(k) && rest[k - 1] !== 10 && rest[k - 1] + v === 10) return '/';
+        return rollLabel(v);
+      });
+      const open = rest.length === 2 && rest[0] !== 10 && rest[0] + rest[1] !== 10;
+      const complete = rest.length === 3 || open;
+      const score = complete ? running + rest.reduce((a, b) => a + b, 0) : null;
+      views.push({ balls, score });
+    }
+  }
+  return views;
 }
 
 type Phase = 'aim' | 'rolling' | 'sweep' | 'done';
@@ -479,6 +549,38 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   }
 }
 
+/** The classic ten-frame score strip: ball marks up top, cumulative score
+ *  below, the active frame lit. Scrolls sideways if the row can't fit. */
+function Scorecard({ rolls, activeFrame }: { rolls: number[]; activeFrame: number | null }) {
+  const views = frameViews(rolls);
+  return (
+    <div className="overflow-x-auto">
+      <div className="flex min-w-full gap-px rounded-lg border border-fairway-800 bg-fairway-800 text-center">
+        {views.map((v, f) => {
+          const active = f === activeFrame;
+          const tenth = f === 9;
+          return (
+            <div
+              key={f}
+              className={`flex flex-1 flex-col ${tenth ? 'min-w-[42px]' : 'min-w-[28px]'} ${
+                active ? 'bg-fairway-700' : 'bg-fairway-900'
+              }`}
+            >
+              <div className="text-[9px] leading-tight text-fairway-500">{f + 1}</div>
+              <div className="flex h-4 items-center justify-center gap-0.5 text-[11px] font-bold leading-none text-fairway-50">
+                {v.balls.length ? v.balls.map((b, k) => <span key={k}>{b}</span>) : <span>&nbsp;</span>}
+              </div>
+              <div className="border-t border-fairway-800 text-[11px] font-semibold leading-tight text-fairway-200">
+                {v.score ?? <span>&nbsp;</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Bowling() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS());
@@ -488,6 +590,7 @@ export default function Bowling() {
   const [score, setScore] = useState(0);
   const [frame, setFrame] = useState(0);
   const [note, setNote] = useState('');
+  const [rolls, setRolls] = useState<number[]>([]);
 
   const playing = phase !== 'done';
   useFitCanvas(canvasRef, W, H, playing);
@@ -501,6 +604,7 @@ export default function Bowling() {
     const pinfall = gs.standing - after;
     gs.rolls.push(pinfall);
     setScore(computeScore(gs.rolls));
+    setRolls([...gs.rolls]);
     if (after === 0) playCup(); // cleared the deck (strike / spare / clean-up)
     else if (pinfall === 0) playUndo(); // whiff or gutter
 
@@ -704,6 +808,7 @@ export default function Bowling() {
     setScore(0);
     setFrame(0);
     setNote('');
+    setRolls([]);
     setPhase('aim');
   }, []);
 
@@ -719,6 +824,9 @@ export default function Bowling() {
             <div className="text-5xl font-black text-fairway-50">{score}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">final score · 10 frames</p>
+          </div>
+          <div className="mt-6">
+            <Scorecard rolls={rolls} activeFrame={null} />
           </div>
           <div className="mt-8">
             <Button onClick={restart} sound="none">
@@ -741,6 +849,10 @@ export default function Bowling() {
         <span className="text-fairway-300">
           Score <span className="font-bold text-fairway-100">{score}</span>
         </span>
+      </div>
+
+      <div className="shrink-0 px-4 pb-1">
+        <Scorecard rolls={rolls} activeFrame={Math.min(frame, 9)} />
       </div>
 
       <div className="flex min-h-0 flex-1 items-center justify-center px-4">

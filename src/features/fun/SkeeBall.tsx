@@ -18,9 +18,10 @@ import {
 } from './fx';
 
 // §12 Skee-Ball — the first attraction mini-game. Swipe up the lane to roll a
-// ball into the target: each scoring ring has a hole the ball drops into. Thread
-// the top corners for 100, nail the small center ring for 50, or come up short
-// for a gutter zero. Nine balls a game.
+// ball into the target: land it in a scoring ring and it rolls down the inside
+// of the ring into the hole at the bottom under gravity. Thread the top corners
+// for 100, nail the small center ring for 50, or come up short for a gutter
+// zero. Nine balls a game.
 //
 // The landing is deterministic from the swipe, but the aim trail FADES OUT before
 // the target — you commit to a line and power without a pinpoint preview, so
@@ -46,7 +47,6 @@ const HOLES: Hole[] = [
   { cx: W / 2, cy: 358, R: 36, pts: 10, color: '#38bdf8' },
 ];
 const HOLE_R = 8; // the drop hole at the bottom of each ring
-const FUNNEL = 12; // lands within R + FUNNEL of a ring get funneled in
 
 const GRAV = 0.5;
 const MIN_V = 11;
@@ -54,7 +54,7 @@ const MAX_V = 25;
 const MAX_DRAG = 300;
 const BALLS = 9;
 const FLIGHT_MS = 560; // arc-to-landing animation
-const SINK_MS = 320; // roll-down-into-the-hole animation
+const SINK_MS = 440; // roll down the inside of the ring into the hole after landing
 const NEXT_DELAY_MS = 850; // pause on the result before the next ball
 const FADE_END_Y = 350; // the aim trail is fully faded above this y (before the target)
 
@@ -65,6 +65,34 @@ const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi 
 /** The drop hole at the bottom-inside of a ring. */
 function holeDrop(h: Hole): { x: number; y: number } {
   return { x: h.cx, y: h.cy + h.R - HOLE_R - 4 };
+}
+
+/** Where the ball sits at progress `q` (0..1) as it settles into the hole. It
+ *  rolls the short way down the *inside* of the ring toward the bottom, where the
+ *  drop hole sits — so an off-centre landing hugs the ring wall and curves down
+ *  to the hole instead of cutting straight across it. Modelled in polar terms
+ *  about the ring centre: the angle swings to the bottom (screen-down) while the
+ *  radius eases to land the ball inside the drop hole. Starts on the landing
+ *  point (q=0). */
+function sinkPos(h: Hole, land: { x: number; y: number }, q: number): { x: number; y: number } {
+  const r0 = Math.hypot(land.x - h.cx, land.y - h.cy);
+  const rHole = h.R - HOLE_R - 4; // the drop hole's centre distance from the ring centre
+  const th0 = Math.atan2(land.y - h.cy, land.x - h.cx);
+  const BOTTOM = Math.PI / 2; // screen-down — where the drop hole sits in the ring
+  // Swing the short way round to the bottom, so the ball rolls down the nearer wall.
+  const dth = ((((BOTTOM - th0 + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI) - Math.PI;
+  const e = q * q; // gravity from rest: the roll accelerates toward the bottom
+  const th = th0 + dth * e;
+  // Land inside the drop hole: grow outward to it, or for a rim landing already
+  // past it, nestle in only as far as the hole's near edge (rHole + HOLE_R). We
+  // never pull all the way to the hole centre, which at the bottom would read as
+  // the ball climbing back up out of the ring.
+  const endRad = clamp(r0, rHole, rHole + HOLE_R);
+  const rad = r0 + (endRad - r0) * e;
+  return {
+    x: h.cx + Math.cos(th) * rad,
+    y: Math.max(h.cy + Math.sin(th) * rad, land.y), // never rise above the landing
+  };
 }
 
 /** Map a swipe (drag delta) to a launch velocity, or null if it isn't a valid
@@ -95,14 +123,16 @@ function landingPoint(v: Vel): { x: number; y: number } | null {
 }
 
 /** The ring/hole a landing point drops into (nearest that captures it), or null
- *  for a gutter miss. */
+ *  for a gutter miss. A ball only counts as "in the ring" when its centroid
+ *  lands inside the ring's rim (d <= R) — no slop past the visible edge, so the
+ *  ball is never scored while sitting outside the ring it's credited to. */
 function holeAt(p: { x: number; y: number } | null): Hole | null {
   if (!p) return null;
   let best: Hole | null = null;
   let bestD = Infinity;
   for (const h of HOLES) {
     const d = Math.hypot(p.x - h.cx, p.y - h.cy);
-    if (d <= h.R + FUNNEL && d < bestD) {
+    if (d <= h.R && d < bestD) {
       best = h;
       bestD = d;
     }
@@ -353,8 +383,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   }
 }
 
-const easeOut = (t: number) => 1 - (1 - t) * (1 - t) * (1 - t);
-
 export default function SkeeBall() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS());
@@ -481,12 +509,8 @@ export default function SkeeBall() {
         }
       } else if (gs.phase === 'sink' && gs.shot && gs.shot.hole) {
         const q = Math.min((now - gs.shot.sinkAt) / SINK_MS, 1);
-        const e = easeOut(q);
-        const dp = holeDrop(gs.shot.hole);
-        gs.ball = {
-          x: gs.shot.land.x + (dp.x - gs.shot.land.x) * e,
-          y: gs.shot.land.y + (dp.y - gs.shot.land.y) * e,
-        };
+        // Roll around the funnel dish and spiral into the hole, not a straight pull.
+        gs.ball = sinkPos(gs.shot.hole, gs.shot.land, q);
         // Shrink into the hole over the last part of the roll.
         gs.ballR = BALL_R * (1 - 0.85 * clamp((q - 0.55) / 0.45, 0, 1));
         if (q >= 1) finalize();

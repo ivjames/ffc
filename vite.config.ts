@@ -71,11 +71,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Precache the app shell + all bundled assets (maps, icons, and the
-        // themes' WebP art) so the whole PWA — including every skin's course
-        // cards, frames, backgrounds, and menu icons — works offline, even if a
-        // skin is selected and the network drops before its images are fetched.
-        globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,webp}'],
+        // Precache the app shell + all bundled assets (maps, icons) so the
+        // whole PWA works offline. Course maps/rules ship in the build.
+        globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
         navigateFallback: '/index.html',
         // Never let the SW intercept API calls — those must hit the network
         // (and fail gracefully to the offline write-queue when down).

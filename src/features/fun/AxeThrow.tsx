@@ -164,6 +164,31 @@ function drawAxe(ctx: CanvasRenderingContext2D, x: number, y: number, angle: num
   ctx.restore();
 }
 
+// The area-centroid of the steel head polygon in drawAxe's local coords. drawAxe
+// pins its origin (0,0) — the neck between handle and head — so calling it with
+// the landing point sticks the axe by the *whole graphic's* middle, biasing the
+// head off-target. Anchoring the head's own center puts the blade the player
+// reads as "the axe" onto the target. (Pinning the far cutting edge instead
+// throws the head high-and-left, since the head extends up-left of that edge.)
+const AXE_HEAD = { x: 5.86, y: -7.28 };
+
+/** Draw an axe so its blade head (not its origin) is centered on (hx, hy). */
+function drawAxeStuck(
+  ctx: CanvasRenderingContext2D,
+  hx: number,
+  hy: number,
+  angle: number,
+  scale = 1,
+) {
+  // Rotate + scale the head-center offset, then place the origin so the head
+  // lands on (hx,hy).
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const ox = (AXE_HEAD.x * c - AXE_HEAD.y * s) * scale;
+  const oy = (AXE_HEAD.x * s + AXE_HEAD.y * c) * scale;
+  drawAxe(ctx, hx - ox, hy - oy, angle, scale);
+}
+
 /** The wooden board + concentric scoring rings + glossy bullseye, top-lit. */
 function drawBoard(ctx: CanvasRenderingContext2D) {
   const bx = 28;
@@ -295,7 +320,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   }
 
   // Previous throws stuck in the board.
-  for (const m of gs.marks) drawAxe(ctx, m.x, m.y, -0.35, 0.8);
+  for (const m of gs.marks) drawAxeStuck(ctx, m.x, m.y, -0.35, 0.8);
 
   // Aiming guides — glowing amber sweep lines.
   if (gs.phase === 'aimX') {
@@ -330,11 +355,11 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     const sy = H - 24;
     const x = sx + (gs.land.x - sx) * p;
     const y = sy + (gs.land.y - sy) * p;
-    drawAxe(ctx, x, y, p * Math.PI * 6);
+    drawAxeStuck(ctx, x, y, p * Math.PI * 6);
   }
   // Stuck result + floating points.
   if (gs.phase === 'scored' && gs.land) {
-    drawAxe(ctx, gs.land.x, gs.land.y, -0.35);
+    drawAxeStuck(ctx, gs.land.x, gs.land.y, -0.35);
     ctx.save();
     ctx.textAlign = 'center';
     ctx.shadowBlur = 12;
@@ -373,6 +398,10 @@ export default function AxeThrow() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS(0));
   const fxRef = useRef<FX>(freshFX());
+  // Last-rendered guide position (the sweep values actually painted this frame).
+  // onTap reads these so the axe lands on the crosshair the player saw, closing
+  // the sub-frame gap between the draw clock and a fresh clock read at tap time.
+  const guideRef = useRef({ x: SWEEP_X0, y: SWEEP_Y0 });
   const nextTimer = useRef<number | null>(null);
 
   const [phase, setPhase] = useState<Phase>('aimX');
@@ -429,6 +458,15 @@ export default function AxeThrow() {
       }
       const dt = Math.min(now - last, 100);
       last = now;
+
+      // Record the guide's *rendered* position this frame so a tap lands exactly
+      // where the crosshair was last drawn — not where a freshly re-read clock in
+      // onTap would place it a few ms later. Same `now` the draw below uses.
+      if (gs.phase === 'aimX') {
+        guideRef.current.x = SWEEP_X0 + (SWEEP_X1 - SWEEP_X0) * triWave(now - gs.sweepBase, SWEEP_X_MS);
+      } else if (gs.phase === 'aimY') {
+        guideRef.current.y = SWEEP_Y0 + (SWEEP_Y1 - SWEEP_Y0) * triWave(now - gs.sweepBase, SWEEP_Y_MS);
+      }
 
       // Feed the spinning motion trail while the axe is in flight.
       if (gs.phase === 'flying' && gs.land) {
@@ -487,13 +525,15 @@ export default function AxeThrow() {
     const gs = gsRef.current;
     const now = performance.now();
     if (gs.phase === 'aimX') {
-      gs.lockX = SWEEP_X0 + (SWEEP_X1 - SWEEP_X0) * triWave(now - gs.sweepBase, SWEEP_X_MS);
+      // Lock to the last *rendered* sweep position, not a re-read of the clock,
+      // so the throw lands exactly under the crosshair the player saw.
+      gs.lockX = guideRef.current.x;
       gs.phase = 'aimY';
       gs.sweepBase = now;
       setPhase('aimY');
       playStroke();
     } else if (gs.phase === 'aimY') {
-      const y = SWEEP_Y0 + (SWEEP_Y1 - SWEEP_Y0) * triWave(now - gs.sweepBase, SWEEP_Y_MS);
+      const y = guideRef.current.y;
       gs.land = { x: gs.lockX, y };
       gs.score = scoreAt(gs.lockX, y);
       gs.phase = 'flying';

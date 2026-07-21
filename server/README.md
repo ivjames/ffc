@@ -30,7 +30,7 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | -------------- | -------------------------------------------------------------- |
 | `DATABASE_URL`      | Postgres connection string (server-side creds).           |
 | `PORT`              | Listen port (default 8060).                               |
-| `APP_TOKEN`         | Shared token guarding `POST /api/seed`. Unset = allow (dev). |
+| `APP_TOKEN`         | Shared token guarding `POST /api/seed`, `POST /api/locations`, and the whole `/api/admin/*` (Master Control) surface. Unset = allow (dev). **Must be set in production** — the admin surface is world-writable without it (the API warns at startup). |
 | `VENUE_TZ`          | **Fallback** IANA timezone for leaderboard calendar windows, used only for a venue whose `location.tz` is unset. The real zone is per venue (see "Venue timezones" below). Default `America/Los_Angeles`. |
 | `ANTHROPIC_API_KEY` | Vision key for the scavenger hunt (`POST /api/hunt/verify`). Unset = hunt verification returns `503`; the rest of the API is unaffected. |
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
@@ -150,6 +150,39 @@ Responses:
 - `401` — token required and missing/wrong.
 - `409` — `slug` already in use by a different location.
 
+`GET /api/locations` returns only **live** venues (`archived_at is null`); an
+optional `orgId` field ties a venue to its org.
+
+### `GET /api/content`
+Open read. The live player-facing catalog — `{ locations: [...], courses: [...] }`,
+archived rows excluded — used by the build-time exporter
+(`scripts/export-content.mjs`) to regenerate `src/data/content.generated.ts`. The
+DB is the source of truth; a site rebuild publishes changes to players.
+
+### Master Control — `/api/admin/*`
+Back-office API for onboarding/managing orgs (owner/franchise), locations
+(venues), and courses. **Every route is guarded by `x-app-token` = `APP_TOKEN`**
+(operator/super-admin only; unset = dev-allow). Mutations are recorded in
+`admin_audit`. **Deletes are soft archives — there is no hard-delete endpoint;**
+archiving sets `archived_at` and hides the row while keeping all history.
+
+| Method & path | Purpose |
+| --- | --- |
+| `GET  /api/admin/overview` | rollup: counts + rounds 7/30d + per-location |
+| `GET  /api/admin/orgs` · `POST /api/admin/orgs` | list / create-update org |
+| `GET  /api/admin/orgs/:id` | one org + its live locations |
+| `POST /api/admin/orgs/:id/archive` · `…/unarchive` | soft-delete / restore |
+| `GET  /api/admin/locations?orgId=&archived=` · `POST /api/admin/locations` | list / create-update venue (reuses the `/api/locations` validation + tz derivation, plus `orgId`) |
+| `GET  /api/admin/locations/:id` | one venue + its live courses |
+| `GET  /api/admin/locations/:id/courses` | courses for a venue |
+| `POST /api/admin/locations/:id/archive` · `…/unarchive` | soft-delete / restore |
+| `POST /api/admin/courses` · `PATCH /api/admin/courses/:id` | create-update / edit course (`pars` length 18, values 2–4) |
+| `POST /api/admin/courses/:id/archive` · `…/unarchive` | soft-delete / restore |
+
+The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
+on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of
+the player PWA. See `../master-control-plan.md` and `ffc admin-setup`.
+
 ### Scavenger hunt (Phase 3)
 
 Each course has its **own themed list** — four courses, four lists — seeded by
@@ -247,11 +280,19 @@ nothing assumes one global zone.
   `validateTags`, `BLOCKLIST`). Mirrors the client's rules exactly.
 - `lib/timezone.js` — venue timezone contract (`tzFromCoords`, `isValidTz`,
   `friendlyTzLabel`); see "Venue timezones" above.
+- `lib/adminAuth.js` — shared token guard (`requireAppToken`), `audit()` writer,
+  and the no-token startup warning; used by the admin surface and the seed/
+  locations write guards.
+- `lib/validateLocation.js` / `lib/validateCourse.js` — shared validators so the
+  public `/api/locations`, `/api/seed`, and the admin routers all validate alike.
 - `routes/rounds.js` — `POST /api/rounds` (idempotent sync, per-IP rate limit).
 - `routes/leaderboard.js` — `GET /api/leaderboard`.
 - `routes/seed.js` — `POST /api/seed`.
 - `routes/locations.js` — `GET`/`POST /api/locations` (venue onboarding; resolves
   `location.tz` via `lib/timezone.js`).
+- `routes/content.js` — `GET /api/content` (live catalog for the build exporter).
+- `routes/admin/` — Master Control: `orgs.js`, `locations.js`, `courses.js`,
+  `overview.js`, mounted under `/api/admin` by `admin/index.js` (token-guarded).
 - `routes/hunt.js` — scavenger hunt: `GET /api/hunt/items`, `GET /api/hunt/progress`,
   `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe).
 - `lib/vision.js` — Claude vision proxy (`claude-opus-4-8`, structured JSON verdict).
