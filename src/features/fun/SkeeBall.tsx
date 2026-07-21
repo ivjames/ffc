@@ -71,21 +71,23 @@ function holeDrop(h: Hole): { x: number; y: number } {
  *  drop hole sits — so an off-centre landing hugs the ring wall and curves down
  *  to the hole instead of cutting straight across it. Modelled in polar terms
  *  about the ring centre: the angle swings to the bottom (screen-down) while the
- *  radius only ever grows outward toward the hole, so gravity never rolls the
- *  ball back up (a floor at the landing height guards the rest). Starts on the
- *  landing point (q=0). */
+ *  radius eases to land the ball inside the drop hole. Starts on the landing
+ *  point (q=0). */
 function sinkPos(h: Hole, land: { x: number; y: number }, q: number): { x: number; y: number } {
   const r0 = Math.hypot(land.x - h.cx, land.y - h.cy);
-  const rHole = h.R - HOLE_R - 4; // the drop hole's distance from the ring centre
+  const rHole = h.R - HOLE_R - 4; // the drop hole's centre distance from the ring centre
   const th0 = Math.atan2(land.y - h.cy, land.x - h.cx);
   const BOTTOM = Math.PI / 2; // screen-down — where the drop hole sits in the ring
   // Swing the short way round to the bottom, so the ball rolls down the nearer wall.
   const dth = ((((BOTTOM - th0 + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI) - Math.PI;
   const e = q * q; // gravity from rest: the roll accelerates toward the bottom
   const th = th0 + dth * e;
-  // Only ever roll outward toward the hole (never inward, which at the bottom
-  // would read as the ball climbing back up out of the ring).
-  const rad = r0 + Math.max(0, rHole - r0) * e;
+  // Land inside the drop hole: grow outward to it, or for a rim landing already
+  // past it, nestle in only as far as the hole's near edge (rHole + HOLE_R). We
+  // never pull all the way to the hole centre, which at the bottom would read as
+  // the ball climbing back up out of the ring.
+  const endRad = clamp(r0, rHole, rHole + HOLE_R);
+  const rad = r0 + (endRad - r0) * e;
   return {
     x: h.cx + Math.cos(th) * rad,
     y: Math.max(h.cy + Math.sin(th) * rad, land.y), // never rise above the landing
