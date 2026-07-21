@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api, type Course, type Location } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, Pill, useAsync } from './ui';
+import { Button, Card, Field, Input, Banner, Spinner, Pill, useAsync, fmtDateTime } from './ui';
 
 function ParsGrid({ pars, onChange }: { pars: number[]; onChange: (p: number[]) => void }) {
   return (
@@ -200,12 +200,22 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
 
 export default function LocationDetail() {
   const { id = '' } = useParams();
-  const { data, error, loading, reload } = useAsync(() => api.getLocation(id), [id]);
+  const { data, error, loading, reload } = useAsync(async () => {
+    const [detail, allCourses] = await Promise.all([
+      api.getLocation(id),
+      api.listLocationCourses(id, true),
+    ]);
+    return {
+      location: detail.location,
+      courses: detail.courses,
+      archivedCourses: allCourses.filter((c) => c.archivedAt),
+    };
+  }, [id]);
 
   if (loading) return <Spinner />;
   if (error) return <Banner kind="error">{error.message}</Banner>;
   if (!data) return null;
-  const { location, courses } = data;
+  const { location, courses, archivedCourses } = data;
 
   async function toggleArchive() {
     await api.archiveLocation(id, !location.archivedAt);
@@ -235,6 +245,34 @@ export default function LocationDetail() {
       </div>
 
       <AddCourse locationId={location.id} onAdded={reload} />
+
+      {archivedCourses.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="pt-2 text-sm font-semibold text-slate-700">
+            Archived courses ({archivedCourses.length})
+          </h2>
+          {archivedCourses.map((c) => (
+            <Card key={c.id} className="flex items-center gap-3">
+              <span className="flex-1 text-sm">
+                <span className="font-medium">{c.name}</span>
+                <span className="ml-2 text-xs text-slate-400">{c.theme}</span>
+                {c.archivedAt && (
+                  <span className="ml-2 text-xs text-slate-400">archived {fmtDateTime(c.archivedAt)}</span>
+                )}
+              </span>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  await api.archiveCourse(c.id, false);
+                  reload();
+                }}
+              >
+                Unarchive
+              </Button>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <p className="text-xs text-slate-500">
         Course data (names, pars, themes) drives the leaderboard and hunt immediately in the DB, and reaches players on

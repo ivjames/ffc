@@ -107,6 +107,9 @@ export const api = {
     return req<Location[]>('GET', `/locations${s ? `?${s}` : ''}`);
   },
   getLocation: (id: string) => req<{ location: Location; courses: Course[] }>('GET', `/locations/${id}`),
+  // archived=1 returns live + archived; callers filter to the archived ones.
+  listLocationCourses: (id: string, archived = false) =>
+    req<Course[]>('GET', `/locations/${id}/courses${archived ? '?archived=1' : ''}`),
   saveLocation: (loc: Partial<Location>) => req<{ ok: true; location: Location }>('POST', '/locations', loc),
   archiveLocation: (id: string, archived: boolean) =>
     req<{ ok: true; location: Location }>('POST', `/locations/${id}/${archived ? 'archive' : 'unarchive'}`),

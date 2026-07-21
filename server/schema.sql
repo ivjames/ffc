@@ -132,32 +132,32 @@ create unique index if not exists hunt_find_verified_unique
 -- Bullwinkle's three venues. Idempotent on id; ids + coords mirror
 -- src/data/courses.ts (exact coordinates geocoded from the street addresses;
 -- 2 km geofence per venue, sites hundreds of km apart so no overlap).
--- schema.sql is the sole source of truth for location rows (there is no
--- separate location seed API), so the conflict clause syncs every field
--- authoritatively — that's how existing DBs pick up name/coord changes on the
--- next migrate. Addresses: Upland 1560 W 7th St 91786; Tukwila 7300 Fun Center
--- Way 98188; Wilsonville 29111 SW Town Center Loop W 97070.
+-- Addresses: Upland 1560 W 7th St 91786; Tukwila 7300 Fun Center Way 98188;
+-- Wilsonville 29111 SW Town Center Loop W 97070.
 -- `tz` is each venue's IANA timezone. Today's three venues happen to all be
 -- Pacific, but that's incidental — a venue elsewhere carries its own zone here,
 -- and the leaderboard reads it per round (never one global assumption).
+--
+-- CREATE-ONLY (ON CONFLICT DO NOTHING): Master Control is now the source of
+-- truth for these fields (§5), so a re-migrate must NOT overwrite an operator's
+-- edits back to these seed values. This seeds the rows once on a fresh DB and
+-- leaves them alone thereafter. (org_id is set by the backfill below, guarded on
+-- `org_id is null`, so it never disturbs a later reassignment either.)
 insert into location (id, name, slug, lat, lng, geofence_km, tz, sort_order) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Upland',      'upland',      34.08867, -117.67946, 2, 'America/Los_Angeles', 10),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Tukwila',     'tukwila',     47.46562, -122.24302, 2, 'America/Los_Angeles', 20),
   ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Wilsonville', 'wilsonville', 45.30969, -122.76680, 2, 'America/Los_Angeles', 30)
-on conflict (id) do update
-  set name        = excluded.name,
-      slug        = excluded.slug,
-      lat         = excluded.lat,
-      lng         = excluded.lng,
-      geofence_km = excluded.geofence_km,
-      tz          = excluded.tz,
-      sort_order  = excluded.sort_order;
+on conflict (id) do nothing;
 
 -- The client's nine courses across the three venues (Upland x4, Tukwila x3,
--- Wilsonville x2). Idempotent on id; `deploy/courses.seed.json` / `ffc seed`
--- remains the source of truth and upserts name/theme/pars over these, so the
--- conflict clause only keeps location_id in sync. Ids + pars + location_id
--- mirror src/data/courses.ts. Pars are still placeholders (length 18, 2..4).
+-- Wilsonville x2). Idempotent on id. Ids + pars + location_id mirror
+-- src/data/courses.ts. Pars are still placeholders (length 18, 2..4).
+--
+-- CREATE-ONLY (ON CONFLICT DO NOTHING): like the location seed above, Master
+-- Control now owns course data (name/theme/pars/location), so a re-migrate must
+-- not clobber operator edits. Seeds once on a fresh DB (also guaranteeing the
+-- rows exist so the hunt_item FKs below resolve) and leaves them alone after.
+-- (`ffc seed` / deploy/courses.seed.json still upsert explicitly when run.)
 insert into course (id, name, theme, pars, location_id, sort_order) values
   ('a1111111-1111-4111-8111-111111111111', 'Blue Course', 'california', '{3,2,3,2,3,4,2,3,2,3,3,2,4,3,2,3,2,3}', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 10),
   ('a2222222-2222-4222-8222-222222222222', 'Green Course', 'classic', '{2,3,2,3,3,2,4,3,2,3,2,3,3,4,2,3,3,2}', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 20),
@@ -168,7 +168,7 @@ insert into course (id, name, theme, pars, location_id, sort_order) values
   ('b3333333-3333-4333-8333-333333333333', 'Red Course', 'red', '{3,3,2,4,2,3,3,2,3,4,2,3,2,3,3,2,4,3}', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 30),
   ('c1111111-1111-4111-8111-111111111111', 'Blue Course', 'blue', '{2,3,2,3,4,2,3,2,3,3,2,4,3,2,3,2,3,3}', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 10),
   ('c2222222-2222-4222-8222-222222222222', 'Green Course', 'green', '{3,2,3,3,2,4,2,3,3,2,3,2,4,3,2,3,2,3}', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 20)
-on conflict (id) do update set location_id = excluded.location_id;
+on conflict (id) do nothing;
 
 -- NOTE: the earlier placeholder courses (Jungle Run / Pirate's Cove / Space
 -- Odyssey / Haunted Manor) may still exist in databases seeded before the real
@@ -329,12 +329,14 @@ create table if not exists admin_user (
 
 -- Seed the default org for the current client (Bullwinkle's) and backfill the
 -- existing locations onto it. Fixed id so this is idempotent and mirrors the
--- LOC_* / course id convention in src/data/courses.ts. ON CONFLICT keeps the
--- name/slug authoritative on re-migrate; sort_order/status left to the update.
+-- LOC_* / course id convention in src/data/courses.ts.
+--
+-- CREATE-ONLY (ON CONFLICT DO NOTHING): Master Control owns org name/slug, so a
+-- re-migrate (every `ffc deploy` runs `ffc migrate`) must not reset an operator's
+-- rename back to this seed value. Seed once, then leave it to the console.
 insert into org (id, name, slug, sort_order) values
   ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'Bullwinkle''s', 'bullwinkles', 10)
-on conflict (id) do update
-  set name = excluded.name, slug = excluded.slug;
+on conflict (id) do nothing;
 
 -- Any location without an org yet joins the default org. Safe to run every
 -- migrate: it only touches rows where org_id is still null, so a later
