@@ -41,7 +41,7 @@ Org (owner / franchise)          ← NEW
 | Content source of truth | **Locations become DB-driven & live; per-course art/pars stay bundled for now** _(recommended)_ | Alt A: flip whole app to API. Alt B: admin writes DB but player app stays fully bundled |
 | v1 admin scope | **Orgs + Locations + Courses CRUD**, plus a light read-only rollup | Hunt-list editing & rich dashboards are Phase 2 |
 | Delivery | **Separate admin build served on its own vhost (`admin.ffc.lab980.com`)** — not part of the player PWA | No service worker, no offline, no admin code in the player bundle |
-| Admin TLS | **Wildcard `*.ffc.lab980.com` cert via certbot DNS-01** | One admin subdomain now; wildcard so future subdomains need no cert work. Prereq: DNS provider API creds + certbot DNS plugin |
+| Admin TLS | **Wildcard `*.ffc.lab980.com` cert via certbot DNS-01, backed by `doctl`** | One admin subdomain now; wildcard so future subdomains need no cert work. Plugin-free — reuses the droplet's existing doctl auth, no token to mint |
 | Write path | All admin writes go through the **existing Express API** (creds server-side), never the browser → DB | Matches architecture principle §3 of the base app |
 
 ---
@@ -245,21 +245,34 @@ robots/precache/scope gymnastics, and **zero admin code in the player bundle**.
     subdomain** (`admin.`, and later per-org/per-location/per-function if ever
     wanted) is covered with **zero additional cert work** — no re-running certbot per
     host.
-  - DNS for `lab980.com` is on **DigitalOcean** (same as the droplet), so this is the
-    `certbot-dns-digitalocean` plugin driven by a **DO API token**. DNS-01 proves
-    control by writing a TXT record via the DO API — no HTTP reachability needed —
-    then auto-renews unattended. Concretely:
+  - DNS for `lab980.com` is on **DigitalOcean**, and the droplet is already
+    **`doctl`-authenticated** — so the DO credential exists on the box and there is
+    **no token to mint**. That lets us do DNS-01 **plugin-free**, using certbot manual
+    hooks that shell out to `doctl` to write/remove the `_acme-challenge` TXT record:
     ```
-    apt install python3-certbot-dns-digitalocean       # or the snap plugin
-    # /etc/letsencrypt/dns-digitalocean.ini  (chmod 600)
-    #   dns_digitalocean_token = <DO API token, write access to lab980.com>
-    certbot certonly --dns-digitalocean \
-      --dns-digitalocean-credentials /etc/letsencrypt/dns-digitalocean.ini \
-      --dns-digitalocean-propagation-seconds 60 \
+    # deploy/acme-doctl-auth.sh   (certbot --manual-auth-hook)
+    doctl compute domain records create lab980.com \
+      --record-type TXT \
+      --record-name "_acme-challenge.${CERTBOT_DOMAIN%.lab980.com}" \
+      --record-data "$CERTBOT_VALIDATION" --record-ttl 30
+    # deploy/acme-doctl-cleanup.sh (certbot --manual-cleanup-hook) deletes it again
+
+    certbot certonly --manual --preferred-challenges dns \
+      --manual-auth-hook   /var/www/ffc/deploy/acme-doctl-auth.sh \
+      --manual-cleanup-hook /var/www/ffc/deploy/acme-doctl-cleanup.sh \
       -d '*.ffc.lab980.com' -d 'ffc.lab980.com' \
       -n --agree-tos -m ivjames@gmail.com
     ```
-    Plus a wildcard `*.ffc.lab980.com` A record (DO DNS) pointing at the droplet.
+    Certbot records these hook paths in the renewal config, so **auto-renew runs
+    unattended** as long as the in-repo hook scripts stay on disk (they ship in
+    `deploy/`, so paths are stable across deploys). No apt plugin, no separate
+    credentials INI — it reuses the existing doctl auth.
+  - Plus a wildcard `*.ffc.lab980.com` A record in DO DNS pointing at the droplet
+    (one-time; also scriptable via `doctl compute domain records create`).
+  - **Alt (plugin):** `python3-certbot-dns-digitalocean` with a DO token in
+    `/etc/letsencrypt/dns-digitalocean.ini` is the more "standard" route if you'd
+    rather not maintain hook scripts. It needs a token dropped in that INI — slightly
+    more setup than reusing doctl, so the hook approach is preferred here.
   - `bin/ffc` grows a `wildcard-cert` path wrapping that DNS-01 issue/renew; the admin
     vhost references the resulting cert. The existing player `vhost` (HTTP-01) is
     left as-is — or optionally folded under the same wildcard later, since the cert
@@ -366,9 +379,10 @@ Vite tree-shakes the two bundles apart.
 5. **Admin build + vhost** — second Vite entry (`vite.admin.config.ts` → `dist-admin/`);
    `bin/ffc` builds both bundles in the atomic release swap and (re)writes the
    `admin.ffc.lab980.com` vhost. TLS via a **wildcard `*.ffc.lab980.com` DNS-01 cert**
-   (new `ffc wildcard-cert` path): install `python3-certbot-dns-digitalocean`, drop a
-   DO API token in `/etc/letsencrypt/dns-digitalocean.ini` (chmod 600), add the
-   wildcard `*.ffc.lab980.com` A record in DO DNS, issue once, auto-renew thereafter.
+   (new `ffc wildcard-cert` path): ship the `deploy/acme-doctl-{auth,cleanup}.sh`
+   hooks, add the wildcard `*.ffc.lab980.com` A record in DO DNS (`doctl`), issue once
+   via `certbot --manual` DNS-01 backed by doctl, auto-renew thereafter. No token to
+   mint — the droplet's existing doctl auth is reused.
 6. **Admin UI** — token gate → Overview → Orgs → Location wizard → Location/course
    detail, shipped in the admin bundle.
 7. **Docs/CLI** — README + `server/README.md` for the new endpoints and the admin
@@ -399,9 +413,11 @@ Vite tree-shakes the two bundles apart.
   (`bullwinkles.ffc.lab980.com`, Host→`org.slug` scoping feeding the `org_admin`
   role). Not built now — flagged so the org-scoped API queries stay written in a way
   that a Host-derived tenant could later drive.
-- **DNS-01 prerequisites (resolved: DigitalOcean).** `lab980.com` DNS is on DO, so the
-  wildcard cert uses `python3-certbot-dns-digitalocean` + a DO API token (write access
-  to the domain) at `/etc/letsencrypt/dns-digitalocean.ini`. The one operator action
-  before this step is implementable: **mint a DO API token** and drop it on the
-  droplet (chmod 600). Everything else (`ffc wildcard-cert`, the vhost) is code.
+- **DNS-01 prerequisites (resolved: DigitalOcean + doctl).** `lab980.com` DNS is on DO
+  and the droplet is already `doctl`-authenticated, so the wildcard cert is issued
+  plugin-free via `certbot --manual` DNS-01 hooks that call `doctl`. **No operator
+  action required** — no token to mint, no INI to write; the existing doctl auth is
+  reused. Everything (hooks, `ffc wildcard-cert`, the vhost, the wildcard A record) is
+  code/CLI. The only assumption to confirm: the authenticated DO token has **write
+  scope** for `lab980.com` domain records (needed to create the ACME TXT record).
 ```
