@@ -367,6 +367,27 @@ body {
   -webkit-touch-callout: none;
 }
 
+/* The rotate-to-portrait overlay (src/ui/RotateNudge.tsx) is a full-screen
+   blocker. An overlay can't let the FIXED body background show through (the
+   stranded landscape app sits between them), so instead it MIRRORS the page
+   background here — this base rule matches the default `body` background above,
+   and each skin's `body` selector below also targets `.rotate-scrim`, so the
+   nudge always looks like the current themed screen (candy gradient, blocky
+   dots, UV grid, glass aurora, chrome metal) rather than a flat grey slab. */
+.rotate-scrim {
+  background:
+    radial-gradient(
+      130% 60% at 50% -10%,
+      color-mix(in srgb, var(--color-fairway-950), white 6%),
+      transparent 60%
+    ),
+    linear-gradient(
+      180deg,
+      var(--color-fairway-950),
+      color-mix(in srgb, var(--color-fairway-950), black 12%)
+    );
+}
+
 /* Text entry still needs real selection — player names, hunt answers, etc. */
 input,
 textarea,
@@ -650,7 +671,8 @@ button {
    gradients / shadows. Uses the mode-aware tokens so light and dark come for
    free; the accent and per-tile/puck/tag colors still flow through as flat
    fills. Disabled controls are already handled by the shared reset at the end. */
-:root[data-template='unstyled'] body {
+:root[data-template='unstyled'] body,
+:root[data-template='unstyled'] .rotate-scrim {
   background-image: none;
   background-color: var(--color-fairway-950);
 }
@@ -727,7 +749,8 @@ button {
   --bk-line: #1a1a1a;
   --bk-cast: #1a1a1a;
 }
-:root[data-template='blocky'] body {
+:root[data-template='blocky'] body,
+:root[data-template='blocky'] .rotate-scrim {
   background-color: var(--bk-paper);
   background-image: radial-gradient(var(--bk-dot) 1.6px, transparent 1.6px);
   background-size: 16px 16px;
@@ -764,7 +787,8 @@ button {
 }
 
 /* ——— UV PARTY — dark glass rimmed in neon (dark) / neon-on-white (light) ——— */
-:root[data-template='uv'][data-theme='dark'] body {
+:root[data-template='uv'][data-theme='dark'] body,
+:root[data-template='uv'][data-theme='dark'] .rotate-scrim {
   background-color: #0a0616;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
@@ -772,7 +796,8 @@ button {
     radial-gradient(70% 45% at 50% -5%, rgba(157, 75, 255, 0.35), transparent 70%);
   background-size: 27px 27px, 27px 27px, 100% 100%;
 }
-:root[data-template='uv'][data-theme='light'] body {
+:root[data-template='uv'][data-theme='light'] body,
+:root[data-template='uv'][data-theme='light'] .rotate-scrim {
   background-color: #f5f1fc;
   background-image:
     radial-gradient(rgba(157, 75, 255, 0.06) 1px, transparent 1px),
@@ -831,14 +856,16 @@ button {
 }
 
 /* ——— GLASSY — frosted translucent panels over an aurora ————————————————————— */
-:root[data-template='glass'][data-theme='dark'] body {
+:root[data-template='glass'][data-theme='dark'] body,
+:root[data-template='glass'][data-theme='dark'] .rotate-scrim {
   background-color: #0a0d18;
   background-image:
     radial-gradient(48% 40% at 12% 6%, rgba(99, 120, 255, 0.4), transparent 62%),
     radial-gradient(46% 36% at 92% 12%, rgba(192, 84, 252, 0.32), transparent 62%),
     radial-gradient(58% 48% at 74% 102%, rgba(34, 197, 225, 0.28), transparent 62%);
 }
-:root[data-template='glass'][data-theme='light'] body {
+:root[data-template='glass'][data-theme='light'] body,
+:root[data-template='glass'][data-theme='light'] .rotate-scrim {
   background-color: #e6ecfb;
   background-image:
     radial-gradient(48% 38% at 12% 8%, rgba(124, 156, 255, 0.5), transparent 62%),
@@ -886,7 +913,8 @@ button {
 }
 
 /* ——— CHROME / METALLIC — gunmetal (dark) / brushed aluminium (light) ———————— */
-:root[data-template='chrome'][data-theme='dark'] body {
+:root[data-template='chrome'][data-theme='dark'] body,
+:root[data-template='chrome'][data-theme='dark'] .rotate-scrim {
   background-image: linear-gradient(
     180deg,
     #20262e 0%,
@@ -896,7 +924,8 @@ button {
     #14181d 100%
   );
 }
-:root[data-template='chrome'][data-theme='light'] body {
+:root[data-template='chrome'][data-theme='light'] body,
+:root[data-template='chrome'][data-theme='light'] .rotate-scrim {
   background-image: linear-gradient(
     180deg,
     #d6dde4 0%,

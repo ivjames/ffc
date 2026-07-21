@@ -40,7 +40,12 @@ export default function RotateNudge() {
     <div
       role="alertdialog"
       aria-label="Please rotate your device to portrait"
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 bg-fairway-950/95 px-8 text-center backdrop-blur"
+      // `rotate-scrim` paints this full-screen overlay with the ACTIVE SKIN's
+      // page background (index.css), so the rotate prompt reads as a themed
+      // screen instead of a flat grey slab that masks the chosen skin. It's
+      // fully opaque, so no backdrop-blur/scrim tint is needed to hide the
+      // stranded landscape layout underneath.
+      className="rotate-scrim fixed inset-0 z-[100] flex flex-col items-center justify-center gap-4 px-8 text-center"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       {/* A phone glyph that tips from landscape back to portrait, on a loop, so
