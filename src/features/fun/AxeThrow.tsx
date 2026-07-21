@@ -163,6 +163,29 @@ function drawAxe(ctx: CanvasRenderingContext2D, x: number, y: number, angle: num
   ctx.restore();
 }
 
+// The blade's cutting edge in drawAxe's local coords — the part that actually
+// bites into the board. drawAxe pins its origin (0,0), the neck between handle
+// and head, so calling it with the landing point sticks the axe by its middle.
+// Anchor the *bit* there instead so the head lands on the target, not the axe's
+// centroid.
+const AXE_BIT = { x: 12, y: -7.5 };
+
+/** Draw an axe so its cutting edge (not its origin) lands at (hx, hy). */
+function drawAxeStuck(
+  ctx: CanvasRenderingContext2D,
+  hx: number,
+  hy: number,
+  angle: number,
+  scale = 1,
+) {
+  // Rotate + scale the bit offset, then place the origin so the bit hits (hx,hy).
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const ox = (AXE_BIT.x * c - AXE_BIT.y * s) * scale;
+  const oy = (AXE_BIT.x * s + AXE_BIT.y * c) * scale;
+  drawAxe(ctx, hx - ox, hy - oy, angle, scale);
+}
+
 /** The wooden board + concentric scoring rings + glossy bullseye, top-lit. */
 function drawBoard(ctx: CanvasRenderingContext2D) {
   const bx = 28;
@@ -294,7 +317,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   }
 
   // Previous throws stuck in the board.
-  for (const m of gs.marks) drawAxe(ctx, m.x, m.y, -0.35, 0.8);
+  for (const m of gs.marks) drawAxeStuck(ctx, m.x, m.y, -0.35, 0.8);
 
   // Aiming guides — glowing amber sweep lines.
   if (gs.phase === 'aimX') {
@@ -329,11 +352,11 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     const sy = H - 24;
     const x = sx + (gs.land.x - sx) * p;
     const y = sy + (gs.land.y - sy) * p;
-    drawAxe(ctx, x, y, p * Math.PI * 6);
+    drawAxeStuck(ctx, x, y, p * Math.PI * 6);
   }
   // Stuck result + floating points.
   if (gs.phase === 'scored' && gs.land) {
-    drawAxe(ctx, gs.land.x, gs.land.y, -0.35);
+    drawAxeStuck(ctx, gs.land.x, gs.land.y, -0.35);
     ctx.save();
     ctx.textAlign = 'center';
     ctx.shadowBlur = 12;
