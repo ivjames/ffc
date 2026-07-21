@@ -657,8 +657,8 @@ export default function SkeeBall() {
         />
       </div>
 
-      <p className="min-h-[2.5rem] shrink-0 px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
-        {hint}
+      <p className="flex h-16 shrink-0 items-center justify-center px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
+        <span className="line-clamp-2">{hint}</span>
       </p>
     </div>
   );
