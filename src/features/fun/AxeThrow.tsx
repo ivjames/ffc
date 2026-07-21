@@ -163,14 +163,15 @@ function drawAxe(ctx: CanvasRenderingContext2D, x: number, y: number, angle: num
   ctx.restore();
 }
 
-// The blade's cutting edge in drawAxe's local coords — the part that actually
-// bites into the board. drawAxe pins its origin (0,0), the neck between handle
-// and head, so calling it with the landing point sticks the axe by its middle.
-// Anchor the *bit* there instead so the head lands on the target, not the axe's
-// centroid.
-const AXE_BIT = { x: 12, y: -7.5 };
+// The area-centroid of the steel head polygon in drawAxe's local coords. drawAxe
+// pins its origin (0,0) — the neck between handle and head — so calling it with
+// the landing point sticks the axe by the *whole graphic's* middle, biasing the
+// head off-target. Anchoring the head's own center puts the blade the player
+// reads as "the axe" onto the target. (Pinning the far cutting edge instead
+// throws the head high-and-left, since the head extends up-left of that edge.)
+const AXE_HEAD = { x: 5.86, y: -7.28 };
 
-/** Draw an axe so its cutting edge (not its origin) lands at (hx, hy). */
+/** Draw an axe so its blade head (not its origin) is centered on (hx, hy). */
 function drawAxeStuck(
   ctx: CanvasRenderingContext2D,
   hx: number,
@@ -178,11 +179,12 @@ function drawAxeStuck(
   angle: number,
   scale = 1,
 ) {
-  // Rotate + scale the bit offset, then place the origin so the bit hits (hx,hy).
+  // Rotate + scale the head-center offset, then place the origin so the head
+  // lands on (hx,hy).
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  const ox = (AXE_BIT.x * c - AXE_BIT.y * s) * scale;
-  const oy = (AXE_BIT.x * s + AXE_BIT.y * c) * scale;
+  const ox = (AXE_HEAD.x * c - AXE_HEAD.y * s) * scale;
+  const oy = (AXE_HEAD.x * s + AXE_HEAD.y * c) * scale;
   drawAxe(ctx, hx - ox, hy - oy, angle, scale);
 }
 
