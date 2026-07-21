@@ -18,7 +18,10 @@
 #   restart   restart the pm2 API
 #   logs      tail the pm2 API logs
 #   backup    pg_dump the database into data/
-#   vhost     (re)write the nginx vhost + (re)issue TLS
+#   vhost     (re)write the player nginx vhost + (re)issue TLS
+#   wildcard-cert  issue/renew the *.<fqdn> wildcard cert (certbot DNS-01 via doctl)
+#   admin-vhost    (re)write the Master Control vhost (admin.<fqdn>)
+#   admin-setup    one-time: wildcard-cert + admin-vhost (Master Control bring-up)
 set -euo pipefail
 
 # Resolve the app dir from this script's own location (…/ffc/bin/ffc -> …/ffc),
@@ -38,6 +41,14 @@ API_PORT="${FFC_PORT:-$(
 : "${API_PORT:=8060}"
 BRANCH="${FFC_BRANCH:-main}"
 KEEP="${FFC_KEEP:-5}"                           # released builds to retain
+
+# Master Control admin app: served on its own subdomain of the player FQDN,
+# under a wildcard cert issued via DNS-01 (doctl). ADMIN_FQDN overridable.
+ADMIN_FQDN="${FFC_ADMIN_FQDN:-admin.$FQDN}"     # e.g. admin.ffc.lab980.com
+# The registered DNS zone doctl manages (last two labels of the FQDN).
+BASE_DNS="${FFC_DNS_DOMAIN:-$(echo "$FQDN" | awk -F. '{print $(NF-1)"."$NF}')}"
+# certbot lineage name for the wildcard cert (deterministic path under live/).
+WILDCARD_CERT_NAME="${FFC_WILDCARD_CERT_NAME:-$STUB-wildcard}"
 
 c_b=$'\033[1;34m'; c_r=$'\033[1;31m'; c_o=$'\033[0m'
 log(){ printf '%s==>%s %s\n' "$c_b" "$c_o" "$*"; }
@@ -67,6 +78,14 @@ build_release(){
   npm_install "$APP_DIR"
   ( cd "$APP_DIR" && npm run build )
   cp -r "$APP_DIR/dist" "$release/dist"
+  # Master Control admin SPA — separate bundle (no service worker). Built and
+  # shipped in the same atomic release so current/dist-admin swaps together with
+  # the player build. Non-fatal if it fails: never block a player deploy on it.
+  if ( cd "$APP_DIR" && npm run build:admin ); then
+    cp -r "$APP_DIR/dist-admin" "$release/dist-admin"
+  else
+    log "admin build failed — shipping player build only this release"
+  fi
   ln -sfn "$release" "$APP_DIR/current.tmp"
   mv -Tf "$APP_DIR/current.tmp" "$APP_DIR/current"
   log "current -> $ts"
@@ -197,6 +216,54 @@ cmd_setup(){
   log "Setup complete: https://$FQDN"
 }
 
+# Issue/renew the wildcard TLS cert (*.FQDN + FQDN) via certbot DNS-01, backed
+# by the droplet's existing doctl auth (no plugin, no credentials file). The
+# _acme-challenge TXT records are written/removed by deploy/acme-doctl-*.sh.
+cmd_wildcard_cert(){
+  command -v certbot >/dev/null || die "certbot not found"
+  command -v doctl   >/dev/null || die "doctl not found (needed for DNS-01)"
+  doctl compute domain records list "$BASE_DNS" >/dev/null 2>&1 \
+    || die "doctl can't read DNS zone '$BASE_DNS' — is doctl authenticated with a token that has write scope for it?"
+  local auth="$APP_DIR/deploy/acme-doctl-auth.sh"
+  local cleanup="$APP_DIR/deploy/acme-doctl-cleanup.sh"
+  chmod +x "$auth" "$cleanup" 2>/dev/null || true
+  log "Issuing/renewing wildcard cert '$WILDCARD_CERT_NAME' for *.$FQDN + $FQDN (DNS-01 via doctl, zone $BASE_DNS)"
+  FFC_DNS_DOMAIN="$BASE_DNS" certbot certonly \
+    --manual --preferred-challenges dns \
+    --manual-auth-hook "$auth" \
+    --manual-cleanup-hook "$cleanup" \
+    --cert-name "$WILDCARD_CERT_NAME" \
+    -d "*.$FQDN" -d "$FQDN" \
+    -n --agree-tos -m "${CERTBOT_EMAIL:-ivjames@gmail.com}"
+  log "Wildcard cert ready: /etc/letsencrypt/live/$WILDCARD_CERT_NAME/"
+}
+
+# (Re)write the admin vhost (admin.<fqdn>) and reload nginx. Requires the
+# wildcard cert to exist first (the vhost references it directly — certbot does
+# NOT rewrite this file per-host the way the player vhost is handled).
+cmd_admin_vhost(){
+  [ -f "$APP_DIR/deploy/nginx.admin.conf.template" ] || die "missing deploy/nginx.admin.conf.template"
+  [ -d "/etc/letsencrypt/live/$WILDCARD_CERT_NAME" ] \
+    || die "wildcard cert '$WILDCARD_CERT_NAME' not found — run 'ffc wildcard-cert' first"
+  local conf="/etc/nginx/sites-available/$ADMIN_FQDN"
+  log "Writing admin vhost $conf (root current/dist-admin, /api -> :$API_PORT)"
+  sed -e "s/__ADMIN_FQDN__/$ADMIN_FQDN/g" \
+      -e "s#__APP_DIR__#$APP_DIR#g" \
+      -e "s/__API_PORT__/$API_PORT/g" \
+      -e "s/__WILDCARD_LINEAGE__/$WILDCARD_CERT_NAME/g" \
+      "$APP_DIR/deploy/nginx.admin.conf.template" > "$conf"
+  ln -sf "$conf" "/etc/nginx/sites-enabled/$ADMIN_FQDN"
+  nginx -t && systemctl reload nginx
+  log "Master Control: https://$ADMIN_FQDN"
+}
+
+# One-shot admin bring-up: wildcard cert + admin vhost. Run once after `setup`.
+cmd_admin_setup(){
+  [ "$(id -u)" -eq 0 ] || die "run as root (writes nginx + runs certbot)."
+  cmd_wildcard_cert
+  cmd_admin_vhost
+}
+
 cmd_backup(){
   local url out
   url="$(grep -E '^DATABASE_URL=' "$APP_DIR/server/.env" 2>/dev/null | cut -d= -f2- || true)"
@@ -218,6 +285,9 @@ case "${1:-}" in
   restart)          pm2 restart ffc-api && pm2 save ;;
   logs)             pm2 logs ffc-api ;;
   backup)           cmd_backup ;;
+  wildcard-cert)    cmd_wildcard_cert ;;
+  admin-vhost)      cmd_admin_vhost ;;
+  admin-setup)      cmd_admin_setup ;;
   ''|-h|--help)
     awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$SELF"
     ;;

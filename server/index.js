@@ -9,7 +9,10 @@ import { router as roundsRouter } from "./routes/rounds.js";
 import { router as leaderboardRouter } from "./routes/leaderboard.js";
 import { router as seedRouter } from "./routes/seed.js";
 import { router as locationsRouter } from "./routes/locations.js";
+import { router as contentRouter } from "./routes/content.js";
 import { router as huntRouter } from "./routes/hunt.js";
+import { router as adminRouter } from "./routes/admin/index.js";
+import { warnIfNoToken } from "./lib/adminAuth.js";
 
 const app = express();
 
@@ -58,6 +61,9 @@ app.use("/api/rounds", roundsRouter);
 app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/seed", seedRouter);
 app.use("/api/locations", locationsRouter);
+app.use("/api/content", contentRouter);
+// Master Control admin surface (token-guarded inside the router).
+app.use("/api/admin", adminRouter);
 // The hunt's /verify endpoint installs its own larger body parser for base64
 // images; the rest of the app keeps the 256kb global cap above.
 app.use("/api/hunt", huntRouter);
@@ -70,4 +76,5 @@ app.use((req, res) => {
 const port = process.env.PORT || 8060;
 app.listen(port, () => {
   console.log(`[ffc-server] listening on port ${port}`);
+  warnIfNoToken();
 });

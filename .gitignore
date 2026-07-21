@@ -4,6 +4,7 @@ server/node_modules/
 
 # build output
 dist/
+dist-admin/
 dev-dist/
 server/dist/
 *.tsbuildinfo
