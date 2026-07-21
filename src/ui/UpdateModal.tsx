@@ -25,7 +25,7 @@ export function UpdateModal() {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-fairway-950/80 p-6 backdrop-blur-sm"
     >
       <div className="w-full max-w-sm rounded-2xl border border-fairway-700 bg-fairway-900 p-6 text-center shadow-2xl">
-        <div className="text-4xl">🔄</div>
+        <div className={`text-4xl${reloading ? ' animate-spin' : ''}`}>🔄</div>
         <h2 id="update-modal-title" className="mt-3 text-lg font-bold text-fairway-50">
           A new version is ready
         </h2>
@@ -40,7 +40,20 @@ export function UpdateModal() {
             }}
             disabled={reloading}
           >
-            {reloading ? 'Reloading…' : 'Click here to reload the app'}
+            {reloading ? (
+              // The reload can take up to a few seconds (fetch the new SW, wait
+              // for it to take control) before the page swaps — show a spinner so
+              // the tap clearly registered and the app isn't stuck.
+              <span className="flex items-center justify-center gap-2">
+                <span
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-fairway-50/40 border-t-fairway-50"
+                  aria-hidden="true"
+                />
+                Reloading…
+              </span>
+            ) : (
+              'Click here to reload the app'
+            )}
           </Button>
         </div>
       </div>
