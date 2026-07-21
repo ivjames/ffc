@@ -36,9 +36,9 @@ const START = { x: W / 2, y: H - 40 };
 
 const FIXED = 1000 / 120;
 const BALL_FRICTION = 0.996;
-const PIN_FRICTION = 0.86;
+const PIN_FRICTION = 0.93; // higher = pins slide farther, so they knock each other over more
 const REST = 0.5; // collision restitution
-const BALL_M = 4;
+const BALL_M = 6;
 const PIN_M = 1;
 const MIN_V = 4;
 const MAX_V = 9;
