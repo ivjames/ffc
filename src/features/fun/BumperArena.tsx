@@ -33,6 +33,7 @@ const CATCH_R = 30; // within this of the finger, the unit eases to a stop
 const BRAKE = 0.9; // gentle braking once caught up to the finger
 const BUMP_COOLDOWN = 450; // ms before the same unit can be bumped again
 const GAME_MS = 30000;
+const COUNTDOWN_MS = 2600; // "3, 2, 1, GO!" before the horn starts
 
 // Boat-only water FX.
 const RIPPLE_INTERVAL = 85; // ms between wake ripples dropped by a moving boat
@@ -78,12 +79,13 @@ type Ripple = { x: number; y: number; born: number }; // expanding wake ring
 type Splash = { x: number; y: number; vx: number; vy: number; born: number }; // droplet
 type Spark = { x: number; y: number; vx: number; vy: number; born: number }; // bump spark
 type Touch = { active: boolean; x: number; y: number }; // finger lure position
-type Phase = 'play' | 'done';
+type Phase = 'ready' | 'countdown' | 'play' | 'done';
 type GS = {
   phase: Phase;
   units: Unit[]; // [0] = player, rest = AI
   score: number;
   elapsed: number; // ms of active play
+  countStart: number; // timestamp the countdown began
   touch: Touch;
   lastBump: number[]; // per-AI-index cooldown timestamps
   lastSound: number;
@@ -120,10 +122,11 @@ function freshGS(theme: BumperTheme): GS {
     });
   }
   return {
-    phase: 'play',
+    phase: 'ready',
     units,
     score: 0,
     elapsed: 0,
+    countStart: 0,
     touch: { active: false, x: W / 2, y: H - 90 },
     lastBump: new Array(N_AI + 1).fill(-1e9),
     lastSound: -1e9,
@@ -675,6 +678,23 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
     ctx.stroke();
     ctx.restore();
   }
+
+  // "3, 2, 1, GO!" countdown before the horn starts.
+  if (gs.phase === 'countdown') {
+    const left = COUNTDOWN_MS - (now - gs.countStart);
+    const n = Math.ceil(left / 800);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.fillStyle = '#fbbf24';
+    ctx.shadowColor = 'rgba(251,191,36,0.7)';
+    ctx.shadowBlur = 18;
+    ctx.font = 'bold 64px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
+    ctx.restore();
+  }
 }
 
 export default function BumperArena({ theme }: { theme: BumperTheme }) {
@@ -682,15 +702,15 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
   const gsRef = useRef<GS>(freshGS(theme));
   const fxRef = useRef<FX>(freshFX(N_AI + 1));
 
-  const [phase, setPhase] = useState<Phase>('play');
+  const [phase, setPhase] = useState<Phase>('ready');
   const [score, setScore] = useState(0);
   const [secs, setSecs] = useState(GAME_MS / 1000);
 
-  const playing = phase !== 'done';
-  useFitCanvas(canvasRef, W, H, playing);
+  const active = phase !== 'done';
+  useFitCanvas(canvasRef, W, H, active);
 
   useEffect(() => {
-    if (!playing) return;
+    if (!active) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -705,6 +725,22 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
     let acc = 0;
     let pushedScore = -1;
     let pushedSecs = -1;
+    // Pause via visibilitychange, matching Go-Karts: a hidden rAF may never run,
+    // so shift the countdown's start by the away span on resume rather than
+    // letting the elapsed hidden time complete it instantly.
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (!hiddenAt) hiddenAt = performance.now();
+      } else if (hiddenAt) {
+        const away = performance.now() - hiddenAt;
+        hiddenAt = 0;
+        const gs = gsRef.current;
+        if (gs.phase === 'countdown') gs.countStart += away;
+        last = performance.now();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     const frame = (now: number) => {
       const gs = gsRef.current;
       if (document.hidden) {
@@ -715,7 +751,13 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
       const dt = Math.min(now - last, 100);
       last = now;
       acc += dt;
-      gs.elapsed += dt;
+
+      if (gs.phase === 'countdown' && now - gs.countStart >= COUNTDOWN_MS) {
+        gs.phase = 'play';
+        setPhase('play');
+      }
+
+      if (gs.phase === 'play') gs.elapsed += dt;
 
       while (acc >= FIXED) {
         if (gs.phase === 'play') step(gs, now, theme);
@@ -751,10 +793,13 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
     // Re-inits only when the play view mounts; the loop reads gsRef and pushes
     // React state only when a mirrored value (score/secs) actually changes.
-  }, [playing, theme]);
+  }, [active, theme]);
 
   const toField = useCallback((e: React.PointerEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -786,12 +831,15 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
     gsRef.current.touch.active = false;
   }, []);
 
-  const restart = useCallback(() => {
-    gsRef.current = freshGS(theme);
+  const start = useCallback(() => {
+    const gs = freshGS(theme);
+    gs.phase = 'countdown';
+    gs.countStart = performance.now();
+    gsRef.current = gs;
     fxRef.current = freshFX(N_AI + 1);
     setScore(0);
     setSecs(GAME_MS / 1000);
-    setPhase('play');
+    setPhase('countdown');
   }, [theme]);
 
   if (phase === 'done') {
@@ -806,7 +854,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
             <p className="text-sm text-fairway-400">bumps in 30 seconds</p>
           </div>
           <div className="mt-8">
-            <Button onClick={restart} sound="none">
+            <Button onClick={start} sound="none">
               Play again
             </Button>
           </div>
@@ -823,19 +871,28 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
         <span className={`font-bold ${secs <= 5 ? 'text-red-400' : 'text-fairway-300'}`}>⏱ {secs}s</span>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+      <div className="grid min-h-0 flex-1 place-items-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
         />
+        {phase === 'ready' && (
+          <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
+            <span className="text-5xl">{theme.emoji}</span>
+            <p className="text-sm text-fairway-100">{theme.hint}</p>
+            <Button onClick={start}>Start</Button>
+          </div>
+        )}
       </div>
 
       <p className="flex h-16 shrink-0 items-center justify-center px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
-        <span className="line-clamp-2">{theme.hint}</span>
+        <span className="line-clamp-2">
+          {phase === 'ready' ? '30 seconds on the clock — most bumps wins.' : phase === 'countdown' ? 'Get ready…' : theme.hint}
+        </span>
       </p>
     </div>
   );

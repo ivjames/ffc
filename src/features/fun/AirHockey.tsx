@@ -46,7 +46,7 @@ const SERVE_DELAY = 850; // pause at center before the puck launches
 
 type Vec = { x: number; y: number };
 type Pad = { x: number; y: number; px: number; py: number }; // p* = previous pos
-type Phase = 'serve' | 'play' | 'done';
+type Phase = 'ready' | 'serve' | 'play' | 'done';
 type GS = {
   phase: Phase;
   puck: { x: number; y: number; vx: number; vy: number };
@@ -69,7 +69,7 @@ function centeredPuck() {
 
 function freshGS(now: number): GS {
   return {
-    phase: 'serve',
+    phase: 'ready',
     puck: centeredPuck(),
     player: { x: W / 2, y: H - 70, px: W / 2, py: H - 70 },
     ai: { x: W / 2, y: 70, px: W / 2, py: 70 },
@@ -385,16 +385,16 @@ export default function AirHockey() {
   const gsRef = useRef<GS>(freshGS(0));
   const fxRef = useRef<FX>(freshFX());
 
-  const [phase, setPhase] = useState<Phase>('serve');
+  const [phase, setPhase] = useState<Phase>('ready');
   const [you, setYou] = useState(0);
   const [cpu, setCpu] = useState(0);
 
-  const playing = phase !== 'done';
-  useFitCanvas(canvasRef, W, H, playing);
+  const active = phase !== 'done';
+  useFitCanvas(canvasRef, W, H, active);
 
   // Render + physics loop (fixed-timestep accumulator).
   useEffect(() => {
-    if (!playing) return;
+    if (!active) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -497,7 +497,7 @@ export default function AirHockey() {
       cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [playing]);
+  }, [active]);
 
   const toField = useCallback((e: React.PointerEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -524,8 +524,12 @@ export default function AirHockey() {
     gsRef.current.pointer = null;
   }, []);
 
-  const restart = useCallback(() => {
-    gsRef.current = freshGS(performance.now());
+  const start = useCallback(() => {
+    const now = performance.now();
+    const gs = freshGS(now);
+    gs.phase = 'serve';
+    gs.serveAt = now + SERVE_DELAY;
+    gsRef.current = gs;
     fxRef.current = freshFX();
     setYou(0);
     setCpu(0);
@@ -546,7 +550,7 @@ export default function AirHockey() {
             </div>
           </div>
           <div className="mt-8">
-            <Button onClick={restart} sound="none">
+            <Button onClick={start} sound="none">
               Play again
             </Button>
           </div>
@@ -564,15 +568,24 @@ export default function AirHockey() {
         <span className="font-bold text-green-400">You {you}</span>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+      <div className="grid min-h-0 flex-1 place-items-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
         />
+        {phase === 'ready' && (
+          <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
+            <span className="text-5xl">🏒</span>
+            <p className="text-sm text-fairway-100">
+              Drag your green mallet to hit the puck into the CPU's goal at the top. First to {TARGET} wins.
+            </p>
+            <Button onClick={start}>Start</Button>
+          </div>
+        )}
       </div>
 
       <p className="flex h-16 shrink-0 items-center justify-center px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
