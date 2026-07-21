@@ -58,6 +58,16 @@ export default function StyleGuide() {
 
   return (
     <Screen>
+      {/* Rendered as a sibling of Content, not inside it: Content's <main> carries
+          `.animate-page-in`, whose entrance animation uses `animation: … both` —
+          the `both` fill-mode never actually ends, so the element keeps a
+          non-`none` computed transform (an identity matrix) forever. Any
+          non-`none` transform on an ancestor makes it the containing block for
+          `position: fixed` descendants, so a Confetti nested inside Content fires
+          relative to that scrolled-away <main> box instead of the viewport —
+          exactly the same class of bug fixed in Summary.tsx/TvLeaderboard.tsx by
+          keeping Confetti outside the animated container. */}
+      {confetti > 0 && <Confetti key={confetti} fire />}
       <TopBar title="Style guide" back="/" />
       <Content>
         <p className="mb-6 text-sm text-fairway-100/80">
@@ -449,7 +459,6 @@ export default function StyleGuide() {
             <button onClick={() => setConfetti((c) => c + 1)} className="key rounded-xl px-3 py-1.5 text-sm font-bold text-fairway-100">
               🎉 Fire confetti
             </button>
-            {confetti > 0 && <Confetti key={confetti} fire />}
           </div>
         </Section>
 

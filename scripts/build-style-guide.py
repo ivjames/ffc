@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
-"""docs/style-guide.html — neutral per-screen WIREFRAMES (element inventory +
-schematic layout, no colors/emoji/materials) with numbered badges anchored
-ON each element, mapping to a spec table incl. current dimensions. The current
-app art is NOT authoritative."""
+"""public/docs/style-guide.html — neutral per-screen WIREFRAMES (element
+inventory + schematic layout, no colors/emoji/materials) with numbered badges
+anchored ON each element, mapping to a spec table incl. current dimensions. The
+current app art is NOT authoritative.
+
+Output lands in public/docs/ so the built app serves it: Vite copies public/* to
+the site root, so these are reachable at /docs/style-guide.html and
+/docs/screens.html (and are linked from the in-app 🎨 style picker menu). The
+companion PDFs (style-guide.pdf, screens.pdf) are printed from these HTML files
+and live alongside them."""
 
 import re
-OUT = "/home/user/ffc/docs/style-guide.html"
-OUT2 = "/home/user/ffc/docs/screens.html"
+OUT = "/home/user/ffc/public/docs/style-guide.html"
+OUT2 = "/home/user/ffc/public/docs/screens.html"
 SCREENS = []
 def screen(**kw): SCREENS.append(kw)
 
