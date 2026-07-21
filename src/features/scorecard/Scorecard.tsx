@@ -303,7 +303,7 @@ export default function Scorecard() {
             {/* Par medallion — a raised disc so the target reads as a physical
                 token rather than a loose number. */}
             <div
-              className="surface-1 flex h-14 w-14 items-center justify-center rounded-full text-2xl font-black"
+              className="surface-1 flex h-12 w-12 items-center justify-center rounded-full text-2xl font-black"
               style={{ color: ink }}
             >
               {par}

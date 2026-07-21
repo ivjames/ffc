@@ -191,7 +191,7 @@ export default function StyleGuide() {
           </div>
           <div className="flex items-center gap-6">
             <Spec label="par medallion">
-              <div className="surface-1 flex h-14 w-14 items-center justify-center rounded-full text-3xl font-black" style={{ color: accentInk('green') }}>
+              <div className="surface-1 flex h-12 w-12 items-center justify-center rounded-full text-2xl font-black" style={{ color: accentInk('green') }}>
                 3
               </div>
             </Spec>
