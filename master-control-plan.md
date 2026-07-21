@@ -41,6 +41,7 @@ Org (owner / franchise)          ← NEW
 | Content source of truth | **Locations become DB-driven & live; per-course art/pars stay bundled for now** _(recommended)_ | Alt A: flip whole app to API. Alt B: admin writes DB but player app stays fully bundled |
 | v1 admin scope | **Orgs + Locations + Courses CRUD**, plus a light read-only rollup | Hunt-list editing & rich dashboards are Phase 2 |
 | Delivery | **Separate admin build served on its own vhost (`admin.ffc.lab980.com`)** — not part of the player PWA | No service worker, no offline, no admin code in the player bundle |
+| Admin TLS | **Wildcard `*.ffc.lab980.com` cert via certbot DNS-01** | One admin subdomain now; wildcard so future subdomains need no cert work. Prereq: DNS provider API creds + certbot DNS plugin |
 | Write path | All admin writes go through the **existing Express API** (creds server-side), never the browser → DB | Matches architecture principle §3 of the base app |
 
 ---
@@ -234,10 +235,27 @@ robots/precache/scope gymnastics, and **zero admin code in the player bundle**.
   `src/ui/components.tsx` primitives so the console matches the house style with no
   new dependencies.
 - **Serving:** an nginx vhost `admin.ffc.lab980.com` with `root …/current/dist-admin`
-  and `/api` proxied to the same Express port as the player app. Certbot TLS, same
-  pattern as the existing `deploy/nginx.conf.template`. `bin/ffc` gains an admin
-  build + vhost step (see §9); `ffc deploy` builds both bundles in the same atomic
-  release swap.
+  and `/api` proxied to the same Express port as the player app. `bin/ffc` gains an
+  admin build + vhost step (see §9); `ffc deploy` builds both bundles in the same
+  atomic release swap.
+- **TLS — wildcard, DNS-01.** The admin vhost is served under a **wildcard
+  `*.ffc.lab980.com` certificate** issued via certbot **DNS-01**, not the per-host
+  HTTP-01 flow the player site uses today. This is a deliberate change:
+  - It's the only cert model that can cover a wildcard, and it means **any future
+    subdomain** (`admin.`, and later per-org/per-location/per-function if ever
+    wanted) is covered with **zero additional cert work** — no re-running certbot per
+    host.
+  - Cost/prereq: DNS-01 proves control by writing a TXT record, so it needs the DNS
+    provider's **API credentials + the matching certbot DNS plugin** (e.g.
+    `certbot-dns-<provider>`) on the droplet, plus a wildcard `*.ffc.lab980.com` DNS
+    record pointing at the box. Auto-renewal runs unattended once the plugin creds
+    are in place.
+  - `bin/ffc` grows a `wildcard-cert` path (DNS-01 issue/renew) that the admin vhost
+    references; the existing player `vhost` (HTTP-01) is left as-is.
+  - **Scope note:** we're provisioning exactly **one** admin subdomain now. The
+    wildcard is chosen purely so adding subdomains later never touches the cert flow
+    — the multi-tenant/per-org subdomain routing itself (Host→slug scoping) stays
+    **deferred** (see §10).
 - **Gate:** a token entry screen; the entered `APP_TOKEN` is held in memory/
   `sessionStorage` and sent as `x-app-token` on every admin call. A 401 bounces back
   to the gate. (When accounts land in Phase 2, this screen becomes a real login and
@@ -335,7 +353,9 @@ Vite tree-shakes the two bundles apart.
    fallback wiring.
 5. **Admin build + vhost** — second Vite entry (`vite.admin.config.ts` → `dist-admin/`);
    `bin/ffc` builds both bundles in the atomic release swap and (re)writes the
-   `admin.ffc.lab980.com` vhost + TLS.
+   `admin.ffc.lab980.com` vhost. TLS via a **wildcard `*.ffc.lab980.com` DNS-01 cert**
+   (new `ffc wildcard-cert` path): install the DNS provider's certbot plugin + API
+   creds, add the wildcard DNS record, issue once, auto-renew thereafter.
 6. **Admin UI** — token gate → Overview → Orgs → Location wizard → Location/course
    detail, shipped in the admin bundle.
 7. **Docs/CLI** — README + `server/README.md` for the new endpoints and the admin
@@ -361,4 +381,13 @@ Vite tree-shakes the two bundles apart.
   location/course with history: hard block (current recommendation) vs. archive/hide.
 - **`APP_TOKEN` in prod.** Onboarding writes must not be world-open; the plan assumes
   `APP_TOKEN` is set in production. Worth confirming it currently is on the droplet.
+- **Per-tenant subdomains (deferred).** v1 ships exactly one admin subdomain, but the
+  wildcard cert (§6) leaves the door open to per-org/per-location subdomains later
+  (`bullwinkles.ffc.lab980.com`, Host→`org.slug` scoping feeding the `org_admin`
+  role). Not built now — flagged so the org-scoped API queries stay written in a way
+  that a Host-derived tenant could later drive.
+- **DNS-01 prerequisites.** The wildcard cert needs the droplet to hold the DNS
+  provider's API credentials and the matching certbot plugin. Confirm which DNS
+  provider hosts `lab980.com` so the right plugin (`certbot-dns-<provider>`) and
+  credential path are wired into `ffc wildcard-cert`.
 ```
