@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
 import {
@@ -367,6 +368,9 @@ export default function SkeeBall() {
 
   const playing = phase !== 'done';
 
+  // Fill the play area: size the canvas to fit its stage (see useFitCanvas).
+  useFitCanvas(canvasRef, W, H, playing);
+
   const loadNextBall = useCallback(() => {
     const gs = gsRef.current;
     if (gs.ballNo + 1 >= BALLS) {
@@ -602,31 +606,36 @@ export default function SkeeBall() {
           : 'Gutter!';
 
   return (
-    <Screen>
+    // Full-height column (Screen's min-h-full doesn't resolve to a real height,
+    // so use a dvh column like CourseMap). HUD + hint keep their size; the stage
+    // flexes to fill, and useFitCanvas sizes the canvas to the largest W:H box
+    // that fits it.
+    <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title="Skee-Ball" back="/fun" />
-      <Content>
-        <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="font-bold text-fairway-50">
-            Ball <span className="text-fairway-100">{Math.min(ballNo + 1, BALLS)}</span>
-            <span className="font-normal text-fairway-400"> / {BALLS}</span>
-          </span>
-          <span className="text-fairway-300">
-            Score <span className="font-bold text-fairway-100">{total}</span>
-          </span>
-        </div>
+      <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
+        <span className="font-bold text-fairway-50">
+          Ball <span className="text-fairway-100">{Math.min(ballNo + 1, BALLS)}</span>
+          <span className="font-normal text-fairway-400"> / {BALLS}</span>
+        </span>
+        <span className="text-fairway-300">
+          Score <span className="font-bold text-fairway-100">{total}</span>
+        </span>
+      </div>
 
+      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block w-full touch-none rounded-2xl border border-fairway-800"
-          style={{ aspectRatio: `${W} / ${H}` }}
+          className="block touch-none rounded-2xl border border-fairway-800"
         />
+      </div>
 
-        <p className="mt-3 min-h-[2.5rem] text-center text-sm text-fairway-100/80">{hint}</p>
-      </Content>
-    </Screen>
+      <p className="min-h-[2.5rem] shrink-0 px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
+        {hint}
+      </p>
+    </div>
   );
 }
