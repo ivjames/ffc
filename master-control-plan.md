@@ -1,7 +1,7 @@
-# Master Control — Venue Onboarding & Management Plan
+# Master Control — Location Onboarding & Management Plan
 
 A self-contained plan for building **Master Control**: the back-office console
-that onboards and manages venues, sitting on top of the existing FFC mini-golf
+that onboards and manages locations, sitting on top of the existing FFC mini-golf
 platform. Hand this to Claude Code as the source of truth for the build.
 
 > Status: **plan / design**. Decisions marked _(recommended)_ are my calls made
@@ -13,23 +13,23 @@ platform. Hand this to Claude Code as the source of truth for the build.
 ## 1. Product summary
 
 Today the platform is a player-facing PWA backed by a Node/Express + Postgres
-API. Content (which venues exist, their courses, coordinates, timezones) lives in
-**two places at once**: the bundled `src/data/courses.ts` that the player app
+API. Content (which locations exist, their courses, coordinates, timezones) lives
+in **two places at once**: the bundled `src/data/courses.ts` that the player app
 actually renders, and the Postgres `location`/`course` tables that own
-rounds/leaderboard/hunt. There is **no back office** — venues are onboarded by
+rounds/leaderboard/hunt. There is **no back office** — locations are onboarded by
 editing code + running `ffc seed`, and the only write auth is a single shared
 `APP_TOKEN` header.
 
 **Master Control** is the console that replaces the "edit code + seed" ritual with
 a real management surface, and introduces the **org (owner/franchise) level above
-venues** that the data model is currently missing.
+locations** that the data model is currently missing.
 
 Domain hierarchy after this work:
 
 ```
 Org (owner / franchise)          ← NEW
-  └─ Venue  (= existing `location`)
-       └─ Course (= existing `course`)
+  └─ Location                     (existing `location` table)
+       └─ Course                  (existing `course` table)
             └─ Hunt items, rounds, scores  (existing)
 ```
 
@@ -37,18 +37,11 @@ Org (owner / franchise)          ← NEW
 | Decision | Choice | Notes |
 |---|---|---|
 | New top entity | **`org`** table above `location`; `location.org_id` FK | Owner/franchise level |
-| "Venue" = | existing **`location`** row (unchanged shape, gains `org_id`) | No rename — avoids churn across schema, API, `courses.ts` |
 | Auth (v1) | **Super-admin behind `APP_TOKEN`**, schema/API designed for per-franchise accounts later _(recommended)_ | Alt: build full RBAC now |
-| Content source of truth | **Venues/orgs become DB-driven & live; per-course art/pars stay bundled for now** _(recommended)_ | Alt A: flip whole app to API. Alt B: admin writes DB but player app stays fully bundled |
-| v1 admin scope | **Orgs + Venues + Courses CRUD**, plus a light read-only rollup | Hunt-list editing & rich dashboards are Phase 2 |
+| Content source of truth | **Locations become DB-driven & live; per-course art/pars stay bundled for now** _(recommended)_ | Alt A: flip whole app to API. Alt B: admin writes DB but player app stays fully bundled |
+| v1 admin scope | **Orgs + Locations + Courses CRUD**, plus a light read-only rollup | Hunt-list editing & rich dashboards are Phase 2 |
 | Delivery | **`/control` route in this PWA, excluded from SW precache & noindexed** _(recommended)_ | Alt: separate `admin.ffc.lab980.com` build/vhost |
 | Write path | All admin writes go through the **existing Express API** (creds server-side), never the browser → DB | Matches architecture principle §3 of the base app |
-
-**Why not rename `location` → `venue`:** the word "venue" is the product term, but
-`location` is threaded through the schema, seed files, `courses.ts`, the locations
-API, and the geo-detect feature. Renaming buys nothing and risks a wide, bug-prone
-diff. Master Control presents these rows to admins **as "Venues"** in the UI while
-the code keeps the stable `location` identifier.
 
 ---
 
@@ -56,9 +49,9 @@ the code keeps the stable `location` identifier.
 
 Concrete facts the build must respect (verified against the repo):
 
-- **`server/routes/locations.js`** already does venue create/update/list with
+- **`server/routes/locations.js`** already does location create/update/list with
   timezone derivation from coordinates and the `APP_TOKEN` gate. Master Control's
-  venue endpoints **extend this router**, not replace it. It's missing: `GET /:id`,
+  location endpoints **extend this router**, not replace it. It's missing: `GET /:id`,
   `DELETE`, and org scoping.
 - **`server/routes/seed.js`** already upserts courses (`POST /api/seed`, array of
   course seeds, `APP_TOKEN`-gated, `pars` length-18 / values 2–4). Course
@@ -96,16 +89,16 @@ create table if not exists org (
 );
 ```
 
-### 3.2 Link venues to an org
+### 3.2 Link locations to an org
 ```sql
 alter table location add column if not exists org_id uuid references org(id);
 create index if not exists location_org_idx on location (org_id);
 ```
-- `org_id` is **nullable** so existing venues migrate cleanly. A seed step creates
-  a default org for the current client (Bullwinkle's) and backfills the three
-  existing venues onto it — idempotent, id-stable, mirroring how `location`/`course`
-  are already seeded.
-- The three existing venue UUIDs and the default org id become fixed constants
+- `org_id` is **nullable** so existing locations migrate cleanly. A seed step
+  creates a default org for the current client (Bullwinkle's) and backfills the
+  three existing locations onto it — idempotent, id-stable, mirroring how
+  `location`/`course` are already seeded.
+- The three existing location UUIDs and the default org id become fixed constants
   shared between `schema.sql` and `src/data/*` (as the current ids already are).
 
 ### 3.3 Audit trail (recommended, small)
@@ -113,15 +106,15 @@ create index if not exists location_org_idx on location (org_id);
 create table if not exists admin_audit (
   id         uuid primary key default gen_random_uuid(),
   actor      text,               -- token label / user id once accounts exist
-  action     text not null,      -- 'org.create', 'venue.update', 'course.delete'
+  action     text not null,      -- 'org.create', 'location.update', 'course.delete'
   entity     text not null,      -- 'org' | 'location' | 'course'
   entity_id  uuid,
   detail     jsonb,              -- before/after or the submitted payload
   created_at timestamptz not null default now()
 );
 ```
-Cheap insurance: onboarding/editing venues is exactly the kind of change you want a
-paper trail for. Every successful admin write logs one row.
+Cheap insurance: onboarding/editing locations is exactly the kind of change you
+want a paper trail for. Every successful admin write logs one row.
 
 ### 3.4 Forward-compat for accounts (schema only, no code in v1)
 To honor "super-admin now, roles later" without a future rewrite, add the tables
@@ -151,7 +144,7 @@ is gated identically and audit-logged in one place.
 server/routes/admin/
   index.js        mounts the admin sub-routers under /api/admin, applies auth mw
   orgs.js         org CRUD
-  venues.js       venue CRUD (wraps/extends existing location logic)
+  locations.js    location CRUD (wraps/extends existing location logic)
   courses.js      course CRUD (wraps/extends existing seed logic)
   overview.js     read-only rollups
 server/lib/adminAuth.js   requireAppToken middleware + audit helper
@@ -167,19 +160,19 @@ Design choices:
 
 | Method & path | Purpose |
 |---|---|
-| `GET  /api/admin/orgs` | list orgs (+ venue counts) |
+| `GET  /api/admin/orgs` | list orgs (+ location counts) |
 | `POST /api/admin/orgs` | create/update org (upsert on id, else slug) |
-| `GET  /api/admin/orgs/:id` | one org with its venues |
-| `DELETE /api/admin/orgs/:id` | soft-delete (status=suspended) unless empty; block hard-delete if venues exist |
-| `GET  /api/admin/venues?orgId=` | list venues, optionally scoped to an org |
-| `POST /api/admin/venues` | create/update venue (reuses `normalizeLocation`, adds `orgId`, tz-from-coords) |
-| `GET  /api/admin/venues/:id` | one venue + its courses |
-| `DELETE /api/admin/venues/:id` | block if courses/rounds reference it; else remove |
-| `GET  /api/admin/venues/:id/courses` | courses for a venue |
+| `GET  /api/admin/orgs/:id` | one org with its locations |
+| `DELETE /api/admin/orgs/:id` | soft-delete (status=suspended) unless empty; block hard-delete if locations exist |
+| `GET  /api/admin/locations?orgId=` | list locations, optionally scoped to an org |
+| `POST /api/admin/locations` | create/update location (reuses `normalizeLocation`, adds `orgId`, tz-from-coords) |
+| `GET  /api/admin/locations/:id` | one location + its courses |
+| `DELETE /api/admin/locations/:id` | block if courses/rounds reference it; else remove |
+| `GET  /api/admin/locations/:id/courses` | courses for a location |
 | `POST /api/admin/courses` | create/update course (reuses seed normalize; `pars` 18×2–4) |
 | `PATCH /api/admin/courses/:id` | edit name/theme/pars/holeCount/sortOrder |
 | `DELETE /api/admin/courses/:id` | block if rounds reference it (mirror the placeholder-purge caution) |
-| `GET  /api/admin/overview` | counts: orgs, venues, courses, rounds (7/30d), hunt finds, per venue |
+| `GET  /api/admin/overview` | counts: orgs, locations, courses, rounds (7/30d), hunt finds, per location |
 
 Deletion policy throughout mirrors `schema.sql`'s hard rule: **never silently drop
 played user data.** Deletes that would orphan rounds/scores/finds are rejected with
@@ -199,18 +192,18 @@ This is the crux. Right now `src/data/courses.ts` is what players see. Three way
 close the gap, in increasing ambition:
 
 - **Alt B — admin writes DB only (lowest risk).** Master Control manages Postgres;
-  player-visible venue/course changes still require editing `courses.ts` + a build.
-  Admin fully drives leaderboard/hunt/geo, but onboarding a venue is *not* live for
-  players. Rejected as the primary path: it doesn't deliver the core promise
-  ("onboard a venue" should light it up).
+  player-visible location/course changes still require editing `courses.ts` + a
+  build. Admin fully drives leaderboard/hunt/geo, but onboarding a location is *not*
+  live for players. Rejected as the primary path: it doesn't deliver the core
+  promise ("onboard a location" should light it up).
 
-- **Recommended — venues live via API, courses bundled for now.** Add **public read
-  endpoints** the player app already half-has (`GET /api/locations` exists):
-  - `GET /api/venues` (public, cached) → the venue list + geo/tz/accent the app uses
-    for location detect and picking. The app fetches this on load, **falls back to
-    the bundled `LOCATIONS` when offline** (PWA requirement), and caches the last
-    good response in IndexedDB. Onboarding a venue in Master Control makes it appear
-    to players without a redeploy.
+- **Recommended — locations live via API, courses bundled for now.** Add **public
+  read endpoints** the player app already half-has (`GET /api/locations` exists):
+  - `GET /api/locations` (public, cached) → the location list + geo/tz/accent the app
+    uses for location detect and picking. The app fetches this on load, **falls back
+    to the bundled `LOCATIONS` when offline** (PWA requirement), and caches the last
+    good response in IndexedDB. Onboarding a location in Master Control makes it
+    appear to players without a redeploy.
   - **Courses stay bundled** because a course also carries art (`mapAsset`), themed
     rules, and accent that live in the frontend. Master Control edits course rows in
     the DB (names/pars/theme for leaderboard/hunt correctness); shipping new
@@ -218,13 +211,13 @@ close the gap, in increasing ambition:
     still placeholders and per-course art is pending (§11 of the base plan).
 
 - **Alt A — flip the whole app to API-driven content.** Cleanest long-term, biggest
-  change: every screen sources venues+courses from the API with an offline cache and
-  a bundled seed as first-paint fallback. Worth a dedicated later phase; out of scope
-  for v1 because of the PWA offline + service-worker-precache implications.
+  change: every screen sources locations+courses from the API with an offline cache
+  and a bundled seed as first-paint fallback. Worth a dedicated later phase; out of
+  scope for v1 because of the PWA offline + service-worker-precache implications.
 
 **Decision:** build the recommended middle path. Concretely, a small
-`src/data/venues-source.ts` that returns API data when fresh, bundle otherwise, so
-the switch is one module and the rest of the app is unchanged.
+`src/data/locations-source.ts` that returns API data when fresh, bundle otherwise,
+so the switch is one module and the rest of the app is unchanged.
 
 ---
 
@@ -241,15 +234,15 @@ _(recommended: a `/control` route inside the existing PWA.)_
   to the gate. (When accounts land in Phase 2, this screen becomes a real login and
   the token becomes a session cookie/JWT — the UI shell doesn't change.)
 - **Screens:**
-  1. **Overview** — the rollup from `GET /api/admin/overview`: orgs, venues,
+  1. **Overview** — the rollup from `GET /api/admin/overview`: orgs, locations,
      courses, rounds this week, recent activity.
-  2. **Orgs** — list → org detail (its venues) → create/edit org form.
-  3. **Venue onboarding wizard** — the headline flow: name + slug → drop a pin / enter
-     address for lat/lng → **timezone auto-derived and shown** (the API already does
-     this) → geofence radius → accent → assign to org. Live preview of the derived
-     tz label so the operator sees "Pacific Time (PT)" before saving.
-  4. **Venue detail** — edit venue, list/add/edit courses (name, theme, 18 pars grid,
-     hole count), soft-delete guards surfaced as friendly messages.
+  2. **Orgs** — list → org detail (its locations) → create/edit org form.
+  3. **Location onboarding wizard** — the headline flow: name + slug → drop a pin /
+     enter address for lat/lng → **timezone auto-derived and shown** (the API already
+     does this) → geofence radius → accent → assign to org. Live preview of the
+     derived tz label so the operator sees "Pacific Time (PT)" before saving.
+  4. **Location detail** — edit location, list/add/edit courses (name, theme, 18 pars
+     grid, hole count), soft-delete guards surfaced as friendly messages.
 - **Styling:** reuse the existing Tailwind v4 setup and `src/ui/components.tsx`
   primitives so the console matches the house style without new dependencies.
 
@@ -293,7 +286,7 @@ server/
     admin/
       index.js
       orgs.js
-      venues.js
+      locations.js
       courses.js
       overview.js
     locations.js         unchanged public behavior, now imports validateLocation
@@ -302,14 +295,14 @@ server/
 
 src/
   data/
-    venues-source.ts     API-with-bundle-fallback resolver (§5)
+    locations-source.ts  API-with-bundle-fallback resolver (§5)
   features/
     control/
       ControlApp.tsx     admin shell + token gate + nested routes
       Overview.tsx
       Orgs.tsx
-      VenueWizard.tsx
-      VenueDetail.tsx
+      LocationWizard.tsx
+      LocationDetail.tsx
       api.ts             typed admin API client (sends x-app-token)
   App.tsx                + <Route path="/control/*">
 ```
@@ -319,13 +312,14 @@ src/
 ## 9. Phasing / build sequence
 
 1. **Schema** — add `org`, `location.org_id`, `admin_audit`, `admin_user`; seed the
-   default org + backfill the three venues. Verify `ffc migrate` is idempotent.
+   default org + backfill the three locations. Verify `ffc migrate` is idempotent.
 2. **API refactor** — extract shared validators; add `adminAuth` middleware + audit;
    keep `/api/locations` + `/api/seed` green.
-3. **Admin API** — `/api/admin/orgs|venues|courses|overview` with delete guards.
-4. **Public venue read** — `GET /api/venues` + `venues-source.ts` fallback wiring.
-5. **Admin UI** — token gate → Overview → Orgs → Venue wizard → Venue/course detail;
-   exclude `/control` from SW precache.
+3. **Admin API** — `/api/admin/orgs|locations|courses|overview` with delete guards.
+4. **Public location read** — confirm `GET /api/locations` shape + `locations-source.ts`
+   fallback wiring.
+5. **Admin UI** — token gate → Overview → Orgs → Location wizard → Location/course
+   detail; exclude `/control` from SW precache.
 6. **Docs/CLI** — README + `server/README.md` for the new endpoints; confirm
    `ffc deploy` needs no new steps; note `APP_TOKEN` is now required in prod.
 7. **(Phase 2)** hunt-list editing, richer dashboards, real admin accounts/RBAC,
@@ -335,10 +329,10 @@ src/
 
 ## 10. Open questions / risks
 
-- **Content source of truth (§5).** I've defaulted to "venues live, courses bundled."
-  If the goal is that a franchisee can stand up a *fully playable* venue (courses,
-  art, hunt) with zero engineering, that's the bigger Alt-A flip and should be its
-  own phase — flag if you want it in v1.
+- **Content source of truth (§5).** I've defaulted to "locations live, courses
+  bundled." If the goal is that a franchisee can stand up a *fully playable* location
+  (courses, art, hunt) with zero engineering, that's the bigger Alt-A flip and should
+  be its own phase — flag if you want it in v1.
 - **Auth depth.** v1 is a single shared token. If franchise owners need their own
   logins in the first release, promote §3.4 + §7 Phase 2 into v1 (adds meaningfully
   to scope).
@@ -346,7 +340,7 @@ src/
   map art or themes (they're bundled assets). Managing those through the console is a
   separate media-handling feature (upload, storage, referencing) — deferred.
 - **Delete semantics.** Confirm the desired behavior when someone tries to delete a
-  venue/course with history: hard block (current recommendation) vs. archive/hide.
+  location/course with history: hard block (current recommendation) vs. archive/hide.
 - **`APP_TOKEN` in prod.** Onboarding writes must not be world-open; the plan assumes
   `APP_TOKEN` is set in production. Worth confirming it currently is on the droplet.
 ```
