@@ -455,10 +455,8 @@ def render_cell(sc, idx):
     body = re.sub(r'<span class="cn-badge">\d+</span>', '', sc["body"])   # drop markers
     tb = '<span class="tb">course-tinted</span>' if sc.get("tint") else ''
     scr = "scr fill" if sc.get("fill") else "scr"
-    route = sc["route"].split(" · ")[0] + (" …" if " · " in sc["route"] else "")
     name = sc["name"].split(" (")[0]
-    return (f'<div class="cell"><div class="celltitle">{idx}. {name} '
-            f'<span class="rt">{route}</span>{tb}</div>'
+    return (f'<div class="cell"><div class="celltitle">{idx}. {name}{tb}</div>'
             f'<div class="frame"><div class="{scr}">{body}</div></div></div>')
 
 sheet_head = """<div class="sheethead">
