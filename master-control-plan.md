@@ -4,9 +4,13 @@ A self-contained plan for building **Master Control**: the back-office console
 that onboards and manages locations, sitting on top of the existing FFC mini-golf
 platform. Hand this to Claude Code as the source of truth for the build.
 
-> Status: **plan / design**. Decisions marked _(recommended)_ are my calls made
-> to keep momentum; each notes the alternative so they're cheap to change before
-> code lands.
+> Status: **implemented** (v1). This document is the design of record; the build
+> follows it. All §10 decisions are locked (operator-only, single `APP_TOKEN`,
+> archive-not-delete, deferred course art, DB-source-of-truth + rebuild-to-publish).
+> Server: `server/routes/admin/*`, `routes/content.js`, `lib/adminAuth.js`,
+> `lib/validate*.js`, schema additions. Admin app: `admin/` → `dist-admin/`.
+> Content export: `scripts/export-content.mjs`. Deploy: `ffc admin-setup` +
+> `deploy/nginx.admin.conf.template` + `deploy/acme-doctl-*.sh`.
 
 ---
 

@@ -77,15 +77,36 @@ npm start                 # http://localhost:8060
 ## Build
 
 ```bash
-npm run build      # tsc + vite build -> dist/  (includes the service worker)
+npm run build      # export content from DB (best-effort) + tsc + vite -> dist/
+npm run build:admin # Master Control admin SPA -> dist-admin/ (separate bundle)
 npm run preview    # serve the production build locally
+```
+
+`npm run build` first runs `scripts/export-content.mjs`, which regenerates
+`src/data/content.generated.ts` from the live DB (`GET /api/content`) so
+Master Control edits reach players on the next build. It degrades gracefully —
+if the API is unreachable it keeps the committed generated file, so builds never
+break offline.
+
+## Master Control (venue admin)
+
+A separate back-office SPA (`admin/`) for onboarding and managing **orgs**
+(owner/franchise), **locations** (venues), and **courses**. It writes to Postgres
+through the token-guarded `/api/admin/*` API; the DB is the source of truth, and a
+site rebuild publishes player-visible content. It ships as its own bundle
+(`dist-admin/`) on its own vhost `admin.<fqdn>` — **not** part of the player PWA.
+Design + decisions: [`master-control-plan.md`](./master-control-plan.md).
+
+```bash
+npm run dev -- --config vite.admin.config.ts   # admin on http://localhost:5174
 ```
 
 ## Layout
 
 ```
 src/
-  data/courses.ts          # four-course seed (pars, map paths, rules)
+  data/content.generated.ts # DB-exported catalog (locations + course data)
+  data/courses.ts          # merges frontend styling (accents/rules) onto the above
   db/                      # IndexedDB wrapper (idb), LocalRound CRUD
   sync/                    # pending-round sync worker + API client
   lib/sanitize.ts          # tag validation + profanity blocklist (§6)
@@ -93,12 +114,14 @@ src/
   features/
     home/  scorecard/  courses/  rules/  tv/
   ui/                      # shared touch-first components
+admin/                     # Master Control admin SPA (separate bundle -> dist-admin)
+scripts/export-content.mjs # build-time DB -> content.generated.ts exporter
 public/
   maps/                    # bundled course map assets (SVG placeholders)
   icons/                   # PWA icons
 server/                    # Node/Express + Postgres API (see server/README.md)
-bin/ffc                    # operate CLI (setup/deploy/seed/restart/logs/backup)
-deploy/                    # nginx vhost template + course seed JSON
+bin/ffc                    # operate CLI (setup/deploy/seed/wildcard-cert/admin-setup)
+deploy/                    # nginx vhost templates + ACME doctl hooks + seed JSON
 ```
 
 ## Deploy

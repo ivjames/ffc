@@ -74,6 +74,27 @@ pm2 startup systemd -u root --hp /root    # then run the line it prints
 systemctl is-enabled pm2-root             # -> enabled
 ```
 
+### Master Control (admin console) — one-time bring-up
+
+The admin app builds and ships with every `ffc deploy` (into `current/dist-admin`),
+but its subdomain + TLS are set up once. It uses a **wildcard cert** issued via
+certbot **DNS-01** through `doctl` (already authenticated on the droplet — the DO
+token needs write scope on the DNS zone), so no per-subdomain cert step is ever
+needed again:
+
+```bash
+# DNS: point a wildcard at the droplet (once). e.g. with doctl:
+doctl compute domain records create lab980.com --record-type A \
+  --record-name '*.ffc' --record-data <droplet-ip> --record-ttl 300
+
+ffc admin-setup     # wildcard-cert (DNS-01 via doctl) + admin vhost + reload
+```
+
+Master Control is then live at `https://admin.ffc.lab980.com`, gated by the same
+`APP_TOKEN` from `server/.env`. It is a separate origin from the player PWA (no
+service worker). Re-issue/rotate the cert with `ffc wildcard-cert`; rewrite the
+vhost with `ffc admin-vhost`.
+
 ## Routine redeploys
 
 ```bash
