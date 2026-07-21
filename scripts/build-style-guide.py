@@ -96,12 +96,13 @@ screen(id="setup", name="Player Setup", route="/new/setup",
  body="".join([
    topbar("Course name", right=CTRL()),
    txt("label: Players"),
-   row(box("1","seg",n=1),box("2","seg on"),box("3","seg"),box("4","seg"),cls="segs"),
+   row(box("1","seg",n=1),box("2","seg"),box("3","seg"),box("4","seg on"),cls="segs"),
    txt("label: Tags (3 chars, arcade style)"),
    row(icon("1"), box("tag input","inp grow",n=2), cls="tagrow"),
    row(icon("2"), box("tag input — error","inp grow err",n=3), cls="tagrow"),
    txt("inline error message","muted"),
-   repeat("＋ up to 2 more tag inputs — one per player (1–4)"),
+   row(icon("3"), box("tag input","inp grow"), cls="tagrow"),
+   row(icon("4"), box("tag input","inp grow"), cls="tagrow"),
    btn("Start round","primary",n=4),
  ]), scales=True,
  specs=[
@@ -133,7 +134,8 @@ screen(id="play", name="Scorecard (play screen)", route="/play/:clientId", tint=
    f'<div class="wf-centered">{box("par","med",n=3)}</div>',
    row(box("tag","tagb",n=4), box("−","key"), box("score well","well",n=5), box("+","key",n=6), cls="prow"),
    row(box("tag","tagb"), box("−","key"), box("score well","well"), box("+","key"), cls="prow"),
-   repeat("＋ up to 2 more player rows — one per player (1–4)"),
+   row(box("tag","tagb"), box("−","key"), box("score well","well"), box("+","key"), cls="prow"),
+   row(box("tag","tagb"), box("−","key"), box("score well","well"), box("+","key"), cls="prow"),
    row(btn("‹ Prev","ghost sm"), btn("Next › / Finish","ghost sm",n=7), cls="nav"),
    txt("stroke-cap footer","muted"),
  ]),
@@ -154,7 +156,8 @@ screen(id="sum", name="Summary (final scorecard)", route="/play/:clientId/summar
    topbar("Final scorecard", right=CTRL()),
    box("Winner hero — trophy · “Winner” · winner tag · total / over-under","wide tall","card",n=1),
    box("Standings row — rank · tag · total","wide","row",n=2),
-   repeat("＋ up to 2 more standings rows — one per non-winner (up to 4 players)"),
+   box("Standings row — rank · tag · total","wide","row"),
+   box("Standings row — rank · tag · total","wide","row"),
    box("Nine-grid table — Front/Back · par row · one score row per player","wide","tbl",n=3),
    txt("sync status line","muted",n=4),
    row(btn("View leaderboard","ghost sm"), btn("Done","primary sm",n=5), cls="nav"),
@@ -223,7 +226,7 @@ screen(id="hunt", name="Scavenger Hunt", route="/hunt",
  purpose="Snap-a-photo hunt; a vision model verifies each find. Reached from the in-round bar (not Home). Gated on an active round.",
  body="".join([
    topbar("Scavenger hunt", right=CTRL()),
-   row(txt("Playing as","inline"), box("tag","tagb sel",n=1), box("tag","tagb dim"), box("＋ 1–4","tagb repeat"), cls="playas"),
+   row(txt("Playing as","inline"), box("tag","tagb sel",n=1), box("tag","tagb dim"), box("tag","tagb dim"), box("tag","tagb dim"), cls="playas"),
    row(box("item — title · hint · count/✓","item",n=2), btn("Snap","snap",n=3), cls="itemrow"),
    row(box("item","item",n=5), btn("Snap","snap"), cls="itemrow"),
    box("result banner (verified / flagged / rejected)","wide small",n=4),
@@ -397,7 +400,7 @@ def render_screen(sc, idx):
  <h2><span>{idx}. {sc['name']}</span><span class="rt">{sc['route']}</span>{tb}</h2>
  <p class="purpose">{sc['purpose']}</p>
  <div class="layout">
-   <div class="framewrap">{frame}<div class="viewcap">wireframe · schematic{" · +1 row/chip per player (1–4)" if sc.get("scales") else ""}</div></div>
+   <div class="framewrap">{frame}<div class="viewcap">wireframe · schematic{" · shown at 4 players (supports 1–4)" if sc.get("scales") else ""}</div></div>
    <div class="specwrap">
      <table><tr><th>#</th><th>Element</th><th>Role &amp; where</th><th>Size (current)</th><th>Interaction / states</th><th>Theming hooks</th><th>Art / assets needed</th></tr>
      {rows}</table>
@@ -421,7 +424,7 @@ cover = """<div class="page cover">
    <li>That number maps to the <b>spec table</b>: role, current <b>size</b>, interaction/states, the <b>theming hooks</b> it keys to (accent / course-color variables), and the <b>art it needs</b>.</li>
    <li><b>Light &amp; dark:</b> the app has no fixed default — it follows the device setting. Design every element for <b>both</b>, clearing contrast on each (≥4.5:1 text / ≥3:1 large &amp; UI).</li>
    <li><b>Full-bleed screens:</b> the Course Map and every game playfield <b>fill the screen</b> below the bar (barring the HUD/buttons) — design them edge-to-edge.</li>
-   <li><b>Player-scaled screens</b> (Player Setup, Scorecard, Summary, Scavenger Hunt) add <b>one row/chip per player, up to 4</b> — shown by a dashed “repeat” placeholder.</li>
+   <li><b>Player-scaled screens</b> (Player Setup, Scorecard, Summary, Scavenger Hunt) add <b>one row/chip per player</b>; they're drawn <b>at the 4-player maximum</b> (1–4 supported), so design for the fullest layout.</li>
    <li>Deeper token / motion / skin reference lives in <code>docs/art-spec.md</code>; the live element inventory is the <code>/style</code> route.</li>
   </ol>
  </div>
