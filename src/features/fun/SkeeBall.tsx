@@ -17,9 +17,10 @@ import {
 } from './fx';
 
 // §12 Skee-Ball — the first attraction mini-game. Swipe up the lane to roll a
-// ball into the target: each scoring ring has a hole the ball drops into. Thread
-// the top corners for 100, nail the small center ring for 50, or come up short
-// for a gutter zero. Nine balls a game.
+// ball into the target: each scoring ring is a funnel dish the ball circles and
+// spirals down into its drop hole (never yanked straight in). Thread the top
+// corners for 100, nail the small center ring for 50, or come up short for a
+// gutter zero. Nine balls a game.
 //
 // The landing is deterministic from the swipe, but the aim trail FADES OUT before
 // the target — you commit to a line and power without a pinpoint preview, so
@@ -53,7 +54,9 @@ const MAX_V = 25;
 const MAX_DRAG = 300;
 const BALLS = 9;
 const FLIGHT_MS = 560; // arc-to-landing animation
-const SINK_MS = 320; // roll-down-into-the-hole animation
+const SINK_MS = 620; // roll-around-the-dish-and-drop-in animation
+const SINK_TURNS = 2; // extra whole revolutions before the drop — must be an
+// integer so `SINK_TURNS * TWO_PI` lands the spiral back on the drop-hole angle
 const NEXT_DELAY_MS = 850; // pause on the result before the next ball
 const FADE_END_Y = 350; // the aim trail is fully faded above this y (before the target)
 
@@ -64,6 +67,33 @@ const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi 
 /** The drop hole at the bottom-inside of a ring. */
 function holeDrop(h: Hole): { x: number; y: number } {
   return { x: h.cx, y: h.cy + h.R - HOLE_R - 4 };
+}
+
+/** Where the ball sits at progress `q` (0..1) as it rolls *around* the funnel
+ *  dish and spirals down into the drop hole — rather than sliding straight to
+ *  it. Modelled as polar motion about the ring centre: the ball keeps its
+ *  landing radius while it whips around the rim early, then the radius collapses
+ *  toward the drop hole for the final plunge. The path starts exactly on the
+ *  landing point (q=0) and ends exactly on the drop hole (q=1). */
+function sinkPos(h: Hole, land: { x: number; y: number }, q: number): { x: number; y: number } {
+  const dp = holeDrop(h);
+  const r0 = Math.hypot(land.x - h.cx, land.y - h.cy);
+  const r1 = Math.hypot(dp.x - h.cx, dp.y - h.cy);
+  // Start angle: fall back to the drop-hole angle for a dead-centre landing so a
+  // near-zero radius doesn't spiral outward from a meaningless heading.
+  const a0 = r0 < 0.5 ? Math.atan2(dp.y - h.cy, dp.x - h.cx) : Math.atan2(land.y - h.cy, land.x - h.cx);
+  const a1 = Math.atan2(dp.y - h.cy, dp.x - h.cx);
+  // Sweep from the landing heading to the drop-hole heading, plus whole extra
+  // revolutions so the ball visibly circles the dish. Normalised to a positive
+  // (clockwise-in-screen) turn for a consistent roll direction.
+  let da = (a1 - a0) % TWO_PI;
+  if (da < 0) da += TWO_PI;
+  const sweep = da + SINK_TURNS * TWO_PI;
+  // Circle fast-then-settling (angle ease-out); hold the wide radius, then let it
+  // collapse into the hole late (radius ease-in) — the funnel "drop" at the end.
+  const ang = a0 + sweep * (1 - (1 - q) * (1 - q));
+  const rad = r0 + (r1 - r0) * (q * q);
+  return { x: h.cx + Math.cos(ang) * rad, y: h.cy + Math.sin(ang) * rad };
 }
 
 /** Map a swipe (drag delta) to a launch velocity, or null if it isn't a valid
@@ -352,8 +382,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   }
 }
 
-const easeOut = (t: number) => 1 - (1 - t) * (1 - t) * (1 - t);
-
 export default function SkeeBall() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS());
@@ -477,12 +505,8 @@ export default function SkeeBall() {
         }
       } else if (gs.phase === 'sink' && gs.shot && gs.shot.hole) {
         const q = Math.min((now - gs.shot.sinkAt) / SINK_MS, 1);
-        const e = easeOut(q);
-        const dp = holeDrop(gs.shot.hole);
-        gs.ball = {
-          x: gs.shot.land.x + (dp.x - gs.shot.land.x) * e,
-          y: gs.shot.land.y + (dp.y - gs.shot.land.y) * e,
-        };
+        // Roll around the funnel dish and spiral into the hole, not a straight pull.
+        gs.ball = sinkPos(gs.shot.hole, gs.shot.land, q);
         // Shrink into the hole over the last part of the roll.
         gs.ballR = BALL_R * (1 - 0.85 * clamp((q - 0.55) / 0.45, 0, 1));
         if (q >= 1) finalize();
