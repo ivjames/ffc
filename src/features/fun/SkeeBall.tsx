@@ -68,15 +68,20 @@ function holeDrop(h: Hole): { x: number; y: number } {
 /** Where the ball sits at progress `q` (0..1) as it drops into the hole under
  *  gravity: it falls straight down with an accelerating vertical motion
  *  (distance ∝ t², from rest) while easing sideways toward the hole's centre,
- *  then settles into the drop hole. Starts on the landing point (q=0), ends on
- *  the drop hole (q=1). */
+ *  then settles into the hole. Starts on the landing point (q=0).
+ *
+ *  Gravity only ever pulls down, so the fall targets the LOWER of the drop hole
+ *  and the landing point — a ball that lands in the lower crescent of a ring
+ *  (already below the drop hole) rolls sideways into the hole without visibly
+ *  rising. */
 function sinkPos(h: Hole, land: { x: number; y: number }, q: number): { x: number; y: number } {
   const dp = holeDrop(h);
+  const targetY = Math.max(dp.y, land.y); // never rise — gravity pulls down only
   const fall = q * q; // gravity from rest: vertical distance grows as t²
   const settle = 1 - (1 - q) * (1 - q); // ease-out sideways roll to the hole centre
   return {
     x: land.x + (dp.x - land.x) * settle,
-    y: land.y + (dp.y - land.y) * fall,
+    y: land.y + (targetY - land.y) * fall,
   };
 }
 
