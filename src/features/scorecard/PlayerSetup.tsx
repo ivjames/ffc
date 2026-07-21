@@ -98,10 +98,10 @@ export default function PlayerSetup() {
             <button
               key={n}
               onClick={() => setCount(n)}
-              className={`rounded-xl py-3 text-lg font-bold transition ${
+              className={`rounded-xl py-3 text-lg font-bold ${
                 count === n
-                  ? 'bg-fairway-700 text-fairway-50'
-                  : 'border border-fairway-700 bg-fairway-900/40 text-fairway-100'
+                  ? 'btn-accent text-fairway-50'
+                  : 'key text-fairway-100'
               }`}
             >
               {n}
@@ -130,7 +130,7 @@ export default function PlayerSetup() {
                   maxLength={TAG_LENGTH}
                   placeholder="ABC"
                   aria-label={`Player ${i + 1} tag`}
-                  className="font-arcade w-32 rounded-xl border-2 border-fairway-700 bg-fairway-950 px-4 py-2.5 text-center text-2xl font-bold uppercase tracking-widest text-fairway-50 focus:border-fairway-500 focus:outline-none"
+                  className="surface-sunk font-arcade w-32 rounded-xl border border-fairway-800/60 px-4 py-2.5 text-center text-2xl font-bold uppercase tracking-widest text-fairway-50 focus:border-fairway-500 focus:outline-none"
                   style={{ borderColor: err ? '#ef4444' : undefined }}
                 />
                 {err && <span className="text-sm text-red-400">{err}</span>}

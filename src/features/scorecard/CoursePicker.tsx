@@ -15,10 +15,11 @@ export default function CoursePicker() {
     <Screen>
       <TopBar title="Pick a course" back="/" />
       <Content>
-        {/* Which site these courses belong to — tap to switch. */}
+        {/* Which site these courses belong to — tap to switch. Raised row
+            material (`.surface-1`), matching Home's location bar. */}
         <Link
           to="/locations?next=/new"
-          className="mb-3 flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-3 py-2 text-sm active:bg-fairway-800/60"
+          className="surface-1 mb-3 flex items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-2.5 text-sm transition-transform active:translate-y-px"
         >
           <span className="text-fairway-100/70">
             📍 <span className="font-semibold text-fairway-100">{location?.name}</span>
@@ -37,7 +38,7 @@ export default function CoursePicker() {
             <button
               key={c.id}
               onClick={() => navigate(`/new/setup?courseId=${c.id}`)}
-              className="flex w-full items-center gap-4 rounded-2xl border border-fairway-800 bg-fairway-900/40 p-4 text-left active:bg-fairway-800/60"
+              className="surface-1 flex w-full items-center gap-4 rounded-2xl border border-fairway-800/60 p-4 text-left transition-transform active:translate-y-px"
             >
               <span
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl"
