@@ -178,10 +178,8 @@ export default function Home() {
         )}
 
         <div className="space-y-2">
-          <Button variant="ghost" onClick={() => navigate('/hunt')}>
-            <span className="menu-ico" data-ico="hunt" aria-hidden="true" />
-            Scavenger hunt
-          </Button>
+          {/* The scavenger hunt is a play-time activity, reached from the
+              scorecard during a round — it's intentionally not on Home. */}
           <Button variant="ghost" onClick={() => navigate('/fun')}>
             <span className="menu-ico" data-ico="wait" aria-hidden="true" />
             <span className="menu-emoji">🎡 </span>While You Wait
