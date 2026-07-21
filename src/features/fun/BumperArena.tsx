@@ -706,7 +706,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
   const [score, setScore] = useState(0);
   const [secs, setSecs] = useState(GAME_MS / 1000);
 
-  const active = phase === 'countdown' || phase === 'play';
+  const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
 
   useEffect(() => {
@@ -842,25 +842,6 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
     setPhase('countdown');
   }, [theme]);
 
-  if (phase === 'ready') {
-    return (
-      <Screen>
-        <TopBar title={theme.title} back="/fun" />
-        <Content>
-          <div className="mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">{theme.emoji}</span>
-            <div className="text-2xl font-black text-fairway-50">{theme.title}</div>
-            <p className="text-sm text-fairway-300">{theme.hint}</p>
-            <p className="text-sm text-fairway-400">30 seconds on the clock — most bumps wins.</p>
-          </div>
-          <div className="mt-8">
-            <Button onClick={start}>Start</Button>
-          </div>
-        </Content>
-      </Screen>
-    );
-  }
-
   if (phase === 'done') {
     return (
       <Screen>
@@ -890,19 +871,28 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
         <span className={`font-bold ${secs <= 5 ? 'text-red-400' : 'text-fairway-300'}`}>⏱ {secs}s</span>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+      <div className="grid min-h-0 flex-1 place-items-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
         />
+        {phase === 'ready' && (
+          <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
+            <span className="text-5xl">{theme.emoji}</span>
+            <p className="text-sm text-fairway-100">{theme.hint}</p>
+            <Button onClick={start}>Start</Button>
+          </div>
+        )}
       </div>
 
       <p className="flex h-16 shrink-0 items-center justify-center px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
-        <span className="line-clamp-2">{phase === 'countdown' ? 'Get ready…' : theme.hint}</span>
+        <span className="line-clamp-2">
+          {phase === 'ready' ? '30 seconds on the clock — most bumps wins.' : phase === 'countdown' ? 'Get ready…' : theme.hint}
+        </span>
       </p>
     </div>
   );

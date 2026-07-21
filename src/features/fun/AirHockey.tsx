@@ -69,7 +69,7 @@ function centeredPuck() {
 
 function freshGS(now: number): GS {
   return {
-    phase: 'serve',
+    phase: 'ready',
     puck: centeredPuck(),
     player: { x: W / 2, y: H - 70, px: W / 2, py: H - 70 },
     ai: { x: W / 2, y: 70, px: W / 2, py: 70 },
@@ -389,7 +389,7 @@ export default function AirHockey() {
   const [you, setYou] = useState(0);
   const [cpu, setCpu] = useState(0);
 
-  const active = phase !== 'ready' && phase !== 'done';
+  const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
 
   // Render + physics loop (fixed-timestep accumulator).
@@ -525,33 +525,16 @@ export default function AirHockey() {
   }, []);
 
   const start = useCallback(() => {
-    gsRef.current = freshGS(performance.now());
+    const now = performance.now();
+    const gs = freshGS(now);
+    gs.phase = 'serve';
+    gs.serveAt = now + SERVE_DELAY;
+    gsRef.current = gs;
     fxRef.current = freshFX();
     setYou(0);
     setCpu(0);
     setPhase('serve');
   }, []);
-
-  if (phase === 'ready') {
-    return (
-      <Screen>
-        <TopBar title="Air Hockey" back="/fun" />
-        <Content>
-          <div className="mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🏒</span>
-            <div className="text-2xl font-black text-fairway-50">Air Hockey</div>
-            <p className="text-sm text-fairway-300">
-              Drag your green mallet to hit the puck into the CPU's goal at the top.
-            </p>
-            <p className="text-sm text-fairway-400">First to {TARGET} wins.</p>
-          </div>
-          <div className="mt-8">
-            <Button onClick={start}>Start</Button>
-          </div>
-        </Content>
-      </Screen>
-    );
-  }
 
   if (phase === 'done') {
     const won = you > cpu;
@@ -585,15 +568,24 @@ export default function AirHockey() {
         <span className="font-bold text-green-400">You {you}</span>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+      <div className="grid min-h-0 flex-1 place-items-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
         />
+        {phase === 'ready' && (
+          <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
+            <span className="text-5xl">🏒</span>
+            <p className="text-sm text-fairway-100">
+              Drag your green mallet to hit the puck into the CPU's goal at the top. First to {TARGET} wins.
+            </p>
+            <Button onClick={start}>Start</Button>
+          </div>
+        )}
       </div>
 
       <p className="flex h-16 shrink-0 items-center justify-center px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">

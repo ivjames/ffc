@@ -429,7 +429,7 @@ export default function AxeThrow() {
   const [total, setTotal] = useState(0);
   const [lastScore, setLastScore] = useState<number | null>(null);
 
-  const active = phase !== 'ready' && phase !== 'done';
+  const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
 
   const loadNext = useCallback((now: number) => {
@@ -590,27 +590,6 @@ export default function AxeThrow() {
     setLastScore(null);
   }, []);
 
-  if (phase === 'ready') {
-    return (
-      <Screen>
-        <TopBar title="Axe Throwing" back="/fun" />
-        <Content>
-          <div className="mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🪓</span>
-            <div className="text-2xl font-black text-fairway-50">Axe Throwing</div>
-            <p className="text-sm text-fairway-300">
-              Two-tap timing: tap to set your left–right aim, tap again to set the height.
-            </p>
-            <p className="text-sm text-fairway-400">{THROWS} throws — stick the bullseye or a clutch.</p>
-          </div>
-          <div className="mt-8">
-            <Button onClick={start}>Start</Button>
-          </div>
-        </Content>
-      </Screen>
-    );
-  }
-
   if (phase === 'done') {
     const remark =
       total >= 28 ? 'Lumberjack legend! 🪓' : total >= 20 ? 'Sharp shooter! 🎯' : total >= 12 ? 'Nice sticks! 👍' : 'Keep throwing! 🎮';
@@ -635,17 +614,19 @@ export default function AxeThrow() {
   }
 
   const hint =
-    phase === 'countdown'
-      ? 'Get ready…'
-      : phase === 'aimX'
-        ? 'Tap to set your aim (left–right).'
-        : phase === 'aimY'
-          ? 'Tap to set the height (up–down).'
-          : phase === 'flying'
-            ? 'Thunk!'
-            : lastScore && lastScore > 0
-              ? `Stuck for +${lastScore}!`
-              : 'Missed the board!';
+    phase === 'ready'
+      ? 'Two-tap timing: tap to set your aim, tap again to set the height.'
+      : phase === 'countdown'
+        ? 'Get ready…'
+        : phase === 'aimX'
+          ? 'Tap to set your aim (left–right).'
+          : phase === 'aimY'
+            ? 'Tap to set the height (up–down).'
+            : phase === 'flying'
+              ? 'Thunk!'
+              : lastScore && lastScore > 0
+                ? `Stuck for +${lastScore}!`
+                : 'Missed the board!';
 
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
@@ -660,12 +641,21 @@ export default function AxeThrow() {
         </span>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+      <div className="grid min-h-0 flex-1 place-items-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onTap}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
         />
+        {phase === 'ready' && (
+          <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
+            <span className="text-5xl">🪓</span>
+            <p className="text-sm text-fairway-100">
+              Tap to set your aim, tap again to set the height. {THROWS} throws — stick the bullseye or a clutch.
+            </p>
+            <Button onClick={start}>Start</Button>
+          </div>
+        )}
       </div>
 
       <p className="flex h-16 shrink-0 items-center justify-center px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
