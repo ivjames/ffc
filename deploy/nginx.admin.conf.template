@@ -1,0 +1,55 @@
+# nginx site for Master Control — the SEPARATE admin SPA. lab980 convention:
+# /etc/nginx/sites-available/<fqdn> symlinked into sites-enabled/.
+#
+# Placeholders to replace:
+#   __ADMIN_FQDN__  e.g. admin.ffc.lab980.com
+#   __APP_DIR__     e.g. /var/www/ffc
+#   __API_PORT__    e.g. 8060  (same Express backend as the player app)
+#
+# TLS: served under the wildcard *.<base-domain> cert issued by `ffc wildcard-cert`
+# (certbot DNS-01 via doctl). Unlike the player vhost, certbot does NOT rewrite
+# this file per-host — the 443 block below references the wildcard cert directly.
+# The admin app has no service worker, so none of the SW cache headers apply.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __ADMIN_FQDN__;
+    # Redirect to HTTPS (the wildcard cert covers this host).
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name __ADMIN_FQDN__;
+
+    # Wildcard cert covering *.<base-domain> (and the apex), issued via DNS-01.
+    ssl_certificate     /etc/letsencrypt/live/__WILDCARD_LINEAGE__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__WILDCARD_LINEAGE__/privkey.pem;
+
+    root __APP_DIR__/current/dist-admin;
+    index index.html;
+
+    # API → the same Node/Express backend the player app uses.
+    location /api/ {
+        client_max_body_size 16m;
+        proxy_pass http://127.0.0.1:__API_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # SPA fallback — client-side routes (/orgs, /locations/:id, …) resolve to
+    # the app shell.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

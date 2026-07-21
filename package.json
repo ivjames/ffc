@@ -8,6 +8,8 @@
     "dev": "vite",
     "export-content": "node scripts/export-content.mjs",
     "build": "node scripts/export-content.mjs && tsc -b && vite build",
+    "build:admin": "tsc -p tsconfig.admin.json --noEmit && vite build --config vite.admin.config.ts",
+    "typecheck:admin": "tsc -p tsconfig.admin.json --noEmit",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "putt:sim": "node --experimental-strip-types scripts/putt-sim.ts"
