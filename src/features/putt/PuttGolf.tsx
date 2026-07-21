@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { useFitCanvas } from '../fun/useFitCanvas';
 import {
   W,
   H,
@@ -653,6 +654,9 @@ export default function PuttGolf() {
   const totalPar = playedHoles.reduce((a, h) => a + h.par, 0);
   const result = phase === 'sunk' && hole ? holeResult(strokes, hole.par) : null;
 
+  // Fill the play area: size the canvas to fit its stage (see useFitCanvas).
+  useFitCanvas(canvasRef, W, H, phase !== 'done');
+
   const hint =
     phase === 'aim'
       ? note || 'Pull back from the ball to aim — the arrow shows your shot — and release to putt.'
@@ -694,68 +698,73 @@ export default function PuttGolf() {
 
   const isEndless = mode === 'endless';
 
+  if (phase !== 'done') {
+    return (
+      <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
+        <TopBar title="Arcade Putt" back="/fun" />
+        <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
+          <span className="font-bold text-fairway-50">
+            Hole {holeIndex + 1}
+            <span className="font-normal text-fairway-400">
+              {isEndless ? ' · Endless' : ` / ${HOLES.length}`}
+            </span>
+          </span>
+          <span className="text-fairway-300">
+            Par <span className="font-bold text-fairway-100">{hole?.par}</span>
+            <span className="mx-2 text-fairway-700">·</span>
+            Strokes <span className="font-bold text-fairway-100">{strokes}</span>
+          </span>
+        </div>
+
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+          <canvas
+            ref={canvasRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            className="block touch-none rounded-2xl border border-fairway-800"
+          />
+        </div>
+
+        <p
+          className={`min-h-[2.5rem] shrink-0 px-4 pt-3 text-center text-sm ${
+            note && phase === 'aim' ? 'font-semibold text-sky-300' : 'text-fairway-100/80'
+          }`}
+        >
+          {hint}
+        </p>
+
+        <div className="shrink-0 space-y-2 px-4 pb-4 pt-1">
+          {phase === 'sunk' && (
+            <Button onClick={advance}>
+              {!isEndless && holeIndex + 1 >= HOLES.length ? 'See scorecard →' : 'Next hole →'}
+            </Button>
+          )}
+          {phase !== 'sunk' && (
+            <Button
+              variant="ghost"
+              onClick={resetHole}
+              disabled={phase === 'rolling' || phase === 'splash'}
+            >
+              Reset hole
+            </Button>
+          )}
+          {isEndless && phase !== 'rolling' && phase !== 'splash' && (
+            <Button variant="ghost" onClick={endRun}>
+              End run
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Screen>
       <TopBar title="Arcade Putt" back="/fun" />
       <Content>
-        {phase !== 'done' ? (
-          <>
-            <div className="mb-2 flex items-center justify-between text-sm">
-              <span className="font-bold text-fairway-50">
-                Hole {holeIndex + 1}
-                <span className="font-normal text-fairway-400">
-                  {isEndless ? ' · Endless' : ` / ${HOLES.length}`}
-                </span>
-              </span>
-              <span className="text-fairway-300">
-                Par <span className="font-bold text-fairway-100">{hole?.par}</span>
-                <span className="mx-2 text-fairway-700">·</span>
-                Strokes <span className="font-bold text-fairway-100">{strokes}</span>
-              </span>
-            </div>
-
-            <canvas
-              ref={canvasRef}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
-              className="block w-full touch-none rounded-2xl border border-fairway-800"
-              style={{ aspectRatio: `${W} / ${H}` }}
-            />
-
-            <p
-              className={`mt-3 min-h-[2.5rem] text-center text-sm ${
-                note && phase === 'aim' ? 'font-semibold text-sky-300' : 'text-fairway-100/80'
-              }`}
-            >
-              {hint}
-            </p>
-
-            <div className="space-y-2">
-              {phase === 'sunk' && (
-                <Button onClick={advance}>
-                  {!isEndless && holeIndex + 1 >= HOLES.length ? 'See scorecard →' : 'Next hole →'}
-                </Button>
-              )}
-              {phase !== 'sunk' && (
-                <Button
-                  variant="ghost"
-                  onClick={resetHole}
-                  disabled={phase === 'rolling' || phase === 'splash'}
-                >
-                  Reset hole
-                </Button>
-              )}
-              {isEndless && phase !== 'rolling' && phase !== 'splash' && (
-                <Button variant="ghost" onClick={endRun}>
-                  End run
-                </Button>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="mt-4">
+        <div className="mt-4">
             <div className="mb-4 text-center">
               <div className="text-5xl">🏆</div>
               <h2 className="mt-2 text-2xl font-black text-fairway-50">
@@ -795,7 +804,6 @@ export default function PuttGolf() {
               </Button>
             </div>
           </div>
-        )}
       </Content>
     </Screen>
   );
