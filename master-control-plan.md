@@ -245,13 +245,25 @@ robots/precache/scope gymnastics, and **zero admin code in the player bundle**.
     subdomain** (`admin.`, and later per-org/per-location/per-function if ever
     wanted) is covered with **zero additional cert work** — no re-running certbot per
     host.
-  - Cost/prereq: DNS-01 proves control by writing a TXT record, so it needs the DNS
-    provider's **API credentials + the matching certbot DNS plugin** (e.g.
-    `certbot-dns-<provider>`) on the droplet, plus a wildcard `*.ffc.lab980.com` DNS
-    record pointing at the box. Auto-renewal runs unattended once the plugin creds
-    are in place.
-  - `bin/ffc` grows a `wildcard-cert` path (DNS-01 issue/renew) that the admin vhost
-    references; the existing player `vhost` (HTTP-01) is left as-is.
+  - DNS for `lab980.com` is on **DigitalOcean** (same as the droplet), so this is the
+    `certbot-dns-digitalocean` plugin driven by a **DO API token**. DNS-01 proves
+    control by writing a TXT record via the DO API — no HTTP reachability needed —
+    then auto-renews unattended. Concretely:
+    ```
+    apt install python3-certbot-dns-digitalocean       # or the snap plugin
+    # /etc/letsencrypt/dns-digitalocean.ini  (chmod 600)
+    #   dns_digitalocean_token = <DO API token, write access to lab980.com>
+    certbot certonly --dns-digitalocean \
+      --dns-digitalocean-credentials /etc/letsencrypt/dns-digitalocean.ini \
+      --dns-digitalocean-propagation-seconds 60 \
+      -d '*.ffc.lab980.com' -d 'ffc.lab980.com' \
+      -n --agree-tos -m ivjames@gmail.com
+    ```
+    Plus a wildcard `*.ffc.lab980.com` A record (DO DNS) pointing at the droplet.
+  - `bin/ffc` grows a `wildcard-cert` path wrapping that DNS-01 issue/renew; the admin
+    vhost references the resulting cert. The existing player `vhost` (HTTP-01) is
+    left as-is — or optionally folded under the same wildcard later, since the cert
+    above already covers the apex `ffc.lab980.com` too.
   - **Scope note:** we're provisioning exactly **one** admin subdomain now. The
     wildcard is chosen purely so adding subdomains later never touches the cert flow
     — the multi-tenant/per-org subdomain routing itself (Host→slug scoping) stays
@@ -354,8 +366,9 @@ Vite tree-shakes the two bundles apart.
 5. **Admin build + vhost** — second Vite entry (`vite.admin.config.ts` → `dist-admin/`);
    `bin/ffc` builds both bundles in the atomic release swap and (re)writes the
    `admin.ffc.lab980.com` vhost. TLS via a **wildcard `*.ffc.lab980.com` DNS-01 cert**
-   (new `ffc wildcard-cert` path): install the DNS provider's certbot plugin + API
-   creds, add the wildcard DNS record, issue once, auto-renew thereafter.
+   (new `ffc wildcard-cert` path): install `python3-certbot-dns-digitalocean`, drop a
+   DO API token in `/etc/letsencrypt/dns-digitalocean.ini` (chmod 600), add the
+   wildcard `*.ffc.lab980.com` A record in DO DNS, issue once, auto-renew thereafter.
 6. **Admin UI** — token gate → Overview → Orgs → Location wizard → Location/course
    detail, shipped in the admin bundle.
 7. **Docs/CLI** — README + `server/README.md` for the new endpoints and the admin
@@ -386,8 +399,9 @@ Vite tree-shakes the two bundles apart.
   (`bullwinkles.ffc.lab980.com`, Host→`org.slug` scoping feeding the `org_admin`
   role). Not built now — flagged so the org-scoped API queries stay written in a way
   that a Host-derived tenant could later drive.
-- **DNS-01 prerequisites.** The wildcard cert needs the droplet to hold the DNS
-  provider's API credentials and the matching certbot plugin. Confirm which DNS
-  provider hosts `lab980.com` so the right plugin (`certbot-dns-<provider>`) and
-  credential path are wired into `ffc wildcard-cert`.
+- **DNS-01 prerequisites (resolved: DigitalOcean).** `lab980.com` DNS is on DO, so the
+  wildcard cert uses `python3-certbot-dns-digitalocean` + a DO API token (write access
+  to the domain) at `/etc/letsencrypt/dns-digitalocean.ini`. The one operator action
+  before this step is implementable: **mint a DO API token** and drop it on the
+  droplet (chmod 600). Everything else (`ffc wildcard-cert`, the vhost) is code.
 ```
