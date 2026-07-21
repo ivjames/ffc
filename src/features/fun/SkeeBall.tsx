@@ -46,7 +46,6 @@ const HOLES: Hole[] = [
   { cx: W / 2, cy: 358, R: 36, pts: 10, color: '#38bdf8' },
 ];
 const HOLE_R = 8; // the drop hole at the bottom of each ring
-const FUNNEL = 12; // lands within R + FUNNEL of a ring get funneled in
 
 const GRAV = 0.5;
 const MIN_V = 11;
@@ -124,14 +123,16 @@ function landingPoint(v: Vel): { x: number; y: number } | null {
 }
 
 /** The ring/hole a landing point drops into (nearest that captures it), or null
- *  for a gutter miss. */
+ *  for a gutter miss. A ball only counts as "in the ring" when its centroid
+ *  lands inside the ring's rim (d <= R) — no slop past the visible edge, so the
+ *  ball is never scored while sitting outside the ring it's credited to. */
 function holeAt(p: { x: number; y: number } | null): Hole | null {
   if (!p) return null;
   let best: Hole | null = null;
   let bestD = Infinity;
   for (const h of HOLES) {
     const d = Math.hypot(p.x - h.cx, p.y - h.cy);
-    if (d <= h.R + FUNNEL && d < bestD) {
+    if (d <= h.R && d < bestD) {
       best = h;
       bestD = d;
     }
