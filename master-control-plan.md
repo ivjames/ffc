@@ -40,7 +40,7 @@ Org (owner / franchise)          ← NEW
 | Auth (v1) | **Super-admin behind `APP_TOKEN`**, schema/API designed for per-franchise accounts later _(recommended)_ | Alt: build full RBAC now |
 | Content source of truth | **Locations become DB-driven & live; per-course art/pars stay bundled for now** _(recommended)_ | Alt A: flip whole app to API. Alt B: admin writes DB but player app stays fully bundled |
 | v1 admin scope | **Orgs + Locations + Courses CRUD**, plus a light read-only rollup | Hunt-list editing & rich dashboards are Phase 2 |
-| Delivery | **`/control` route in this PWA, excluded from SW precache & noindexed** _(recommended)_ | Alt: separate `admin.ffc.lab980.com` build/vhost |
+| Delivery | **Separate admin build served on its own vhost (`admin.ffc.lab980.com`)** — not part of the player PWA | No service worker, no offline, no admin code in the player bundle |
 | Write path | All admin writes go through the **existing Express API** (creds server-side), never the browser → DB | Matches architecture principle §3 of the base app |
 
 ---
@@ -221,14 +221,23 @@ so the switch is one module and the rest of the app is unchanged.
 
 ---
 
-## 6. Admin UI
+## 6. Admin UI — a separate build
 
-_(recommended: a `/control` route inside the existing PWA.)_
+Master Control is **its own SPA**, not a route in the player PWA. It shares the
+repo, the Postgres DB, and the Express API, but ships as a distinct bundle on its
+own vhost. This means: no service worker, no offline caching, no
+robots/precache/scope gymnastics, and **zero admin code in the player bundle**.
 
-- **Route:** `/control` (and `/control/*`) in `App.tsx`. **Excluded from the
-  service-worker precache** (Workbox `navigateFallbackDenylist` / glob ignore) so
-  admin code never bloats the player offline bundle, and a `<meta name="robots"
-  content="noindex">` on the admin shell.
+- **Build:** a second Vite entry (`admin/index.html` + `vite.admin.config.ts`)
+  building to `dist-admin/`. Plain SPA — the `vite-plugin-pwa` config stays on the
+  player build only. Reuses the existing Tailwind v4 setup and
+  `src/ui/components.tsx` primitives so the console matches the house style with no
+  new dependencies.
+- **Serving:** an nginx vhost `admin.ffc.lab980.com` with `root …/current/dist-admin`
+  and `/api` proxied to the same Express port as the player app. Certbot TLS, same
+  pattern as the existing `deploy/nginx.conf.template`. `bin/ffc` gains an admin
+  build + vhost step (see §9); `ffc deploy` builds both bundles in the same atomic
+  release swap.
 - **Gate:** a token entry screen; the entered `APP_TOKEN` is held in memory/
   `sessionStorage` and sent as `x-app-token` on every admin call. A 401 bounces back
   to the gate. (When accounts land in Phase 2, this screen becomes a real login and
@@ -243,14 +252,10 @@ _(recommended: a `/control` route inside the existing PWA.)_
      derived tz label so the operator sees "Pacific Time (PT)" before saving.
   4. **Location detail** — edit location, list/add/edit courses (name, theme, 18 pars
      grid, hole count), soft-delete guards surfaced as friendly messages.
-- **Styling:** reuse the existing Tailwind v4 setup and `src/ui/components.tsx`
-  primitives so the console matches the house style without new dependencies.
 
-**Alt (separate build):** a distinct Vite entry + `admin.ffc.lab980.com` vhost keeps
-admin code 100% out of the player bundle. Cleaner isolation, but doubles the deploy
-plumbing in `bin/ffc` and nginx. Recommended only if/when the console grows past a
-few screens or gets exposed to franchisees. The `/control`-route approach is
-reversible into this later.
+**Isolation is the point:** because it's a separate origin, the admin app is trivial
+to firewall (IP-allowlist the vhost, or drop it behind basic-auth at nginx) on top
+of the API token gate, and the player app can never accidentally surface admin UI.
 
 ---
 
@@ -264,8 +269,10 @@ reversible into this later.
   token).
 - **Transport:** admin endpoints only over HTTPS (already true behind nginx/certbot).
 - **CORS:** the app currently `app.use(cors())` (open). Admin mutations are
-  token-gated so open CORS is acceptable for v1, but note it: when cookie/session
-  auth arrives, lock `/api/admin/*` CORS to the admin origin.
+  token-gated so open CORS is acceptable for v1. Since the admin app is now its own
+  origin (`admin.ffc.lab980.com`), `/api/admin/*` CORS can be locked to that origin
+  straight away, and the vhost itself can be IP-allowlisted / basic-auth'd for
+  defense in depth.
 - **Audit:** every successful mutation writes `admin_audit` (§3.3).
 - **Phase 2 accounts:** `admin_user` table (§3.4) + bcrypt + a sessions mechanism;
   super-admin sees all orgs, `org_admin` is scoped to `org_id`. The API queries are
@@ -296,16 +303,24 @@ server/
 src/
   data/
     locations-source.ts  API-with-bundle-fallback resolver (§5)
-  features/
-    control/
-      ControlApp.tsx     admin shell + token gate + nested routes
-      Overview.tsx
-      Orgs.tsx
-      LocationWizard.tsx
-      LocationDetail.tsx
-      api.ts             typed admin API client (sends x-app-token)
-  App.tsx                + <Route path="/control/*">
+
+admin/                   the separate admin SPA (own bundle)
+  index.html             admin entry (no PWA plugin)
+  main.tsx               mounts ControlApp
+  ControlApp.tsx         admin shell + token gate + routes
+  Overview.tsx
+  Orgs.tsx
+  LocationWizard.tsx
+  LocationDetail.tsx
+  api.ts                 typed admin API client (sends x-app-token)
+
+vite.admin.config.ts     builds admin/ -> dist-admin/ (imports src/ui + tailwind)
+deploy/
+  nginx.admin.conf.template   admin.ffc.lab980.com vhost (root dist-admin, /api proxy)
 ```
+The player `App.tsx` is **untouched** — no `/control` route, no admin imports.
+The admin app reuses shared primitives from `src/ui/*` but has its own entry, so
+Vite tree-shakes the two bundles apart.
 
 ---
 
@@ -318,12 +333,15 @@ src/
 3. **Admin API** — `/api/admin/orgs|locations|courses|overview` with delete guards.
 4. **Public location read** — confirm `GET /api/locations` shape + `locations-source.ts`
    fallback wiring.
-5. **Admin UI** — token gate → Overview → Orgs → Location wizard → Location/course
-   detail; exclude `/control` from SW precache.
-6. **Docs/CLI** — README + `server/README.md` for the new endpoints; confirm
-   `ffc deploy` needs no new steps; note `APP_TOKEN` is now required in prod.
-7. **(Phase 2)** hunt-list editing, richer dashboards, real admin accounts/RBAC,
-   optional separate admin vhost, optional full API-driven player content (Alt A).
+5. **Admin build + vhost** — second Vite entry (`vite.admin.config.ts` → `dist-admin/`);
+   `bin/ffc` builds both bundles in the atomic release swap and (re)writes the
+   `admin.ffc.lab980.com` vhost + TLS.
+6. **Admin UI** — token gate → Overview → Orgs → Location wizard → Location/course
+   detail, shipped in the admin bundle.
+7. **Docs/CLI** — README + `server/README.md` for the new endpoints and the admin
+   vhost; confirm the extended `ffc deploy`; note `APP_TOKEN` is now required in prod.
+8. **(Phase 2)** hunt-list editing, richer dashboards, real admin accounts/RBAC,
+   optional full API-driven player content (Alt A).
 
 ---
 
