@@ -56,6 +56,7 @@ const SWEEP_Y_MS = 1100;
 const THROWS = 5;
 const FLIGHT_MS = 480;
 const NEXT_DELAY_MS = 800;
+const COUNTDOWN_MS = 2600; // "3, 2, 1, GO!" before the first sweep starts
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 
@@ -74,7 +75,7 @@ function scoreAt(x: number, y: number): number {
   return 0;
 }
 
-type Phase = 'aimX' | 'aimY' | 'flying' | 'scored' | 'done';
+type Phase = 'ready' | 'countdown' | 'aimX' | 'aimY' | 'flying' | 'scored' | 'done';
 type Mark = { x: number; y: number };
 type GS = {
   phase: Phase;
@@ -87,11 +88,12 @@ type GS = {
   scoreAtTs: number; // when the current result was locked in
   marks: Mark[];
   sweepBase: number; // now-offset so each sweep starts at its left/top
+  countStart: number; // timestamp the countdown began
 };
 
 function freshGS(now: number): GS {
   return {
-    phase: 'aimX',
+    phase: 'ready',
     throwNo: 0,
     total: 0,
     lockX: CENTER.x,
@@ -101,6 +103,7 @@ function freshGS(now: number): GS {
     scoreAtTs: 0,
     marks: [],
     sweepBase: now,
+    countStart: 0,
   };
 }
 
@@ -381,7 +384,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   }
 
   // Thrower's axe at the ready.
-  if (gs.phase === 'aimX' || gs.phase === 'aimY') drawAxe(ctx, W / 2, H - 24, 0);
+  if (gs.phase === 'countdown' || gs.phase === 'aimX' || gs.phase === 'aimY') drawAxe(ctx, W / 2, H - 24, 0);
 
   // Additive spark / chip particles.
   drawParticles(ctx, fx.particles);
@@ -391,6 +394,23 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   if (fx.flash > 0) {
     ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
     ctx.fillRect(0, 0, W, H);
+  }
+
+  // "3, 2, 1, GO!" countdown before the first sweep starts.
+  if (gs.phase === 'countdown') {
+    const left = COUNTDOWN_MS - (now - gs.countStart);
+    const n = Math.ceil(left / 800);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.fillStyle = '#fbbf24';
+    ctx.shadowColor = 'rgba(251,191,36,0.7)';
+    ctx.shadowBlur = 18;
+    ctx.font = 'bold 64px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
+    ctx.restore();
   }
 }
 
@@ -404,13 +424,13 @@ export default function AxeThrow() {
   const guideRef = useRef({ x: SWEEP_X0, y: SWEEP_Y0 });
   const nextTimer = useRef<number | null>(null);
 
-  const [phase, setPhase] = useState<Phase>('aimX');
+  const [phase, setPhase] = useState<Phase>('ready');
   const [throwNo, setThrowNo] = useState(0);
   const [total, setTotal] = useState(0);
   const [lastScore, setLastScore] = useState<number | null>(null);
 
-  const playing = phase !== 'done';
-  useFitCanvas(canvasRef, W, H, playing);
+  const active = phase !== 'ready' && phase !== 'done';
+  useFitCanvas(canvasRef, W, H, active);
 
   const loadNext = useCallback((now: number) => {
     const gs = gsRef.current;
@@ -429,7 +449,7 @@ export default function AxeThrow() {
   }, []);
 
   useEffect(() => {
-    if (!playing) return;
+    if (!active) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -453,11 +473,19 @@ export default function AxeThrow() {
         return;
       }
       if (sweepPausedAt) {
-        gs.sweepBase += now - sweepPausedAt;
+        const away = now - sweepPausedAt;
+        gs.sweepBase += away;
+        if (gs.phase === 'countdown') gs.countStart += away;
         sweepPausedAt = 0;
       }
       const dt = Math.min(now - last, 100);
       last = now;
+
+      if (gs.phase === 'countdown' && now - gs.countStart >= COUNTDOWN_MS) {
+        gs.phase = 'aimX';
+        gs.sweepBase = now;
+        setPhase('aimX');
+      }
 
       // Record the guide's *rendered* position this frame so a tap lands exactly
       // where the crosshair was last drawn — not where a freshly re-read clock in
@@ -513,7 +541,7 @@ export default function AxeThrow() {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [playing, loadNext]);
+  }, [active, loadNext]);
 
   useEffect(() => {
     return () => {
@@ -547,15 +575,41 @@ export default function AxeThrow() {
     }
   }, []);
 
-  const restart = useCallback(() => {
+  const start = useCallback(() => {
     if (nextTimer.current) clearTimeout(nextTimer.current);
-    gsRef.current = freshGS(performance.now());
+    const now = performance.now();
+    const gs = freshGS(now);
+    gs.phase = 'countdown';
+    gs.countStart = now;
+    gsRef.current = gs;
     fxRef.current = freshFX();
-    setPhase('aimX');
+    guideRef.current = { x: SWEEP_X0, y: SWEEP_Y0 };
+    setPhase('countdown');
     setThrowNo(0);
     setTotal(0);
     setLastScore(null);
   }, []);
+
+  if (phase === 'ready') {
+    return (
+      <Screen>
+        <TopBar title="Axe Throwing" back="/fun" />
+        <Content>
+          <div className="mt-6 flex flex-col items-center gap-3 text-center">
+            <span className="text-6xl">🪓</span>
+            <div className="text-2xl font-black text-fairway-50">Axe Throwing</div>
+            <p className="text-sm text-fairway-300">
+              Two-tap timing: tap to set your left–right aim, tap again to set the height.
+            </p>
+            <p className="text-sm text-fairway-400">{THROWS} throws — stick the bullseye or a clutch.</p>
+          </div>
+          <div className="mt-8">
+            <Button onClick={start}>Start</Button>
+          </div>
+        </Content>
+      </Screen>
+    );
+  }
 
   if (phase === 'done') {
     const remark =
@@ -571,7 +625,7 @@ export default function AxeThrow() {
             <p className="text-sm text-fairway-400">across {THROWS} throws</p>
           </div>
           <div className="mt-8">
-            <Button onClick={restart} sound="none">
+            <Button onClick={start} sound="none">
               Play again
             </Button>
           </div>
@@ -581,15 +635,17 @@ export default function AxeThrow() {
   }
 
   const hint =
-    phase === 'aimX'
-      ? 'Tap to set your aim (left–right).'
-      : phase === 'aimY'
-        ? 'Tap to set the height (up–down).'
-        : phase === 'flying'
-          ? 'Thunk!'
-          : lastScore && lastScore > 0
-            ? `Stuck for +${lastScore}!`
-            : 'Missed the board!';
+    phase === 'countdown'
+      ? 'Get ready…'
+      : phase === 'aimX'
+        ? 'Tap to set your aim (left–right).'
+        : phase === 'aimY'
+          ? 'Tap to set the height (up–down).'
+          : phase === 'flying'
+            ? 'Thunk!'
+            : lastScore && lastScore > 0
+              ? `Stuck for +${lastScore}!`
+              : 'Missed the board!';
 
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">

@@ -46,7 +46,7 @@ const SERVE_DELAY = 850; // pause at center before the puck launches
 
 type Vec = { x: number; y: number };
 type Pad = { x: number; y: number; px: number; py: number }; // p* = previous pos
-type Phase = 'serve' | 'play' | 'done';
+type Phase = 'ready' | 'serve' | 'play' | 'done';
 type GS = {
   phase: Phase;
   puck: { x: number; y: number; vx: number; vy: number };
@@ -385,16 +385,16 @@ export default function AirHockey() {
   const gsRef = useRef<GS>(freshGS(0));
   const fxRef = useRef<FX>(freshFX());
 
-  const [phase, setPhase] = useState<Phase>('serve');
+  const [phase, setPhase] = useState<Phase>('ready');
   const [you, setYou] = useState(0);
   const [cpu, setCpu] = useState(0);
 
-  const playing = phase !== 'done';
-  useFitCanvas(canvasRef, W, H, playing);
+  const active = phase !== 'ready' && phase !== 'done';
+  useFitCanvas(canvasRef, W, H, active);
 
   // Render + physics loop (fixed-timestep accumulator).
   useEffect(() => {
-    if (!playing) return;
+    if (!active) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -497,7 +497,7 @@ export default function AirHockey() {
       cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [playing]);
+  }, [active]);
 
   const toField = useCallback((e: React.PointerEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -524,13 +524,34 @@ export default function AirHockey() {
     gsRef.current.pointer = null;
   }, []);
 
-  const restart = useCallback(() => {
+  const start = useCallback(() => {
     gsRef.current = freshGS(performance.now());
     fxRef.current = freshFX();
     setYou(0);
     setCpu(0);
     setPhase('serve');
   }, []);
+
+  if (phase === 'ready') {
+    return (
+      <Screen>
+        <TopBar title="Air Hockey" back="/fun" />
+        <Content>
+          <div className="mt-6 flex flex-col items-center gap-3 text-center">
+            <span className="text-6xl">🏒</span>
+            <div className="text-2xl font-black text-fairway-50">Air Hockey</div>
+            <p className="text-sm text-fairway-300">
+              Drag your green mallet to hit the puck into the CPU's goal at the top.
+            </p>
+            <p className="text-sm text-fairway-400">First to {TARGET} wins.</p>
+          </div>
+          <div className="mt-8">
+            <Button onClick={start}>Start</Button>
+          </div>
+        </Content>
+      </Screen>
+    );
+  }
 
   if (phase === 'done') {
     const won = you > cpu;
@@ -546,7 +567,7 @@ export default function AirHockey() {
             </div>
           </div>
           <div className="mt-8">
-            <Button onClick={restart} sound="none">
+            <Button onClick={start} sound="none">
               Play again
             </Button>
           </div>
