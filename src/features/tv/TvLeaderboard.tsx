@@ -29,7 +29,7 @@ export default function TvLeaderboard() {
     r.courseId === highlightCourseId && highlightSet.has(`${r.tag}:${r.total}`);
   const hasHighlight = (highlightScores ?? []).length > 0;
 
-  const [period, setPeriod] = useState<Period>('all');
+  const [period, setPeriod] = useState<Period>('day');
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Celebrate exactly once, the first time the board loads with any scores on
