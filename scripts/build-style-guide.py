@@ -137,9 +137,8 @@ screen(id="play", name="Scorecard (play screen)", route="/play/:clientId", tint=
  body="".join([
    (lambda cluster: f'<div class="wf-top">{icon("‹")}<span class="wf-ttl">Course</span><span class="wf-sp"></span>{cluster}{CTRL()}</div>')(
        group(icon()+icon()+'<span class="wf-mini">Holes</span>', 1)),
-   txt("HOLE n · hole name","center"),
+   row(txt("HOLE n · hole name","inline"), box("par","med",n=3), cls="hud"),
    box("hole-jump grid — 6-col keys","wide small","toggled",n=2),
-   f'<div class="wf-centered">{box("par","med",n=3)}</div>',
    row(box("tag","tagb",n=4), box("−","key"), box("score well","well",n=5), box("+","key",n=6), cls="prow"),
    row(box("tag","tagb"), box("−","key"), box("score well","well"), box("+","key"), cls="prow"),
    row(box("tag","tagb"), box("−","key"), box("score well","well"), box("+","key"), cls="prow"),
@@ -150,10 +149,10 @@ screen(id="play", name="Scorecard (play screen)", route="/play/:clientId", tint=
  specs=[
   (1,"TopBar shortcuts","Scavenger hunt · Challenge spinner · “Holes” toggle","glyphs ~24px; back key 40×40","the Holes toggle reveals a hole-jump grid","—","a hunt icon + a spinner icon"),
   (2,"Hole-jump grid","Toggled grid of hole keys","6-col; cells 32–36px","current / done / unplayed key states","--accent marks the current hole","the three key states"),
-  (3,"Par medallion","Par read-out disc","56×56 circle","—","par numeral in the course ink","the disc surface"),
+  (3,"Par medallion","Par read-out disc","48×48 circle","—","par numeral in the course ink","the disc surface"),
   (4,"Player tag","Player identity chip on each row","radius 8 pill; text ~18px","empty shows a placeholder","--tag-accent","the tag surface (contrast-checked on any accent)"),
-  (5,"Score well","Recessed score read-out","full-width flex, ~56 tall","reacts to each stroke edit; empty when unscored","—","the recessed-well surface"),
-  (6,"± stepper keys","Add / remove a stroke","56×56, radius 16","press feedback; disabled at floor & at the stroke cap","—","the key surface + the + / − marks"),
+  (5,"Score well","Recessed score read-out","full-width flex, ~36 tall — matches the tag & keys","reacts to each stroke edit; empty when unscored","—","the recessed-well surface"),
+  (6,"± stepper keys","Add / remove a stroke","36×36, radius 8 — matches the tag & well","press feedback; disabled at floor & at the stroke cap","—","the key surface + the + / − marks"),
   (7,"Hole navigation","Prev / Next — or Finish on the last hole","full-width, ~52 tall","disabled until the hole/round is complete","--accent on Finish","ghost + primary surfaces"),
  ]),
 
@@ -379,6 +378,7 @@ tr{break-inside:avoid}
 .wf-row.ftiles{display:grid;grid-template-columns:1fr 1fr;gap:5px} .wf-row.ftiles .wf-box{margin:0;min-height:38px}
 .wf-box.seg{margin:0} .wf-box.seg.on{background:var(--fill2);border-color:var(--wire);font-weight:800}
 .wf-box.med{width:40px;height:40px;border-radius:999px;margin:2px auto 6px;justify-content:center;min-height:0}
+.wf-row.hud .wf-box.med{margin:0}
 .wf-box.tagb{font-family:"SF Mono",monospace;letter-spacing:.1em;font-weight:800}
 .wf-box.tagb.sel{border-color:var(--wire);border-width:2px} .wf-box.tagb.dim{opacity:.5}
 .wf-box.inp{font-family:"SF Mono",monospace;letter-spacing:.15em}

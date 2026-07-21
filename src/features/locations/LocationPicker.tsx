@@ -34,7 +34,7 @@ export default function LocationPicker() {
           <button
             onClick={useMyLocation}
             disabled={detecting}
-            className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-fairway-700 bg-fairway-900/40 px-4 py-3 text-sm font-semibold text-fairway-100 active:bg-fairway-800 disabled:opacity-50"
+            className="surface-1 mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-fairway-800/60 px-4 py-3 text-sm font-semibold text-fairway-100 transition-transform active:translate-y-px disabled:opacity-50"
           >
             <span>🧭</span>
             {detecting ? 'Locating…' : 'Use my location'}
@@ -50,10 +50,8 @@ export default function LocationPicker() {
               <button
                 key={loc.id}
                 onClick={() => choose(loc.id)}
-                className={`flex w-full items-center gap-4 rounded-2xl border p-4 text-left active:bg-fairway-800/60 ${
-                  selected
-                    ? 'border-fairway-500/60 bg-fairway-900/70'
-                    : 'border-fairway-800 bg-fairway-900/40'
+                className={`surface-1 flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition-transform active:translate-y-px ${
+                  selected ? 'border-fairway-500/60' : 'border-fairway-800/60'
                 }`}
               >
                 <span

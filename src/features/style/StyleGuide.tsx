@@ -177,23 +177,26 @@ export default function StyleGuide() {
         </Section>
 
         {/* 06 · KEYS, STEPPER, PAR */}
-        <Section n="06" title="Steppers & score readout" desc="The play-screen stepper: raised ± keys around a carved score well, plus the par medallion and the hole-jump grid.">
-          <div className="mb-4 flex items-center gap-3">
+        <Section n="06" title="Steppers & score readout" desc="The play-screen player row: the arcade tag, the raised ± keys, and the carved score well all share one height, plus the par medallion and the hole-jump grid.">
+          <div className="mb-4 flex items-center gap-2.5">
+            <span className="shrink-0">
+              <TagChip tag="AVA" color="#22c55e" />
+            </span>
             <button
               onClick={() => setPunch((p) => p + 1)}
-              className="key flex h-14 w-14 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100"
+              className="key flex h-9 w-9 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100"
               aria-label="Decrease"
             >
               −
             </button>
-            <div className="surface-sunk flex h-14 flex-1 items-center justify-center rounded-2xl">
-              <span key={punch} className="animate-score-punch inline-block text-4xl font-black text-fairway-50">
+            <div className="surface-sunk flex h-9 flex-1 items-center justify-center rounded-lg">
+              <span key={punch} className="animate-score-punch inline-block text-3xl font-black text-fairway-50">
                 {2 + (punch % 4)}
               </span>
             </div>
             <button
               onClick={() => setPunch((p) => p + 1)}
-              className="key flex h-14 w-14 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100"
+              className="key flex h-9 w-9 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100"
               aria-label="Increase"
             >
               +
@@ -201,7 +204,7 @@ export default function StyleGuide() {
           </div>
           <div className="flex items-center gap-6">
             <Spec label="par medallion">
-              <div className="surface-1 flex h-14 w-14 items-center justify-center rounded-full text-3xl font-black" style={{ color: accentInk('green') }}>
+              <div className="surface-1 flex h-12 w-12 items-center justify-center rounded-full text-2xl font-black" style={{ color: accentInk('green') }}>
                 3
               </div>
             </Spec>
