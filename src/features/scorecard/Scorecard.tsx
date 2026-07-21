@@ -326,14 +326,14 @@ export default function Scorecard() {
                 <button
                   onClick={() => bump(p, -1)}
                   disabled={autoPlaying || strokes == null || strokes <= 1}
-                  className="key flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                  className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
                   aria-label={`Decrease strokes for ${tag}`}
                 >
                   −
                 </button>
                 {/* The count sits in a carved well so it reads as a recessed
                     readout between the two raised keys. */}
-                <div className="surface-sunk flex h-14 flex-1 items-center justify-center rounded-2xl">
+                <div className="surface-sunk flex h-9 flex-1 items-center justify-center rounded-xl">
                   {/* Keyed on a per-player nonce that only changes on a real
                       stroke edit, so the punch fires on +/− but not when
                       navigating between holes. */}
@@ -349,7 +349,7 @@ export default function Scorecard() {
                   disabled={
                     autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
                   }
-                  className="key flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                  className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
                   aria-label={`Increase strokes for ${tag}`}
                 >
                   +

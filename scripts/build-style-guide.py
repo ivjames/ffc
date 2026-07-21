@@ -145,8 +145,8 @@ screen(id="play", name="Scorecard (play screen)", route="/play/:clientId", tint=
   (2,"Hole-jump grid","Toggled grid of hole keys","6-col; cells 32–36px","current / done / unplayed key states","--accent marks the current hole","the three key states"),
   (3,"Par medallion","Par read-out disc","48×48 circle","—","par numeral in the course ink","the disc surface"),
   (4,"Player tag","Player identity chip on each row","radius 8 pill; text ~18px","empty shows a placeholder","--tag-accent","the tag surface (contrast-checked on any accent)"),
-  (5,"Score well","Recessed score read-out","full-width flex, ~56 tall","reacts to each stroke edit; empty when unscored","—","the recessed-well surface"),
-  (6,"± stepper keys","Add / remove a stroke","56×56, radius 16","press feedback; disabled at floor & at the stroke cap","—","the key surface + the + / − marks"),
+  (5,"Score well","Recessed score read-out","full-width flex, ~36 tall — matches the tag & keys","reacts to each stroke edit; empty when unscored","—","the recessed-well surface"),
+  (6,"± stepper keys","Add / remove a stroke","36×36, radius 12 — matches the tag & well height","press feedback; disabled at floor & at the stroke cap","—","the key surface + the + / − marks"),
   (7,"Hole navigation","Prev / Next — or Finish on the last hole","full-width, ~52 tall","disabled until the hole/round is complete","--accent on Finish","ghost + primary surfaces"),
  ]),
 
