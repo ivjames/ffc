@@ -38,6 +38,10 @@ type Drag = { active: boolean; sx: number; sy: number; dx: number; dy: number };
 // A splash-and-sink animation: the ball sinks at (sx,sy), ripples spread, then it
 // re-drops (grows back in) at (dx,dy) just outside the pool. `p` runs 0→1.
 type Splash = { sx: number; sy: number; dx: number; dy: number; p: number };
+// A drop-into-the-cup animation played when a putt is holed: the ball falls into
+// the cup at (x,y), bounces off the bottom, and shrinks as it settles deeper to
+// read as depth. `p` runs 0→1 then holds at 1 (ball resting small at the bottom).
+type Sink = { x: number; y: number; p: number };
 type GS = {
   holes: Hole[];
   mode: Mode;
@@ -48,6 +52,7 @@ type GS = {
   strokes: number;
   drag: Drag;
   splash: Splash | null;
+  sink: Sink | null;
 };
 
 // Distinct derived seeds per hole so an endless run is reproducible.
@@ -55,6 +60,10 @@ const SEED_SALT = 0x9e3779b1;
 
 // How long the splash-and-sink plays before the ball is live again (ms).
 const SPLASH_MS = 950;
+
+// How long the ball's drop-and-bounce into the cup plays (ms). It settles well
+// within the sunk-celebration linger, then the ball rests small at the bottom.
+const SINK_MS = 650;
 
 // After sinking, linger on the result so the score reads clearly, then advance
 // on its own so a round flows without a tap between every hole. The "Next hole"
@@ -256,6 +265,40 @@ function drawSplash(ctx: CanvasRenderingContext2D, s: Splash) {
   }
 }
 
+// Bounce ease: 0→1 with a few decaying bounces near the end — the classic curve
+// of an object dropped and settling. Drives how deep into the cup the ball has
+// fallen, so it visibly bounces off the bottom before coming to rest.
+function easeOutBounce(t: number): number {
+  const n1 = 7.5625;
+  const d1 = 2.75;
+  if (t < 1 / d1) return n1 * t * t;
+  if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+  if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+  return n1 * (t -= 2.625 / d1) * t + 0.984375;
+}
+
+// The ball dropping into the cup, driven by progress s.p (0→1): it falls to the
+// bottom with a couple of bounces (easeOutBounce), sinking a touch and shrinking
+// as it goes so it reads as depth, then rests small and dim at the bottom of the
+// cup. Drawn over the (already-rendered) dark cup so it looks nestled inside.
+function drawSink(ctx: CanvasRenderingContext2D, s: Sink) {
+  // depth 0 (at the rim) → 1 (settled at the bottom), bouncing on the way down.
+  const depth = easeOutBounce(Math.min(s.p, 1));
+  // Shrink with depth so a deeper ball looks further away down the cup.
+  const r = BALL_R * (1 - depth * 0.62);
+  // Nudge toward the cup's lower-far side as it drops, reinforcing "into" the hole.
+  const y = s.y + depth * (HOLE_R - r) * 0.55;
+  // Dim as it descends into the cup's shadow.
+  const shade = 1 - depth * 0.55;
+  const tone = Math.round(248 * shade);
+  ctx.save();
+  ctx.fillStyle = `rgb(${tone},${tone},${Math.round(252 * shade)})`;
+  ctx.beginPath();
+  ctx.arc(s.x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   const hole = gs.holes[gs.holeIndex];
   if (!hole) return;
@@ -329,6 +372,13 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS) {
   // and nothing else (no resting ball, no aim UI).
   if (gs.phase === 'splash' && gs.splash) {
     drawSplash(ctx, gs.splash);
+    return;
+  }
+
+  // A holed putt drops into the cup with a bounce, then rests small at the
+  // bottom — draw that instead of a full-size ball sitting on the cup.
+  if (gs.phase === 'sunk' && gs.sink) {
+    drawSink(ctx, gs.sink);
     return;
   }
 
@@ -414,6 +464,7 @@ export default function PuttGolf() {
     strokes: 0,
     drag: { active: false, sx: 0, sy: 0, dx: 0, dy: 0 },
     splash: null,
+    sink: null,
   });
 
   const [mode, setMode] = useState<Mode | null>(null);
@@ -434,6 +485,7 @@ export default function PuttGolf() {
     gs.strokes = 0;
     gs.drag.active = false;
     gs.splash = null;
+    gs.sink = null;
     setPhase('aim');
     setHoleIndex(index);
     setStrokes(0);
@@ -499,6 +551,9 @@ export default function PuttGolf() {
         const res = stepPhysics(gs.ball, gs.holes[gs.holeIndex], splashInfo);
         if (res === 'sunk') {
           gs.phase = 'sunk';
+          // Kick off the drop-and-bounce into the cup (the ball is already
+          // parked at the cup centre by the physics).
+          gs.sink = { x: gs.ball.x, y: gs.ball.y, p: 0 };
           const next = [...scoresRef.current];
           next[gs.holeIndex] = gs.strokes;
           scoresRef.current = next;
@@ -543,6 +598,9 @@ export default function PuttGolf() {
           gs.phase = 'aim';
           setPhase('aim');
         }
+      } else if (gs.phase === 'sunk' && gs.sink && gs.sink.p < 1) {
+        // Advance the drop-and-bounce, holding at the bottom once it lands.
+        gs.sink.p = Math.min(1, gs.sink.p + dt / SINK_MS);
       }
       draw(ctx, gs);
       raf = requestAnimationFrame(frame);
