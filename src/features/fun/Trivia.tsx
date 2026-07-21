@@ -124,9 +124,11 @@ export default function Trivia() {
             const isCorrect = i === current.answer;
             const isPicked = i === picked;
 
-            // Default (unanswered) look; after answering, reveal the correct
-            // choice in green and a wrong pick in red.
-            let cls = 'border-fairway-700 bg-fairway-900/40 text-fairway-50 active:bg-fairway-800';
+            // Default (unanswered) look uses the shared raised row material;
+            // after answering, reveal the correct choice in green and a wrong
+            // pick in red (flat feedback colors, not raised — these are no
+            // longer tappable). Other options dim to a flat, inert disabled look.
+            let cls = 'surface-1 border-fairway-800/60 text-fairway-50';
             if (answered && isCorrect) cls = 'border-green-500 bg-green-500/20 text-fairway-50';
             else if (answered && isPicked) cls = 'border-red-500 bg-red-500/20 text-fairway-50';
             else if (answered) cls = 'border-fairway-800 bg-fairway-900/30 text-fairway-100/50';
@@ -136,7 +138,7 @@ export default function Trivia() {
                 key={i}
                 onClick={() => pick(i)}
                 disabled={answered}
-                className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left text-base font-semibold transition active:scale-[0.99] disabled:active:scale-100 ${cls}`}
+                className={`flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left text-base font-semibold transition-transform active:translate-y-px disabled:active:translate-y-0 ${cls}`}
               >
                 <span>{choice}</span>
                 {answered && isCorrect && <span aria-hidden>✓</span>}
