@@ -392,7 +392,7 @@ tr{break-inside:avoid}
 .sheethead .note{border-left:3px solid #d97706;background:#fff7ed;border-radius:0 8px 8px 0;padding:7px 11px;margin-top:8px;font-size:9.5px}
 .sheethead .note b{color:#9a3412}
 .grid-screens{display:flex;flex-wrap:wrap;gap:16px 18px;justify-content:center;align-items:flex-start}
-.grid-screens .frame .scr{min-height:0}   /* size to content; fill screens keep their fixed height */
+.grid-screens .frame .scr{height:496px}   /* uniform full device height for every screen */
 .cell{break-inside:avoid;display:flex;flex-direction:column;align-items:center;gap:6px;width:250px}
 .celltitle{font-size:11px;font-weight:800;text-align:center;display:flex;gap:6px;align-items:baseline;justify-content:center;flex-wrap:wrap}
 .celltitle .rt{font-family:"SF Mono",monospace;font-size:8px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 6px;font-weight:700}
