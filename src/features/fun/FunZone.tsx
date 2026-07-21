@@ -116,18 +116,12 @@ export default function FunZone() {
                 playClick();
                 navigate(t.to);
               }}
-              className="animate-rise-in flex h-full w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98]"
-              style={
-                {
-                  '--i': i,
-                  background: `${t.accent}1a`,
-                  borderColor: `${t.accent}66`,
-                } as CSSProperties
-              }
+              className="surface-1 animate-rise-in flex h-full w-full items-center gap-2.5 rounded-xl border border-fairway-800/60 px-3 py-2.5 text-left transition-transform active:translate-y-px"
+              style={{ '--i': i } as CSSProperties}
             >
               <span
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl"
-                style={{ background: `${t.accent}33` }}
+                style={{ background: `${t.accent}22`, border: `1px solid ${t.accent}55` }}
               >
                 {t.emoji}
               </span>
