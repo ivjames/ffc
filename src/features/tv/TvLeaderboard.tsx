@@ -90,7 +90,7 @@ export default function TvLeaderboard() {
       <li
         key={`${r.tag}-${r.courseId}-${rank}`}
         style={{ '--i': Math.min(i, 12) } as CSSProperties}
-        className={`animate-rise-in flex items-center justify-between rounded-xl border px-4 py-3 ${
+        className={`animate-rise-in flex items-center justify-between rounded-2xl border px-4 py-3 ${
           mine
             ? 'border-fairway-400 bg-fairway-500/15 ring-1 ring-fairway-400/60'
             : 'border-fairway-800 bg-fairway-900/40'

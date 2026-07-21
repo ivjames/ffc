@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { useFitCanvas } from './useFitCanvas';
 import { playBump, playWaterBump, playScore, playFanfare } from '../../lib/sound';
 import type { Vec as FxVec } from './fx';
 import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, decay, shakeOffset } from './fx';
@@ -686,6 +687,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
   const [secs, setSecs] = useState(GAME_MS / 1000);
 
   const playing = phase !== 'done';
+  useFitCanvas(canvasRef, W, H, playing);
 
   useEffect(() => {
     if (!playing) return;
@@ -814,26 +816,25 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
   }
 
   return (
-    <Screen>
+    <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title={theme.title} back="/fun" />
-      <Content>
-        <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="font-bold text-green-400">Bumps {score}</span>
-          <span className={`font-bold ${secs <= 5 ? 'text-red-400' : 'text-fairway-300'}`}>⏱ {secs}s</span>
-        </div>
+      <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
+        <span className="font-bold text-green-400">Bumps {score}</span>
+        <span className={`font-bold ${secs <= 5 ? 'text-red-400' : 'text-fairway-300'}`}>⏱ {secs}s</span>
+      </div>
 
+      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block w-full touch-none rounded-2xl border border-fairway-800"
-          style={{ aspectRatio: `${W} / ${H}` }}
+          className="block touch-none rounded-2xl border border-fairway-800"
         />
+      </div>
 
-        <p className="mt-3 min-h-[2.5rem] text-center text-sm text-fairway-100/80">{theme.hint}</p>
-      </Content>
-    </Screen>
+      <p className="min-h-[2.5rem] shrink-0 px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">{theme.hint}</p>
+    </div>
   );
 }

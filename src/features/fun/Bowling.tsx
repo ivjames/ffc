@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
 import {
@@ -592,6 +593,7 @@ export default function Bowling() {
   const [rolls, setRolls] = useState<number[]>([]);
 
   const playing = phase !== 'done';
+  useFitCanvas(canvasRef, W, H, playing);
 
   /** Advance frame/deck state after a roll settles. */
   // A roll has stopped: score it and decide what happens next, but DEFER the
@@ -837,37 +839,36 @@ export default function Bowling() {
   }
 
   return (
-    <Screen>
+    <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title="Bowling" back="/fun" />
-      <Content>
-        <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="font-bold text-fairway-50">
-            Frame <span className="text-fairway-100">{Math.min(frame + 1, 10)}</span>
-            <span className="font-normal text-fairway-400"> / 10</span>
-          </span>
-          <span className="text-fairway-300">
-            Score <span className="font-bold text-fairway-100">{score}</span>
-          </span>
-        </div>
+      <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
+        <span className="font-bold text-fairway-50">
+          Frame <span className="text-fairway-100">{Math.min(frame + 1, 10)}</span>
+          <span className="font-normal text-fairway-400"> / 10</span>
+        </span>
+        <span className="text-fairway-300">
+          Score <span className="font-bold text-fairway-100">{score}</span>
+        </span>
+      </div>
 
-        <div className="mb-2">
-          <Scorecard rolls={rolls} activeFrame={Math.min(frame, 9)} />
-        </div>
+      <div className="shrink-0 px-4 pb-1">
+        <Scorecard rolls={rolls} activeFrame={Math.min(frame, 9)} />
+      </div>
 
+      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block w-full touch-none rounded-2xl border border-fairway-800"
-          style={{ aspectRatio: `${W} / ${H}` }}
+          className="block touch-none rounded-2xl border border-fairway-800"
         />
+      </div>
 
-        <p className="mt-3 min-h-[2.5rem] text-center text-sm text-fairway-100/80">
-          {phase === 'rolling' ? 'Rolling…' : note || 'Swipe up the lane to roll — angle it for a hook.'}
-        </p>
-      </Content>
-    </Screen>
+      <p className="min-h-[2.5rem] shrink-0 px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
+        {phase === 'rolling' ? 'Rolling…' : note || 'Swipe up the lane to roll — angle it for a hook.'}
+      </p>
+    </div>
   );
 }

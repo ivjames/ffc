@@ -38,36 +38,36 @@ export default function CourseMap() {
     <div className="mx-auto flex min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title={course.name} back="/" />
       {/* Tap anywhere on the opening screen to begin the round. */}
+      {/* The map fills the whole area below the bar; tapping anywhere begins.
+          Edge-to-edge (no inner frame) per the layout spec — the prompt is
+          overlaid on the map rather than sitting below it. */}
       <button
         onClick={begin}
         aria-label={`Begin a round on ${course.name}`}
-        className="animate-page-in flex flex-1 cursor-pointer flex-col px-4 py-4 text-left"
+        className="animate-page-in relative flex flex-1 cursor-pointer flex-col overflow-hidden text-left"
       >
         {course.mapAsset ? (
-          <div className="overflow-hidden rounded-2xl border border-fairway-800 bg-fairway-900/40">
-            <img
-              src={course.mapAsset}
-              alt={`${course.name} course map`}
-              className="mx-auto block h-auto w-full"
-            />
-          </div>
+          <img
+            src={course.mapAsset}
+            alt={`${course.name} course map`}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
         ) : (
           <div
-            className="flex flex-1 items-center justify-center rounded-2xl border text-7xl"
-            style={{
-              background: `${course.accent}22`,
-              borderColor: `${course.accent}66`,
-            }}
+            className="flex flex-1 items-center justify-center text-7xl"
+            style={{ background: `${course.accent}22` }}
           >
             {themeEmoji(course.theme)}
           </div>
         )}
 
-        <div className="mt-8 mb-6 text-center">
-          <div className="animate-pulse text-2xl font-black uppercase tracking-wide text-fairway-50">
+        {/* Prompt overlay — a bottom scrim keeps it legible over any map art in
+            both light and dark. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent px-4 pb-8 pt-16 text-center">
+          <div className="animate-pulse text-2xl font-black uppercase tracking-wide text-white">
             Tap anywhere to begin
           </div>
-          <div className="mt-1 text-sm text-fairway-100/70">
+          <div className="mt-1 text-sm text-white/80">
             {course.holeCount} holes · {course.name}
           </div>
         </div>

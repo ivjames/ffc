@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
 import {
@@ -414,6 +415,7 @@ export default function BattingCages() {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const playing = phase !== 'done';
+  useFitCanvas(canvasRef, W, H, playing);
 
   useEffect(() => {
     if (!playing) return;
@@ -615,30 +617,29 @@ export default function BattingCages() {
       : 'Hold to pitch and wind up, release to swing as the ball reaches the plate.';
 
   return (
-    <Screen>
+    <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title="Batting Cages" back="/fun" />
-      <Content>
-        <div className="mb-2 flex items-center justify-between text-sm">
-          <span className="font-bold text-fairway-50">
-            Pitch <span className="text-fairway-100">{Math.min(pitchNo + 1, PITCHES)}</span>
-            <span className="font-normal text-fairway-400"> / {PITCHES}</span>
-          </span>
-          <span className="text-fairway-300">
-            Runs <span className="font-bold text-fairway-100">{total}</span>
-          </span>
-        </div>
+      <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
+        <span className="font-bold text-fairway-50">
+          Pitch <span className="text-fairway-100">{Math.min(pitchNo + 1, PITCHES)}</span>
+          <span className="font-normal text-fairway-400"> / {PITCHES}</span>
+        </span>
+        <span className="text-fairway-300">
+          Runs <span className="font-bold text-fairway-100">{total}</span>
+        </span>
+      </div>
 
+      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPress}
           onPointerUp={onRelease}
           onPointerCancel={onRelease}
-          className="block w-full touch-none rounded-2xl border border-fairway-800"
-          style={{ aspectRatio: `${W} / ${H}` }}
+          className="block touch-none rounded-2xl border border-fairway-800"
         />
+      </div>
 
-        <p className="mt-3 min-h-[2.5rem] text-center text-sm text-fairway-100/80">{hint}</p>
-      </Content>
-    </Screen>
+      <p className="min-h-[2.5rem] shrink-0 px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">{hint}</p>
+    </div>
   );
 }
