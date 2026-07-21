@@ -277,9 +277,10 @@ export default function Scorecard() {
       )}
 
       <Content>
-        {/* Hole header */}
-        <div className="mb-4 flex items-center justify-between">
-          <div>
+        {/* Hole header — centered hole label with the par medallion beneath it,
+            per the §6 wireframe. */}
+        <div className="mb-5 flex flex-col items-center gap-3">
+          <div className="text-center">
             {holeName ? (
               <>
                 <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
@@ -311,57 +312,49 @@ export default function Scorecard() {
           </div>
         </div>
 
-        {/* Player rows */}
+        {/* Player rows — one inline row per player (tag · − · score well · +),
+            per the §6 wireframe. No per-row card; the raised keys and the carved
+            well carry the depth. Tags are a fixed three monospace chars, so the
+            steppers line up across rows on their own. */}
         <div className="space-y-3">
           {round.playerTags.map((tag, p) => {
             const strokes = round.scores[p]?.[hole] ?? null;
             return (
-              <div
-                key={p}
-                className="surface rounded-3xl border border-fairway-800/60 p-4"
-              >
-                <div className="mb-2.5 flex items-center justify-between">
+              <div key={p} className="flex items-center gap-2.5">
+                <span className="shrink-0">
                   <TagChip tag={tag} color={course.accent} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => bump(p, -1)}
-                    disabled={autoPlaying || strokes == null || strokes <= 1}
-                    className="key flex h-14 w-14 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
-                    aria-label={`Decrease strokes for ${tag}`}
+                </span>
+                <button
+                  onClick={() => bump(p, -1)}
+                  disabled={autoPlaying || strokes == null || strokes <= 1}
+                  className="key flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                  aria-label={`Decrease strokes for ${tag}`}
+                >
+                  −
+                </button>
+                {/* The count sits in a carved well so it reads as a recessed
+                    readout between the two raised keys. */}
+                <div className="surface-sunk flex h-14 flex-1 items-center justify-center rounded-2xl">
+                  {/* Keyed on a per-player nonce that only changes on a real
+                      stroke edit, so the punch fires on +/− but not when
+                      navigating between holes. */}
+                  <span
+                    key={pops[p] ?? 0}
+                    className="animate-score-punch inline-block text-4xl font-black text-fairway-50"
                   >
-                    −
-                  </button>
-                  {/* The count sits in a carved well so it reads as a recessed
-                      readout between the two raised keys. */}
-                  <div className="surface-sunk flex h-14 flex-1 items-center justify-center rounded-2xl">
-                    {/* Keyed on a per-player nonce that only changes on a real
-                        stroke edit, so the punch fires on +/− but not when
-                        navigating between holes. */}
-                    <span
-                      key={pops[p] ?? 0}
-                      className="animate-score-punch inline-block text-4xl font-black text-fairway-50"
-                    >
-                      {strokes ?? '–'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => bump(p, +1)}
-                    disabled={
-                      autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
-                    }
-                    className="key flex h-14 w-14 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
-                    aria-label={`Increase strokes for ${tag}`}
-                  >
-                    +
-                  </button>
+                    {strokes ?? '–'}
+                  </span>
                 </div>
-                {/* Fixed-height slot so the card doesn't shrink when this hint
-                    disappears on scoring — reserve the row whether or not the
-                    text is showing. */}
-                <p className="mt-2 h-4 text-center text-xs leading-4 text-fairway-100/70">
-                  {strokes == null ? 'Tap + to score this hole' : ''}
-                </p>
+                <button
+                  onClick={() => bump(p, +1)}
+                  disabled={
+                    autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
+                  }
+                  className="key flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-3xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                  aria-label={`Increase strokes for ${tag}`}
+                >
+                  +
+                </button>
               </div>
             );
           })}
