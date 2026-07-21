@@ -55,7 +55,8 @@ const MAX_DRAG = 300;
 const BALLS = 9;
 const FLIGHT_MS = 560; // arc-to-landing animation
 const SINK_MS = 620; // roll-around-the-dish-and-drop-in animation
-const SINK_TURNS = 1.5; // revolutions the ball circles the funnel before dropping
+const SINK_TURNS = 2; // extra whole revolutions before the drop — must be an
+// integer so `SINK_TURNS * TWO_PI` lands the spiral back on the drop-hole angle
 const NEXT_DELAY_MS = 850; // pause on the result before the next ball
 const FADE_END_Y = 350; // the aim trail is fully faded above this y (before the target)
 
