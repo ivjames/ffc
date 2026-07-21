@@ -163,14 +163,15 @@ function drawAxe(ctx: CanvasRenderingContext2D, x: number, y: number, angle: num
   ctx.restore();
 }
 
-// The blade's cutting edge in drawAxe's local coords — the part that actually
-// bites into the board. drawAxe pins its origin (0,0), the neck between handle
-// and head, so calling it with the landing point sticks the axe by its middle.
-// Anchor the *bit* there instead so the head lands on the target, not the axe's
-// centroid.
-const AXE_BIT = { x: 12, y: -7.5 };
+// The area-centroid of the steel head polygon in drawAxe's local coords. drawAxe
+// pins its origin (0,0) — the neck between handle and head — so calling it with
+// the landing point sticks the axe by the *whole graphic's* middle, biasing the
+// head off-target. Anchoring the head's own center puts the blade the player
+// reads as "the axe" onto the target. (Pinning the far cutting edge instead
+// throws the head high-and-left, since the head extends up-left of that edge.)
+const AXE_HEAD = { x: 5.86, y: -7.28 };
 
-/** Draw an axe so its cutting edge (not its origin) lands at (hx, hy). */
+/** Draw an axe so its blade head (not its origin) is centered on (hx, hy). */
 function drawAxeStuck(
   ctx: CanvasRenderingContext2D,
   hx: number,
@@ -178,11 +179,12 @@ function drawAxeStuck(
   angle: number,
   scale = 1,
 ) {
-  // Rotate + scale the bit offset, then place the origin so the bit hits (hx,hy).
+  // Rotate + scale the head-center offset, then place the origin so the head
+  // lands on (hx,hy).
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  const ox = (AXE_BIT.x * c - AXE_BIT.y * s) * scale;
-  const oy = (AXE_BIT.x * s + AXE_BIT.y * c) * scale;
+  const ox = (AXE_HEAD.x * c - AXE_HEAD.y * s) * scale;
+  const oy = (AXE_HEAD.x * s + AXE_HEAD.y * c) * scale;
   drawAxe(ctx, hx - ox, hy - oy, angle, scale);
 }
 
@@ -395,6 +397,10 @@ export default function AxeThrow() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gsRef = useRef<GS>(freshGS(0));
   const fxRef = useRef<FX>(freshFX());
+  // Last-rendered guide position (the sweep values actually painted this frame).
+  // onTap reads these so the axe lands on the crosshair the player saw, closing
+  // the sub-frame gap between the draw clock and a fresh clock read at tap time.
+  const guideRef = useRef({ x: SWEEP_X0, y: SWEEP_Y0 });
   const nextTimer = useRef<number | null>(null);
 
   const [phase, setPhase] = useState<Phase>('aimX');
@@ -450,6 +456,15 @@ export default function AxeThrow() {
       }
       const dt = Math.min(now - last, 100);
       last = now;
+
+      // Record the guide's *rendered* position this frame so a tap lands exactly
+      // where the crosshair was last drawn — not where a freshly re-read clock in
+      // onTap would place it a few ms later. Same `now` the draw below uses.
+      if (gs.phase === 'aimX') {
+        guideRef.current.x = SWEEP_X0 + (SWEEP_X1 - SWEEP_X0) * triWave(now - gs.sweepBase, SWEEP_X_MS);
+      } else if (gs.phase === 'aimY') {
+        guideRef.current.y = SWEEP_Y0 + (SWEEP_Y1 - SWEEP_Y0) * triWave(now - gs.sweepBase, SWEEP_Y_MS);
+      }
 
       // Feed the spinning motion trail while the axe is in flight.
       if (gs.phase === 'flying' && gs.land) {
@@ -508,13 +523,15 @@ export default function AxeThrow() {
     const gs = gsRef.current;
     const now = performance.now();
     if (gs.phase === 'aimX') {
-      gs.lockX = SWEEP_X0 + (SWEEP_X1 - SWEEP_X0) * triWave(now - gs.sweepBase, SWEEP_X_MS);
+      // Lock to the last *rendered* sweep position, not a re-read of the clock,
+      // so the throw lands exactly under the crosshair the player saw.
+      gs.lockX = guideRef.current.x;
       gs.phase = 'aimY';
       gs.sweepBase = now;
       setPhase('aimY');
       playStroke();
     } else if (gs.phase === 'aimY') {
-      const y = SWEEP_Y0 + (SWEEP_Y1 - SWEEP_Y0) * triWave(now - gs.sweepBase, SWEEP_Y_MS);
+      const y = guideRef.current.y;
       gs.land = { x: gs.lockX, y };
       gs.score = scoreAt(gs.lockX, y);
       gs.phase = 'flying';
