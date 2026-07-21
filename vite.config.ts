@@ -75,9 +75,13 @@ export default defineConfig({
         // whole PWA works offline. Course maps/rules ship in the build.
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
         navigateFallback: '/index.html',
-        // Never let the SW intercept API calls — those must hit the network
-        // (and fail gracefully to the offline write-queue when down).
-        navigateFallbackDenylist: [/^\/api\//],
+        // Never let the SW rewrite these to the app shell:
+        //  - /api/* must hit the network (and fail gracefully to the offline
+        //    write-queue when down).
+        //  - /docs/* are the static artist style-guide files (HTML + PDF,
+        //    linked from the 🎨 picker); the PDF is a real navigation and must
+        //    resolve to the file, not index.html.
+        navigateFallbackDenylist: [/^\/api\//, /^\/docs\//],
         cleanupOutdatedCaches: true,
       },
       devOptions: {
