@@ -37,9 +37,12 @@ Org (owner / franchise)          ← NEW
 | Decision | Choice | Notes |
 |---|---|---|
 | New top entity | **`org`** table above `location`; `location.org_id` FK | Owner/franchise level |
-| Auth (v1) | **Super-admin behind `APP_TOKEN`**, schema/API designed for per-franchise accounts later _(recommended)_ | Alt: build full RBAC now |
-| Content source of truth | **Locations become DB-driven & live; per-course art/pars stay bundled for now** _(recommended)_ | Alt A: flip whole app to API. Alt B: admin writes DB but player app stays fully bundled |
-| v1 admin scope | **Orgs + Locations + Courses CRUD**, plus a light read-only rollup | Hunt-list editing & rich dashboards are Phase 2 |
+| Who uses it | **Operator / super-admin only — franchisees have NO admin access** ✅ decided | Master Control is an internal back office; franchise owners never log in |
+| Auth (v1) | **Super-admin behind `APP_TOKEN`** ✅ decided; schema still pre-wired for accounts later | No RBAC/logins in v1 (no franchisee self-serve to support) |
+| Delete semantics | **Archive / hide (soft), never hard-delete played data** ✅ decided | Archived rows hidden from players + default admin lists; unarchive available |
+| Course art | **Deferred — map art/themes stay bundled assets** ✅ decided | Console edits data fields only; no upload/media pipeline in v1 |
+| Content source of truth | **OPEN — see §5 / §10** (recommended default: locations live via API, courses bundled) | Franchisee-self-serve is off the table, so the decision is purely: does operator onboarding go live to players, or need a build? |
+| v1 admin scope | **Orgs + Locations + Courses management**, plus a light read-only rollup | Hunt-list editing & rich dashboards are Phase 2 |
 | Delivery | **Separate admin build served on its own vhost (`admin.ffc.lab980.com`)** — not part of the player PWA | No service worker, no offline, no admin code in the player bundle |
 | Admin TLS | **Wildcard `*.ffc.lab980.com` cert via certbot DNS-01, backed by `doctl`** | One admin subdomain now; wildcard so future subdomains need no cert work. Plugin-free — reuses the droplet's existing doctl auth, no token to mint |
 | Write path | All admin writes go through the **existing Express API** (creds server-side), never the browser → DB | Matches architecture principle §3 of the base app |
@@ -95,6 +98,23 @@ create table if not exists org (
 alter table location add column if not exists org_id uuid references org(id);
 create index if not exists location_org_idx on location (org_id);
 ```
+
+### 3.2b Archive columns (soft-delete)
+Deletes are archives, not row removals (decided). Add a nullable `archived_at` to
+every admin-managed entity; a non-null value means "hidden from players and from the
+default admin list, but retained with all history intact". `org.status` already
+carries `active | suspended`; add `archived` to its allowed values or lean on the
+same `archived_at` for consistency.
+```sql
+alter table location add column if not exists archived_at timestamptz;
+alter table course   add column if not exists archived_at timestamptz;
+alter table org      add column if not exists archived_at timestamptz;
+create index if not exists location_active_idx on location (archived_at);
+create index if not exists course_active_idx   on course   (archived_at);
+```
+Every player-facing and default admin read filters `archived_at is null`; a separate
+"Archived" admin view lists the rest and offers **unarchive** (set `archived_at =
+null`). Nothing is ever hard-deleted through the console.
 - `org_id` is **nullable** so existing locations migrate cleanly. A seed step
   creates a default org for the current client (Bullwinkle's) and backfills the
   three existing locations onto it — idempotent, id-stable, mirroring how
@@ -164,22 +184,24 @@ Design choices:
 | `GET  /api/admin/orgs` | list orgs (+ location counts) |
 | `POST /api/admin/orgs` | create/update org (upsert on id, else slug) |
 | `GET  /api/admin/orgs/:id` | one org with its locations |
-| `DELETE /api/admin/orgs/:id` | soft-delete (status=suspended) unless empty; block hard-delete if locations exist |
-| `GET  /api/admin/locations?orgId=` | list locations, optionally scoped to an org |
+| `POST /api/admin/orgs/:id/archive` | archive (set `archived_at`) / `…/unarchive` to restore |
+| `GET  /api/admin/locations?orgId=&archived=` | list locations, org-scoped; `archived=1` for the archived view |
 | `POST /api/admin/locations` | create/update location (reuses `normalizeLocation`, adds `orgId`, tz-from-coords) |
 | `GET  /api/admin/locations/:id` | one location + its courses |
-| `DELETE /api/admin/locations/:id` | block if courses/rounds reference it; else remove |
+| `POST /api/admin/locations/:id/archive` | archive / `…/unarchive` to restore |
 | `GET  /api/admin/locations/:id/courses` | courses for a location |
 | `POST /api/admin/courses` | create/update course (reuses seed normalize; `pars` 18×2–4) |
 | `PATCH /api/admin/courses/:id` | edit name/theme/pars/holeCount/sortOrder |
-| `DELETE /api/admin/courses/:id` | block if rounds reference it (mirror the placeholder-purge caution) |
+| `POST /api/admin/courses/:id/archive` | archive / `…/unarchive` to restore |
 | `GET  /api/admin/overview` | counts: orgs, locations, courses, rounds (7/30d), hunt finds, per location |
 
-Deletion policy throughout mirrors `schema.sql`'s hard rule: **never silently drop
-played user data.** Deletes that would orphan rounds/scores/finds are rejected with
-a 409 explaining what references the row; the operator gets an explicit path (e.g.
-suspend instead of delete). This reuses the reasoning already written into
-`deploy/purge-placeholder-data.sql`.
+**Delete = archive (decided).** There is no hard-delete endpoint in v1. Archiving
+sets `archived_at`; the row and all its history (rounds/scores/finds) stay intact,
+and it simply disappears from players and the default admin lists. Archiving a
+parent cascades in the *read* sense only — a query helper hides an org's/location's
+children when the parent is archived, but no rows are removed. This satisfies the
+`schema.sql` rule ("never silently drop played user data") by never dropping
+anything, and it's gentler than the 409-block model: the operator can always undo.
 
 Validation reuses the existing regexes/ranges (UUID, kebab `slug`, lat/lng bounds,
 tz via `isValidTz`, pars). Responses keep the current JSON casing
@@ -200,11 +222,12 @@ close the gap, in increasing ambition:
 
 - **Recommended — locations live via API, courses bundled for now.** Add **public
   read endpoints** the player app already half-has (`GET /api/locations` exists):
-  - `GET /api/locations` (public, cached) → the location list + geo/tz/accent the app
-    uses for location detect and picking. The app fetches this on load, **falls back
-    to the bundled `LOCATIONS` when offline** (PWA requirement), and caches the last
-    good response in IndexedDB. Onboarding a location in Master Control makes it
-    appear to players without a redeploy.
+  - `GET /api/locations` (public, cached, **`archived_at is null` only**) → the
+    location list + geo/tz/accent the app uses for location detect and picking. The
+    app fetches this on load, **falls back to the bundled `LOCATIONS` when offline**
+    (PWA requirement), and caches the last good response in IndexedDB. Onboarding a
+    location in Master Control makes it appear to players without a redeploy; archiving
+    one removes it from the public list.
   - **Courses stay bundled** because a course also carries art (`mapAsset`), themed
     rules, and accent that live in the frontend. Master Control edits course rows in
     the DB (names/pars/theme for leaderboard/hunt correctness); shipping new
@@ -294,7 +317,11 @@ robots/precache/scope gymnastics, and **zero admin code in the player bundle**.
      does this) → geofence radius → accent → assign to org. Live preview of the
      derived tz label so the operator sees "Pacific Time (PT)" before saving.
   4. **Location detail** — edit location, list/add/edit courses (name, theme, 18 pars
-     grid, hole count), soft-delete guards surfaced as friendly messages.
+     grid, hole count), and **archive** a location or course (with a confirm; archived
+     items drop out of the list). No hard delete.
+  5. **Archived view** — a filtered list (per entity type) of archived orgs/locations/
+     courses with a one-click **unarchive**. Keeps the primary lists clean while
+     making nothing unrecoverable.
 
 **Isolation is the point:** because it's a separate origin, the admin app is trivial
 to firewall (IP-allowlist the vhost, or drop it behind basic-auth at nginx) on top
@@ -304,6 +331,10 @@ of the API token gate, and the player app can never accidentally surface admin U
 
 ## 7. Auth & security
 
+- **Audience:** operator/super-admin **only**. Franchisees have **no** admin access in
+  any release currently planned — Master Control is an internal back office, so there
+  is no franchisee-facing surface to secure, no self-serve org scoping to enforce in
+  v1. (The `admin_user`/`org_id` scaffolding in §3.4 stays for optionality, unused.)
 - **v1:** single `APP_TOKEN` super-admin gate, centralized in
   `server/lib/adminAuth.js`. Unset token still means "dev, allow" locally, matching
   current behavior — but **document that production MUST set `APP_TOKEN`** (it
@@ -369,11 +400,13 @@ Vite tree-shakes the two bundles apart.
 
 ## 9. Phasing / build sequence
 
-1. **Schema** — add `org`, `location.org_id`, `admin_audit`, `admin_user`; seed the
-   default org + backfill the three locations. Verify `ffc migrate` is idempotent.
+1. **Schema** — add `org`, `location.org_id`, `archived_at` on org/location/course,
+   `admin_audit`, `admin_user`; seed the default org + backfill the three locations.
+   Verify `ffc migrate` is idempotent.
 2. **API refactor** — extract shared validators; add `adminAuth` middleware + audit;
    keep `/api/locations` + `/api/seed` green.
-3. **Admin API** — `/api/admin/orgs|locations|courses|overview` with delete guards.
+3. **Admin API** — `/api/admin/orgs|locations|courses|overview` + archive/unarchive
+   endpoints (no hard delete); reads default to `archived_at is null`.
 4. **Public location read** — confirm `GET /api/locations` shape + `locations-source.ts`
    fallback wiring.
 5. **Admin build + vhost** — second Vite entry (`vite.admin.config.ts` → `dist-admin/`);
@@ -394,18 +427,22 @@ Vite tree-shakes the two bundles apart.
 
 ## 10. Open questions / risks
 
-- **Content source of truth (§5).** I've defaulted to "locations live, courses
-  bundled." If the goal is that a franchisee can stand up a *fully playable* location
-  (courses, art, hunt) with zero engineering, that's the bigger Alt-A flip and should
-  be its own phase — flag if you want it in v1.
-- **Auth depth.** v1 is a single shared token. If franchise owners need their own
-  logins in the first release, promote §3.4 + §7 Phase 2 into v1 (adds meaningfully
-  to scope).
-- **Course art pipeline.** Master Control can't currently upload/manage per-course
-  map art or themes (they're bundled assets). Managing those through the console is a
-  separate media-handling feature (upload, storage, referencing) — deferred.
-- **Delete semantics.** Confirm the desired behavior when someone tries to delete a
-  location/course with history: hard block (current recommendation) vs. archive/hide.
+**Decided (this pass):**
+- ✅ **Audience** — operator/super-admin only; **franchisees get no admin access**. §7.
+- ✅ **Auth depth** — single shared `APP_TOKEN` for v1; no logins/RBAC. §7.
+- ✅ **Delete semantics** — **archive/hide** (soft), never hard-delete; unarchive
+  available. §3.2b, §4, §6.
+- ✅ **Course art** — deferred; art/themes stay bundled assets. §5.
+
+**Still open:**
+- ⚠️ **Content source of truth (§5) — the one real remaining decision.** With
+  franchisee self-serve off the table, the question is purely: when the *operator*
+  onboards/edits a location, should it go **live to players via the API** (recommended
+  default: locations live, courses bundled), or is **admin-writes-DB-only** (changes
+  need a build to reach players) enough? This sets how much of the read path we build
+  in v1. Answer pending.
+
+**Risks / confirmations:**
 - **`APP_TOKEN` in prod.** Onboarding writes must not be world-open; the plan assumes
   `APP_TOKEN` is set in production. Worth confirming it currently is on the droplet.
 - **Per-tenant subdomains (deferred).** v1 ships exactly one admin subdomain, but the
