@@ -462,6 +462,23 @@ export default function AxeThrow() {
     let raf = 0;
     let sweepPausedAt = 0;
     let last = performance.now();
+    // Pause the countdown via visibilitychange, not the hidden-rAF branch below:
+    // mobile browsers can fully suspend requestAnimationFrame while backgrounded,
+    // so a hidden frame may never run to catch the away span. Shift countStart by
+    // the away span on resume so the elapsed hidden time can't skip the countdown.
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (!hiddenAt) hiddenAt = performance.now();
+      } else if (hiddenAt) {
+        const away = performance.now() - hiddenAt;
+        hiddenAt = 0;
+        const gs = gsRef.current;
+        if (gs.phase === 'countdown') gs.countStart += away;
+        last = performance.now();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     const frame = (now: number) => {
       const gs = gsRef.current;
       const fx = fxRef.current;
@@ -473,9 +490,7 @@ export default function AxeThrow() {
         return;
       }
       if (sweepPausedAt) {
-        const away = now - sweepPausedAt;
-        gs.sweepBase += away;
-        if (gs.phase === 'countdown') gs.countStart += away;
+        gs.sweepBase += now - sweepPausedAt;
         sweepPausedAt = 0;
       }
       const dt = Math.min(now - last, 100);
@@ -540,7 +555,10 @@ export default function AxeThrow() {
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [active, loadNext]);
 
   useEffect(() => {
