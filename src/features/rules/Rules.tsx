@@ -43,37 +43,42 @@ export default function Rules() {
             <div className="space-y-4">
               {noted.map((c) => {
                 const ink = accentInk(c.theme);
-                // Tint the card to its course (`.course-tinted` reads
-                // `--course-accent`) and add a soft accent glow in the corner —
-                // the card surface (var(--color-fairway-900)) is already tinted.
-                const cardStyle = {
-                  '--course-accent': c.accent,
-                  background: `radial-gradient(120% 80% at 0% 0%, ${c.accent}1f, transparent 60%), var(--color-fairway-900)`,
-                } as CSSProperties;
                 return (
                   <div
                     key={c.id}
-                    style={cardStyle}
-                    className="course-tinted rounded-2xl border border-fairway-700/60 p-4"
+                    style={{ '--course-accent': c.accent } as CSSProperties}
+                    className="course-tinted surface-1 relative overflow-hidden rounded-2xl border border-fairway-700/60 p-4"
                   >
-                    <div className="mb-3 flex items-center gap-2">
-                      <span aria-hidden className="text-lg">
-                        {themeEmoji(c.theme)}
-                      </span>
-                      <span className="font-bold" style={{ color: ink }}>
-                        {c.name}
-                      </span>
+                    {/* Soft accent glow in the corner, layered over the raised
+                        surface-1 material (which is itself already tinted to
+                        the course via `.course-tinted`). */}
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0"
+                      style={{
+                        background: `radial-gradient(120% 80% at 0% 0%, ${c.accent}1f, transparent 60%)`,
+                      }}
+                    />
+                    <div className="relative">
+                      <div className="mb-3 flex items-center gap-2">
+                        <span aria-hidden className="text-lg">
+                          {themeEmoji(c.theme)}
+                        </span>
+                        <span className="font-bold" style={{ color: ink }}>
+                          {c.name}
+                        </span>
+                      </div>
+                      <ul className="space-y-2">
+                        {c.rules!.map((r, i) => (
+                          <li key={i} className="flex gap-2 text-sm text-fairway-100/85">
+                            <span aria-hidden style={{ color: ink }}>
+                              •
+                            </span>
+                            <span>{r}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <ul className="space-y-2">
-                      {c.rules!.map((r, i) => (
-                        <li key={i} className="flex gap-2 text-sm text-fairway-100/85">
-                          <span aria-hidden style={{ color: ink }}>
-                            •
-                          </span>
-                          <span>{r}</span>
-                        </li>
-                      ))}
-                    </ul>
                   </div>
                 );
               })}
