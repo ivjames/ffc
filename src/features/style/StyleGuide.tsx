@@ -174,19 +174,19 @@ export default function StyleGuide() {
             </span>
             <button
               onClick={() => setPunch((p) => p + 1)}
-              className="key flex h-9 w-9 items-center justify-center rounded-xl text-2xl font-bold text-fairway-100"
+              className="key flex h-9 w-9 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100"
               aria-label="Decrease"
             >
               −
             </button>
-            <div className="surface-sunk flex h-9 flex-1 items-center justify-center rounded-xl">
+            <div className="surface-sunk flex h-9 flex-1 items-center justify-center rounded-lg">
               <span key={punch} className="animate-score-punch inline-block text-3xl font-black text-fairway-50">
                 {2 + (punch % 4)}
               </span>
             </div>
             <button
               onClick={() => setPunch((p) => p + 1)}
-              className="key flex h-9 w-9 items-center justify-center rounded-xl text-2xl font-bold text-fairway-100"
+              className="key flex h-9 w-9 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100"
               aria-label="Increase"
             >
               +
