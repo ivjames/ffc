@@ -339,7 +339,7 @@ export default function Scorecard() {
                       navigating between holes. */}
                   <span
                     key={pops[p] ?? 0}
-                    className="animate-score-punch inline-block text-4xl font-black text-fairway-50"
+                    className="animate-score-punch inline-block text-3xl font-black text-fairway-50"
                   >
                     {strokes ?? '–'}
                   </span>
