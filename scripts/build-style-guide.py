@@ -268,7 +268,7 @@ screen(id="fun", name="Fun Zone hub", route="/fun",
  ]),
  specs=[
   (1,"Activity tile","One per game → its route (11 games)","2-col, radius 16","entrance stagger; press feedback","accent-tinted per tile","the tile surface"),
-  (2,"Activity icon","Leading mark on each tile","~48×48 chip","—","tinted to the tile accent","one designed icon per activity (11 total)"),
+  (2,"Activity icon","Leading mark on each tile","~36×36 chip","—","tinted to the tile accent","one designed icon per activity (11 total)"),
  ]),
 
 # ============================================================ 14. MINIGAME SHELL (fills screen)
