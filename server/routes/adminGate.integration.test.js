@@ -28,7 +28,9 @@ before(async () => {
 });
 
 after(async () => {
-  await close();
+  // If before() failed (e.g. Postgres unreachable), close/baseUrl never got
+  // assigned — don't mask that real error with a "close is not a function" one.
+  if (close) await close();
   const { pool } = await import("../db.js");
   await pool.end();
 });
