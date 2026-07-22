@@ -5,9 +5,14 @@
 //   GET    /api/admin/locations/:id/courses        courses for a location
 //   POST   /api/admin/locations/:id/archive        soft-delete
 //   POST   /api/admin/locations/:id/unarchive      restore
+//
+// Org-scoping: an org_admin (orgScope(req) non-null) is confined to their own
+// org's locations everywhere below — list/get/create/archive all either force
+// or verify org_id === their scope. A super_admin (orgScope null) is
+// unrestricted, same as today.
 import { Router } from "express";
 import { pool } from "../../db.js";
-import { audit } from "../../lib/adminAuth.js";
+import { audit, orgScope, actorLabel } from "../../lib/adminAuth.js";
 import {
   normalizeLocation,
   withLabel,
@@ -21,17 +26,21 @@ export const router = Router();
 // --- List -------------------------------------------------------------------
 router.get("/", async (req, res) => {
   const includeArchived = req.query.archived === "1" || req.query.archived === "true";
+  const scope = orgScope(req);
   const orgId = req.query.orgId;
-  if (orgId !== undefined && typeof orgId === "string" && orgId && !UUID_RE.test(orgId)) {
+  if (!scope && orgId !== undefined && typeof orgId === "string" && orgId && !UUID_RE.test(orgId)) {
     return res.status(400).json({ ok: false, error: "orgId must be a uuid" });
   }
+  // An org_admin's scope always wins over any orgId query param — they never
+  // see another org's locations, whatever they ask for.
+  const effectiveOrgId = scope || orgId || null;
   try {
     const result = await pool.query(
       `select ${LOCATION_RETURN_COLS} from location
         where ($1::bool or archived_at is null)
           and ($2::uuid is null or org_id = $2)
         order by sort_order, name`,
-      [includeArchived, orgId || null]
+      [includeArchived, effectiveOrgId]
     );
     return res.json(result.rows.map(withLabel));
   } catch (err) {
@@ -50,6 +59,10 @@ router.get("/:id", async (req, res) => {
       [id]
     );
     if (loc.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
+    const scope = orgScope(req);
+    if (scope && loc.rows[0].orgId !== scope) {
+      return res.status(403).json({ ok: false, error: "forbidden: not your org" });
+    }
     const courses = await pool.query(
       `select ${COURSE_RETURN_COLS} from course
         where location_id = $1 and archived_at is null
@@ -69,6 +82,14 @@ router.get("/:id/courses", async (req, res) => {
   if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "bad id" });
   const includeArchived = req.query.archived === "1" || req.query.archived === "true";
   try {
+    const scope = orgScope(req);
+    if (scope) {
+      const loc = await pool.query(`select org_id as "orgId" from location where id = $1`, [id]);
+      if (loc.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
+      if (loc.rows[0].orgId !== scope) {
+        return res.status(403).json({ ok: false, error: "forbidden: not your org" });
+      }
+    }
     const courses = await pool.query(
       `select ${COURSE_RETURN_COLS} from course
         where location_id = $1 and ($2::bool or archived_at is null)
@@ -87,7 +108,20 @@ router.post("/", async (req, res) => {
   const result = normalizeLocation(req.body);
   if (result.error) return res.status(result.status).json({ ok: false, error: result.error });
   const row = result.row;
+  const scope = orgScope(req);
   try {
+    if (scope) {
+      row.orgId = scope; // org_admin can only ever write into their own org
+      if (row.id) {
+        const existing = await pool.query(`select org_id as "orgId" from location where id = $1`, [
+          row.id,
+        ]);
+        if (existing.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
+        if (existing.rows[0].orgId !== scope) {
+          return res.status(403).json({ ok: false, error: "forbidden: not your org" });
+        }
+      }
+    }
     let db;
     if (row.id) {
       db = await pool.query(
@@ -119,6 +153,7 @@ router.post("/", async (req, res) => {
       entity: "location",
       entityId: db.rows[0].id,
       detail: row,
+      actor: actorLabel(req),
     });
     return res.json({ ok: true, location: withLabel(db.rows[0]) });
   } catch (err) {
@@ -138,6 +173,14 @@ async function setArchived(req, res, archived) {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "bad id" });
   try {
+    const scope = orgScope(req);
+    if (scope) {
+      const existing = await pool.query(`select org_id as "orgId" from location where id = $1`, [id]);
+      if (existing.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
+      if (existing.rows[0].orgId !== scope) {
+        return res.status(403).json({ ok: false, error: "forbidden: not your org" });
+      }
+    }
     const db = await pool.query(
       `update location set archived_at = ${archived ? "now()" : "null"} where id = $1
          returning ${LOCATION_RETURN_COLS}`,
@@ -148,6 +191,7 @@ async function setArchived(req, res, archived) {
       action: archived ? "location.archive" : "location.unarchive",
       entity: "location",
       entityId: id,
+      actor: actorLabel(req),
     });
     return res.json({ ok: true, location: withLabel(db.rows[0]) });
   } catch (err) {

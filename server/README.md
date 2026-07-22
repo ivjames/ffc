@@ -30,7 +30,8 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | -------------- | -------------------------------------------------------------- |
 | `DATABASE_URL`      | Postgres connection string (server-side creds).           |
 | `PORT`              | Listen port (default 8060).                               |
-| `APP_TOKEN`         | Shared token guarding `POST /api/seed`, `POST /api/locations`, and the whole `/api/admin/*` (Master Control) surface. **Required** — unset/empty fails closed (every one of those routes returns `401`, including on a local dev box; the API also warns loudly at startup). |
+| `APP_TOKEN`         | Shared token guarding `POST /api/seed`, `POST /api/locations`, and the whole `/api/admin/*` (Master Control) surface. **Required** — unset/empty fails closed (every one of those routes returns `401`, including on a local dev box; the API also warns loudly at startup). On `/api/admin/*` it also doubles as the **bootstrap credential**: use it to call `POST /api/admin/users` and create the first real `admin_user` (see "Admin accounts & sessions" below). |
+| `NODE_ENV`          | When `production`, admin session cookies are marked `Secure` (HTTPS-only) and `HUNT_ALLOW_PHOTO_OF_PHOTO` is forced off regardless of its own value. Unset/anything else = dev behavior. |
 | `VENUE_TZ`          | **Fallback** IANA timezone for leaderboard calendar windows, used only for a venue whose `location.tz` is unset. The real zone is per venue (see "Venue timezones" below). Default `America/Los_Angeles`. |
 | `ANTHROPIC_API_KEY` | Vision key for the scavenger hunt (`POST /api/hunt/verify`). Unset = hunt verification returns `503`; the rest of the API is unaffected. |
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
@@ -161,28 +162,68 @@ DB is the source of truth; a site rebuild publishes changes to players.
 
 ### Master Control — `/api/admin/*`
 Back-office API for onboarding/managing orgs (owner/franchise), locations
-(venues), and courses. **Every route is guarded by `x-app-token` = `APP_TOKEN`**
-(operator/super-admin only; fails closed — unset `APP_TOKEN` denies every
-request). Mutations are recorded in
-`admin_audit`. **Deletes are soft archives — there is no hard-delete endpoint;**
-archiving sets `archived_at` and hides the row while keeping all history.
+(venues), and courses. **Every route except `POST /login` is guarded by
+`requireAdminAuth`** — either the `x-app-token` = `APP_TOKEN` header (operator/
+super-admin only; fails closed — unset `APP_TOKEN` denies every request) OR a
+logged-in `admin_user` session cookie (see "Admin accounts & sessions" below).
+Mutations are recorded in `admin_audit` (`actor` is the session's email, or
+`"app-token"` for the token path). **Deletes are soft archives — there is no
+hard-delete endpoint** for domain data; archiving sets `archived_at` and hides
+the row while keeping all history. (`admin_user` itself IS hard-deletable —
+no domain history hangs off an account.)
 
 | Method & path | Purpose |
 | --- | --- |
-| `GET  /api/admin/overview` | rollup: counts + rounds 7/30d + per-location |
-| `GET  /api/admin/orgs` · `POST /api/admin/orgs` | list / create-update org |
-| `GET  /api/admin/orgs/:id` | one org + its live locations |
-| `POST /api/admin/orgs/:id/archive` · `…/unarchive` | soft-delete / restore |
-| `GET  /api/admin/locations?orgId=&archived=` · `POST /api/admin/locations` | list / create-update venue (reuses the `/api/locations` validation + tz derivation, plus `orgId`) |
-| `GET  /api/admin/locations/:id` | one venue + its live courses |
-| `GET  /api/admin/locations/:id/courses` | courses for a venue |
-| `POST /api/admin/locations/:id/archive` · `…/unarchive` | soft-delete / restore |
-| `POST /api/admin/courses` · `PATCH /api/admin/courses/:id` | create-update / edit course (`pars` length 18, values 2–4) |
-| `POST /api/admin/courses/:id/archive` · `…/unarchive` | soft-delete / restore |
+| `POST /api/admin/login` | email+password login (no auth required to call this one) |
+| `POST /api/admin/logout` · `GET /api/admin/me` | end / inspect the current session |
+| `GET  /api/admin/users` · `POST /api/admin/users` | list / create `admin_user` accounts — **super_admin only** |
+| `PATCH /api/admin/users/:id` · `DELETE /api/admin/users/:id` | edit (incl. password reset) / remove an account — **super_admin only** |
+| `GET  /api/admin/overview` | rollup: counts + rounds 7/30d + per-location (org-scoped for `org_admin`) |
+| `GET  /api/admin/orgs` · `POST /api/admin/orgs` | list / create-update org — **create/update/archive is super_admin only**; `org_admin` can only read their own org |
+| `GET  /api/admin/orgs/:id` | one org + its live locations (`org_admin`: 403 on any org but their own) |
+| `POST /api/admin/orgs/:id/archive` · `…/unarchive` | soft-delete / restore — **super_admin only** |
+| `GET  /api/admin/locations?orgId=&archived=` · `POST /api/admin/locations` | list / create-update venue (reuses the `/api/locations` validation + tz derivation, plus `orgId`); `org_admin` is always scoped to their own org (an `orgId` query param or body field for a *different* org is overridden/rejected, never honored) |
+| `GET  /api/admin/locations/:id` | one venue + its live courses (`org_admin`: 403 outside their org) |
+| `GET  /api/admin/locations/:id/courses` | courses for a venue (same scoping) |
+| `POST /api/admin/locations/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
+| `POST /api/admin/courses` · `PATCH /api/admin/courses/:id` | create-update / edit course (`pars` length 18, values 2–4); `org_admin` must name a `locationId` in their own org (required, not optional, for that role) |
+| `POST /api/admin/courses/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping, resolved via the course's location) |
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of
-the player PWA. See `../master-control-plan.md` and `ffc admin-setup`.
+the player PWA. See `../master-control-plan.md` and `ffc admin-setup`. The SPA
+today still authenticates with `x-app-token` (`admin/api.ts`) — wiring its
+login screen to `POST /login` + session cookies is frontend work not yet done.
+
+#### Admin accounts & sessions
+
+`admin_user` (email/role/org_id/password_hash) and `admin_session` (opaque
+server-side session tokens) back real per-operator logins, alongside the
+original single-shared-secret `APP_TOKEN`:
+
+- **Bootstrap**: there's no self-serve signup. Use `APP_TOKEN` (still a full
+  super-admin bypass) to call `POST /api/admin/users` and create the first
+  `admin_user`; from then on that account can log in and, if `super_admin`,
+  create more.
+- **Login**: `POST /api/admin/login { email, password }` → on success, an
+  `httpOnly`, `SameSite=Lax` cookie scoped to `/api/admin` (named
+  `ffc_admin_session`, 7-day expiry, `Secure` when `NODE_ENV=production`).
+  Wrong password and unknown email return the identical `401` + message (and
+  pay the same scrypt cost via `verifyDummyPassword`) so login can't be used to
+  enumerate registered emails.
+- **Passwords**: `scrypt` (Node's built-in `node:crypto`, no bcrypt/argon2
+  dependency), stored as `salt:hash` — never returned by any endpoint.
+- **Roles**: `super_admin` is unrestricted (identical access to the `APP_TOKEN`
+  path). `org_admin` is confined to their own `org_id` everywhere — orgs
+  (read-only, own org only), locations, courses (via their location's org),
+  and the overview rollup. Enforced per-route via `orgScope(req)` (returns
+  `null` for `super_admin`, meaning "no filter"), not by a single shared
+  middleware — each router applies it to its own queries because the
+  ownership path differs (locations carry `org_id` directly; courses only
+  reach it through `location_id`).
+- Session lookups and org-scope checks add real per-request DB round trips —
+  fine at this scale (single droplet, small operator headcount); revisit if
+  Master Control traffic ever justifies caching.
 
 ### Scavenger hunt (Phase 3)
 
@@ -273,13 +314,20 @@ tests). It's an experimental Node flag, stable enough for this, but expect an
   the cache-busting trick in play, 91% once it was removed).
 
 Coverage today (full-suite `--experimental-test-coverage` run): **95% lines /
-91% branches / 95% funcs** across all of `server/`. Every route file has an
+91% branches / 96% funcs** across all of `server/`. Every route file has an
 integration test; every `lib/` validator has a unit test. What that run
 actually exercises:
 
 - The `APP_TOKEN` fail-closed gate (`lib/adminAuth.js`) end-to-end through
-  every guarded surface: `/api/admin/*` (orgs, locations, courses, overview),
-  `/api/seed`, and the public `/api/locations`.
+  every guarded surface: `/api/admin/*` (orgs, locations, courses, overview,
+  users), `/api/seed`, and the public `/api/locations`.
+- Admin accounts & sessions (`lib/adminPasswords.js` 100%, `lib/adminSession.js`
+  100%): login/logout/me, password hashing + reset, and — the security-critical
+  part — org_admin RBAC isolation (`routes/admin/orgScoping.integration.test.js`):
+  two separate org_admin accounts confirming each sees/writes only their own
+  org's orgs/locations/courses/overview numbers, that an org_admin can't
+  escalate by submitting someone else's `orgId`, and that a session-based
+  super_admin is exactly as unrestricted as the `APP_TOKEN` bypass.
 - The `HUNT_ALLOW_PHOTO_OF_PHOTO` production fail-safe (`lib/huntAntiCheat.js`, 100%).
 - The pure validators (`lib/sanitize.js`, `lib/validateCourse.js` — both 100%;
   `lib/timezone.js` 99%; `lib/validateLocation.js` 96%).
@@ -293,17 +341,17 @@ actually exercises:
 - `routes/content.js` (92%), `routes/locations.js` (94%), `routes/seed.js`
   (100% lines) — live-only filtering, upsert-on-id/slug, transactional
   rollback on a mid-batch DB error (seed).
-- `routes/admin/{orgs,locations,courses}.js` (82–92%) — CRUD, org/location FK
-  errors, PATCH's merge-over-existing semantics, archive/unarchive + the
-  `admin_audit` trail, nested list/detail endpoints.
+- `routes/admin/{orgs,locations,courses,users}.js` (85–92%) — CRUD, org/location
+  FK errors, PATCH's merge-over-existing semantics, archive/unarchive + the
+  `admin_audit` trail, nested list/detail endpoints, plus every RBAC branch above.
 
-Remaining gaps, all minor: `lib/adminAuth.js`'s `audit()` failure-handling
-branch and `warnIfNoToken()` (82% — the happy path for `audit()` is exercised
-indirectly by every admin mutation test above); `lib/vision.js`'s real
-Anthropic call (52% — intentionally never exercised, since tests must not hit
-the network); a handful of uncommon catch branches in the admin routers
-(bad-uuid/not-found edge cases not every route re-tests). None of these are
-silently assumed tested — this list is current as of the last coverage run.
+Remaining gaps, all minor: `lib/adminAuth.js`'s DB-failure catch branches
+(session lookup, `audit()` write, both "can't happen unless Postgres itself is
+down") and `warnIfNoToken()`; `lib/vision.js`'s real Anthropic call (52% —
+intentionally never exercised, since tests must not hit the network); a
+handful of uncommon catch branches in the admin routers (bad-uuid/not-found
+edge cases not every route re-tests). None of these are silently assumed
+tested — this list is current as of the last coverage run.
 
 ## Venue timezones
 
@@ -346,9 +394,16 @@ nothing assumes one global zone.
   `validateTags`, `BLOCKLIST`). Mirrors the client's rules exactly.
 - `lib/timezone.js` — venue timezone contract (`tzFromCoords`, `isValidTz`,
   `friendlyTzLabel`); see "Venue timezones" above.
-- `lib/adminAuth.js` — shared token guard (`requireAppToken`), `audit()` writer,
-  and the no-token startup warning; used by the admin surface and the seed/
-  locations write guards.
+- `lib/adminAuth.js` — `requireAppToken` (APP_TOKEN-only, used by seed/public-locations),
+  `requireAdminAuth` (APP_TOKEN OR admin_user session, used by `/api/admin/*`),
+  `isSuperAdmin`/`orgScope`/`actorLabel` RBAC helpers, `audit()` writer, and the
+  no-token startup warning.
+- `lib/adminPasswords.js` — `scrypt` password hashing (`hashPassword`,
+  `verifyPassword`, `verifyDummyPassword` for login timing-uniformity). No
+  bcrypt/argon2 dependency — uses Node's built-in `node:crypto`.
+- `lib/adminSession.js` — server-side admin_user sessions: `createSession`/
+  `getSessionUser`/`deleteSession` (backed by `admin_session`) plus the cookie
+  helpers (`ffc_admin_session`, httpOnly, scoped to `/api/admin`).
 - `lib/validateLocation.js` / `lib/validateCourse.js` — shared validators so the
   public `/api/locations`, `/api/seed`, and the admin routers all validate alike.
 - `routes/rounds.js` — `POST /api/rounds` (idempotent sync, per-IP rate limit).
@@ -357,8 +412,11 @@ nothing assumes one global zone.
 - `routes/locations.js` — `GET`/`POST /api/locations` (venue onboarding; resolves
   `location.tz` via `lib/timezone.js`).
 - `routes/content.js` — `GET /api/content` (live catalog for the build exporter).
-- `routes/admin/` — Master Control: `orgs.js`, `locations.js`, `courses.js`,
-  `overview.js`, mounted under `/api/admin` by `admin/index.js` (token-guarded).
+- `routes/admin/` — Master Control, mounted under `/api/admin` by `admin/index.js`
+  (`requireAdminAuth`-guarded, `/login` excepted): `auth.js` (login/logout/me),
+  `users.js` (admin_user CRUD, super_admin only), `orgs.js`, `locations.js`,
+  `courses.js`, `overview.js` (the latter four org-scoped for `org_admin` —
+  see "Admin accounts & sessions" above).
 - `routes/hunt.js` — scavenger hunt: `GET /api/hunt/items`, `GET /api/hunt/progress`,
   `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe).
 - `lib/huntAntiCheat.js` — pure resolver for the `HUNT_ALLOW_PHOTO_OF_PHOTO`
