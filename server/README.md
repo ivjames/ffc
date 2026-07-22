@@ -30,7 +30,7 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | -------------- | -------------------------------------------------------------- |
 | `DATABASE_URL`      | Postgres connection string (server-side creds).           |
 | `PORT`              | Listen port (default 8060).                               |
-| `APP_TOKEN`         | Shared token guarding `POST /api/seed`, `POST /api/locations`, and the whole `/api/admin/*` (Master Control) surface. Unset = allow (dev). **Must be set in production** — the admin surface is world-writable without it (the API warns at startup). |
+| `APP_TOKEN`         | Shared token guarding `POST /api/seed`, `POST /api/locations`, and the whole `/api/admin/*` (Master Control) surface. **Required** — unset/empty fails closed (every one of those routes returns `401`, including on a local dev box; the API also warns loudly at startup). |
 | `VENUE_TZ`          | **Fallback** IANA timezone for leaderboard calendar windows, used only for a venue whose `location.tz` is unset. The real zone is per venue (see "Venue timezones" below). Default `America/Los_Angeles`. |
 | `ANTHROPIC_API_KEY` | Vision key for the scavenger hunt (`POST /api/hunt/verify`). Unset = hunt verification returns `503`; the rest of the API is unaffected. |
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
@@ -88,8 +88,8 @@ VENUE_TZ)`, so a venue in another region uses its own calendar day — see "Venu
 timezones" below.
 
 ### `POST /api/seed`
-Dev helper. Upserts courses. Requires header `x-app-token: $APP_TOKEN` when
-`APP_TOKEN` is set (unset = allowed in dev).
+Dev helper. Upserts courses. Requires header `x-app-token: $APP_TOKEN`; fails
+closed (`401`) if `APP_TOKEN` isn't set.
 
 Request: array of seeds
 ```json
@@ -119,7 +119,7 @@ List venues, ordered by `sortOrder` then `name`. Open read (like the leaderboard
 
 ### `POST /api/locations`
 Create or update a venue (onboarding). Same `x-app-token` guard as `/api/seed`
-(unset `APP_TOKEN` = allowed in dev). Upserts on `id` when given, else on `slug`
+(fails closed if `APP_TOKEN` is unset). Upserts on `id` when given, else on `slug`
 (idempotent re-post). The **timezone is resolved server-side** — see "Venue
 timezones" below: omit `tz` and it's derived from `lat`/`lng`; send `tz` and it's
 validated (a fixed-offset abbreviation like `"PST"` is rejected).
@@ -162,7 +162,8 @@ DB is the source of truth; a site rebuild publishes changes to players.
 ### Master Control — `/api/admin/*`
 Back-office API for onboarding/managing orgs (owner/franchise), locations
 (venues), and courses. **Every route is guarded by `x-app-token` = `APP_TOKEN`**
-(operator/super-admin only; unset = dev-allow). Mutations are recorded in
+(operator/super-admin only; fails closed — unset `APP_TOKEN` denies every
+request). Mutations are recorded in
 `admin_audit`. **Deletes are soft archives — there is no hard-delete endpoint;**
 archiving sets `archived_at` and hides the row while keeping all history.
 
@@ -243,6 +244,30 @@ Responses:
 - `200 { "ok": true, "verified": true, "alreadyFound": true, "reason": "…" }` — dedupe.
 - `400` — validation failure. `429` — per-IP cap (20/min). `503` — `ANTHROPIC_API_KEY` unset.
 
+## Testing
+
+```sh
+npm test               # node's built-in test runner (node --test)
+```
+
+- Pure unit tests (`lib/*.test.js`) need no database — they run against `lib/`'s
+  exported functions directly.
+- Integration tests (`routes/*.integration.test.js`) boot the real Express app
+  (`app.js`) on an ephemeral port and need a reachable Postgres. They point at
+  `TEST_DATABASE_URL` (default `postgres://postgres:postgres@localhost:5432/ffc_test`)
+  — create that database once (`createdb ffc_test`) and the tests apply
+  `schema.sql` themselves on each run.
+- `test-support/testDb.js` holds the shared DB helpers (`ensureSchema`,
+  `testQuery`, `listenEphemeral`); it isn't itself a test file.
+- Coverage today: the `APP_TOKEN` fail-closed gate (`lib/adminAuth.js` +
+  end-to-end through `/api/admin/*`, `/api/seed`, `/api/locations`), the
+  `HUNT_ALLOW_PHOTO_OF_PHOTO` production fail-safe, and the pure validators
+  (`lib/sanitize.js`, `lib/validateCourse.js`, `lib/validateLocation.js`,
+  `lib/timezone.js`). Not yet covered: `routes/rounds.js`, `routes/leaderboard.js`,
+  `routes/content.js`, `routes/admin/{orgs,locations,courses}.js`, and the
+  `POST /api/hunt/verify` happy path (would need a mocked `lib/vision.js`) —
+  worth filling in next, not silently assumed to be tested.
+
 ## Venue timezones
 
 The leaderboard buckets rounds by **calendar** day/week/month in each venue's
@@ -271,8 +296,12 @@ nothing assumes one global zone.
 
 ## Files
 
-- `index.js` — Express app, middleware, route mounting, listen.
+- `app.js` — Express app: middleware + route mounting (importable with no
+  side effects, so tests can boot it without a real `listen()`).
+- `index.js` — process entrypoint: imports `app.js`, calls `listen()`.
 - `db.js` — shared `pg` Pool from `DATABASE_URL`.
+- `test-support/testDb.js` — shared helpers for DB-backed tests (not itself a
+  test file); see "Testing" above.
 - `schema.sql` — DDL (course / round / score / hunt_item / hunt_find) + per-course
   hunt seed (ensures the four courses exist so the hunt FK resolves on a fresh migrate).
 - `migrate.js` — applies `schema.sql`.
