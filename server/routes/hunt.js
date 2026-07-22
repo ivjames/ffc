@@ -15,6 +15,7 @@ import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pool } from "../db.js";
 import { isValidTag } from "../lib/sanitize.js";
+import { resolveAllowPhotoOfPhoto } from "../lib/huntAntiCheat.js";
 import {
   verifyItemInImage,
   isVisionConfigured,
@@ -36,13 +37,12 @@ const UPLOAD_DIR =
 // path, or a stale client bundle) still goes through rather than 413/400.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
-// TESTING ONLY — remove before production. When HUNT_ALLOW_PHOTO_OF_PHOTO is
-// truthy, the anti-cheat photo-of-a-photo check is bypassed, so testers can
-// verify landmarks from screenshots or pictures of a screen. Leave this UNSET
-// in production so the anti-cheat is active (the default, production-safe path).
-const ALLOW_PHOTO_OF_PHOTO = /^(1|true|yes|on)$/i.test(
-  process.env.HUNT_ALLOW_PHOTO_OF_PHOTO ?? ""
-);
+// See lib/huntAntiCheat.js for the fail-safe rules (TEST ONLY; forced off in
+// production even if left set).
+const ALLOW_PHOTO_OF_PHOTO = resolveAllowPhotoOfPhoto({
+  rawFlag: process.env.HUNT_ALLOW_PHOTO_OF_PHOTO,
+  nodeEnv: process.env.NODE_ENV,
+});
 
 const EXT_BY_MEDIA = {
   "image/jpeg": "jpg",

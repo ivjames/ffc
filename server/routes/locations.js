@@ -1,6 +1,7 @@
 // Locations API — public venue read + the original token-guarded upsert.
 //
-//   POST /api/locations  — create or update a venue (guarded by APP_TOKEN)
+//   POST /api/locations  — create or update a venue (guarded by APP_TOKEN,
+//                           fails closed if APP_TOKEN is unset)
 //   GET  /api/locations  — list live venues (open read, like the leaderboard)
 //
 // The venue's timezone drives the leaderboard's calendar-day windows

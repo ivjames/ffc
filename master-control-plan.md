@@ -11,6 +11,18 @@ platform. Hand this to Claude Code as the source of truth for the build.
 > `lib/validate*.js`, schema additions. Admin app: `admin/` → `dist-admin/`.
 > Content export: `scripts/export-content.mjs`. Deploy: `ffc admin-setup` +
 > `deploy/nginx.admin.conf.template` + `deploy/acme-doctl-*.sh`.
+>
+> **Update — Phase 2 accounts/RBAC now implemented** (previously listed below as
+> deferred/"no logins in v1"): `admin_user` + `admin_session` back real
+> email+password logins, alongside — not instead of — `APP_TOKEN`. `org_admin`
+> is scoped to its `org_id` everywhere; `super_admin` is unrestricted. This does
+> **not** by itself reverse the "franchisees get no admin access" decision below
+> — that's a question of who actually holds an `admin_user` account, which
+> remains an operator call — it means the mechanism now exists if/when that
+> changes. See `server/lib/adminAuth.js`, `lib/adminSession.js`,
+> `lib/adminPasswords.js`, `routes/admin/{auth,users}.js`, and
+> `server/README.md`'s "Admin accounts & sessions" for the actual shape (scrypt,
+> not bcrypt as originally sketched in §7).
 
 ---
 
@@ -42,7 +54,7 @@ Org (owner / franchise)          ← NEW
 |---|---|---|
 | New top entity | **`org`** table above `location`; `location.org_id` FK | Owner/franchise level |
 | Who uses it | **Operator / super-admin only — franchisees have NO admin access** ✅ decided | Master Control is an internal back office; franchise owners never log in |
-| Auth (v1) | **Super-admin behind `APP_TOKEN`** ✅ decided; schema still pre-wired for accounts later | No RBAC/logins in v1 (no franchisee self-serve to support) |
+| Auth (v1) | **Super-admin behind `APP_TOKEN`** ✅ decided; schema still pre-wired for accounts later | No RBAC/logins in v1 (no franchisee self-serve to support). **Update: Phase 2 accounts/RBAC are now implemented** (`admin_user`/`admin_session`, alongside `APP_TOKEN` — see §7) |
 | Delete semantics | **Archive / hide (soft), never hard-delete played data** ✅ decided | Archived rows hidden from players + default admin lists; unarchive available |
 | Course art | **Deferred — map art/themes stay bundled assets** ✅ decided | Console edits data fields only; no upload/media pipeline in v1 |
 | Content pipeline | **DB is source of truth; player app stays bundled; a rebuild publishes** ✅ decided | No live API content fetch in v1. Build-time export from DB → generated data module avoids double data-entry (§5) |
@@ -339,27 +351,42 @@ of the API token gate, and the player app can never accidentally surface admin U
 
 ## 7. Auth & security
 
-- **Audience:** operator/super-admin **only**. Franchisees have **no** admin access in
-  any release currently planned — Master Control is an internal back office, so there
-  is no franchisee-facing surface to secure, no self-serve org scoping to enforce in
-  v1. (The `admin_user`/`org_id` scaffolding in §3.4 stays for optionality, unused.)
+- **Audience (v1 decision):** operator/super-admin **only**; no franchisee accounts
+  were provisioned. **Phase 2 update:** the `admin_user`/`org_id` scaffolding from
+  §3.4 is no longer just scaffolding — `org_admin` logins are implemented and
+  scoped to their `org_id` (see below). Whether a franchisee is ever actually
+  handed one of those accounts is still an operator decision, not a code
+  constraint — but the access-control mechanism to do so, if wanted, now exists.
 - **v1:** single `APP_TOKEN` super-admin gate, centralized in
-  `server/lib/adminAuth.js`. Unset token still means "dev, allow" locally, matching
-  current behavior — but **document that production MUST set `APP_TOKEN`** (it
-  already should for `/api/locations` + `/api/seed`; the admin surface makes this
-  non-negotiable, so add a startup warning if `/api/admin/*` is mounted with no
-  token).
+  `server/lib/adminAuth.js`. Unset token means **fail closed** (every guarded
+  route 401s, including on a local dev box) — an earlier draft of this plan said
+  "dev, allow" on an unset token; that was changed after a pre-launch audit
+  flagged it as a live risk (silent open-admin-surface on a misconfigured box).
+  Production **must** set `APP_TOKEN` (also required for `/api/locations` +
+  `/api/seed`); the API warns loudly at startup if it's unset.
 - **Transport:** admin endpoints only over HTTPS (already true behind nginx/certbot).
 - **CORS:** the app currently `app.use(cors())` (open). Admin mutations are
   token-gated so open CORS is acceptable for v1. Since the admin app is now its own
   origin (`admin.ffc.lab980.com`), `/api/admin/*` CORS can be locked to that origin
   straight away, and the vhost itself can be IP-allowlisted / basic-auth'd for
   defense in depth.
-- **Audit:** every successful mutation writes `admin_audit` (§3.3).
-- **Phase 2 accounts:** `admin_user` table (§3.4) + bcrypt + a sessions mechanism;
-  super-admin sees all orgs, `org_admin` is scoped to `org_id`. The API queries are
-  written from day one to accept an optional org scope, so adding enforcement is a
-  middleware change, not a query rewrite.
+- **Audit:** every successful mutation writes `admin_audit` (§3.3), `actor` now the
+  session's email rather than always `"app-token"` when a real login is used.
+- **Phase 2 accounts — ✅ implemented:** `admin_user` table (§3.4) + `admin_session`
+  (new table; opaque server-side session tokens, not JWTs) + `scrypt` password
+  hashing (`node:crypto`, not bcrypt as sketched here originally — avoids adding a
+  dependency). `super_admin` sees all orgs (identical access to the `APP_TOKEN`
+  path); `org_admin` is scoped to `org_id` everywhere — orgs (read-only, own org
+  only; org create/rename/archive stays super_admin-only), locations, courses
+  (via their location's org, since courses don't carry `org_id` directly), and the
+  overview rollup. `APP_TOKEN` remains valid alongside logins (not replaced) and
+  is the bootstrap credential for creating the first `admin_user`
+  (`POST /api/admin/users`). Login: `POST /api/admin/login`; session cookie is
+  `httpOnly`, scoped to `/api/admin`, `Secure` when `NODE_ENV=production`. The
+  admin SPA (`admin/ControlApp.tsx`'s `SignInGate`) hides super_admin-only
+  actions (e.g. "Create org") from an `org_admin` — covered by both
+  `admin/*.test.tsx` (Vitest, mocked `api.ts`) and `e2e/*.spec.ts` (Playwright,
+  real server + Postgres); see the root `README.md`'s "Testing" section.
 
 ---
 
@@ -434,8 +461,8 @@ Vite tree-shakes the two bundles apart.
    detail, shipped in the admin bundle.
 7. **Docs/CLI** — README + `server/README.md` for the new endpoints and the admin
    vhost; confirm the extended `ffc deploy`; note `APP_TOKEN` is now required in prod.
-8. **(Phase 2)** hunt-list editing, richer dashboards, real admin accounts/RBAC,
-   optional full API-driven player content (Alt A).
+8. **(Phase 2)** hunt-list editing, richer dashboards, optional full API-driven
+   player content (Alt A). Real admin accounts/RBAC — **done**, see §7.
 
 ---
 
@@ -443,7 +470,12 @@ Vite tree-shakes the two bundles apart.
 
 **Decided (this pass):**
 - ✅ **Audience** — operator/super-admin only; **franchisees get no admin access**. §7.
+  (Still true in practice — no `admin_user` account has been handed to a
+  franchisee — but see the Phase 2 update in §7: that's now an operator choice,
+  not something the code forecloses.)
 - ✅ **Auth depth** — single shared `APP_TOKEN` for v1; no logins/RBAC. §7.
+  **Superseded** — Phase 2 accounts/RBAC (`admin_user` + `admin_session`) are
+  implemented; `APP_TOKEN` remains valid alongside them. See §7.
 - ✅ **Delete semantics** — **archive/hide** (soft), never hard-delete; unarchive
   available. §3.2b, §4, §6.
 - ✅ **Course art** — deferred; art/themes stay bundled assets. §5.

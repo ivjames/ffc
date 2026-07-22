@@ -316,8 +316,12 @@ create table if not exists admin_audit (
 );
 create index if not exists admin_audit_created_idx on admin_audit (created_at);
 
--- Forward-compat for real accounts (Phase 2). Present so org-scoping has a home
--- and org_id never needs re-plumbing later; UNUSED by v1 code (single APP_TOKEN).
+-- Real accounts (Phase 2). super_admin sees/manages everything; org_admin is
+-- scoped to org_id (required for that role — enforced at the app layer, same
+-- as `role`'s enum, to match this schema's existing style of not adding CHECK
+-- constraints for small fixed vocabularies). password_hash is `scrypt salt:hash`
+-- (see lib/adminPasswords.js) — never a plaintext password, never returned by
+-- the API.
 create table if not exists admin_user (
   id            uuid primary key default gen_random_uuid(),
   email         text not null unique,
@@ -326,6 +330,19 @@ create table if not exists admin_user (
   password_hash text,
   created_at    timestamptz not null default now()
 );
+
+-- Server-side sessions for admin_user logins (lib/adminSession.js). `id` is an
+-- opaque high-entropy random token (the session cookie's value — looked up,
+-- never decoded), not a JWT. Sits alongside the single-shared-secret APP_TOKEN
+-- gate (routes/admin/index.js accepts either); APP_TOKEN remains the
+-- bootstrap credential for creating the first admin_user.
+create table if not exists admin_session (
+  id            text primary key,
+  admin_user_id uuid not null references admin_user(id) on delete cascade,
+  created_at    timestamptz not null default now(),
+  expires_at    timestamptz not null
+);
+create index if not exists admin_session_expires_idx on admin_session (expires_at);
 
 -- Seed the default org for the current client (Bullwinkle's) and backfill the
 -- existing locations onto it. Fixed id so this is idempotent and mirrors the

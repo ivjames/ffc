@@ -4,9 +4,14 @@
 //   GET    /api/admin/orgs/:id           one org + its locations
 //   POST   /api/admin/orgs/:id/archive   soft-delete (set archived_at)
 //   POST   /api/admin/orgs/:id/unarchive restore
+//
+// Org-scoping: an org is the top-level tenant boundary, so managing orgs
+// themselves (create/rename/archive) is super_admin only. An org_admin can
+// only read their OWN org (GET list/one) — never another org's, never all of
+// them.
 import { Router } from "express";
 import { pool } from "../../db.js";
-import { audit } from "../../lib/adminAuth.js";
+import { audit, isSuperAdmin, orgScope, actorLabel } from "../../lib/adminAuth.js";
 import { UUID_RE, SLUG_RE, LOCATION_RETURN_COLS, withLabel } from "../../lib/validateLocation.js";
 
 export const router = Router();
@@ -44,6 +49,7 @@ function normalizeOrg(body) {
 // --- List -------------------------------------------------------------------
 router.get("/", async (req, res) => {
   const includeArchived = req.query.archived === "1" || req.query.archived === "true";
+  const scope = orgScope(req); // null (super_admin) or the org_admin's own org id
   try {
     const result = await pool.query(
       `select o.id, o.name, o.slug, o.status, o.sort_order as "sortOrder",
@@ -52,9 +58,10 @@ router.get("/", async (req, res) => {
          from org o
          left join location l on l.org_id = o.id
         where ($1::bool or o.archived_at is null)
+          and ($2::uuid is null or o.id = $2)
         group by o.id
         order by o.sort_order, o.name`,
-      [includeArchived]
+      [includeArchived, scope]
     );
     return res.json(result.rows.map((r) => ({ ...r, locationCount: Number(r.locationCount) })));
   } catch (err) {
@@ -67,6 +74,10 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "bad id" });
+  const scope = orgScope(req);
+  if (scope && id !== scope) {
+    return res.status(403).json({ ok: false, error: "forbidden: not your org" });
+  }
   try {
     const org = await pool.query(`select ${ORG_COLS} from org where id = $1`, [id]);
     if (org.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
@@ -85,6 +96,9 @@ router.get("/:id", async (req, res) => {
 
 // --- Create / update --------------------------------------------------------
 router.post("/", async (req, res) => {
+  if (!isSuperAdmin(req)) {
+    return res.status(403).json({ ok: false, error: "super_admin only" });
+  }
   const result = normalizeOrg(req.body);
   if (result.error) return res.status(result.status).json({ ok: false, error: result.error });
   const row = result.row;
@@ -109,7 +123,13 @@ router.post("/", async (req, res) => {
         [row.name, row.slug, row.sortOrder]
       );
     }
-    await audit({ action: row.id ? "org.update" : "org.create", entity: "org", entityId: db.rows[0].id, detail: row });
+    await audit({
+      action: row.id ? "org.update" : "org.create",
+      entity: "org",
+      entityId: db.rows[0].id,
+      detail: row,
+      actor: actorLabel(req),
+    });
     return res.json({ ok: true, org: db.rows[0] });
   } catch (err) {
     if (err && err.code === "23505") {
@@ -122,6 +142,9 @@ router.post("/", async (req, res) => {
 
 // --- Archive / unarchive ----------------------------------------------------
 async function setArchived(req, res, archived) {
+  if (!isSuperAdmin(req)) {
+    return res.status(403).json({ ok: false, error: "super_admin only" });
+  }
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "bad id" });
   try {
@@ -130,7 +153,12 @@ async function setArchived(req, res, archived) {
       [id]
     );
     if (db.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
-    await audit({ action: archived ? "org.archive" : "org.unarchive", entity: "org", entityId: id });
+    await audit({
+      action: archived ? "org.archive" : "org.unarchive",
+      entity: "org",
+      entityId: id,
+      actor: actorLabel(req),
+    });
     return res.json({ ok: true, org: db.rows[0] });
   } catch (err) {
     console.error("[admin/orgs] archive error:", err);

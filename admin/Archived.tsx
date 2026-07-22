@@ -1,7 +1,7 @@
 import { api } from './api';
 import { Button, Card, Banner, Spinner, useAsync, fmtDateTime, ADMIN_TZ_LABEL } from './ui';
 
-export default function Archived() {
+export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const orgs = useAsync(() => api.listOrgs(true), []);
   const locations = useAsync(() => api.listLocations({ archived: true }), []);
 
@@ -29,15 +29,17 @@ export default function Archived() {
                 <span className="ml-2 text-xs font-normal text-slate-400">archived {fmtDateTime(o.archivedAt)}</span>
               )}
             </span>
-            <Button
-              variant="ghost"
-              onClick={async () => {
-                await api.archiveOrg(o.id, false);
-                orgs.reload();
-              }}
-            >
-              Unarchive
-            </Button>
+            {isSuperAdmin && (
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  await api.archiveOrg(o.id, false);
+                  orgs.reload();
+                }}
+              >
+                Unarchive
+              </Button>
+            )}
           </Card>
         ))}
       </section>

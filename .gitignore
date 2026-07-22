@@ -25,3 +25,9 @@ server/data/
 .DS_Store
 .vscode/
 .idea/
+
+# test output
+test-results/
+playwright-report/
+blob-report/
+coverage/

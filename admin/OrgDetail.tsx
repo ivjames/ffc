@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from './api';
 import { Button, Card, Banner, Spinner, Pill, useAsync } from './ui';
 
-export default function OrgDetail() {
+export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const { data, error, loading, reload } = useAsync(() => api.getOrg(id), [id]);
@@ -29,9 +29,11 @@ export default function OrgDetail() {
           <Link to={`/locations/new?orgId=${org.id}`}>
             <Button>+ Location</Button>
           </Link>
-          <Button variant={org.archivedAt ? 'ghost' : 'danger'} onClick={toggleArchive}>
-            {org.archivedAt ? 'Unarchive' : 'Archive'}
-          </Button>
+          {isSuperAdmin && (
+            <Button variant={org.archivedAt ? 'ghost' : 'danger'} onClick={toggleArchive}>
+              {org.archivedAt ? 'Unarchive' : 'Archive'}
+            </Button>
+          )}
         </div>
       </div>
 
