@@ -5,9 +5,10 @@
 //     holeCount?: number, pars: int[18], sortOrder?: number }
 // locationId, when given, must reference an existing location(id).
 //
-// Guard: header `x-app-token` must match APP_TOKEN (unset -> dev, allow). This
-// is the same guard the admin surface uses; per-course admin management lives at
-// POST/PATCH /api/admin/courses. Validation is shared (lib/validateCourse.js).
+// Guard: header `x-app-token` must match APP_TOKEN (unset -> fail closed, deny
+// all). This is the same guard the admin surface uses; per-course admin
+// management lives at POST/PATCH /api/admin/courses. Validation is shared
+// (lib/validateCourse.js).
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAppToken } from "../lib/adminAuth.js";

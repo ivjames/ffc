@@ -1,8 +1,9 @@
 // Master Control admin API — mounted at /api/admin.
 //
-// Every route here is token-guarded (requireAppToken) and, for mutations,
-// audit-logged. Deletes are ARCHIVES (soft) — there is no hard-delete endpoint.
-// Sub-routers: orgs, locations, courses, overview.
+// Every route here is token-guarded (requireAppToken, fail-closed if APP_TOKEN
+// is unset) and, for mutations, audit-logged. Deletes are ARCHIVES (soft) —
+// there is no hard-delete endpoint. Sub-routers: orgs, locations, courses,
+// overview.
 import { Router } from "express";
 import { requireAppToken } from "../../lib/adminAuth.js";
 import { router as orgsRouter } from "./orgs.js";

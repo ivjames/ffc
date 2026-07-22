@@ -40,9 +40,21 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 // truthy, the anti-cheat photo-of-a-photo check is bypassed, so testers can
 // verify landmarks from screenshots or pictures of a screen. Leave this UNSET
 // in production so the anti-cheat is active (the default, production-safe path).
-const ALLOW_PHOTO_OF_PHOTO = /^(1|true|yes|on)$/i.test(
+// Fail-safe: even if the flag is accidentally left set in a production deploy
+// config, force it off here rather than letting the bypass reach a public,
+// unauthenticated, family-venue upload endpoint.
+const HUNT_ALLOW_PHOTO_OF_PHOTO_RAW = /^(1|true|yes|on)$/i.test(
   process.env.HUNT_ALLOW_PHOTO_OF_PHOTO ?? ""
 );
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+if (HUNT_ALLOW_PHOTO_OF_PHOTO_RAW && IS_PRODUCTION) {
+  console.warn(
+    "[hunt] HUNT_ALLOW_PHOTO_OF_PHOTO is set truthy with NODE_ENV=production — " +
+      "forcing it OFF. This flag is TEST ONLY and must never be set in a " +
+      "production deploy config; remove it from that environment's config."
+  );
+}
+const ALLOW_PHOTO_OF_PHOTO = HUNT_ALLOW_PHOTO_OF_PHOTO_RAW && !IS_PRODUCTION;
 
 const EXT_BY_MEDIA = {
   "image/jpeg": "jpg",
