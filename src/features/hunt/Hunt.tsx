@@ -294,9 +294,7 @@ export default function Hunt() {
               <li
                 key={item.id}
                 className={`rounded-2xl border p-4 ${
-                  foundByMe
-                    ? 'border-fairway-500/60 bg-fairway-900/60'
-                    : 'border-fairway-800/60 bg-fairway-950/40'
+                  foundByMe ? 'surface border-fairway-500/60' : 'surface-1 border-fairway-800/60'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -341,7 +339,7 @@ export default function Hunt() {
                   <button
                     onClick={() => onSnapClick(item.id)}
                     disabled={state.kind === 'verifying' || !canSnap}
-                    className="shrink-0 rounded-xl bg-fairway-700 px-4 py-2 text-sm font-semibold text-fairway-50 transition active:scale-[0.98] active:bg-fairway-800 disabled:opacity-40 disabled:active:scale-100"
+                    className="btn-accent shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-fairway-50 transition-transform active:translate-y-px disabled:opacity-40 disabled:active:translate-y-0"
                   >
                     {state.kind === 'verifying'
                       ? 'Checking…'
