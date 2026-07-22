@@ -272,18 +272,38 @@ tests). It's an experimental Node flag, stable enough for this, but expect an
   the rest of the suite (confirmed: `routes/hunt.js` showed 26% coverage with
   the cache-busting trick in play, 91% once it was removed).
 
-Coverage today (line %, full-suite `--experimental-test-coverage` run): the
-`APP_TOKEN` fail-closed gate (`lib/adminAuth.js`, 62%, the untested lines are
-`audit()`/`warnIfNoToken()`) end-to-end through `/api/admin/*`, `/api/seed`,
-`/api/locations`; the `HUNT_ALLOW_PHOTO_OF_PHOTO` production fail-safe (100%);
-the pure validators (`lib/sanitize.js`, `lib/validateCourse.js` — both 100%;
-`lib/timezone.js` 99%; `lib/validateLocation.js` 96%); and `routes/hunt.js`
-(91% — items/progress, verify's full validation + happy-path + dedupe +
-anti-cheat-flagged + countable-count + no-output branches, and the per-IP rate
-limit, all via a mocked `lib/vision.js`). Not yet covered: `routes/rounds.js`
-(23%), `routes/leaderboard.js` (27%), `routes/content.js` (39%),
-`routes/admin/{orgs,locations,courses}.js` (21–25%) — worth filling in next,
-not silently assumed to be tested.
+Coverage today (full-suite `--experimental-test-coverage` run): **95% lines /
+91% branches / 95% funcs** across all of `server/`. Every route file has an
+integration test; every `lib/` validator has a unit test. What that run
+actually exercises:
+
+- The `APP_TOKEN` fail-closed gate (`lib/adminAuth.js`) end-to-end through
+  every guarded surface: `/api/admin/*` (orgs, locations, courses, overview),
+  `/api/seed`, and the public `/api/locations`.
+- The `HUNT_ALLOW_PHOTO_OF_PHOTO` production fail-safe (`lib/huntAntiCheat.js`, 100%).
+- The pure validators (`lib/sanitize.js`, `lib/validateCourse.js` — both 100%;
+  `lib/timezone.js` 99%; `lib/validateLocation.js` 96%).
+- `routes/hunt.js` (91%) — items/progress, verify's full validation +
+  happy-path + dedupe + anti-cheat-flagged + countable-count + no-output
+  branches, and the per-IP rate limit, all via a mocked `lib/vision.js`.
+- `routes/rounds.js` (96%) — validation, idempotent re-sync (scores untouched
+  on a duplicate `clientId`), the rate limit.
+- `routes/leaderboard.js` (97%) — best-per-(tag, course) aggregation, calendar
+  window filtering (day/week/month vs. a 2020 fixture round), sort order.
+- `routes/content.js` (92%), `routes/locations.js` (94%), `routes/seed.js`
+  (100% lines) — live-only filtering, upsert-on-id/slug, transactional
+  rollback on a mid-batch DB error (seed).
+- `routes/admin/{orgs,locations,courses}.js` (82–92%) — CRUD, org/location FK
+  errors, PATCH's merge-over-existing semantics, archive/unarchive + the
+  `admin_audit` trail, nested list/detail endpoints.
+
+Remaining gaps, all minor: `lib/adminAuth.js`'s `audit()` failure-handling
+branch and `warnIfNoToken()` (82% — the happy path for `audit()` is exercised
+indirectly by every admin mutation test above); `lib/vision.js`'s real
+Anthropic call (52% — intentionally never exercised, since tests must not hit
+the network); a handful of uncommon catch branches in the admin routers
+(bad-uuid/not-found edge cases not every route re-tests). None of these are
+silently assumed tested — this list is current as of the last coverage run.
 
 ## Venue timezones
 
