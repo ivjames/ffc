@@ -120,6 +120,19 @@ router.post("/", async (req, res) => {
         if (existing.rows[0].orgId !== scope) {
           return res.status(403).json({ ok: false, error: "forbidden: not your org" });
         }
+      } else {
+        // No id — the insert below still upserts ON CONFLICT (slug), so a
+        // slug that already belongs to ANOTHER org must be checked too, or an
+        // org_admin could take over another org's location (and its courses,
+        // via location_id) just by submitting its slug — visible from the
+        // public GET /api/locations — with no id.
+        const existingBySlug = await pool.query(
+          `select org_id as "orgId" from location where slug = $1`,
+          [row.slug]
+        );
+        if (existingBySlug.rowCount > 0 && existingBySlug.rows[0].orgId !== scope) {
+          return res.status(403).json({ ok: false, error: "forbidden: not your org" });
+        }
       }
     }
     let db;

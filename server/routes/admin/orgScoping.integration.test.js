@@ -20,7 +20,7 @@ const { hashPassword } = await import("../../lib/adminPasswords.js");
 let baseUrl;
 let close;
 let orgAId, orgBId;
-let locationAId, locationBId;
+let locationAId, locationBId, locationBSlug;
 let courseAId, courseBId;
 let orgAdminACookie, orgAdminBCookie, superAdminSessionCookie;
 const userIds = [];
@@ -66,9 +66,10 @@ before(async () => {
     [`Scope Location A ${stamp}`, `scope-location-a-${stamp}`, orgAId]
   );
   locationAId = locA.rows[0].id;
+  locationBSlug = `scope-location-b-${stamp}`;
   const locB = await testQuery(
     `insert into location (name, slug, org_id) values ($1, $2, $3) returning id`,
-    [`Scope Location B ${stamp}`, `scope-location-b-${stamp}`, orgBId]
+    [`Scope Location B ${stamp}`, locationBSlug, orgBId]
   );
   locationBId = locB.rows[0].id;
 
@@ -180,6 +181,25 @@ test("locations: creating a location forces org_id to the caller's own org, even
   const body = await res.json();
   assert.equal(body.location.orgId, orgAId);
   await testQuery(`delete from location where id = $1`, [body.location.id]);
+});
+
+test("locations: an org_admin cannot hijack another org's location by submitting its slug with no id", async () => {
+  // Regression for a Codex-flagged P1: the ownership check only ran inside
+  // `if (row.id)`, but the insert upserts ON CONFLICT (slug) even with no id
+  // — so submitting org B's (publicly visible) slug with no id would update
+  // org B's location and reassign it to org A via `coalesce(excluded.org_id,
+  // location.org_id)`, since org_id was already forced to the caller's org.
+  const res = await as(orgAdminACookie)("/api/admin/locations", {
+    method: "POST",
+    body: JSON.stringify({ name: "Hijacked Name", slug: locationBSlug }),
+  });
+  assert.equal(res.status, 403);
+
+  const stillOwnedByB = await testQuery(`select org_id as "orgId", name from location where id = $1`, [
+    locationBId,
+  ]);
+  assert.equal(stillOwnedByB.rows[0].orgId, orgBId, "location B must still belong to org B");
+  assert.notEqual(stillOwnedByB.rows[0].name, "Hijacked Name", "location B's name must be untouched");
 });
 
 test("courses: an org_admin can only create/patch/archive courses under their own org's locations", async () => {
