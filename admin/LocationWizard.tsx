@@ -6,11 +6,21 @@ import { Button, Card, Field, Input, Banner, Spinner, useAsync } from './ui';
 const autoSlug = (v: string) =>
   v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-export default function LocationWizard() {
+export default function LocationWizard({
+  isSuperAdmin,
+  ownOrgId,
+}: {
+  isSuperAdmin: boolean;
+  ownOrgId: string | null;
+}) {
   const [params] = useSearchParams();
   const orgs = useAsync(() => api.listOrgs(), []);
 
-  const [orgId, setOrgId] = useState(params.get('orgId') ?? '');
+  // An org_admin's org is fixed to their own, regardless of any ?orgId= in
+  // the URL — the server would silently force this anyway (it never trusts a
+  // submitted orgId from an org_admin), so the field mirrors that truth
+  // instead of showing a picker that doesn't actually do what it implies.
+  const [orgId, setOrgId] = useState(isSuperAdmin ? params.get('orgId') ?? '' : ownOrgId ?? '');
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [lat, setLat] = useState('');
@@ -81,7 +91,11 @@ export default function LocationWizard() {
           {err && <Banner kind="error">{err}</Banner>}
 
           <Field label="Org (owner / franchise)">
-            {orgs.loading ? (
+            {!isSuperAdmin ? (
+              <div className="px-1 py-1.5 text-sm text-slate-600">
+                {orgs.data?.find((o) => o.id === ownOrgId)?.name ?? 'Your org'}
+              </div>
+            ) : orgs.loading ? (
               <Spinner label="Loading orgs…" />
             ) : (
               <select

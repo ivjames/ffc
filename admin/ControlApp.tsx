@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { getToken, setToken, clearToken, api, AuthError, ApiError, type CurrentUser } from './api';
+import { setToken, clearToken, api, AuthError, ApiError, type CurrentUser } from './api';
 import { Button, Card, Field, Input, Banner, ADMIN_TZ_LABEL } from './ui';
 import Overview from './Overview';
 import Orgs from './Orgs';
@@ -108,6 +108,13 @@ export function SignInGate({ onUnlock }: { onUnlock: (user: CurrentUser | null) 
 }
 
 function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void }) {
+  // While `user` is momentarily unresolved (see the token-path note in
+  // ControlApp below), default to false — briefly hiding a super_admin's
+  // controls for one round trip reads better than briefly showing an
+  // org_admin controls that then vanish.
+  const isSuperAdmin = user?.role === 'super_admin';
+  const ownOrgId = user?.orgId ?? null;
+
   const linkCls = ({ isActive }: { isActive: boolean }) =>
     `rounded-md px-3 py-1.5 text-sm font-medium ${
       isActive ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-200'
@@ -148,11 +155,14 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
         <div className="mb-4 text-right text-xs text-slate-400">Times shown in {ADMIN_TZ_LABEL}</div>
         <Routes>
           <Route path="/" element={<Overview />} />
-          <Route path="/orgs" element={<Orgs />} />
-          <Route path="/orgs/:id" element={<OrgDetail />} />
-          <Route path="/locations/new" element={<LocationWizard />} />
+          <Route path="/orgs" element={<Orgs isSuperAdmin={isSuperAdmin} />} />
+          <Route path="/orgs/:id" element={<OrgDetail isSuperAdmin={isSuperAdmin} />} />
+          <Route
+            path="/locations/new"
+            element={<LocationWizard isSuperAdmin={isSuperAdmin} ownOrgId={ownOrgId} />}
+          />
           <Route path="/locations/:id" element={<LocationDetail />} />
-          <Route path="/archived" element={<Archived />} />
+          <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
           <Route path="*" element={<Overview />} />
         </Routes>
       </main>
@@ -177,15 +187,13 @@ export default function ControlApp() {
     return () => window.removeEventListener('ffc-admin-unauthorized', onUnauthorized);
   }, []);
 
-  // On load: an existing APP_TOKEN in sessionStorage is trusted optimistically
-  // (as before — a bad one just 401s on the first real call and bounces via the
-  // event above). Otherwise, check for an already-valid admin_user session —
-  // e.g. a page reload after logging in — before falling back to the gate.
+  // On load: GET /me works via EITHER auth path (the x-app-token header is
+  // sent on every request; a session cookie rides along automatically), so
+  // this both restores an already-valid admin_user session (e.g. a page
+  // reload after logging in) AND resolves *who* a stored APP_TOKEN belongs to
+  // — needed for role-based UI (an org_admin's restricted actions must stay
+  // hidden even on the token path, not just for real logins).
   useEffect(() => {
-    if (getToken()) {
-      setAuthState('unlocked');
-      return;
-    }
     api.me().then(
       ({ user }) => {
         setUser(user);
@@ -202,6 +210,20 @@ export default function ControlApp() {
         onUnlock={(loggedInUser) => {
           setUser(loggedInUser);
           setAuthState('unlocked');
+          if (!loggedInUser) {
+            // Token path: onUnlock(null) is optimistic (the client can't tell
+            // a real role from the token string), so resolve it for real —
+            // this also self-corrects back to the gate if the token is bad,
+            // rather than waiting for some other call to fail later.
+            api.me().then(
+              ({ user }) => setUser(user),
+              () => {
+                clearToken();
+                setUser(null);
+                setAuthState('locked');
+              }
+            );
+          }
         }}
       />
     );
