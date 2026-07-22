@@ -247,8 +247,14 @@ Responses:
 ## Testing
 
 ```sh
-npm test               # node's built-in test runner (node --test)
+npm test                              # node's built-in test runner
+node --test --experimental-test-coverage   # + a per-file coverage report
 ```
+
+`npm test` runs with `--experimental-test-module-mocks` (needed by the hunt
+tests below, which mock `lib/vision.js` — real Anthropic calls never happen in
+tests). It's an experimental Node flag, stable enough for this, but expect an
+`ExperimentalWarning` on stderr; it doesn't affect results.
 
 - Pure unit tests (`lib/*.test.js`) need no database — they run against `lib/`'s
   exported functions directly.
@@ -259,14 +265,25 @@ npm test               # node's built-in test runner (node --test)
   `schema.sql` themselves on each run.
 - `test-support/testDb.js` holds the shared DB helpers (`ensureSchema`,
   `testQuery`, `listenEphemeral`); it isn't itself a test file.
-- Coverage today: the `APP_TOKEN` fail-closed gate (`lib/adminAuth.js` +
-  end-to-end through `/api/admin/*`, `/api/seed`, `/api/locations`), the
-  `HUNT_ALLOW_PHOTO_OF_PHOTO` production fail-safe, and the pure validators
-  (`lib/sanitize.js`, `lib/validateCourse.js`, `lib/validateLocation.js`,
-  `lib/timezone.js`). Not yet covered: `routes/rounds.js`, `routes/leaderboard.js`,
-  `routes/content.js`, `routes/admin/{orgs,locations,courses}.js`, and the
-  `POST /api/hunt/verify` happy path (would need a mocked `lib/vision.js`) —
-  worth filling in next, not silently assumed to be tested.
+- If a test needs a module re-imported under different env combinations,
+  prefer extracting the env-dependent bit into a small pure function (see
+  `lib/huntAntiCheat.js`) over cache-busted dynamic `import()`s — the latter
+  corrupts V8's per-file coverage accounting for the re-imported module across
+  the rest of the suite (confirmed: `routes/hunt.js` showed 26% coverage with
+  the cache-busting trick in play, 91% once it was removed).
+
+Coverage today (line %, full-suite `--experimental-test-coverage` run): the
+`APP_TOKEN` fail-closed gate (`lib/adminAuth.js`, 62%, the untested lines are
+`audit()`/`warnIfNoToken()`) end-to-end through `/api/admin/*`, `/api/seed`,
+`/api/locations`; the `HUNT_ALLOW_PHOTO_OF_PHOTO` production fail-safe (100%);
+the pure validators (`lib/sanitize.js`, `lib/validateCourse.js` — both 100%;
+`lib/timezone.js` 99%; `lib/validateLocation.js` 96%); and `routes/hunt.js`
+(91% — items/progress, verify's full validation + happy-path + dedupe +
+anti-cheat-flagged + countable-count + no-output branches, and the per-IP rate
+limit, all via a mocked `lib/vision.js`). Not yet covered: `routes/rounds.js`
+(23%), `routes/leaderboard.js` (27%), `routes/content.js` (39%),
+`routes/admin/{orgs,locations,courses}.js` (21–25%) — worth filling in next,
+not silently assumed to be tested.
 
 ## Venue timezones
 
@@ -324,4 +341,7 @@ nothing assumes one global zone.
   `overview.js`, mounted under `/api/admin` by `admin/index.js` (token-guarded).
 - `routes/hunt.js` — scavenger hunt: `GET /api/hunt/items`, `GET /api/hunt/progress`,
   `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe).
+- `lib/huntAntiCheat.js` — pure resolver for the `HUNT_ALLOW_PHOTO_OF_PHOTO`
+  production fail-safe (`resolveAllowPhotoOfPhoto`); split out of `routes/hunt.js`
+  so it's unit-testable without re-importing the route module.
 - `lib/vision.js` — Claude vision proxy (`claude-opus-4-8`, structured JSON verdict).

@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node index.js",
     "migrate": "node migrate.js",
-    "test": "node --test"
+    "test": "node --experimental-test-module-mocks --test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.1",
