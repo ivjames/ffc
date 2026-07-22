@@ -382,12 +382,11 @@ of the API token gate, and the player app can never accidentally surface admin U
   overview rollup. `APP_TOKEN` remains valid alongside logins (not replaced) and
   is the bootstrap credential for creating the first `admin_user`
   (`POST /api/admin/users`). Login: `POST /api/admin/login`; session cookie is
-  `httpOnly`, scoped to `/api/admin`, `Secure` when `NODE_ENV=production`. Not yet
-  done: the admin SPA's login screen only reached parity for the sign-in gate
-  itself (`admin/ControlApp.tsx`'s `SignInGate`) — it doesn't yet hide
-  super_admin-only actions (e.g. "Create org") from an `org_admin` in the UI; the
-  server already rejects those with a `403`, so this is a UX-polish gap, not a
-  security one.
+  `httpOnly`, scoped to `/api/admin`, `Secure` when `NODE_ENV=production`. The
+  admin SPA (`admin/ControlApp.tsx`'s `SignInGate`) hides super_admin-only
+  actions (e.g. "Create org") from an `org_admin` — covered by both
+  `admin/*.test.tsx` (Vitest, mocked `api.ts`) and `e2e/*.spec.ts` (Playwright,
+  real server + Postgres); see the root `README.md`'s "Testing" section.
 
 ---
 

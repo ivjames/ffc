@@ -101,6 +101,38 @@ Design + decisions: [`master-control-plan.md`](./master-control-plan.md).
 npm run dev -- --config vite.admin.config.ts   # admin on http://localhost:5174
 ```
 
+## Testing
+
+Three layers, each covering something the others can't:
+
+```bash
+cd server && npm test                      # backend: node:test, see server/README.md
+npm run test:admin                         # admin SPA components: Vitest + RTL, mocked api.ts
+npm run test:e2e                           # admin SPA e2e: Playwright, real server + Postgres
+```
+
+- **`npm run test:admin`** (`admin/*.test.tsx`, config `vitest.admin.config.ts`) —
+  fast, no server or DB needed. `./api` is mocked with `vi.mock`, so these test
+  component logic in isolation: the RBAC UI gating (`org_admin` vs `super_admin`
+  seeing different controls in `Orgs.tsx`/`OrgDetail.tsx`/`Archived.tsx`/
+  `LocationWizard.tsx`), the sign-in state machine (`ControlApp.tsx` — checking →
+  locked/unlocked, the token vs. session paths, the global sign-out event), and
+  `api.ts`'s fetch/401 handling directly (the `quiet401` distinction — a failed
+  login is a normal local error, not "you got signed out").
+- **`npm run test:e2e`** (`e2e/*.spec.ts`, config `playwright.config.ts`) — a real
+  browser against the real Express API + Postgres (`globalSetup`/`globalTeardown`
+  seed and clean up two fixed `admin_user` accounts + an org at
+  `TEST_DATABASE_URL`, same DB `server/`'s own tests use — create it once with
+  `createdb ffc_test`). Playwright's `webServer` option starts both the API
+  (`server/index.js`) and the admin dev server automatically. This layer exists
+  because manual browser testing during the RBAC work caught two real bugs
+  (cookie/credentials handling, a dev-proxy path collision) that mocked
+  component tests couldn't have — it's complementary to `test:admin`, not
+  redundant with it.
+- Both admin layers are separate from `server/`'s own `node:test` suite (backend
+  routes/validators/RBAC enforcement) — see `server/README.md`'s "Testing"
+  section for that.
+
 ## Layout
 
 ```
