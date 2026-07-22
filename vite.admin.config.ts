@@ -18,7 +18,13 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      '/api': { target: 'http://localhost:8060', changeOrigin: true },
+      // Regex key (leading ^), NOT a plain prefix match — a plain '/api' key
+      // also matches Vite's own dev-server request for the source file
+      // `/api.ts` (imported as `./api`), forwarding it to the backend and
+      // 404ing instead of serving it. Real API paths always have something
+      // after the slash (/api/health, /api/admin/login, ...), so requiring
+      // the trailing slash excludes '/api.ts' while matching every real call.
+      '^/api/': { target: 'http://localhost:8060', changeOrigin: true },
     },
   },
 });
