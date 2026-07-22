@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button, TagChip } from '../../ui/components';
+import CourseTheme from '../../ui/CourseTheme';
 import { getActiveRound } from '../../db';
 import { courseById } from '../../data/courses';
 import type { LocalRound } from '../../types';
@@ -221,6 +222,7 @@ export default function Hunt() {
   }
 
   return (
+    <CourseTheme theme={course?.theme} accent={course?.accent}>
     <Screen>
       <TopBar title="Scavenger hunt" back={backTo} />
       <input
@@ -378,5 +380,6 @@ export default function Hunt() {
         </ul>
       </Content>
     </Screen>
+    </CourseTheme>
   );
 }
