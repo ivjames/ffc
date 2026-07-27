@@ -12,7 +12,6 @@ and live alongside them."""
 
 import re
 OUT = "/home/user/ffc/public/docs/style-guide.html"
-OUT2 = "/home/user/ffc/public/docs/screens.html"
 SCREENS = []
 def screen(**kw): SCREENS.append(kw)
 
@@ -462,23 +461,6 @@ html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 open(OUT,"w").write(html)
 print("wrote", OUT, "screens:", len(SCREENS))
 
-# ---------------------------------------------------------------- screens-only sheet
-def render_cell(sc, idx):
-    body = re.sub(r'<span class="cn-badge">\d+</span>', '', sc["body"])   # drop markers
-    tb = '<span class="tb">course-tinted</span>' if sc.get("tint") else ''
-    scr = "scr fill" if sc.get("fill") else "scr"
-    name = sc["name"].split(" (")[0]
-    return (f'<div class="cell"><div class="celltitle">{idx}. {name}{tb}</div>'
-            f'<div class="frame"><div class="{scr}">{body}</div></div></div>')
-
-sheet_head = """<div class="sheethead">
- <h1>Mini Golf — Screens</h1>
- <p>Every screen's element layout, at a glance — no specs, no markers. Structural wireframes only; the current app art is not authoritative. Companion to the full <b>Screen &amp; Element Guide</b> (which adds dimensions, states, theming hooks, and the art needed per element).</p>
- <div class="note"><b>Not the design.</b> No colors, type, icons, or materials are implied. Player-scaled screens are drawn at 4 players; the Course Map and game playfields fill the screen below the bar.</div>
-</div>"""
-cells = "".join(render_cell(sc, i+1) for i,sc in enumerate(SCREENS))
-html2 = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>Mini Golf — Screens</title><style>{CSS}</style></head>
-<body>{sheet_head}<div class="grid-screens">{cells}</div></body></html>"""
-open(OUT2,"w").write(html2)
-print("wrote", OUT2)
+# The to-scale contact sheet (public/docs/screens.html + screens.pdf) is built
+# separately by scripts/build-screens-sheet.py so it can render real-pixel
+# artboards while this guide keeps its schematic wireframes + spec tables.
