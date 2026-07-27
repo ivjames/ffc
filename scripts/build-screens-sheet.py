@@ -19,8 +19,12 @@ in public/docs/ so the built app serves it at /docs/screens.html; the companion
 screens.pdf is printed from this HTML.
 """
 
+import os
 import re
-OUT2 = "/home/user/ffc/public/docs/screens.html"
+# Resolve output relative to this script (repo_root/public/docs), so it works in
+# any checkout — not just the author's workspace.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT2 = os.path.join(_ROOT, "public", "docs", "screens.html")
 SCREENS = []
 def screen(**kw): SCREENS.append(kw)
 
@@ -500,10 +504,10 @@ table.spec tr{break-inside:avoid}
 .celltitle{font-size:11px;font-weight:800;text-align:center;display:flex;gap:6px;align-items:baseline;justify-content:center;flex-wrap:wrap}
 .celltitle .rt{font-family:"SF Mono",monospace;font-size:8px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 6px;font-weight:700}
 .celltitle .tb{font:700 7.5px/1.6 "SF Mono",monospace;color:#9a3412;background:#fff2e6;border:1px solid #f6d3ad;border-radius:5px;padding:1px 5px}
-/* on screen the sheet artboards are TRUE 390px (the overlay/trace layer);
-   print scales them to fit the page grid. */
-@media print { .sheet .dv{zoom:.42} .sg .dv{zoom:.60} }
-@media screen { .sheet .dv{zoom:.62} }
+/* On screen the sheet artboards stay TRUE 390px (the overlay/trace layer) — no
+   zoom, so an artist can lay one over a 390px app screenshot 1:1. Print alone
+   scales them down to fit the page grid. */
+@media print { .sheet .dv{zoom:.42} }
 """
 
 # ———————————————————————————————————————————————— contact sheet (trace layer)
