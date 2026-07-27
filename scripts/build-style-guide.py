@@ -57,7 +57,7 @@ screen(id="home", name="Home", route="/",
   (2,"Hero mark","Brand identity, top of Home","~48px","animates on arrival","—","the brand hero mark"),
   (3,"Location bar","Row → Location Picker","full-width row, radius 16","tappable; shows current venue","row surface","a location/pin marker + the row surface"),
   (4,"Resume-round card","CTA → resume the in-progress round","full-width, radius 16","only present when a round is live; standing glow","--glow = course accent","card surface + the standing-glow treatment"),
-  (5,"Course tiles","Grid → each course's map/start","2-col, ~1:1 (~208px sq in the 448px column), radius 24; puck 56×56, marker 24–28px","tappable; staggered entrance","--tile-accent / --puck-accent per course","tile surface + a course marker/crest per course (the puck)"),
+  (5,"Course tiles","Grid → each course's map screen","2-col grid, scales to the location's course count (2–4), ~1:1, radius 24; domed puck 56×56, glyph ~30px","tappable; staggered pop-in entrance","--tile-accent / --puck-accent per course","tile surface + a course marker/crest per course (the puck)"),
   (6,"Secondary menu","Ghost-button stack → While You Wait / Rules / Leaderboard / Install","full-width rows, ~48 tall, radius 16","Install hidden when already installed. (Scavenger hunt is NOT here — it lives on the in-round bar)","—","ghost surface + a leading icon per row"),
  ]),
 
@@ -74,10 +74,10 @@ screen(id="loc", name="Location Picker", route="/locations",
    txt("footer note","muted"),
  ]),
  specs=[
-  (1,"“Use my location”","GPS-detect button (only if geolocation is available)","full-width, radius 12","disabled + progress label while locating","—","a GPS/location icon + button surface"),
+  (1,"“Use my location”","GPS-detect button (only if geolocation is available)","full-width, radius 12, ~44 tall","disabled + progress label while locating","—","a GPS/location icon (currently a 🧭 placeholder) + button surface"),
   (2,"Status message","Detect feedback","text","appears on progress / error","(error emphasis)","—"),
-  (3,"Location row","One per venue → selects it","full-width row, radius 16; marker chip ~48×48","selected vs unselected","per-location accent tints the marker chip","a location marker + row surface"),
-  (4,"Trailing marker","Row right edge","chevron ~14px","“Current” (selected) or forward chevron","per-location accent","a chevron icon"),
+  (3,"Location row","One per venue → selects it (3 venues today)","full-width row, radius 16; marker chip ~48×48","selected vs unselected","per-location accent tints the marker chip","a location marker + row surface"),
+  (4,"Trailing marker","Row right edge","“Current” label (14px) when selected, else a › chevron (~20px)","“Current” (selected) or forward chevron","per-location accent","a chevron icon"),
  ]),
 
 # ============================================================ 3. COURSE PICKER
@@ -92,10 +92,10 @@ screen(id="pick", name="Course Picker", route="/new",
    row(box("mkr","chip"), box("name · “holes · par”","grow"), box("›","trail"), cls="lrow"),
  ]),
  specs=[
-  (1,"Location switcher","Row → Location Picker (returns here)","full-width, radius 12","tappable","row surface","a pin marker + row surface"),
-  (2,"Course marker","Left of each course row","~48×48 rounded square, radius 12","—","tinted from the course accent","the course marker icon"),
-  (3,"Course row","Tap → Player Setup","full-width row, radius 16","tappable; empty state when no courses","—","row surface"),
-  (4,"Chevron","Row right edge","~16px","—","muted","a forward chevron"),
+  (1,"Location switcher","Row → Location Picker (returns here)","full-width, radius 16","tappable","row surface","a pin marker + row surface"),
+  (2,"Course marker","Left of each course row","~48×48 rounded square, radius 12","—","tinted from the course accent","the course marker icon (currently the theme emoji)"),
+  (3,"Course row","Tap → Player Setup","full-width row, radius 16; subtitle “N holes · par N”","tappable; scales to the location's course count; empty state when no courses","—","row surface"),
+  (4,"Chevron","Row right edge","~20px","—","muted","a forward chevron"),
  ]),
 
 # ============================================================ 4. PLAYER SETUP
@@ -104,19 +104,19 @@ screen(id="setup", name="Player Setup", route="/new/setup",
  body="".join([
    topbar("Course name", right=CTRL()),
    txt("label: Players"),
-   row(box("1","seg",n=1),box("2","seg"),box("3","seg"),box("4","seg on"),cls="segs"),
-   txt("label: Tags (3 chars, arcade style)"),
-   row(icon("1"), box("tag input","inp grow",n=2), cls="tagrow"),
-   row(icon("2"), box("tag input — error","inp grow err",n=3), cls="tagrow"),
+   row(box("1","seg",n=1),box("2","seg on"),box("3","seg"),box("4","seg"),cls="segs"),
+   txt("label: Tags (3 letters/numbers, arcade)"),
+   row(icon("1"), box("tag well","inp",n=2), cls="tagrow"),
+   row(icon("2"), box("tag well — error","inp err",n=3), cls="tagrow"),
    txt("inline error message","muted"),
-   row(icon("3"), box("tag input","inp grow"), cls="tagrow"),
-   row(icon("4"), box("tag input","inp grow"), cls="tagrow"),
+   row(icon("3"), box("tag well","inp"), cls="tagrow"),
+   row(icon("4"), box("tag well","inp"), cls="tagrow"),
    btn("Start round","primary",n=4),
  ]), scales=True,
  specs=[
-  (1,"Player-count selector","1–4 buttons","4-col grid; each ≥44px tall","selected vs unselected","—","selected/unselected states"),
-  (2,"Tag input","Arcade text field — one row per player (1–4)","full-width row, ~44 tall","empty (placeholder) / filled / invalid; row count = selected players","an arcade/mono type role","field surface; the arcade type face"),
-  (3,"Invalid-tag state","On a bad tag","—","red border + inline error","(error emphasis)","error treatment"),
+  (1,"Player-count selector","1–4 buttons","4-col grid, radius 12, ~44px tall","selected = candy accent key, unselected = neutral key (default 2)","--accent (selected key)","the selected/unselected key states"),
+  (2,"Tag input","Arcade text field — one row per player (1–4)","recessed well, ~128px wide × ~44 tall, radius 12; centered 24px uppercase","empty (placeholder “ABC”) / filled / invalid; row count = selected players","the recessed-well (surface-sunk) surface; the arcade type face","the carved-well surface; the arcade type face"),
+  (3,"Invalid-tag state","On a bad tag","—","red border + inline error once 3 chars are entered","(error emphasis)","error treatment"),
   (4,"Start round","Primary CTA → play","full-width, ~52 tall, radius 16","disabled until roster valid; busy label while starting","--accent","the primary button surface"),
  ]),
 
@@ -125,10 +125,10 @@ screen(id="map", name="Course Map", route="/courses/:id/map", tint=True, fill=Tr
  purpose="Opening course screen — the map fills the screen below the bar; tapping it starts the round.",
  body="".join([
    topbar("Course name", right=CTRL()),
-   img("Course map illustration — FILLS the screen below the bar; the whole panel is one tap target → setup. “TAP ANYWHERE TO BEGIN” prompt overlays it.", n=1, fill=True),
+   img("Full-bleed tap target → setup (a tap anywhere begins the round). Today a themed-emoji placeholder (~72px) on an accent-tinted fill — no per-course map art in the data yet. Bottom scrim + pulsing “TAP ANYWHERE TO BEGIN” + “N holes · course”.", n=1, fill=True),
  ]),
  specs=[
-  (1,"Course map","Full-bleed map; the whole panel starts the round","fills the screen barring the top bar (≈448px wide × remaining height)","tappable; a pulsing “tap to begin” prompt overlays it","the screen washes toward the course color","a top-down hole map per course (or a fallback panel with the course marker); keep center/edges calm so the overlay prompt stays legible, in both light and dark"),
+  (1,"Course map","Full-bleed panel; the whole panel starts the round","fills the screen barring the top bar (≈448px wide × remaining height)","tappable; today renders the themed-emoji placeholder (map asset not populated); a pulsing “tap to begin” prompt sits over a bottom scrim","the screen washes toward the course color","a top-down hole map per course (replacing the emoji placeholder); keep center/edges calm so the overlay prompt stays legible, in both light and dark"),
  ]),
 
 # ============================================================ 6. SCORECARD
@@ -147,7 +147,7 @@ screen(id="play", name="Scorecard (play screen)", route="/play/:clientId", tint=
    txt("stroke-cap footer","muted"),
  ]),
  specs=[
-  (1,"TopBar shortcuts","Scavenger hunt · Challenge spinner · “Holes” toggle","glyphs ~24px; back key 40×40","the Holes toggle reveals a hole-jump grid","—","a hunt icon + a spinner icon"),
+  (1,"TopBar shortcuts","Scavenger hunt · Challenge spinner · “Holes” toggle","glyphs ~18px; back key 40×40","the Holes toggle reveals a hole-jump grid","—","a hunt icon + a spinner icon"),
   (2,"Hole-jump grid","Toggled grid of hole keys","6-col; cells 32–36px","current / done / unplayed key states","--accent marks the current hole","the three key states"),
   (3,"Par medallion","Par read-out disc","48×48 circle","—","par numeral in the course ink","the disc surface"),
   (4,"Player tag","Player identity chip on each row","radius 8 pill; text ~18px","empty shows a placeholder","--tag-accent","the tag surface (contrast-checked on any accent)"),
@@ -161,18 +161,19 @@ screen(id="sum", name="Summary (final scorecard)", route="/play/:clientId/summar
  purpose="Celebrates the winner, shows standings + hole-by-hole grid, syncs to the leaderboard.",
  body="".join([
    topbar("Final scorecard", right=CTRL()),
-   box("Winner hero — trophy · “Winner” · winner tag · total / over-under","wide tall","card",n=1),
+   txt("course name · “Par N”","center muted"),
+   box("Winner hero — trophy · “Winner / Tied” · winner tag(s) · total / over-under","wide tall","card",n=1),
    box("Standings row — rank · tag · total","wide","row",n=2),
    box("Standings row — rank · tag · total","wide","row"),
-   box("Standings row — rank · tag · total","wide","row"),
-   box("Nine-grid table — Front/Back · par row · one score row per player","wide","tbl",n=3),
+   box("Nine-grid — Front (1–9): hole row · par row · one score row/player","wide","tbl",n=3),
+   box("Nine-grid — Back (10–18)","wide","tbl"),
    txt("sync status line","muted",n=4),
    row(btn("View leaderboard","ghost sm"), btn("Done","primary sm",n=5), cls="nav"),
  ]),
  specs=[
-  (1,"Winner hero","Celebration card","full-width card, radius 24; trophy ~48px","celebratory entrance; a “tied” variant","--glow accent; winner tag in course ink","a trophy/celebration mark + the hero surface"),
-  (2,"Standings row","One per non-winner (up to 4 players total)","full-width, radius 16","staggered entrance","rank + arcade tag in course ink","the row surface"),
-  (3,"Nine-grid table","Hole-by-hole scores, Front & Back","full-width table","cells signal under / over / at par; empty cell","--score-under / --score-over","the table surface + the score-signal colors"),
+  (1,"Winner hero","Celebration card","full-width card, radius 24, p-5; 56px trophy column (48px glyph) + a 192px accent spotlight","pop-in + looping glow; a “Tied for the win” variant","--glow accent; winner tag(s) in course ink (accentInk)","a trophy/celebration mark + the hero surface"),
+  (2,"Standings row","One per non-winner (up to 3, for 4 players total)","full-width, radius 16; 56px rank column","staggered rise-in entrance","mono rank + arcade tag in course ink (accentInk)","the row surface"),
+  (3,"Nine-grid tables","Hole-by-hole scores — separate Front (1–9) & Back (10–18) tables","two full-width tables, radius 16; 56px label column + 9 hole columns","cells signal under / over / at par; “·” for an unentered hole","--score-under / --score-over","the table surface + the score-signal colors"),
   (4,"Sync note","Leaderboard save status","text","synced / failed / saving / offline","(failure emphasis)","a confirmation tick"),
   (5,"Action buttons","View leaderboard (secondary) · Done (primary)","full-width","—","--accent","ghost + primary surfaces"),
  ]),
@@ -185,14 +186,16 @@ screen(id="rules", name="Rules", route="/rules",
    txt("heading: GENERAL","eyebrow",n=1),
    row(icon("1"), box("rule text","line",n=2), cls="rule"),
    row(icon("2"), box("rule text","line"), cls="rule"),
-   row(icon("3"), box("rule text","line"), cls="rule"),
+   row(icon("3"), box("rule text — “Max 6 strokes per hole”","line"), cls="rule"),
+   row(icon("4"), box("rule text","line"), cls="rule"),
+   repeat("…6 general rules total"),
    txt("heading: COURSE NOTES","eyebrow"),
    box("Course-note card — marker · course name · bulleted notes","wide tall","card",n=3),
  ]),
  specs=[
   (1,"Section heading","“General” / “Course notes”","text eyebrow","—","muted","—"),
-  (2,"Numbered rule list","General rules","list","—","—","list-number treatment"),
-  (3,"Course-note card","One tinted card per course","full-width, radius 16","—","washes toward the course accent; name + marker + bullets in course ink","the card surface + the course marker"),
+  (2,"Numbered rule list","General rules — 6 items","list; mono “N.” prefix","—","—","list-number treatment"),
+  (3,"Course-note card","One tinted card per course with notes (section hidden when none)","full-width, radius 16","conditional on per-course notes","washes toward the course accent; name + marker + bullets in course ink (accentInk)","the card surface + the course marker"),
  ]),
 
 # ============================================================ 9. INSTALL
@@ -222,9 +225,9 @@ screen(id="tv", name="TV Leaderboard", route="/tv",
    row(box("rank","chip"), box("tag · course","grow"), box("total","tot"), cls="lb"),
  ]),
  specs=[
-  (1,"Period tabs","Day / Week / Month / All","4-col","active vs inactive","—","tab states"),
-  (2,"Rank / tag","Row identity","tag ~24px","—","tag in course ink","the arcade type face"),
-  (3,"“You” pill + row highlight","Marks your rows","pill (rounded-full)","only on your rows","a highlight/ring accent","the pill + row-highlight treatment"),
+  (1,"Period tabs","Day / Week / Month / All (Day is the default)","4-col grid, radius 8","active (filled) vs inactive (outline)","—","tab states"),
+  (2,"Rank / tag","Row identity","rank 14px mono · tag 24px arcade","—","neutral ramp — the leaderboard is not course-tinted","the arcade type face"),
+  (3,"“You” pill + row highlight","Marks your rows","pill (rounded-full)","only on your rows; polls every 5s","a highlight/ring accent","the pill + row-highlight treatment"),
   (4,"Standings row","One per score","full-width, radius 16","entrance stagger; error / empty / loading states","—","the row surface"),
  ]),
 
@@ -233,13 +236,14 @@ screen(id="hunt", name="Scavenger Hunt", route="/hunt",
  purpose="Snap-a-photo hunt; a vision model verifies each find. Reached from the in-round bar (not Home). Gated on an active round.",
  body="".join([
    topbar("Scavenger hunt", right=CTRL()),
+   txt("intro — “Things to find on <course>. Snap a photo of each.”","muted"),
    row(txt("Playing as","inline"), box("tag","tagb sel",n=1), box("tag","tagb dim"), box("tag","tagb dim"), box("tag","tagb dim"), cls="playas"),
    row(box("item — title · hint · count/✓","item",n=2), btn("Snap","snap",n=3), cls="itemrow"),
    row(box("item","item",n=5), btn("Snap","snap"), cls="itemrow"),
    box("result banner (verified / flagged / rejected)","wide small",n=4),
  ]),
  specs=[
-  (1,"“Playing as” selector","Player chips — one per player (1–4)","radius 8 pills","selected (ring) vs dimmed","--tag-accent","tag surface + selected-state treatment"),
+  (1,"“Playing as” selector","Player chips — one per player (1–4)","radius 8 pills","selected (ring-2) vs dimmed (opacity 60%)","--tag-accent (house green default here)","tag surface + selected-state treatment"),
   (2,"Item hint / count / check","On each item","small","hint show/hide toggle; ×N count or a found check","—","hint, count, and check icons"),
   (3,"Snap button","Photo capture (opens the camera)","compact button","label cycles Snap / Snap another / Checking / Found (locked)","—","a camera icon + button surface"),
   (4,"Result banner","Verify outcome","full-width, radius 12","verified / flagged (photo-of-screen) / rejected; plus a load-error box","(flag/error emphasis)","banner treatments"),
@@ -267,13 +271,15 @@ screen(id="fun", name="Fun Zone hub", route="/fun",
  purpose="Grid landing routing to every mini-game. Each tile = an icon + title (11 games).",
  body="".join([
    topbar("While You Wait", right=CTRL()),
+   txt("intro — “Pass the time.”","center muted"),
    row(
      f'<div class="wf-box ftile">{cn(1)}{icon(n=2)}<span>game tile — icon · title</span></div>',
      *[box("game tile — icon · title","ftile") for _ in range(5)], cls="ftiles"),
+   repeat("…11 game tiles total"),
  ]),
  specs=[
-  (1,"Activity tile","One per game → its route (11 games)","2-col, radius 16","entrance stagger; press feedback","accent-tinted per tile","the tile surface"),
-  (2,"Activity icon","Leading mark on each tile","~36×36 chip","—","tinted to the tile accent","one designed icon per activity (11 total)"),
+  (1,"Activity tile","One per game → its route (11 games)","2-col grid, radius 12, px-3 py-2.5","rise-in stagger; press-shrink feedback","accent-tinted per tile (bg/border/icon from the tile accent)","the tile surface"),
+  (2,"Activity icon","Leading mark on each tile","~36×36 chip, radius 8, glyph ~20px","—","tinted to the tile accent","one designed icon per activity (11 total)"),
  ]),
 
 # ============================================================ 14. MINIGAME SHELL (fills screen)
@@ -284,12 +290,12 @@ screen(id="game", name="Minigame shell (covers the 8 canvas games)",
  body="".join([
    topbar("Game name", right=CTRL()),
    row(txt("count (ball / frame / pitch)","inline"), txt("score / timer","inline r"), cls="hud", n=1),
-   img("Canvas playfield — FILLS the screen between HUD and footer. Per-game sprites & interaction; game-over overlay draws over it.", n=2, fill=True),
+   img("Canvas playfield — FILLS the screen between HUD and hint. Per-game sprites & interaction; on game-over it reverts to a results screen (big emoji + score + Play again), not drawn on the canvas.", n=2, fill=True),
    txt("hint line","center muted"),
  ]),
  specs=[
-  (1,"HUD counter row","Per-game counters / score / timer","text row","labels vary by game; a timer can signal time pressure","—","—"),
-  (2,"Canvas playfield","The game itself","fills the screen barring HUD + footer (≈448px wide × remaining height)","aim / play / result; impact + shake feedback; a celebratory game-over overlay","--accent on the overlay's Play-again","per-game background + sprites (ball, puck, kart, target, pins, axe, bumper) as sprite sheets / SVGs; a result mark per game"),
+  (1,"HUD counter row","Per-game counters / score / timer","text row","labels vary by game (Bowling adds a 10-frame scorecard strip); a timer can signal time pressure","—","—"),
+  (2,"Canvas playfield","The game itself","fills the screen barring HUD + hint (≈448px wide × remaining height)","aim / play / result; impact + shake feedback; a celebratory game-over results screen","--accent on the results Play-again","per-game background + sprites (ball, puck, kart, target, pins, axe, bumper) as sprite sheets / SVGs; a result mark per game"),
  ]),
 
 # screens whose layout grows by one row/chip per player (1–4)
@@ -381,7 +387,7 @@ tr{break-inside:avoid}
 .wf-row.hud .wf-box.med{margin:0}
 .wf-box.tagb{font-family:"SF Mono",monospace;letter-spacing:.1em;font-weight:800}
 .wf-box.tagb.sel{border-color:var(--wire);border-width:2px} .wf-box.tagb.dim{opacity:.5}
-.wf-box.inp{font-family:"SF Mono",monospace;letter-spacing:.15em}
+.wf-box.inp{font-family:"SF Mono",monospace;letter-spacing:.15em;flex:0 0 128px;justify-content:center;background:var(--fill2);box-shadow:inset 0 2px 3px rgba(0,0,0,.07)}
 .wf-box.line{flex:1;min-height:0;padding:5px 8px}
 .wf-centered{display:flex;justify-content:center}
 .wf-btn{position:relative;border:1px solid var(--wireln);border-radius:10px;background:var(--fill);margin:6px 9px;padding:9px;text-align:center;font-weight:700;font-size:9.5px;color:#3b4653;display:flex;align-items:center;justify-content:center}
@@ -444,7 +450,7 @@ cover = """<div class="page cover">
    <li><b>Light &amp; dark:</b> the app has no fixed default — it follows the device setting. Design every element for <b>both</b>, clearing contrast on each (≥4.5:1 text / ≥3:1 large &amp; UI).</li>
    <li><b>Full-bleed screens:</b> the Course Map and every game playfield <b>fill the screen</b> below the bar (barring the HUD/buttons) — design them edge-to-edge.</li>
    <li><b>Player-scaled screens</b> (Player Setup, Scorecard, Summary, Scavenger Hunt) add <b>one row/chip per player</b>; they're drawn <b>at the 4-player maximum</b> (1–4 supported), so design for the fullest layout.</li>
-   <li>Deeper token / motion / skin reference lives in <code>docs/art-spec.md</code>; the live element inventory is the <code>/style</code> route.</li>
+   <li>The live, re-skinnable element inventory is the <code>/style</code> route in the running app; this document measures the current build.</li>
   </ol>
  </div>
 </div>"""
