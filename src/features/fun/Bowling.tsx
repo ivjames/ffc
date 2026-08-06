@@ -383,20 +383,49 @@ function drawStandingPin(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.restore();
 }
 
-/** A fallen pin: a faded, top-lit ellipse lying along its travel direction. */
+/** A fallen pin lying on its side: the classic profile — belly, tapered neck,
+ *  head, and the neck stripes — pointing head-first along its topple
+ *  direction, with a soft contact shadow so it reads as flat on the lane. */
 function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
+  const R = PIN_R;
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
-  const g = ctx.createLinearGradient(0, -PIN_R, 0, PIN_R);
-  g.addColorStop(0, 'rgba(236,240,246,0.55)');
-  g.addColorStop(1, 'rgba(150,163,184,0.45)');
-  ctx.beginPath();
-  ctx.ellipse(0, 0, PIN_R + 3, PIN_R - 3, 0, 0, TWO_PI);
+
+  drawShadow(ctx, R * 0.25, R * 0.5, R * 1.7, R * 0.45, 0.22);
+
+  // Ivory body, lit across the pin's width (top edge lighter).
+  const g = ctx.createLinearGradient(0, -R, 0, R);
+  g.addColorStop(0, '#f6f8fb');
+  g.addColorStop(0.55, '#dfe6ef');
+  g.addColorStop(1, '#a9b3c3');
   ctx.fillStyle = g;
+
+  // Belly → neck taper → head, one closed profile path (base end at -x).
+  ctx.beginPath();
+  ctx.moveTo(-R * 1.05, -R * 0.55);
+  ctx.bezierCurveTo(-R * 0.35, -R * 0.85, R * 0.35, -R * 0.85, R * 0.7, -R * 0.32);
+  ctx.lineTo(R * 1.1, -R * 0.26);
+  ctx.arc(R * 1.45, 0, R * 0.44, -Math.PI * 0.65, Math.PI * 0.65);
+  ctx.lineTo(R * 0.7, R * 0.32);
+  ctx.bezierCurveTo(R * 0.35, R * 0.85, -R * 0.35, R * 0.85, -R * 1.05, R * 0.55);
+  ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = 'rgba(148,163,184,0.5)';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(105,115,135,0.45)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // The two neck stripes.
+  ctx.fillStyle = withAlpha(PURPLE, 0.9);
+  ctx.fillRect(R * 0.72, -R * 0.31, R * 0.16, R * 0.62);
+  ctx.fillRect(R * 0.98, -R * 0.28, R * 0.14, R * 0.56);
+
+  // Thin highlight along the upper belly so it still reads as glossy ivory.
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-R * 0.7, -R * 0.52);
+  ctx.quadraticCurveTo(0, -R * 0.72, R * 0.45, -R * 0.42);
   ctx.stroke();
   ctx.restore();
 }
