@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
-import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
+import { playStroke, playCup, playUndo, playPinClack, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
 import {
   TWO_PI,
   withAlpha,
-  roundRectPath,
   drawShadow,
   drawSphere,
   neonLine,
@@ -184,6 +183,7 @@ type GS = {
   rollStart: number;
   note: string;
   sweepAt: number; // when the current sweep pause began
+  lastClack: number; // throttle so a pile-up doesn't machine-gun the clack
   afterSweep: 'rack' | 'clear' | 'done'; // what the sweep resolves to
 };
 
@@ -204,14 +204,16 @@ function freshGS(): GS {
     rollStart: 0,
     note: '',
     sweepAt: 0,
+    lastClack: -1e9,
     afterSweep: 'rack',
   };
 }
 
 const standingCount = (pins: Pin[]) => pins.reduce((n, p) => n + (p.down ? 0 : 1), 0);
 
-/** One physics substep of a live roll. */
-function step(gs: GS) {
+/** One physics substep of a live roll. `now` is only used to throttle the
+ *  collision clacks — the physics itself stays fixed-timestep. */
+function step(gs: GS, now: number) {
   const ball = gs.ball;
   if (ball.rolling && !ball.gutter) {
     // Hook: a gentle lateral pull in the aim's x direction while moving.
@@ -259,31 +261,46 @@ function step(gs: GS) {
   }
 
   // Ball ↔ pin collisions (only pins still standing on the deck).
+  let ballHit = 0;
   if (!ball.gutter) {
     for (const p of gs.pins) {
-      collide(ball, p, BALL_M, PIN_M);
+      ballHit = Math.max(ballHit, collide(ball, p, BALL_M, PIN_M));
     }
   }
   // Pin ↔ pin collisions.
+  let pinHit = 0;
   for (let a = 0; a < gs.pins.length; a++) {
     for (let b = a + 1; b < gs.pins.length; b++) {
-      collide(gs.pins[a], gs.pins[b], PIN_M, PIN_M);
+      pinHit = Math.max(pinHit, collide(gs.pins[a], gs.pins[b], PIN_M, PIN_M));
+    }
+  }
+  // Voice the loudest impact this substep: a sharp clack for the ball striking
+  // a pin, a lighter clatter for pins bouncing off each other.
+  if (now - gs.lastClack > 55) {
+    if (ballHit > 0.6) {
+      gs.lastClack = now;
+      playPinClack(Math.min(1.4, 0.4 + ballHit * 0.12));
+    } else if (pinHit > 0.45) {
+      gs.lastClack = now;
+      playPinClack(Math.min(0.9, 0.25 + pinHit * 0.1));
     }
   }
 }
 
-/** Resolve a circle↔circle collision with mass + restitution. */
+/** Resolve a circle↔circle collision with mass + restitution. Returns the
+ *  closing speed when a bounce was applied (0 otherwise) so the caller can
+ *  voice the impact. */
 function collide(
   a: { x: number; y: number; vx: number; vy: number },
   b: { x: number; y: number; vx: number; vy: number },
   ma: number,
   mb: number,
-) {
+): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dist = Math.hypot(dx, dy) || 0.0001;
   const min = ma === BALL_M || mb === BALL_M ? BALL_R + PIN_R : PIN_R * 2;
-  if (dist >= min) return;
+  if (dist >= min) return 0;
   const nx = dx / dist;
   const ny = dy / dist;
   const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
@@ -302,7 +319,9 @@ function collide(
     a.vy -= j * invA * ny;
     b.vx += j * invB * nx;
     b.vy += j * invB * ny;
+    return -rel;
   }
+  return 0;
 }
 
 // —— juice: rendering-only effects (no gameplay state) ————————————————————————
@@ -339,14 +358,14 @@ function updateFX(fx: FX, gs: GS, dt: number) {
   for (const p of gs.pins) {
     if (p.down && !fx.downSeen.has(p)) {
       fx.downSeen.set(p, true);
-      spawnBurst(fx.particles, p.x, p.y, 6, 120, PURPLE_LIGHT);
+      const q = projectPin(p.x, p.y);
+      spawnBurst(fx.particles, q.x, q.y, 6, 50 + 90 * q.s, PURPLE_LIGHT);
     }
   }
 
   // On the roll → sweep edge, celebrate strikes (big) and spares (small).
   if (fx.prevPhase !== 'sweep' && gs.phase === 'sweep') {
-    const cx = W / 2;
-    const cy = HEAD_Y - PIN_GAP_Y * 1.5;
+    const { x: cx, y: cy } = project(W / 2, HEAD_Y - PIN_GAP_Y * 1.5);
     if (gs.note.includes('Strike')) {
       fx.shake = 8;
       fx.flash = 1;
@@ -367,42 +386,39 @@ function updateFX(fx: FX, gs: GS, dt: number) {
 }
 
 // —— drawing —————————————————————————————————————————————————————————————————
-/** A standing pin: soft shadow, lit body, glossy highlight, purple neck ring. */
-function drawStandingPin(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  drawShadow(ctx, x, y + PIN_R * 0.55, PIN_R * 1.05, PIN_R * 0.5, 0.3);
-  drawSphere(ctx, x, y, PIN_R, '#ffffff', '#e8edf4', '#9aa6b6');
-  // Purple neck stripe reads as the classic pin band + our theme accent.
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(x, y, PIN_R - 2.5, 0, TWO_PI);
-  ctx.strokeStyle = PURPLE;
-  ctx.lineWidth = 2;
-  ctx.shadowColor = withAlpha(PURPLE, 0.7);
-  ctx.shadowBlur = 5;
-  ctx.stroke();
-  ctx.restore();
+// —— POV projection ——
+// The sim stays top-down (x across the lane, y down it); only the renderer
+// looks down the lane from behind the bowler. project() maps a sim point on
+// the lane surface to screen space: things farther up the lane (smaller sim y)
+// shrink toward the vanishing point and rise toward the horizon.
+const CAM_D = 140; // camera distance behind the near lane edge; bigger = flatter
+const HORIZON = 56; // screen y the lane converges toward
+const NEAR_Y = H - 4; // screen y of the nearest lane edge (sim y = H)
+const PIN_VIEW = 2.5; // stylized pin size boost so the rack reads at distance
+type Proj = { x: number; y: number; s: number };
+function project(x: number, y: number): Proj {
+  const s = CAM_D / (CAM_D + (H - y));
+  return { x: W / 2 + (x - W / 2) * s, y: HORIZON + (NEAR_Y - HORIZON) * s, s };
 }
 
-/** A fallen pin lying on its side: the classic profile — belly, tapered neck,
- *  head, and the neck stripes — pointing head-first along its topple
- *  direction, with a soft contact shadow so it reads as flat on the lane. */
-function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
+// Display-only: exaggerate the rack's depth around the head pin so the back
+// rows peek out from behind the front ones instead of clumping — the physics
+// spacing is untouched.
+const RACK_SPREAD = 1.6;
+const projectPin = (x: number, y: number) => project(x, HEAD_Y + (y - HEAD_Y) * RACK_SPREAD);
+
+/** Paint the pin profile at the current transform — head pointing +x, base at
+ *  -1.48R. Real-pin proportions: 15" tall vs 4.75" max diameter (≈3.2:1), flat
+ *  base, belly max at 0, neck waist at +1.8R, head centered at +2.8R. Shared by
+ *  the upright and fallen renderers. */
+function drawPinShape(ctx: CanvasRenderingContext2D) {
   const R = PIN_R;
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
-
-  drawShadow(ctx, R * 0.6, R * 0.5, R * 2.4, R * 0.42, 0.22);
-
-  // Ivory body, lit across the pin's width (top edge lighter).
   const g = ctx.createLinearGradient(0, -R, 0, R);
   g.addColorStop(0, '#f6f8fb');
   g.addColorStop(0.55, '#dfe6ef');
   g.addColorStop(1, '#a9b3c3');
   ctx.fillStyle = g;
 
-  // Real-pin proportions — 15" tall vs 4.75" max diameter (≈3.2:1): flat base
-  // at -1.48R, belly max at 0, neck waist at +1.8R, head centered at +2.8R.
   ctx.beginPath();
   ctx.moveTo(-R * 1.48, -R * 0.33);
   ctx.bezierCurveTo(-R * 1.15, -R * 0.72, -R * 0.55, -R * 0.78, 0, -R * 0.78);
@@ -423,71 +439,146 @@ function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
   ctx.fillRect(R * 1.42, -R * 0.34, R * 0.17, R * 0.68);
   ctx.fillRect(R * 1.7, -R * 0.31, R * 0.15, R * 0.62);
 
-  // Thin highlight along the upper belly so it still reads as glossy ivory.
+  // Thin highlight along the upper belly so it reads as glossy ivory.
   ctx.strokeStyle = 'rgba(255,255,255,0.55)';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.moveTo(-R * 1.0, -R * 0.55);
   ctx.quadraticCurveTo(-R * 0.1, -R * 0.68, R * 0.7, -R * 0.45);
   ctx.stroke();
+}
+
+/** A standing pin seen from behind the bowler: upright, base on the lane. */
+function drawStandingPin(ctx: CanvasRenderingContext2D, p: Pin) {
+  const q = projectPin(p.x, p.y);
+  const sc = q.s * PIN_VIEW;
+  drawShadow(ctx, q.x, q.y + 1.5, PIN_R * 1.1 * sc, PIN_R * 0.36 * sc, 0.3);
+  ctx.save();
+  ctx.translate(q.x, q.y);
+  ctx.scale(sc, sc);
+  ctx.rotate(-Math.PI / 2);
+  ctx.translate(PIN_R * 1.48, 0); // put the flat base on the lane point
+  drawPinShape(ctx);
   ctx.restore();
 }
 
-/** The glossy, top-lit bowling ball with a contact shadow. */
+/** A fallen pin lying flat on the lane, foreshortened by the ground plane and
+ *  pointing head-first along its topple direction. */
+function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
+  const q = projectPin(p.x, p.y);
+  const sc = q.s * PIN_VIEW;
+  drawShadow(ctx, q.x + 1.5, q.y + 1.5, PIN_R * 2.1 * sc, PIN_R * 0.45 * sc, 0.18);
+  ctx.save();
+  ctx.translate(q.x, q.y);
+  ctx.scale(sc, sc * 0.62); // squash before rotating: the pin lies on the lane
+  ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
+  drawPinShape(ctx);
+  ctx.restore();
+}
+
+/** View-scale for the ball: ×1 in the hand, boosted with distance so it stays
+ *  in proportion to the (boosted) pins at the deck. */
+const ballView = (s: number) => 1 + (1 - s) * 1.35;
+
+/** The glossy bowling ball, shrinking as it rolls away from the bowler. */
 function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  drawShadow(ctx, x, y + BALL_R * 0.55, BALL_R * 0.95, BALL_R * 0.5, 0.35);
-  drawSphere(ctx, x, y, BALL_R, PURPLE_LIGHT, PURPLE, PURPLE_DEEP, { rim: true });
+  const q = project(x, y);
+  const r = Math.max(3, BALL_R * q.s * ballView(q.s));
+  drawShadow(ctx, q.x, q.y + r * 0.3, r * 0.95, r * 0.4, 0.35);
+  drawSphere(ctx, q.x, q.y - r * 0.45, r, PURPLE_LIGHT, PURPLE, PURPLE_DEEP, { rim: true });
 }
 
 function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.clearRect(0, 0, W, H);
 
-  // —— Backdrop: a dim, top-lit alley beyond the pins ——
+  const nearL = project(LANE_L, H);
+  const nearR = project(LANE_R, H);
+  const farL = project(LANE_L, 0);
+  const farR = project(LANE_R, 0);
+  const deck = project(W / 2, HEAD_Y);
+
+  // —— Back wall of the alley, falling away into darkness above the horizon ——
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#1a1330');
-  bg.addColorStop(0.35, '#121026');
+  bg.addColorStop(0, '#0b0a16');
+  bg.addColorStop(0.3, '#1a1330');
+  bg.addColorStop(0.55, '#121026');
   bg.addColorStop(1, '#0b0a16');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // Pin-deck sheen glowing down from the top (behind the rack).
-  const sheen = ctx.createRadialGradient(W / 2, HEAD_Y - 40, 10, W / 2, HEAD_Y - 40, H * 0.55);
-  sheen.addColorStop(0, withAlpha(PURPLE, 0.16));
+  // Pin-deck glow radiating from behind the rack.
+  const sheen = ctx.createRadialGradient(W / 2, deck.y - 14, 8, W / 2, deck.y - 14, H * 0.42);
+  sheen.addColorStop(0, withAlpha(PURPLE, 0.2));
   sheen.addColorStop(1, withAlpha(PURPLE, 0));
   ctx.fillStyle = sheen;
   ctx.fillRect(0, 0, W, H);
 
-  // —— Gutters: rounded, recessed channels either side of the lane ——
-  const gut = ctx.createLinearGradient(0, 0, 0, H);
-  gut.addColorStop(0, '#141021');
-  gut.addColorStop(1, '#0a0813');
-  ctx.fillStyle = gut;
-  roundRectPath(ctx, 4, 6, LANE_L - 8, H - 12, 8);
-  ctx.fill();
-  roundRectPath(ctx, LANE_R + 4, 6, W - LANE_R - 8, H - 12, 8);
-  ctx.fill();
+  // Pit + pinsetter: a near-black band with a neon edge above the deck.
+  ctx.fillStyle = '#07060d';
+  ctx.fillRect(farL.x - 16, farL.y - 30, farR.x - farL.x + 32, 30);
+  neonLine(ctx, farL.x - 16, farL.y - 30, farR.x + 16, farL.y - 30, PURPLE, 2, 10);
 
-  // —— Lane: polished wood, brighter toward the bowler where light pools ——
-  const wood = ctx.createLinearGradient(0, 0, 0, H);
-  wood.addColorStop(0, '#4a3a22');
-  wood.addColorStop(0.55, '#5a4526');
+  // —— Gutters: converging recessed channels either side of the lane ——
+  const gut = ctx.createLinearGradient(0, farL.y, 0, nearL.y);
+  gut.addColorStop(0, '#0a0813');
+  gut.addColorStop(1, '#141021');
+  ctx.fillStyle = gut;
+  for (const [x0, x1] of [
+    [10, LANE_L],
+    [LANE_R, W - 10],
+  ] as const) {
+    const a = project(x0, H);
+    const b = project(x1, H);
+    const c = project(x1, 0);
+    const d = project(x0, 0);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.lineTo(d.x, d.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // —— Lane: polished boards converging on the pin deck ——
+  ctx.beginPath();
+  ctx.moveTo(nearL.x, nearL.y);
+  ctx.lineTo(nearR.x, nearR.y);
+  ctx.lineTo(farR.x, farR.y);
+  ctx.lineTo(farL.x, farL.y);
+  ctx.closePath();
+  const wood = ctx.createLinearGradient(0, farL.y, 0, nearL.y);
+  wood.addColorStop(0, '#3d3020');
+  wood.addColorStop(0.45, '#5a4526');
   wood.addColorStop(1, '#6b5330');
   ctx.fillStyle = wood;
-  ctx.fillRect(LANE_L, 0, LANE_R - LANE_L, H);
-  // A soft lengthwise gloss down the middle of the boards.
-  const gloss = ctx.createLinearGradient(LANE_L, 0, LANE_R, 0);
+  ctx.fill();
+  // Lengthwise gloss pooling down the middle boards.
+  const gloss = ctx.createLinearGradient(nearL.x, 0, nearR.x, 0);
   gloss.addColorStop(0, 'rgba(0,0,0,0.25)');
   gloss.addColorStop(0.5, 'rgba(255,236,190,0.10)');
   gloss.addColorStop(1, 'rgba(0,0,0,0.25)');
   ctx.fillStyle = gloss;
-  ctx.fillRect(LANE_L, 0, LANE_R - LANE_L, H);
-  // Lane boards.
+  ctx.fill();
+  // Boards converging toward the vanishing point.
   ctx.strokeStyle = 'rgba(0,0,0,0.20)';
   ctx.lineWidth = 1;
   for (let x = LANE_L + 20; x < LANE_R; x += 20) {
+    const a = project(x, H);
+    const b = project(x, 0);
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, H);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  // Faint cross-seams for a sense of distance down the lane.
+  ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+  for (let y = 120; y < H - 60; y += 90) {
+    const a = project(LANE_L, y);
+    const b = project(LANE_R, y);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
     ctx.stroke();
   }
 
@@ -497,19 +588,21 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.shadowColor = withAlpha(PURPLE, 0.7);
   ctx.shadowBlur = 6;
   for (let i = -2; i <= 2; i++) {
-    const ax = W / 2 + i * 26;
-    const ay = HEAD_Y + 150 + Math.abs(i) * 14;
+    const q = project(W / 2 + i * 26, HEAD_Y + 150 + Math.abs(i) * 14);
+    const sz = 5 * q.s + 2;
     ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(ax - 4, ay + 12);
-    ctx.lineTo(ax + 4, ay + 12);
+    ctx.moveTo(q.x, q.y - sz * 1.6);
+    ctx.lineTo(q.x - sz * 0.55, q.y);
+    ctx.lineTo(q.x + sz * 0.55, q.y);
     ctx.closePath();
     ctx.fill();
   }
   ctx.restore();
 
-  // —— Foul line: a glowing neon accent ——
-  neonLine(ctx, LANE_L, H - 70, LANE_R, H - 70, PURPLE, 3, 12);
+  // —— Foul line: a glowing neon accent across the approach ——
+  const foulL = project(LANE_L, H - 70);
+  const foulR = project(LANE_R, H - 70);
+  neonLine(ctx, foulL.x, foulL.y, foulR.x, foulR.y, PURPLE, 3, 12);
 
   // —— Vignette for depth ——
   const vig = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.28, W / 2, H * 0.5, H * 0.72);
@@ -529,22 +622,34 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   for (let i = 0; i < fx.trail.length; i++) {
     const t = fx.trail[i];
     const k = i / fx.trail.length;
+    const q = project(t.x, t.y);
+    const br = BALL_R * q.s * ballView(q.s);
     ctx.beginPath();
-    ctx.arc(t.x, t.y, BALL_R * (0.3 + k * 0.6), 0, TWO_PI);
+    ctx.arc(q.x, q.y - br * 0.5, br * (0.3 + k * 0.6), 0, TWO_PI);
     ctx.fillStyle = withAlpha(PURPLE, 0.04 + k * 0.14);
     ctx.fill();
   }
 
-  // Pins: fallen ones lie flat (drawn first), standing ones stand lit on top.
-  for (const p of gs.pins) if (p.down) drawFallenPin(ctx, p);
-  for (const p of gs.pins) if (!p.down) drawStandingPin(ctx, p.x, p.y);
+  // Every lane object — fallen pins included — draws far-to-near in one pass,
+  // so a pin that slid toward the bowler isn't painted under a farther
+  // standing pin or the ball. Sort on projected screen y, since pins project
+  // through the rack's display-only depth spread and the ball doesn't.
+  const items: Array<{ sy: number; d: () => void }> = gs.pins.map((p) => ({
+    sy: projectPin(p.x, p.y).y,
+    d: p.down ? () => drawFallenPin(ctx, p) : () => drawStandingPin(ctx, p),
+  }));
+  items.push({ sy: project(gs.ball.x, gs.ball.y).y, d: () => drawBall(ctx, gs.ball.x, gs.ball.y) });
+  items.sort((a, b) => a.sy - b.sy);
+  for (const it of items) it.d();
 
-  // Aim guide (glowing).
+  // Aim guide (glowing), converging up the lane with the perspective.
   if (gs.phase === 'aim' && gs.drag.active) {
     const v = launch(gs.drag.dx, gs.drag.dy);
     if (v) {
-      const len = 120;
-      const s = Math.hypot(v.vx0, v.vy0);
+      const len = 150;
+      const sp = Math.hypot(v.vx0, v.vy0);
+      const from = project(START.x, START.y);
+      const to = project(START.x + (v.vx0 / sp) * len, START.y + (v.vy0 / sp) * len);
       ctx.save();
       ctx.strokeStyle = withAlpha('#38bdf8', 0.85);
       ctx.shadowColor = withAlpha('#38bdf8', 0.8);
@@ -553,14 +658,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
       ctx.lineCap = 'round';
       ctx.setLineDash([6, 6]);
       ctx.beginPath();
-      ctx.moveTo(START.x, START.y);
-      ctx.lineTo(START.x + (v.vx0 / s) * len, START.y + (v.vy0 / s) * len);
+      ctx.moveTo(from.x, from.y - 6);
+      ctx.lineTo(to.x, to.y);
       ctx.stroke();
       ctx.restore();
     }
   }
-
-  drawBall(ctx, gs.ball.x, gs.ball.y);
 
   drawParticles(ctx, fx.particles);
   drawFloaters(ctx, fx.floaters);
@@ -582,7 +685,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.fillStyle = strike ? '#f5e9ff' : '#ede9fe';
     ctx.shadowColor = withAlpha(PURPLE, 0.95);
     ctx.shadowBlur = 18;
-    ctx.fillText(strike ? 'STRIKE!' : 'SPARE!', W / 2, HEAD_Y + 60);
+    ctx.fillText(strike ? 'STRIKE!' : 'SPARE!', W / 2, 330);
     ctx.restore();
   }
 }
@@ -698,7 +801,7 @@ export default function Bowling() {
     // The STRIKE!/SPARE! banner covers those rolls; pop the pinfall for the
     // rest — including 10th-frame bonus clears, which set no banner note.
     if (!note.includes('Strike') && !note.includes('Spare')) {
-      spawnFloater(fxRef.current.floaters, W / 2, HEAD_Y + 64, pinfall > 0 ? `+${pinfall}` : 'MISS', pinfall > 0 ? '#d8b4fe' : '#94a3b8', { size: 22, life: 800 });
+      spawnFloater(fxRef.current.floaters, W / 2, project(W / 2, HEAD_Y).y + 44, pinfall > 0 ? `+${pinfall}` : 'MISS', pinfall > 0 ? '#d8b4fe' : '#94a3b8', { size: 22, life: 800 });
     }
 
     gs.afterSweep = afterSweep;
@@ -775,7 +878,7 @@ export default function Bowling() {
       last = now;
 
       while (acc >= FIXED) {
-        if (gs.phase === 'rolling') step(gs);
+        if (gs.phase === 'rolling') step(gs, now);
         acc -= FIXED;
       }
 
@@ -842,7 +945,8 @@ export default function Bowling() {
     setPhase('rolling');
     setNote('');
     // Rendering-only: a little release puff at the foul line.
-    spawnBurst(fxRef.current.particles, gs.ball.x, gs.ball.y, 10, 140, PURPLE_LIGHT);
+    const q = project(gs.ball.x, gs.ball.y);
+    spawnBurst(fxRef.current.particles, q.x, q.y, 10, 140, PURPLE_LIGHT);
     playStroke();
   }, []);
 

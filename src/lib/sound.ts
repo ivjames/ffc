@@ -209,6 +209,18 @@ export function playWaterBump(intensity = 1): void {
   noise({ dur: 0.13, gain: g * 0.7, freq: 1300 });
 }
 
+/** Hard wooden "clack" of ball↔pin or pin↔pin contact. `intensity` (~0.3–1.4)
+ *  scales loudness and brightness with the impact speed; a quieter click a beat
+ *  later sells the pin clattering back onto the deck. */
+export function playPinClack(intensity = 1): void {
+  const g = Math.min(0.22, 0.11 * intensity);
+  const bright = 1900 + Math.min(1100, intensity * 650);
+  noise({ dur: 0.035, gain: g, freq: bright });
+  tone({ type: 'triangle', freq: 560 + intensity * 140, freqEnd: 310, dur: 0.055, gain: g * 0.7 });
+  // Bounce echo.
+  noise({ dur: 0.03, gain: g * 0.4, freq: bright * 0.8, start: 0.07 });
+}
+
 /** Bright little "bip" accent layered on a bump that scores. */
 export function playScore(): void {
   tone({ type: 'triangle', freq: 880, freqEnd: 1174.7, dur: 0.09, gain: 0.12 });
