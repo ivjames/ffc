@@ -23,6 +23,7 @@ import AxeThrow from './features/fun/AxeThrow';
 import BattingCages from './features/fun/BattingCages';
 import Bowling from './features/fun/Bowling';
 import GoKarts from './features/fun/GoKarts';
+import WhackAMole from './features/fun/WhackAMole';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import { BuildStamp } from './ui/BuildStamp';
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="/fun/batting" element={<BattingCages />} />
         <Route path="/fun/bowling" element={<Bowling />} />
         <Route path="/fun/karts" element={<GoKarts />} />
+        <Route path="/fun/mole" element={<WhackAMole />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         {/* Living component inventory / style guide — the theming reference. */}
