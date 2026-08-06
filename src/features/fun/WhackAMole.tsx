@@ -42,7 +42,9 @@ const RISE_H = 58; // how far the head rises out of the hole
 const HIT_R = 42; // generous tap radius around the head
 
 const GAME_MS = 30_000;
-const COUNTDOWN_MS = 2600; // "3, 2, 1, GO!" before the round starts
+const COUNT_STEP_MS = 800; // per digit of the "3, 2, 1" countdown
+const GO_MS = 500; // beat of "GO!" after the digits, before play starts
+const COUNTDOWN_MS = 3 * COUNT_STEP_MS + GO_MS;
 const RISE_MS = 150;
 const SINK_MS = 150;
 const WHACK_MS = 300; // squashed-with-stars linger before the mole is removed
@@ -430,10 +432,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // "3, 2, 1, GO!" countdown before the round starts.
+  // "3, 2, 1, GO!" countdown before the round starts. The digits run first;
+  // the last GO_MS of the phase shows "GO!" so the cue is actually visible
+  // before the frame loop flips to 'playing'.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
-    const n = Math.ceil(left / 800);
+    const n = Math.ceil((left - GO_MS) / COUNT_STEP_MS);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(0, 0, W, H);
     ctx.save();
