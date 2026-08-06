@@ -383,20 +383,52 @@ function drawStandingPin(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.restore();
 }
 
-/** A fallen pin: a faded, top-lit ellipse lying along its travel direction. */
+/** A fallen pin lying on its side: the classic profile — belly, tapered neck,
+ *  head, and the neck stripes — pointing head-first along its topple
+ *  direction, with a soft contact shadow so it reads as flat on the lane. */
 function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
+  const R = PIN_R;
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
-  const g = ctx.createLinearGradient(0, -PIN_R, 0, PIN_R);
-  g.addColorStop(0, 'rgba(236,240,246,0.55)');
-  g.addColorStop(1, 'rgba(150,163,184,0.45)');
-  ctx.beginPath();
-  ctx.ellipse(0, 0, PIN_R + 3, PIN_R - 3, 0, 0, TWO_PI);
+
+  drawShadow(ctx, R * 0.6, R * 0.5, R * 2.4, R * 0.42, 0.22);
+
+  // Ivory body, lit across the pin's width (top edge lighter).
+  const g = ctx.createLinearGradient(0, -R, 0, R);
+  g.addColorStop(0, '#f6f8fb');
+  g.addColorStop(0.55, '#dfe6ef');
+  g.addColorStop(1, '#a9b3c3');
   ctx.fillStyle = g;
+
+  // Real-pin proportions — 15" tall vs 4.75" max diameter (≈3.2:1): flat base
+  // at -1.48R, belly max at 0, neck waist at +1.8R, head centered at +2.8R.
+  ctx.beginPath();
+  ctx.moveTo(-R * 1.48, -R * 0.33);
+  ctx.bezierCurveTo(-R * 1.15, -R * 0.72, -R * 0.55, -R * 0.78, 0, -R * 0.78);
+  ctx.bezierCurveTo(R * 0.85, -R * 0.78, R * 1.3, -R * 0.42, R * 1.8, -R * 0.3);
+  ctx.bezierCurveTo(R * 2.1, -R * 0.24, R * 2.3, -R * 0.3, R * 2.45, -R * 0.36);
+  ctx.arc(R * 2.8, 0, R * 0.42, -Math.PI * 0.72, Math.PI * 0.72);
+  ctx.bezierCurveTo(R * 2.3, R * 0.3, R * 2.1, R * 0.24, R * 1.8, R * 0.3);
+  ctx.bezierCurveTo(R * 1.3, R * 0.42, R * 0.85, R * 0.78, 0, R * 0.78);
+  ctx.bezierCurveTo(-R * 0.55, R * 0.78, -R * 1.15, R * 0.72, -R * 1.48, R * 0.33);
+  ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = 'rgba(148,163,184,0.5)';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(105,115,135,0.45)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // The two stripes just below the neck waist.
+  ctx.fillStyle = withAlpha(PURPLE, 0.9);
+  ctx.fillRect(R * 1.42, -R * 0.34, R * 0.17, R * 0.68);
+  ctx.fillRect(R * 1.7, -R * 0.31, R * 0.15, R * 0.62);
+
+  // Thin highlight along the upper belly so it still reads as glossy ivory.
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-R * 1.0, -R * 0.55);
+  ctx.quadraticCurveTo(-R * 0.1, -R * 0.68, R * 0.7, -R * 0.45);
   ctx.stroke();
   ctx.restore();
 }
