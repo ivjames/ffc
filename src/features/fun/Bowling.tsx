@@ -358,7 +358,7 @@ function updateFX(fx: FX, gs: GS, dt: number) {
   for (const p of gs.pins) {
     if (p.down && !fx.downSeen.has(p)) {
       fx.downSeen.set(p, true);
-      const q = project(p.x, p.y);
+      const q = projectPin(p.x, p.y);
       spawnBurst(fx.particles, q.x, q.y, 6, 50 + 90 * q.s, PURPLE_LIGHT);
     }
   }
@@ -391,15 +391,21 @@ function updateFX(fx: FX, gs: GS, dt: number) {
 // looks down the lane from behind the bowler. project() maps a sim point on
 // the lane surface to screen space: things farther up the lane (smaller sim y)
 // shrink toward the vanishing point and rise toward the horizon.
-const CAM_D = 280; // camera distance behind the near lane edge; bigger = flatter
-const HORIZON = 112; // screen y the lane converges toward
+const CAM_D = 140; // camera distance behind the near lane edge; bigger = flatter
+const HORIZON = 56; // screen y the lane converges toward
 const NEAR_Y = H - 4; // screen y of the nearest lane edge (sim y = H)
-const PIN_VIEW = 1.8; // stylized pin size boost so the rack reads at distance
+const PIN_VIEW = 2.5; // stylized pin size boost so the rack reads at distance
 type Proj = { x: number; y: number; s: number };
 function project(x: number, y: number): Proj {
   const s = CAM_D / (CAM_D + (H - y));
   return { x: W / 2 + (x - W / 2) * s, y: HORIZON + (NEAR_Y - HORIZON) * s, s };
 }
+
+// Display-only: exaggerate the rack's depth around the head pin so the back
+// rows peek out from behind the front ones instead of clumping — the physics
+// spacing is untouched.
+const RACK_SPREAD = 1.6;
+const projectPin = (x: number, y: number) => project(x, HEAD_Y + (y - HEAD_Y) * RACK_SPREAD);
 
 /** Paint the pin profile at the current transform — head pointing +x, base at
  *  -1.48R. Real-pin proportions: 15" tall vs 4.75" max diameter (≈3.2:1), flat
@@ -444,7 +450,7 @@ function drawPinShape(ctx: CanvasRenderingContext2D) {
 
 /** A standing pin seen from behind the bowler: upright, base on the lane. */
 function drawStandingPin(ctx: CanvasRenderingContext2D, p: Pin) {
-  const q = project(p.x, p.y);
+  const q = projectPin(p.x, p.y);
   const sc = q.s * PIN_VIEW;
   drawShadow(ctx, q.x, q.y + 1.5, PIN_R * 1.1 * sc, PIN_R * 0.36 * sc, 0.3);
   ctx.save();
@@ -459,7 +465,7 @@ function drawStandingPin(ctx: CanvasRenderingContext2D, p: Pin) {
 /** A fallen pin lying flat on the lane, foreshortened by the ground plane and
  *  pointing head-first along its topple direction. */
 function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
-  const q = project(p.x, p.y);
+  const q = projectPin(p.x, p.y);
   const sc = q.s * PIN_VIEW;
   drawShadow(ctx, q.x + 1.5, q.y + 1.5, PIN_R * 2.1 * sc, PIN_R * 0.45 * sc, 0.18);
   ctx.save();
@@ -470,10 +476,14 @@ function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
   ctx.restore();
 }
 
+/** View-scale for the ball: ×1 in the hand, boosted with distance so it stays
+ *  in proportion to the (boosted) pins at the deck. */
+const ballView = (s: number) => 1 + (1 - s) * 1.35;
+
 /** The glossy bowling ball, shrinking as it rolls away from the bowler. */
 function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number) {
   const q = project(x, y);
-  const r = Math.max(3, BALL_R * q.s * 1.15);
+  const r = Math.max(3, BALL_R * q.s * ballView(q.s));
   drawShadow(ctx, q.x, q.y + r * 0.3, r * 0.95, r * 0.4, 0.35);
   drawSphere(ctx, q.x, q.y - r * 0.45, r, PURPLE_LIGHT, PURPLE, PURPLE_DEEP, { rim: true });
 }
@@ -613,8 +623,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     const t = fx.trail[i];
     const k = i / fx.trail.length;
     const q = project(t.x, t.y);
+    const br = BALL_R * q.s * ballView(q.s);
     ctx.beginPath();
-    ctx.arc(q.x, q.y - BALL_R * q.s * 0.5, BALL_R * q.s * (0.3 + k * 0.6), 0, TWO_PI);
+    ctx.arc(q.x, q.y - br * 0.5, br * (0.3 + k * 0.6), 0, TWO_PI);
     ctx.fillStyle = withAlpha(PURPLE, 0.04 + k * 0.14);
     ctx.fill();
   }
