@@ -613,10 +613,6 @@ export default function Bowling() {
     setRolls([...gs.rolls]);
     if (after === 0) playCup(); // cleared the deck (strike / spare / clean-up)
     else if (pinfall === 0) playUndo(); // whiff or gutter
-    // The STRIKE!/SPARE! banner covers cleared decks; pop the pinfall otherwise.
-    if (after !== 0) {
-      spawnFloater(fxRef.current.floaters, W / 2, HEAD_Y + 64, pinfall > 0 ? `+${pinfall}` : 'MISS', pinfall > 0 ? '#d8b4fe' : '#94a3b8', { size: 22, life: 800 });
-    }
 
     // 'rack' = fresh ten after the sweep; 'clear' = sweep the downed pins and
     // leave the standing ones for the next ball; 'done' = game over.
@@ -665,6 +661,12 @@ export default function Bowling() {
         afterSweep = 'done';
         note = '';
       }
+    }
+
+    // The STRIKE!/SPARE! banner covers those rolls; pop the pinfall for the
+    // rest — including 10th-frame bonus clears, which set no banner note.
+    if (!note.includes('Strike') && !note.includes('Spare')) {
+      spawnFloater(fxRef.current.floaters, W / 2, HEAD_Y + 64, pinfall > 0 ? `+${pinfall}` : 'MISS', pinfall > 0 ? '#d8b4fe' : '#94a3b8', { size: 22, life: 800 });
     }
 
     gs.afterSweep = afterSweep;

@@ -46,10 +46,11 @@ const PUCK_MIN_HIT = 3.4; // floor speed after a mallet strike so it never stall
 const SERVE_SPEED = 3.4;
 const AI_SPEED = 4.2; // CPU mallet max speed (units/step) — kept beatable
 const SERVE_DELAY = 850; // pause at center before the puck launches
+const END_DELAY_MS = 1100; // hold the play view after the winning goal so its popup shows
 
 type Vec = { x: number; y: number };
 type Pad = { x: number; y: number; px: number; py: number }; // p* = previous pos
-type Phase = 'ready' | 'serve' | 'play' | 'done';
+type Phase = 'ready' | 'serve' | 'play' | 'over' | 'done';
 type GS = {
   phase: Phase;
   puck: { x: number; y: number; vx: number; vy: number };
@@ -58,6 +59,7 @@ type GS = {
   you: number;
   cpu: number;
   serveAt: number; // timestamp to launch the next serve
+  overAt: number; // timestamp the winning goal landed (brief hold before 'done')
   serveDir: number; // -1 up (toward CPU), +1 down (toward you)
   pointer: Vec | null; // latest finger target for the player mallet
   aiRetreatUntil: number; // after a strike, defend until this time (no re-chase)
@@ -79,6 +81,7 @@ function freshGS(now: number): GS {
     you: 0,
     cpu: 0,
     serveAt: now + SERVE_DELAY,
+    overAt: 0,
     serveDir: -1,
     pointer: null,
     aiRetreatUntil: 0,
@@ -424,6 +427,7 @@ export default function AirHockey() {
         if (!hiddenAt) hiddenAt = performance.now();
       } else if (hiddenAt) {
         gsRef.current.serveAt += performance.now() - hiddenAt;
+        gsRef.current.overAt += performance.now() - hiddenAt;
         hiddenAt = 0;
         last = performance.now();
         acc = 0;
@@ -442,6 +446,10 @@ export default function AirHockey() {
       last = now;
 
       if (gs.phase === 'serve' && now >= gs.serveAt) serve(gs);
+      if (gs.phase === 'over' && now - gs.overAt >= END_DELAY_MS) {
+        gs.phase = 'done';
+        setPhase('done');
+      }
 
       const hitRef = { v: false };
       let goal: 'you' | 'cpu' | null = null;
@@ -484,8 +492,10 @@ export default function AirHockey() {
           playUndo();
         }
         if (gs.you >= TARGET || gs.cpu >= TARGET) {
-          gs.phase = 'done';
-          setPhase('done');
+          // Hold the play view so the winning GOAL! popup and burst play out
+          // before the results screen replaces the canvas.
+          gs.phase = 'over';
+          gs.overAt = now;
           playFanfare();
         } else {
           gs.puck = centeredPuck();
