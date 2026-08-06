@@ -48,7 +48,9 @@ const TURN_FLOOR = 0.3; // min turn authority, so a slow kart can still point ou
 const LEAD = 80; // finger lead distance (px) for full throttle
 const CATCH_R = 18; // within this of the finger, the kart eases to a stop
 const BRAKE = 0.9; // gentle braking once caught up to the finger
-const COUNTDOWN_MS = 2600;
+const COUNT_STEP_MS = 800; // per digit of the "3, 2, 1" countdown
+const GO_MS = 500; // beat of "GO!" after the digits, before the lights go green
+const COUNTDOWN_MS = 3 * COUNT_STEP_MS + GO_MS;
 
 // The wall sits half the kart's width in from the asphalt edge, so the kart body
 // rests against the barrier rather than half-buried in it.
@@ -678,7 +680,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number, fx: FX) {
   // Countdown.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
-    const n = Math.ceil(left / 800);
+    const n = Math.ceil((left - GO_MS) / COUNT_STEP_MS);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(0, 0, W, H);
     ctx.save();

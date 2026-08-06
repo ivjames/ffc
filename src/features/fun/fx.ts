@@ -200,6 +200,56 @@ export function drawParticles(ctx: CanvasRenderingContext2D, list: Particle[]): 
   ctx.restore();
 }
 
+// —— score floaters ———————————————————————————————————————————————————————————
+// Rising, fading text popups ("+3", "GOAL!") anchored where a score happened.
+export type Floater = {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number; // ms remaining
+  max: number; // ms total (for alpha falloff)
+  size: number; // font px
+};
+
+/** Push a rising score popup onto `list`. */
+export function spawnFloater(
+  list: Floater[],
+  x: number,
+  y: number,
+  text: string,
+  color: string,
+  opts: { life?: number; size?: number } = {},
+): void {
+  const max = opts.life ?? 650;
+  list.push({ x, y, text, color, life: max, max, size: opts.size ?? 20 });
+}
+
+/** Advance floaters by `dt` ms (rise + fade) and return the survivors. */
+export function stepFloaters(list: Floater[], dt: number, rise = 0.045): Floater[] {
+  for (const f of list) {
+    f.y -= dt * rise;
+    f.life -= dt;
+  }
+  return list.filter((f) => f.life > 0);
+}
+
+/** Draw floaters with a soft self-colored glow, fading out over their life. */
+export function drawFloaters(ctx: CanvasRenderingContext2D, list: Floater[]): void {
+  if (!list.length) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  for (const f of list) {
+    ctx.globalAlpha = Math.max(0, f.life / f.max);
+    ctx.font = `bold ${f.size}px system-ui, sans-serif`;
+    ctx.fillStyle = f.color;
+    ctx.shadowColor = f.color;
+    ctx.shadowBlur = 10;
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.restore();
+}
+
 // —— trails & decay ———————————————————————————————————————————————————————————
 /** Push a point onto a capped motion trail (mutates + returns it). */
 export function pushTrail(trail: Vec[], x: number, y: number, cap = 16): Vec[] {

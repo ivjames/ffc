@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
-import type { Particle, Vec as FxVec } from './fx';
+import type { Particle, Vec as FxVec, Floater } from './fx';
 import {
   TWO_PI,
   withAlpha,
@@ -13,6 +13,9 @@ import {
   spawnBurst,
   stepParticles,
   drawParticles,
+  spawnFloater,
+  stepFloaters,
+  drawFloaters,
   pushTrail,
   decay,
   shakeOffset,
@@ -236,19 +239,21 @@ function step(gs: GS, hitRef: { v: boolean }, now: number): 'you' | 'cpu' | null
 type FX = {
   trail: FxVec[]; // recent puck positions → motion streak
   particles: Particle[]; // spark bursts on hits/goals
+  floaters: Floater[]; // rising GOAL! popups
   shake: number; // camera shake magnitude (px), decays to 0
   flash: number; // goal flash 0..1, decays to 0
   flashColor: string;
 };
 
 function freshFX(): FX {
-  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#ffffff' };
+  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#ffffff', floaters: [] };
 }
 
 /** Advance the visual-only effects by `dt` ms (framerate-correct). */
 function updateFX(fx: FX, gs: GS, dt: number) {
   pushTrail(fx.trail, gs.puck.x, gs.puck.y);
   fx.particles = stepParticles(fx.particles, dt);
+  fx.floaters = stepFloaters(fx.floaters, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
   fx.flash = decay(fx.flash, dt, 0.0022);
 }
@@ -358,6 +363,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   drawPuck(ctx, gs.puck.x, gs.puck.y);
 
   drawParticles(ctx, fx.particles);
+  drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
   // —— Goal flash overlay ——
@@ -465,6 +471,7 @@ export default function AirHockey() {
           gs.serveDir = -1; // serve away toward the CPU next
           fx.flashColor = '#38bdf8';
           spawnBurst(fx.particles, W / 2, 12, 28, 320, '#7dd3fc');
+          spawnFloater(fx.floaters, W / 2, 70, 'GOAL!', '#7dd3fc', { size: 28, life: 900 });
           setYou(gs.you);
           playCup();
         } else {
@@ -472,6 +479,7 @@ export default function AirHockey() {
           gs.serveDir = 1;
           fx.flashColor = '#ef4444';
           spawnBurst(fx.particles, W / 2, H - 12, 28, 320, '#fca5a5');
+          spawnFloater(fx.floaters, W / 2, H - 60, 'CPU SCORES', '#fca5a5', { size: 22, life: 900 });
           setCpu(gs.cpu);
           playUndo();
         }

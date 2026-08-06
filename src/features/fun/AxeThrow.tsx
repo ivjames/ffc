@@ -56,7 +56,9 @@ const SWEEP_Y_MS = 1100;
 const THROWS = 5;
 const FLIGHT_MS = 480;
 const NEXT_DELAY_MS = 800;
-const COUNTDOWN_MS = 2600; // "3, 2, 1, GO!" before the first sweep starts
+const COUNT_STEP_MS = 800; // per digit of the "3, 2, 1" countdown
+const GO_MS = 500; // beat of "GO!" after the digits, before the first sweep starts
+const COUNTDOWN_MS = 3 * COUNT_STEP_MS + GO_MS;
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 
@@ -399,7 +401,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   // "3, 2, 1, GO!" countdown before the first sweep starts.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
-    const n = Math.ceil(left / 800);
+    const n = Math.ceil((left - GO_MS) / COUNT_STEP_MS);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(0, 0, W, H);
     ctx.save();
