@@ -320,9 +320,17 @@ games themed to the real attractions, playable one-handed while waiting.
   detection (forward-wrap past start/finish, guarded against reverse farming).
   Shows current + best lap; background-paused countdown and clock.
 
+- **Whack-a-Mole** (`/fun/mole`) — **shipped.** An arcade-classic extra beyond
+  the attraction list: gophers pop out of a 3×3 grid of fairway holes for a
+  30-second round — tap them for +1, golden gophers +3, bombs −3. Spawn pace and
+  hold time ramp with the clock, urgency ticks in the last three seconds. Pure
+  tap-reflex mechanic on the shared canvas shell; countdown and clock pause when
+  backgrounded.
+
 **All seven attraction mini-games are now shipped** — the roadmap list is
-complete. Further work is content/variants (bumper boats reskin, more trivia/fact
-packs, per-attraction leaderboards) rather than new game engines.
+complete (plus Whack-a-Mole as an arcade-classic bonus). Further work is
+content/variants (bumper boats reskin, more trivia/fact packs, per-attraction
+leaderboards) rather than new game engines.
 
 Each is a self-contained `src/features/<game>/` route wired into the `/fun` hub
 (or its own "Arcade" hub), following the Arcade Putt / Skee-Ball pattern:

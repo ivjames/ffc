@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
-import { playBump, playWaterBump, playScore, playFanfare } from '../../lib/sound';
-import type { Vec as FxVec } from './fx';
-import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, decay, shakeOffset } from './fx';
+import { playBump, playWaterBump, playScore, playTick, playFanfare } from '../../lib/sound';
+import type { Vec as FxVec, Floater } from './fx';
+import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, spawnFloater, stepFloaters, drawFloaters, decay, shakeOffset } from './fx';
 
 // §12 Bumper arena — the shared engine behind Bumper Cars and Bumper Boats.
 // Drag to lead your unit around (it chases your finger like a lure, the same
@@ -33,7 +33,9 @@ const CATCH_R = 30; // within this of the finger, the unit eases to a stop
 const BRAKE = 0.9; // gentle braking once caught up to the finger
 const BUMP_COOLDOWN = 450; // ms before the same unit can be bumped again
 const GAME_MS = 30000;
-const COUNTDOWN_MS = 2600; // "3, 2, 1, GO!" before the horn starts
+const COUNT_STEP_MS = 800; // per digit of the "3, 2, 1" countdown
+const GO_MS = 500; // beat of "GO!" after the digits, before the horn starts
+const COUNTDOWN_MS = 3 * COUNT_STEP_MS + GO_MS;
 
 // Boat-only water FX.
 const RIPPLE_INTERVAL = 85; // ms between wake ripples dropped by a moving boat
@@ -94,6 +96,7 @@ type GS = {
   lastSplash: number; // throttle for splash bursts
   sparks: Spark[]; // sparks flung out by a car bump
   lastSpark: number; // throttle for spark bursts
+  scoreAt: FxVec; // contact point of the last scoring bump (popup anchor)
 };
 
 const rnd = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
@@ -130,6 +133,7 @@ function freshGS(theme: BumperTheme): GS {
     touch: { active: false, x: W / 2, y: H - 90 },
     lastBump: new Array(N_AI + 1).fill(-1e9),
     lastSound: -1e9,
+    scoreAt: { x: W / 2, y: H / 2 },
     ripples: [],
     splashes: [],
     lastSplash: -1e9,
@@ -278,6 +282,7 @@ function step(gs: GS, now: number, theme: BumperTheme) {
         if (playerIntoAi > 0.4 && now - gs.lastBump[aiIdx] > BUMP_COOLDOWN) {
           gs.score += 1;
           gs.lastBump[aiIdx] = now;
+          gs.scoreAt = { x: a.x + nx * UNIT_R, y: a.y + ny * UNIT_R };
           // Bright accent on top of the bump thud so a scoring hit stands out.
           playScore();
         }
@@ -327,6 +332,7 @@ type FX = {
   prevScore: number;
   prevSpark: number; // last-seen gs.lastSpark timestamp
   prevSplash: number; // last-seen gs.lastSplash timestamp
+  floaters: Floater[]; // rising "+1" popups on scoring bumps
 };
 
 function freshFX(nUnits: number): FX {
@@ -338,6 +344,7 @@ function freshFX(nUnits: number): FX {
     prevScore: 0,
     prevSpark: -1e9,
     prevSplash: -1e9,
+    floaters: [],
   };
 }
 
@@ -356,6 +363,7 @@ function updateFX(fx: FX, gs: GS, theme: BumperTheme, dt: number) {
     fx.shake = Math.max(fx.shake, 5.5);
     fx.flash = 1;
     fx.flashColor = theme.kind === 'boat' ? '#7dd3fc' : '#fdba74';
+    spawnFloater(fx.floaters, gs.scoreAt.x, gs.scoreAt.y - 14, '+1', fx.flashColor);
   }
   if (gs.lastSpark !== fx.prevSpark) {
     fx.prevSpark = gs.lastSpark;
@@ -365,6 +373,7 @@ function updateFX(fx: FX, gs: GS, theme: BumperTheme, dt: number) {
     fx.prevSplash = gs.lastSplash;
     fx.shake = Math.max(fx.shake, 2.5);
   }
+  fx.floaters = stepFloaters(fx.floaters, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
   fx.flash = decay(fx.flash, dt, 0.004);
 }
@@ -655,6 +664,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
     ctx.globalAlpha = 1;
   }
 
+  drawFloaters(ctx, fx.floaters);
   ctx.restore(); // end dynamic layer
 
   // Scoring-bump flash overlay.
@@ -682,7 +692,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
   // "3, 2, 1, GO!" countdown before the horn starts.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
-    const n = Math.ceil(left / 800);
+    const n = Math.ceil((left - GO_MS) / COUNT_STEP_MS);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(0, 0, W, H);
     ctx.save();
@@ -780,6 +790,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
       if (remain !== pushedSecs) {
         pushedSecs = remain;
         setSecs(remain);
+        if (gs.phase === 'play' && remain <= 3 && remain > 0) playTick();
       }
 
       if (gs.elapsed >= GAME_MS) {

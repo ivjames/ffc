@@ -8,7 +8,6 @@ import {
   withAlpha,
   roundRectPath,
   drawShadow,
-  drawSphere,
   neonLine,
   spawnBurst,
   stepParticles,
@@ -56,7 +55,9 @@ const SWEEP_Y_MS = 1100;
 const THROWS = 5;
 const FLIGHT_MS = 480;
 const NEXT_DELAY_MS = 800;
-const COUNTDOWN_MS = 2600; // "3, 2, 1, GO!" before the first sweep starts
+const COUNT_STEP_MS = 800; // per digit of the "3, 2, 1" countdown
+const GO_MS = 500; // beat of "GO!" after the digits, before the first sweep starts
+const COUNTDOWN_MS = 3 * COUNT_STEP_MS + GO_MS;
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 
@@ -233,68 +234,102 @@ function drawBoard(ctx: CanvasRenderingContext2D) {
   roundRectPath(ctx, bx + 2, by + 2, bw - 4, bh - 4, 10);
   ctx.stroke();
 
-  // Scoring discs — outer→inner (each covers the previous), lit top-left.
+  // Scoring rings — matte paint on the wood, outer→inner (each covers the
+  // previous). A faint top-to-bottom falloff instead of a specular radial
+  // hotspot, so the paint never reads as metal.
   for (const ring of RINGS) {
-    const g = ctx.createRadialGradient(
-      CENTER.x - ring.r * 0.35,
-      CENTER.y - ring.r * 0.4,
-      ring.r * 0.1,
-      CENTER.x,
-      CENTER.y,
-      ring.r,
-    );
-    g.addColorStop(0, withAlpha('#ffffff', 0.22));
-    g.addColorStop(0.18, ring.fill);
-    g.addColorStop(1, withAlpha('#000000', 0.28));
     ctx.beginPath();
     ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
     ctx.fillStyle = ring.fill;
     ctx.fill();
+    const g = ctx.createLinearGradient(0, CENTER.y - ring.r, 0, CENTER.y + ring.r);
+    g.addColorStop(0, 'rgba(255,255,255,0.06)');
+    g.addColorStop(1, 'rgba(0,0,0,0.16)');
     ctx.fillStyle = g;
     ctx.fill();
   }
-  // Ring boundaries — soft amber-lit strokes.
+
+  // Wood grain showing through the paint across the whole target face.
   ctx.save();
-  ctx.shadowColor = 'rgba(251,191,36,0.5)';
-  for (const ring of RINGS) {
+  ctx.beginPath();
+  ctx.arc(CENTER.x, CENTER.y, RINGS[0].r, 0, TWO_PI);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 1;
+  for (let gx = CENTER.x - RINGS[0].r + 6; gx < CENTER.x + RINGS[0].r; gx += 16) {
     ctx.beginPath();
-    ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
-    ctx.strokeStyle = 'rgba(255,240,210,0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.shadowBlur = 5;
+    ctx.moveTo(gx, CENTER.y - RINGS[0].r);
+    ctx.lineTo(gx + 4, CENTER.y + RINGS[0].r);
     ctx.stroke();
   }
   ctx.restore();
 
-  // Glossy bullseye highlight.
-  ctx.beginPath();
-  ctx.arc(CENTER.x - 7, CENTER.y - 8, 6, 0, TWO_PI);
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.fill();
+  // Ring boundaries — plain painted edges, no glow.
+  for (const ring of RINGS) {
+    ctx.beginPath();
+    ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
 
-  // Corner clutch dots — lit green spheres.
+  // Corner clutch dots — flat painted green circles with a darker rim.
   for (const c of CLUTCH) {
-    drawShadow(ctx, c.x, c.y + 3, CLUTCH_R * 0.9, CLUTCH_R * 0.5, 0.35);
-    drawSphere(ctx, c.x, c.y, CLUTCH_R, '#bbf7d0', '#22c55e', '#14532d', { rim: true });
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, CLUTCH_R, 0, TWO_PI);
+    ctx.fillStyle = '#22c55e';
+    ctx.fill();
+    const g = ctx.createLinearGradient(0, c.y - CLUTCH_R, 0, c.y + CLUTCH_R);
+    g.addColorStop(0, 'rgba(255,255,255,0.08)');
+    g.addColorStop(1, 'rgba(0,0,0,0.2)');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+/** The wood-plank wall of the throwing bay — warm and matte, no sheen, darker
+ *  than the target board so the board still pops. All offsets are index-derived
+ *  (no RNG in the draw path), so the wall is identical every frame. */
+function drawWoodWall(ctx: CanvasRenderingContext2D) {
+  // Base tone, falling into shadow toward the floor.
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#2e1f10');
+  bg.addColorStop(0.55, '#24170b');
+  bg.addColorStop(1, '#140c05');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const PLANK_H = 46;
+  for (let row = 0, y = 0; y < H; row++, y += PLANK_H) {
+    // Subtle per-plank tone shift so the wall doesn't read as one flat sheet.
+    const t = ((row * 73) % 7) / 7 - 0.5;
+    ctx.fillStyle = t > 0 ? `rgba(214,164,96,${t * 0.07})` : `rgba(0,0,0,${-t * 0.12})`;
+    ctx.fillRect(0, y, W, PLANK_H);
+    // Faint wavering grain streaks along each plank.
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.lineWidth = 1;
+    for (let k = 0; k < 3; k++) {
+      const gy = y + ((row * 31 + k * 17) % PLANK_H);
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      ctx.bezierCurveTo(W * 0.3, gy + 2, W * 0.7, gy - 2, W, gy + 1);
+      ctx.stroke();
+    }
+    // Seam under the plank + a staggered butt joint.
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, y + PLANK_H - 1.5, W, 1.5);
+    ctx.fillRect((row * 149) % W, y, 1.5, PLANK_H);
   }
 }
 
 function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.clearRect(0, 0, W, H);
 
-  // —— Throwing-range backdrop: dim gradient + warm radial sheen + vignette ——
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#141d2f');
-  bg.addColorStop(0.5, '#0e1626');
-  bg.addColorStop(1, '#080d18');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-
-  const sheen = ctx.createRadialGradient(W / 2, CENTER.y, 20, W / 2, CENTER.y, H * 0.6);
-  sheen.addColorStop(0, 'rgba(234,179,8,0.12)');
-  sheen.addColorStop(1, 'rgba(234,179,8,0)');
-  ctx.fillStyle = sheen;
-  ctx.fillRect(0, 0, W, H);
+  // —— Throwing-range backdrop: wood-plank wall + vignette ——
+  drawWoodWall(ctx);
 
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
   vig.addColorStop(0, 'rgba(0,0,0,0)');
@@ -399,7 +434,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   // "3, 2, 1, GO!" countdown before the first sweep starts.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
-    const n = Math.ceil(left / 800);
+    const n = Math.ceil((left - GO_MS) / COUNT_STEP_MS);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(0, 0, W, H);
     ctx.save();

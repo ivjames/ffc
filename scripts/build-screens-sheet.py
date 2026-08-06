@@ -387,20 +387,20 @@ def _ftile(first=False):
               f'<span style="margin-left:10px">{lab("game tile — title",12)}</span>',
               cls="tile rowc", n=(1 if first else None), r=12, pad="10px 12px")
 screen(id="fun", name="Fun Zone hub", route="/fun",
- purpose="Grid landing routing to every mini-game. Each tile = an icon + title (11 games).",
+ purpose="Grid landing routing to every mini-game. Each tile = an icon + title (12 games).",
  body=dev(bar("While You Wait") + content(
    el(f'<div style="text-align:center">{lab("Pass the time.",14)}</div>', border="none") +
    el("".join(_ftile(first=(i==0)) for i in range(6)), cls="grid2", mt=12) +
-   el(lab("…11 game tiles total",12), mt=8, border="none")
+   el(lab("…12 game tiles total",12), mt=8, border="none")
  )),
  specs=[
-  (1,"Activity tile","One per game → its route (11 games)","2-col grid, radius 12, pad 10/12","rise-in stagger; press-shrink feedback","accent-tinted per tile (bg/border/icon from the tile accent)","the tile surface"),
-  (2,"Activity icon","Leading mark on each tile","36×36 chip, radius 8, glyph ~20px","—","tinted to the tile accent","one designed icon per activity (11 total)"),
+  (1,"Activity tile","One per game → its route (12 games)","2-col grid, radius 12, pad 10/12","rise-in stagger; press-shrink feedback","accent-tinted per tile (bg/border/icon from the tile accent)","the tile surface"),
+  (2,"Activity icon","Leading mark on each tile","36×36 chip, radius 8, glyph ~20px","—","tinted to the tile accent","one designed icon per activity (12 total)"),
  ]),
 
 # ════════════════════════════════════════════════════════════ 14. MINIGAME SHELL (fills)
-screen(id="game", name="Minigame shell (covers the 8 canvas games)",
- route="/fun/skeeball · /fun/bowling · /fun/karts · /fun/airhockey · /fun/bumper · /fun/boats · /fun/axe · /fun/batting",
+screen(id="game", name="Minigame shell (covers the 9 canvas games)",
+ route="/fun/skeeball · /fun/bowling · /fun/karts · /fun/airhockey · /fun/bumper · /fun/boats · /fun/axe · /fun/batting · /fun/mole",
  fill=True,
  purpose="Shared shell for every canvas game — the playfield fills the screen between the HUD and any footer.",
  body=dev(bar("Game name") +
@@ -410,7 +410,7 @@ screen(id="game", name="Minigame shell (covers the 8 canvas games)",
    fill=True),
  specs=[
   (1,"HUD counter row","Per-game counters / score / timer","text row","labels vary by game (Bowling adds a 10-frame scorecard strip); a timer can signal time pressure","—","—"),
-  (2,"Canvas playfield","The game itself","fills the device below the HUD + hint (390px wide × remaining height), radius 16","aim / play / result; impact + shake feedback; a celebratory game-over results screen","--accent on the results Play-again","per-game background + sprites (ball, puck, kart, target, pins, axe, bumper) as sprite sheets / SVGs; a result mark per game"),
+  (2,"Canvas playfield","The game itself","fills the device below the HUD + hint (390px wide × remaining height), radius 16","aim / play / result; impact + shake feedback; a celebratory game-over results screen","--accent on the results Play-again","per-game background + sprites (ball, puck, kart, target, pins, axe, bumper, gopher) as sprite sheets / SVGs; a result mark per game"),
  ]),
 
 # screens whose layout grows by one row/chip per player (1–4)

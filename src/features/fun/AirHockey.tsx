@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
-import type { Particle, Vec as FxVec } from './fx';
+import type { Particle, Vec as FxVec, Floater } from './fx';
 import {
   TWO_PI,
   withAlpha,
@@ -13,6 +13,9 @@ import {
   spawnBurst,
   stepParticles,
   drawParticles,
+  spawnFloater,
+  stepFloaters,
+  drawFloaters,
   pushTrail,
   decay,
   shakeOffset,
@@ -43,10 +46,11 @@ const PUCK_MIN_HIT = 3.4; // floor speed after a mallet strike so it never stall
 const SERVE_SPEED = 3.4;
 const AI_SPEED = 4.2; // CPU mallet max speed (units/step) — kept beatable
 const SERVE_DELAY = 850; // pause at center before the puck launches
+const END_DELAY_MS = 1100; // hold the play view after the winning goal so its popup shows
 
 type Vec = { x: number; y: number };
 type Pad = { x: number; y: number; px: number; py: number }; // p* = previous pos
-type Phase = 'ready' | 'serve' | 'play' | 'done';
+type Phase = 'ready' | 'serve' | 'play' | 'over' | 'done';
 type GS = {
   phase: Phase;
   puck: { x: number; y: number; vx: number; vy: number };
@@ -55,6 +59,7 @@ type GS = {
   you: number;
   cpu: number;
   serveAt: number; // timestamp to launch the next serve
+  overAt: number; // timestamp the winning goal landed (brief hold before 'done')
   serveDir: number; // -1 up (toward CPU), +1 down (toward you)
   pointer: Vec | null; // latest finger target for the player mallet
   aiRetreatUntil: number; // after a strike, defend until this time (no re-chase)
@@ -76,6 +81,7 @@ function freshGS(now: number): GS {
     you: 0,
     cpu: 0,
     serveAt: now + SERVE_DELAY,
+    overAt: 0,
     serveDir: -1,
     pointer: null,
     aiRetreatUntil: 0,
@@ -236,19 +242,21 @@ function step(gs: GS, hitRef: { v: boolean }, now: number): 'you' | 'cpu' | null
 type FX = {
   trail: FxVec[]; // recent puck positions → motion streak
   particles: Particle[]; // spark bursts on hits/goals
+  floaters: Floater[]; // rising GOAL! popups
   shake: number; // camera shake magnitude (px), decays to 0
   flash: number; // goal flash 0..1, decays to 0
   flashColor: string;
 };
 
 function freshFX(): FX {
-  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#ffffff' };
+  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#ffffff', floaters: [] };
 }
 
 /** Advance the visual-only effects by `dt` ms (framerate-correct). */
 function updateFX(fx: FX, gs: GS, dt: number) {
   pushTrail(fx.trail, gs.puck.x, gs.puck.y);
   fx.particles = stepParticles(fx.particles, dt);
+  fx.floaters = stepFloaters(fx.floaters, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
   fx.flash = decay(fx.flash, dt, 0.0022);
 }
@@ -358,6 +366,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   drawPuck(ctx, gs.puck.x, gs.puck.y);
 
   drawParticles(ctx, fx.particles);
+  drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
   // —— Goal flash overlay ——
@@ -418,6 +427,7 @@ export default function AirHockey() {
         if (!hiddenAt) hiddenAt = performance.now();
       } else if (hiddenAt) {
         gsRef.current.serveAt += performance.now() - hiddenAt;
+        gsRef.current.overAt += performance.now() - hiddenAt;
         hiddenAt = 0;
         last = performance.now();
         acc = 0;
@@ -436,6 +446,10 @@ export default function AirHockey() {
       last = now;
 
       if (gs.phase === 'serve' && now >= gs.serveAt) serve(gs);
+      if (gs.phase === 'over' && now - gs.overAt >= END_DELAY_MS) {
+        gs.phase = 'done';
+        setPhase('done');
+      }
 
       const hitRef = { v: false };
       let goal: 'you' | 'cpu' | null = null;
@@ -465,6 +479,7 @@ export default function AirHockey() {
           gs.serveDir = -1; // serve away toward the CPU next
           fx.flashColor = '#38bdf8';
           spawnBurst(fx.particles, W / 2, 12, 28, 320, '#7dd3fc');
+          spawnFloater(fx.floaters, W / 2, 70, 'GOAL!', '#7dd3fc', { size: 28, life: 900 });
           setYou(gs.you);
           playCup();
         } else {
@@ -472,12 +487,15 @@ export default function AirHockey() {
           gs.serveDir = 1;
           fx.flashColor = '#ef4444';
           spawnBurst(fx.particles, W / 2, H - 12, 28, 320, '#fca5a5');
+          spawnFloater(fx.floaters, W / 2, H - 60, 'CPU SCORES', '#fca5a5', { size: 22, life: 900 });
           setCpu(gs.cpu);
           playUndo();
         }
         if (gs.you >= TARGET || gs.cpu >= TARGET) {
-          gs.phase = 'done';
-          setPhase('done');
+          // Hold the play view so the winning GOAL! popup and burst play out
+          // before the results screen replaces the canvas.
+          gs.phase = 'over';
+          gs.overAt = now;
           playFanfare();
         } else {
           gs.puck = centeredPuck();

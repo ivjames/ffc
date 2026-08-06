@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
-import type { Particle, Vec as FxVec } from './fx';
+import type { Particle, Vec as FxVec, Floater } from './fx';
 import {
   TWO_PI,
   withAlpha,
@@ -13,6 +13,9 @@ import {
   spawnBurst,
   stepParticles,
   drawParticles,
+  spawnFloater,
+  stepFloaters,
+  drawFloaters,
   pushTrail,
   decay,
   shakeOffset,
@@ -311,12 +314,13 @@ type FX = {
   particles: Particle[]; // spark bursts on pin hits / strikes / spares
   shake: number; // camera shake magnitude (px), decays to 0
   flash: number; // strike/spare flash 0..1, decays to 0
+  floaters: Floater[]; // rising "+N" pinfall popups
   downSeen: Map<Pin, boolean>; // pins already spark-flashed (so each falls once)
   prevPhase: Phase; // for edge-detecting the roll → sweep transition
 };
 
 function freshFX(): FX {
-  return { trail: [], particles: [], shake: 0, flash: 0, downSeen: new Map(), prevPhase: 'aim' };
+  return { trail: [], particles: [], shake: 0, flash: 0, floaters: [], downSeen: new Map(), prevPhase: 'aim' };
 }
 
 const PURPLE_LIGHT = '#e9d5ff';
@@ -357,6 +361,7 @@ function updateFX(fx: FX, gs: GS, dt: number) {
   fx.prevPhase = gs.phase;
 
   fx.particles = stepParticles(fx.particles, dt, 0.02, 40);
+  fx.floaters = stepFloaters(fx.floaters, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
   fx.flash = decay(fx.flash, dt, 0.0022);
 }
@@ -526,6 +531,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   drawBall(ctx, gs.ball.x, gs.ball.y);
 
   drawParticles(ctx, fx.particles);
+  drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
   // —— Strike/spare flash overlay ——
@@ -655,6 +661,12 @@ export default function Bowling() {
         afterSweep = 'done';
         note = '';
       }
+    }
+
+    // The STRIKE!/SPARE! banner covers those rolls; pop the pinfall for the
+    // rest — including 10th-frame bonus clears, which set no banner note.
+    if (!note.includes('Strike') && !note.includes('Spare')) {
+      spawnFloater(fxRef.current.floaters, W / 2, HEAD_Y + 64, pinfall > 0 ? `+${pinfall}` : 'MISS', pinfall > 0 ? '#d8b4fe' : '#94a3b8', { size: 22, life: 800 });
     }
 
     gs.afterSweep = afterSweep;

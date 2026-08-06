@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
 import { playBump, playCup, playBuzz, playStroke, playTick, playFanfare } from '../../lib/sound';
-import type { Particle } from './fx';
+import type { Particle, Floater } from './fx';
 import {
   TWO_PI,
   withAlpha,
@@ -12,6 +12,9 @@ import {
   spawnBurst,
   stepParticles,
   drawParticles,
+  spawnFloater,
+  stepFloaters,
+  drawFloaters,
   decay,
   shakeOffset,
 } from './fx';
@@ -111,7 +114,6 @@ function freshGS(): GS {
 // Advanced per animation frame with a real dt; they only ever paint pixels.
 // Built on the shared ./fx toolkit so every Fun Zone game shares one visual
 // language.
-type Floater = { x: number; y: number; text: string; color: string; life: number; max: number };
 type FX = {
   particles: Particle[]; // dirt / spark bursts on whacks
   floaters: Floater[]; // rising "+1" / "−3" score popups
@@ -128,11 +130,7 @@ function freshFX(): FX {
 /** Advance the visual-only effects by `dt` ms (framerate-correct). */
 function updateFX(fx: FX, dt: number) {
   fx.particles = stepParticles(fx.particles, dt, 0.02, 260); // gravity so dirt falls
-  for (const f of fx.floaters) {
-    f.y -= dt * 0.045;
-    f.life -= dt;
-  }
-  fx.floaters = fx.floaters.filter((f) => f.life > 0);
+  fx.floaters = stepFloaters(fx.floaters, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
   fx.flash = decay(fx.flash, dt, 0.0022);
 }
@@ -410,17 +408,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   drawParticles(ctx, fx.particles);
 
   // Rising score popups.
-  for (const f of fx.floaters) {
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, f.life / f.max);
-    ctx.font = 'bold 20px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = f.color;
-    ctx.shadowColor = f.color;
-    ctx.shadowBlur = 10;
-    ctx.fillText(f.text, f.x, f.y);
-    ctx.restore();
-  }
+  drawFloaters(ctx, fx.floaters);
 
   // The mallet swing rides above everything it hits.
   if (fx.mallet) drawMallet(ctx, fx.mallet, now);
@@ -637,7 +625,7 @@ export default function WhackAMole() {
       fx.shake = 7;
       fx.flash = 1;
       fx.flashColor = '#f87171';
-      fx.floaters.push({ x: hx, y: headY - 30, text: `${pts}`, color: '#f87171', life: 750, max: 750 });
+      spawnFloater(fx.floaters, hx, headY - 30, `${pts}`, '#f87171', { life: 750 });
       playBuzz();
     } else {
       gs.hits += 1;
@@ -648,14 +636,7 @@ export default function WhackAMole() {
         fx.flash = 0.6;
         fx.flashColor = '#fbbf24';
       }
-      fx.floaters.push({
-        x: hx,
-        y: headY - 30,
-        text: `+${pts}`,
-        color: gold ? '#fde68a' : '#bef264',
-        life: 650,
-        max: 650,
-      });
+      spawnFloater(fx.floaters, hx, headY - 30, `+${pts}`, gold ? '#fde68a' : '#bef264');
       if (gold) playCup();
       else playBump(1);
     }
