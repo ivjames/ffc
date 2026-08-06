@@ -630,16 +630,17 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.fill();
   }
 
-  // Fallen pins lie on the lane; standing pins and the ball then draw
-  // far-to-near so nearer objects overlap farther ones correctly.
-  const fallen = gs.pins.filter((p) => p.down).sort((a, b) => a.y - b.y);
-  for (const p of fallen) drawFallenPin(ctx, p);
-  const uprights: Array<{ y: number; d: () => void }> = gs.pins
-    .filter((p) => !p.down)
-    .map((p) => ({ y: p.y, d: () => drawStandingPin(ctx, p) }));
-  uprights.push({ y: gs.ball.y, d: () => drawBall(ctx, gs.ball.x, gs.ball.y) });
-  uprights.sort((a, b) => a.y - b.y);
-  for (const u of uprights) u.d();
+  // Every lane object — fallen pins included — draws far-to-near in one pass,
+  // so a pin that slid toward the bowler isn't painted under a farther
+  // standing pin or the ball. Sort on projected screen y, since pins project
+  // through the rack's display-only depth spread and the ball doesn't.
+  const items: Array<{ sy: number; d: () => void }> = gs.pins.map((p) => ({
+    sy: projectPin(p.x, p.y).y,
+    d: p.down ? () => drawFallenPin(ctx, p) : () => drawStandingPin(ctx, p),
+  }));
+  items.push({ sy: project(gs.ball.x, gs.ball.y).y, d: () => drawBall(ctx, gs.ball.x, gs.ball.y) });
+  items.sort((a, b) => a.sy - b.sy);
+  for (const it of items) it.d();
 
   // Aim guide (glowing), converging up the lane with the perspective.
   if (gs.phase === 'aim' && gs.drag.active) {
