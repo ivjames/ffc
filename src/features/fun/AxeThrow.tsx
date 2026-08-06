@@ -8,7 +8,6 @@ import {
   withAlpha,
   roundRectPath,
   drawShadow,
-  drawSphere,
   neonLine,
   spawnBurst,
   stepParticles,
@@ -235,49 +234,59 @@ function drawBoard(ctx: CanvasRenderingContext2D) {
   roundRectPath(ctx, bx + 2, by + 2, bw - 4, bh - 4, 10);
   ctx.stroke();
 
-  // Scoring discs — outer→inner (each covers the previous), lit top-left.
+  // Scoring rings — matte paint on the wood, outer→inner (each covers the
+  // previous). A faint top-to-bottom falloff instead of a specular radial
+  // hotspot, so the paint never reads as metal.
   for (const ring of RINGS) {
-    const g = ctx.createRadialGradient(
-      CENTER.x - ring.r * 0.35,
-      CENTER.y - ring.r * 0.4,
-      ring.r * 0.1,
-      CENTER.x,
-      CENTER.y,
-      ring.r,
-    );
-    g.addColorStop(0, withAlpha('#ffffff', 0.22));
-    g.addColorStop(0.18, ring.fill);
-    g.addColorStop(1, withAlpha('#000000', 0.28));
     ctx.beginPath();
     ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
     ctx.fillStyle = ring.fill;
     ctx.fill();
+    const g = ctx.createLinearGradient(0, CENTER.y - ring.r, 0, CENTER.y + ring.r);
+    g.addColorStop(0, 'rgba(255,255,255,0.06)');
+    g.addColorStop(1, 'rgba(0,0,0,0.16)');
     ctx.fillStyle = g;
     ctx.fill();
   }
-  // Ring boundaries — soft amber-lit strokes.
+
+  // Wood grain showing through the paint across the whole target face.
   ctx.save();
-  ctx.shadowColor = 'rgba(251,191,36,0.5)';
-  for (const ring of RINGS) {
+  ctx.beginPath();
+  ctx.arc(CENTER.x, CENTER.y, RINGS[0].r, 0, TWO_PI);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 1;
+  for (let gx = CENTER.x - RINGS[0].r + 6; gx < CENTER.x + RINGS[0].r; gx += 16) {
     ctx.beginPath();
-    ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
-    ctx.strokeStyle = 'rgba(255,240,210,0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.shadowBlur = 5;
+    ctx.moveTo(gx, CENTER.y - RINGS[0].r);
+    ctx.lineTo(gx + 4, CENTER.y + RINGS[0].r);
     ctx.stroke();
   }
   ctx.restore();
 
-  // Glossy bullseye highlight.
-  ctx.beginPath();
-  ctx.arc(CENTER.x - 7, CENTER.y - 8, 6, 0, TWO_PI);
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.fill();
+  // Ring boundaries — plain painted edges, no glow.
+  for (const ring of RINGS) {
+    ctx.beginPath();
+    ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
 
-  // Corner clutch dots — lit green spheres.
+  // Corner clutch dots — flat painted green circles with a darker rim.
   for (const c of CLUTCH) {
-    drawShadow(ctx, c.x, c.y + 3, CLUTCH_R * 0.9, CLUTCH_R * 0.5, 0.35);
-    drawSphere(ctx, c.x, c.y, CLUTCH_R, '#bbf7d0', '#22c55e', '#14532d', { rim: true });
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, CLUTCH_R, 0, TWO_PI);
+    ctx.fillStyle = '#22c55e';
+    ctx.fill();
+    const g = ctx.createLinearGradient(0, c.y - CLUTCH_R, 0, c.y + CLUTCH_R);
+    g.addColorStop(0, 'rgba(255,255,255,0.08)');
+    g.addColorStop(1, 'rgba(0,0,0,0.2)');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 }
 
