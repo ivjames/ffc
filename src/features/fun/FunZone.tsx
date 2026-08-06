@@ -93,6 +93,13 @@ const TILES: Tile[] = [
     blurb: 'Three-lap time trial — set your best lap.',
     accent: '#06b6d4',
   },
+  {
+    to: '/fun/mole',
+    emoji: '🔨',
+    title: 'Whack-a-Mole',
+    blurb: 'Bop the gophers — gold pays triple, bombs bite.',
+    accent: '#84cc16',
+  },
 ];
 
 export default function FunZone() {
