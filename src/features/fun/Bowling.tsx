@@ -392,7 +392,7 @@ function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
   ctx.translate(p.x, p.y);
   ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
 
-  drawShadow(ctx, R * 0.25, R * 0.5, R * 1.7, R * 0.45, 0.22);
+  drawShadow(ctx, R * 0.6, R * 0.5, R * 2.4, R * 0.42, 0.22);
 
   // Ivory body, lit across the pin's width (top edge lighter).
   const g = ctx.createLinearGradient(0, -R, 0, R);
@@ -401,31 +401,34 @@ function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
   g.addColorStop(1, '#a9b3c3');
   ctx.fillStyle = g;
 
-  // Belly → neck taper → head, one closed profile path (base end at -x).
+  // Real-pin proportions — 15" tall vs 4.75" max diameter (≈3.2:1): flat base
+  // at -1.48R, belly max at 0, neck waist at +1.8R, head centered at +2.8R.
   ctx.beginPath();
-  ctx.moveTo(-R * 1.05, -R * 0.55);
-  ctx.bezierCurveTo(-R * 0.35, -R * 0.85, R * 0.35, -R * 0.85, R * 0.7, -R * 0.32);
-  ctx.lineTo(R * 1.1, -R * 0.26);
-  ctx.arc(R * 1.45, 0, R * 0.44, -Math.PI * 0.65, Math.PI * 0.65);
-  ctx.lineTo(R * 0.7, R * 0.32);
-  ctx.bezierCurveTo(R * 0.35, R * 0.85, -R * 0.35, R * 0.85, -R * 1.05, R * 0.55);
+  ctx.moveTo(-R * 1.48, -R * 0.33);
+  ctx.bezierCurveTo(-R * 1.15, -R * 0.72, -R * 0.55, -R * 0.78, 0, -R * 0.78);
+  ctx.bezierCurveTo(R * 0.85, -R * 0.78, R * 1.3, -R * 0.42, R * 1.8, -R * 0.3);
+  ctx.bezierCurveTo(R * 2.1, -R * 0.24, R * 2.3, -R * 0.3, R * 2.45, -R * 0.36);
+  ctx.arc(R * 2.8, 0, R * 0.42, -Math.PI * 0.72, Math.PI * 0.72);
+  ctx.bezierCurveTo(R * 2.3, R * 0.3, R * 2.1, R * 0.24, R * 1.8, R * 0.3);
+  ctx.bezierCurveTo(R * 1.3, R * 0.42, R * 0.85, R * 0.78, 0, R * 0.78);
+  ctx.bezierCurveTo(-R * 0.55, R * 0.78, -R * 1.15, R * 0.72, -R * 1.48, R * 0.33);
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = 'rgba(105,115,135,0.45)';
   ctx.lineWidth = 1.2;
   ctx.stroke();
 
-  // The two neck stripes.
+  // The two stripes just below the neck waist.
   ctx.fillStyle = withAlpha(PURPLE, 0.9);
-  ctx.fillRect(R * 0.72, -R * 0.31, R * 0.16, R * 0.62);
-  ctx.fillRect(R * 0.98, -R * 0.28, R * 0.14, R * 0.56);
+  ctx.fillRect(R * 1.42, -R * 0.34, R * 0.17, R * 0.68);
+  ctx.fillRect(R * 1.7, -R * 0.31, R * 0.15, R * 0.62);
 
   // Thin highlight along the upper belly so it still reads as glossy ivory.
   ctx.strokeStyle = 'rgba(255,255,255,0.55)';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.moveTo(-R * 0.7, -R * 0.52);
-  ctx.quadraticCurveTo(0, -R * 0.72, R * 0.45, -R * 0.42);
+  ctx.moveTo(-R * 1.0, -R * 0.55);
+  ctx.quadraticCurveTo(-R * 0.1, -R * 0.68, R * 0.7, -R * 0.45);
   ctx.stroke();
   ctx.restore();
 }
