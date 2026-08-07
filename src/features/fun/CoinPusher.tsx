@@ -92,18 +92,23 @@ type GS = {
 
 /** ~27 coins packed near the front edge in a fixed staggered grid, so early
  *  drops can cascade. Seeded coins are all silver (gold only comes from drops). */
+// A stocked table: brick-staggered rows from just ahead of the pusher's full
+// extension down to just shy of the lip. Anything sparser leaves a dead zone
+// the 20 droppable coins can never bridge — the pusher would shove them into
+// empty tray while the pile at the edge never felt a thing, and the game
+// could not pay out at all.
 function seedCoins(): Coin[] {
   const coins: Coin[] = [];
   let id = 0;
-  const rows: Array<{ y: number; n: number }> = [
-    { y: 464, n: 11 },
-    { y: 443, n: 9 },
-    { y: 422, n: 7 },
-  ];
-  for (const row of rows) {
-    for (let k = 0; k < row.n; k++) {
-      const x = W / 2 + (k - (row.n - 1) / 2) * 24.5;
-      coins.push({ id: id++, x, y: row.y, vx: 0, vy: 0, gold: false, state: 'tray', t: 0, landY: 0 });
+  const PITCH = 22.4; // row spacing — one coin diameter plus breathing room
+  const Y0 = P_MAX + R + 11; // first row clears the fully-extended pusher face
+  const rows = Math.floor((EDGE - 18 - Y0) / PITCH) + 1; // front row ends up ~20px shy of the lip
+  for (let i = 0; i < rows; i++) {
+    const y = Y0 + i * PITCH;
+    const n = i % 2 === 0 ? 11 : 10; // brick stagger packs the pile like a real tray
+    for (let k = 0; k < n; k++) {
+      const x = W / 2 + (k - (n - 1) / 2) * 24.5;
+      coins.push({ id: id++, x, y, vx: 0, vy: 0, gold: false, state: 'tray', t: 0, landY: 0 });
     }
   }
   return coins;
