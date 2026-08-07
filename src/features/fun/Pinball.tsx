@@ -179,7 +179,8 @@ type Ev =
   | { kind: 'bumper'; x: number; y: number; i: number }
   | { kind: 'sling'; x: number; y: number; i: number }
   | { kind: 'lane'; x: number; y: number }
-  | { kind: 'lanes' };
+  | { kind: 'lanes' }
+  | { kind: 'nudge'; x: number; y: number };
 type GS = {
   phase: Phase;
   time: number; // sim clock (s) — all cooldowns/deadlines live on this
@@ -196,6 +197,7 @@ type GS = {
   lamps: boolean[];
   pointers: Map<number, 'L' | 'R'>; // flipper pointers by pointerId
   events: Ev[]; // drained by the frame loop for sounds/fx
+  stillT: number; // seconds the live ball has sat near-motionless (stuck watchdog)
 };
 
 const L_REST = 0.52;
@@ -218,6 +220,7 @@ function freshGS(): GS {
     lamps: [false, false, false],
     pointers: new Map(),
     events: [],
+    stillT: 0,
   };
 }
 
@@ -402,6 +405,27 @@ function step(gs: GS): void {
   if (sp > MAXV) {
     b.vx = (b.vx / sp) * MAXV;
     b.vy = (b.vy / sp) * MAXV;
+  }
+
+  // Stuck-ball watchdog. The table has no slope toward the drain, so the ball
+  // can come to a true dead rest cradled between wall tips (the outlane mouth
+  // is the classic spot) — REST_VN kills every bounce there and the anti-stall
+  // bounce jitter never fires on a resting contact. After ~1.2s of standstill,
+  // give it the bump a tilted playfield would: a kick toward the playfield
+  // center with a little lift. The flipper zone (y ≥ 462) is exempt so a ball
+  // deliberately trapped on a flipper stays trapped, as is the shooter lane
+  // (weak launches are allowed to fall back and re-rack in peace).
+  if (sp < 26 && b.y < 462 && b.x < PF_R - BALL_R) {
+    gs.stillT += DT;
+    if (gs.stillT >= 1.2) {
+      gs.stillT = 0;
+      const dir = b.x > PF_CX ? -1 : 1;
+      b.vx += dir * (90 + Math.random() * 60);
+      b.vy -= 30 + Math.random() * 40;
+      gs.events.push({ kind: 'nudge', x: b.x, y: b.y });
+    }
+  } else {
+    gs.stillT = 0;
   }
 
   // Rollover lanes: light the lamp, and all three lit pays the LANES bonus.
@@ -896,6 +920,10 @@ export default function Pinball() {
             playDing();
             spawnBurst(fx.particles, ev.x, ev.y, 8, 150, '#fde68a');
             spawnFloater(fx.floaters, ev.x, ev.y + 22, '+500', '#fde68a', { size: 16, life: 800 });
+          } else if (ev.kind === 'nudge') {
+            playTick();
+            fx.shake = Math.min(4, fx.shake + 2.5);
+            spawnFloater(fx.floaters, ev.x, ev.y - 14, 'NUDGE', '#94a3b8', { size: 12, life: 600 });
           } else {
             playCup();
             fx.flash = 1;
