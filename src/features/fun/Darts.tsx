@@ -486,12 +486,12 @@ export default function Darts() {
     ctx.scale(dpr, dpr);
 
     let raf = 0;
-    let sweepPausedAt = 0;
     let last = performance.now();
-    // Pause the countdown via visibilitychange, not the hidden-rAF branch below:
-    // mobile browsers can fully suspend requestAnimationFrame while backgrounded,
-    // so a hidden frame may never run to catch the away span. Shift countStart by
-    // the away span on resume so the elapsed hidden time can't skip the countdown.
+    // Freeze the game via visibilitychange, not a hidden-rAF branch: mobile
+    // browsers can fully suspend requestAnimationFrame while backgrounded, so a
+    // hidden frame may never run to catch the away span. Shift EVERY absolute
+    // time base by the away span on resume — countdown, sweeps, flight, score
+    // beat, and visit interlude — so no phase can skip ahead while hidden.
     let hiddenAt = 0;
     const onVisibility = () => {
       if (document.hidden) {
@@ -500,7 +500,11 @@ export default function Darts() {
         const away = performance.now() - hiddenAt;
         hiddenAt = 0;
         const gs = gsRef.current;
-        if (gs.phase === 'countdown') gs.countStart += away;
+        gs.countStart += away;
+        gs.sweepBase += away;
+        gs.flyStart += away;
+        gs.scoreAtTs += away;
+        gs.visitStart += away;
         last = performance.now();
       }
     };
@@ -509,19 +513,10 @@ export default function Darts() {
       const gs = gsRef.current;
       const fx = fxRef.current;
       if (document.hidden) {
-        // Freeze all time bases while backgrounded by advancing them on resume.
-        if (!sweepPausedAt) sweepPausedAt = now;
+        // Time bases are shifted in onVisibility; just skip sim/draw work.
         last = now;
         raf = requestAnimationFrame(frame);
         return;
-      }
-      if (sweepPausedAt) {
-        const away = now - sweepPausedAt;
-        gs.sweepBase += away;
-        gs.flyStart += away;
-        gs.scoreAtTs += away;
-        gs.visitStart += away;
-        sweepPausedAt = 0;
       }
       const dt = Math.min(now - last, 100);
       last = now;

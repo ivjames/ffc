@@ -6,7 +6,6 @@ import {
   playStroke,
   playPinClack,
   playCup,
-  playUndo,
   playTick,
   playDing,
   playFanfare,
@@ -658,13 +657,7 @@ export default function ShootingGallery() {
     const now = performance.now();
     if (gs.reloadStart > 0) return; // can't fire mid-reload
 
-    if (gs.shells === 0) {
-      // Dry click on an empty magazine starts the auto-reload.
-      gs.reloadStart = now;
-      setReloading(true);
-      playUndo();
-      return;
-    }
+    if (gs.shells === 0) return; // empty only while a reload is pending
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -675,6 +668,12 @@ export default function ShootingGallery() {
     gs.shells -= 1;
     gs.shots += 1;
     setShells(gs.shells);
+    if (gs.shells === 0) {
+      // The sixth shot empties the magazine — start the auto-reload right away
+      // instead of charging the player a dry tap to kick it off.
+      gs.reloadStart = now;
+      setReloading(true);
+    }
     fx.cross = { x, y, t0: now };
     fx.muzzle = now;
     fx.shake = Math.max(fx.shake, 1.5);
