@@ -40,9 +40,18 @@ export function warnIfConsoleMailer() {
   }
 }
 
+/** MAIL_DAILY_CAP with .env.example semantics: blank/unset/garbage means the
+ *  default — .env.example ships the var as an empty string, and Number("")
+ *  is 0, which would silently kill every send. An explicit "0" IS the kill
+ *  switch. */
+export function resolveDailyCap(raw = process.env.MAIL_DAILY_CAP) {
+  if (raw == null || String(raw).trim() === "") return DEFAULT_DAILY_CAP;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : DEFAULT_DAILY_CAP;
+}
+
 async function underDailyCap() {
-  const cap = Number(process.env.MAIL_DAILY_CAP ?? DEFAULT_DAILY_CAP);
-  if (!Number.isFinite(cap)) return true;
+  const cap = resolveDailyCap();
   const result = await pool.query(
     `select count(*)::int as n from mail_send where created_at > now() - interval '24 hours'`
   );

@@ -296,9 +296,12 @@ function validateWrites(writes, playerCount) {
 }
 
 router.post("/:id/scores", scoreLimit, async (req, res) => {
+  const client = await pool.connect();
   try {
     const game = await loadParticipantGame(req.params.id, req.body?.participant);
-    if (!game) return res.status(401).json({ ok: false, error: "unknown game or participant" });
+    if (!game) {
+      return res.status(401).json({ ok: false, error: "unknown game or participant" });
+    }
     if ((await expireIfStale(game)) !== "open") {
       return res.status(409).json({ ok: false, error: "game is no longer open" });
     }
@@ -308,14 +311,26 @@ router.post("/:id/scores", scoreLimit, async (req, res) => {
     const check = validateWrites(req.body?.writes, playerCount);
     if (check.error) return res.status(400).json({ ok: false, error: check.error });
 
-    let applied = 0;
+    // The whole batch lands in one transaction holding a SHARE lock on the
+    // game row. Completion takes the row FOR UPDATE, so a batch either commits
+    // wholly before completion reads the grid, or blocks and then sees
+    // status='completed' — no cells can slip in after the canonical round was
+    // materialized (they'd be broadcast but missing from the leaderboard).
+    const events = [];
+    await client.query("BEGIN");
+    const locked = await client.query(`select status from shared_game where id = $1 for share`, [
+      game.id,
+    ]);
+    if (locked.rows[0]?.status !== "open") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ ok: false, error: "game is no longer open" });
+    }
     for (const w of req.body.writes) {
-      const result = await applyCellWrite(pool, game.id, w, game.participantId);
+      const result = await applyCellWrite(client, game.id, w, game.participantId);
       if (result.applied) {
-        applied++;
-        // Broadcast with the CLAMPED ts the server stored, so every replica
-        // compares the same value.
-        publish(game.id, "score", {
+        // Carry the CLAMPED ts the server stored, so every replica compares
+        // the same value.
+        events.push({
           slot: w.slot,
           hole: w.hole,
           strokes: w.strokes,
@@ -324,13 +339,21 @@ router.post("/:id/scores", scoreLimit, async (req, res) => {
         });
       }
     }
-    await pool.query(`update shared_game_participant set last_seen_at = now() where id = $1`, [
+    await client.query(`update shared_game_participant set last_seen_at = now() where id = $1`, [
       game.participantId,
     ]);
-    return res.json({ ok: true, applied });
+    await client.query("COMMIT");
+
+    // Broadcast only after commit — subscribers must never see a cell that a
+    // rollback would take back.
+    for (const event of events) publish(game.id, "score", event);
+    return res.json({ ok: true, applied: events.length });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("[games] scores error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
+  } finally {
+    client.release();
   }
 });
 

@@ -47,12 +47,16 @@ export async function createUserSession(userId) {
 }
 
 /**
- * Resolve a session token to its app_user (or null), sliding the expiry
- * forward when the session is more than a day into its window — one cheap
- * write a day per active user, not one per request.
+ * Resolve a session token to its app_user, sliding the expiry forward when
+ * the session is more than a day into its window — one cheap write a day per
+ * active user, not one per request. `refreshed` tells the caller the DB
+ * expiry moved, so it must re-send the cookie too: the browser's Max-Age was
+ * stamped at sign-in and never moves on its own, and without the re-send an
+ * active player would still be logged out 30 days after sign-in.
+ * @returns {Promise<{user: object|null, refreshed: boolean}>}
  */
 export async function getUserSession(token) {
-  if (!token) return null;
+  if (!token) return { user: null, refreshed: false };
   const result = await pool.query(
     `select ${USER_COLS}, s.id as "sessionId", s.expires_at as "expiresAt"
        from user_session s
@@ -61,16 +65,18 @@ export async function getUserSession(token) {
     [token]
   );
   const row = result.rows[0];
-  if (!row) return null;
+  if (!row) return { user: null, refreshed: false };
+  let refreshed = false;
   const remaining = new Date(row.expiresAt).getTime() - Date.now();
   if (remaining < USER_SESSION_TTL_MS - 24 * 60 * 60 * 1000) {
     await pool.query(`update user_session set expires_at = $2 where id = $1`, [
       token,
       new Date(Date.now() + USER_SESSION_TTL_MS),
     ]);
+    refreshed = true;
   }
   const { sessionId, expiresAt, ...user } = row;
-  return user;
+  return { user, refreshed };
 }
 
 export async function deleteUserSession(token) {
@@ -81,17 +87,21 @@ export async function deleteUserSession(token) {
 /**
  * App-wide middleware: resolve the ffc_session cookie to req.user (or null).
  * Never rejects — anonymous requests flow through untouched, so the existing
- * public routes are unaffected.
+ * public routes are unaffected. When the lookup slid the session's expiry,
+ * the cookie is re-issued so the browser's Max-Age slides with it.
  */
-export function attachUser(req, _res, next) {
+export function attachUser(req, res, next) {
   const token = parseCookies(req)[USER_COOKIE_NAME];
   if (!token) {
     req.user = null;
     return next();
   }
   getUserSession(token)
-    .then((user) => {
+    .then(({ user, refreshed }) => {
       req.user = user;
+      if (user && refreshed) {
+        res.set("Set-Cookie", serializeUserCookie(token, { secure: isProd() }));
+      }
       next();
     })
     .catch((err) => {

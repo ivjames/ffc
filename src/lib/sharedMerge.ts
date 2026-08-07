@@ -64,6 +64,31 @@ export function applyRemoteCell(round: LocalRound, cell: RemoteCell): LocalRound
   };
 }
 
+/** A 'score' event that echoes THIS DEVICE's own write back from the server.
+ *  Adopt the server's stored value verbatim instead of LWW-gating it: the
+ *  server may have clamped a far-future timestamp (broken-clock guard), and
+ *  keeping our bigger unclamped ts would make this replica reject every later
+ *  legitimate update to the cell while all other replicas accept them — the
+ *  one replica that never converges. Echoes arrive in server apply order, so
+ *  adopting each one lands us on the server's final state; any still-queued
+ *  outbox writes re-post and re-echo after. */
+export function applyOwnEcho(round: LocalRound, cell: RemoteCell): LocalRound | null {
+  if (!round.shared || cell.by !== round.shared.participantToken) return null;
+  const holeIdx = cell.hole - 1;
+  if (holeIdx < 0 || holeIdx >= HOLE_COUNT) return null;
+  const meta = metaRow(round, cell.slot);
+  const existing = meta[holeIdx];
+  if (existing && existing.ts === cell.ts && existing.by === cell.by) return null; // already in sync
+  meta[holeIdx] = { ts: cell.ts, by: cell.by };
+  const row = scoreRow(round, cell.slot);
+  row[holeIdx] = cell.strokes;
+  return {
+    ...round,
+    scores: { ...round.scores, [cell.slot]: row },
+    shared: { ...round.shared, cellMeta: { ...round.shared.cellMeta, [cell.slot]: meta } },
+  };
+}
+
 /** Stamp a local tap into the round (scores + cellMeta) with this device's
  *  participant id. The caller queues the matching outbox entry. */
 export function applyLocalStroke(

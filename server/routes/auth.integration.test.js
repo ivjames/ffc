@@ -240,6 +240,31 @@ test("PATCH /me updates profile fields; logout kills the session", async () => {
   assert.equal(meRes.status, 401);
 });
 
+test("sliding session re-issues the cookie once it's a day into its window", async () => {
+  await requestCode(EMAIL);
+  const verifyRes = await verify(EMAIL, lastCode());
+  const cookie = sessionCookie(verifyRes);
+  const token = cookie.split("=")[1];
+
+  // Fresh session: /me must NOT re-send the cookie (no write per request).
+  const fresh = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookie } });
+  assert.equal(fresh.headers.get("set-cookie"), null);
+
+  // Age the session by 2 days (28 of 30 remaining) — the next use slides the
+  // DB expiry AND must re-send the cookie so the browser's Max-Age slides too.
+  await testQuery(`update user_session set expires_at = now() + interval '28 days' where id = $1`, [
+    token,
+  ]);
+  const aged = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookie } });
+  assert.equal(aged.status, 200);
+  const setCookie = aged.headers.get("set-cookie");
+  assert.ok(setCookie, "sliding refresh should re-issue the session cookie");
+  assert.match(setCookie, new RegExp(`ffc_session=${token}`));
+  assert.match(setCookie, /Max-Age=2592000/); // full 30 days again
+  const expiry = await testQuery(`select expires_at from user_session where id = $1`, [token]);
+  assert.ok(new Date(expiry.rows[0].expires_at).getTime() > Date.now() + 29 * 24 * 60 * 60 * 1000);
+});
+
 test("me without a cookie 401s; PATCH without a cookie 401s", async () => {
   assert.equal((await fetch(`${baseUrl}/api/auth/me`)).status, 401);
   const patch = await fetch(`${baseUrl}/api/auth/me`, {

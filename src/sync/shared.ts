@@ -8,6 +8,7 @@ import type { LocalRound } from '../types';
 import { getRound, putRound, enqueueOutbox, getOutbox, clearOutbox } from '../db';
 import {
   applyRemoteCell,
+  applyOwnEcho,
   applySnapshot,
   applyPlayerJoined,
   applyLocalStroke,
@@ -54,30 +55,47 @@ export function openSharedRound(
     return queue as Promise<void>;
   }
 
-  /** Push everything queued for this game; delivered writes leave the outbox. */
+  /** Push everything queued for this game; delivered writes leave the outbox.
+   *  Loops until the outbox is empty so edits made while a POST was in flight
+   *  are drained too — otherwise a tap landing mid-request would sit in
+   *  IndexedDB until the next online/visibility event. */
+  let flushRequested = false;
   async function flush(): Promise<void> {
-    if (flushing || closed || !navigator.onLine) return;
+    if (closed || !navigator.onLine) return;
+    if (flushing) {
+      // A drain is running — have it re-check the outbox before it exits.
+      flushRequested = true;
+      return;
+    }
     flushing = true;
     try {
-      const shared = current?.shared;
-      if (!shared) return;
-      const pending = await getOutbox(shared.gameId);
-      if (pending.length === 0) return;
-      const res = await postScores(
-        shared.gameId,
-        shared.participantToken,
-        pending.map(({ entry }) => ({
-          slot: entry.slot,
-          hole: entry.hole,
-          strokes: entry.strokes,
-          ts: entry.ts,
-        })),
-      );
-      // Delivered (or permanently undeliverable — the game closed or the
-      // token was revoked): clear the queue. Transient failures keep it.
-      if (res.ok || res.status === 409 || res.status === 401) {
-        await clearOutbox(pending.map((p) => p.key));
-      }
+      do {
+        flushRequested = false;
+        const shared = current?.shared;
+        if (!shared) return;
+        const pending = await getOutbox(shared.gameId);
+        if (pending.length === 0) continue; // exits unless another drain was requested
+        const res = await postScores(
+          shared.gameId,
+          shared.participantToken,
+          pending.map(({ entry }) => ({
+            slot: entry.slot,
+            hole: entry.hole,
+            strokes: entry.strokes,
+            ts: entry.ts,
+          })),
+        );
+        // Delivered (or permanently undeliverable — the game closed or the
+        // token was revoked): clear this batch and loop for anything that
+        // queued during the POST. Transient failures keep the queue for the
+        // next trigger.
+        if (res.ok || res.status === 409 || res.status === 401) {
+          await clearOutbox(pending.map((p) => p.key));
+          flushRequested = true;
+        } else {
+          return;
+        }
+      } while (flushRequested);
     } finally {
       flushing = false;
     }
@@ -99,9 +117,9 @@ export function openSharedRound(
     es.addEventListener('score', (e) => {
       const cell = JSON.parse((e as MessageEvent).data) as RemoteCell;
       void mutate((r) =>
-        // Our own writes echo back with our participant id — the LWW gate
-        // makes them no-ops, so no self-filtering is needed.
-        applyRemoteCell(r, cell),
+        // Our own echoes adopt the server's stored (possibly ts-clamped)
+        // value verbatim; everyone else's writes go through the LWW gate.
+        cell.by === r.shared?.participantToken ? applyOwnEcho(r, cell) : applyRemoteCell(r, cell),
       );
     });
     es.addEventListener('player_joined', (e) => {
@@ -143,17 +161,19 @@ export function openSharedRound(
   return {
     applyLocal(slot, holeIdx, strokes) {
       const ts = Date.now();
-      void mutate((r) => {
-        const next = applyLocalStroke(r, slot, holeIdx, strokes, ts);
-        void enqueueOutbox({
-          gameId: r.shared!.gameId,
-          slot,
-          hole: holeIdx + 1,
-          strokes,
-          ts,
-        });
-        return next;
-      }).then(flush);
+      // Enqueue AFTER the state mutation resolves and AWAIT it before
+      // flushing, so a running drain's outbox re-read can never miss it.
+      void mutate((r) => applyLocalStroke(r, slot, holeIdx, strokes, ts))
+        .then(() =>
+          enqueueOutbox({
+            gameId: gameIdFromClientId(clientId),
+            slot,
+            hole: holeIdx + 1,
+            strokes,
+            ts,
+          }),
+        )
+        .then(flush);
     },
     async complete() {
       // Drain any straggler writes first so the server sees the full grid.

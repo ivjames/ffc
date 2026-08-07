@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   lwwWins,
   applyRemoteCell,
+  applyOwnEcho,
   applyLocalStroke,
   applyPlayerJoined,
   applyCompleted,
@@ -101,6 +102,32 @@ describe('convergence', () => {
     expect(shuffled).toEqual(forward);
     expect(forward[0][0]).toBe(3); // 'c' won the tie at ts 12
     expect(forward[1][17]).toBeNull(); // the ts-9 clear beat the ts-8 write
+  });
+});
+
+describe('applyOwnEcho', () => {
+  test('adopts the server-clamped ts so later remote writes can win the cell', () => {
+    let round = freshRound();
+    // Our clock is a year fast: the local stamp is far-future.
+    const farFuture = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    round = applyLocalStroke(round, 0, 0, 4, farFuture);
+    // The server clamped our ts and echoes the stored value back.
+    const clamped = Date.now() + 60_000;
+    const echoed = applyOwnEcho(round, { slot: 0, hole: 1, strokes: 4, ts: clamped, by: 'me-token' });
+    expect(echoed).not.toBeNull();
+    round = echoed!;
+    expect(round.shared?.cellMeta[0][0]?.ts).toBe(clamped);
+    // An identical echo is a no-op.
+    expect(applyOwnEcho(round, { slot: 0, hole: 1, strokes: 4, ts: clamped, by: 'me-token' })).toBeNull();
+    // Without the adoption this later legitimate correction would lose to the
+    // far-future stamp; now it wins, matching every other replica.
+    const other = applyRemoteCell(round, { slot: 0, hole: 1, strokes: 2, ts: clamped + 1, by: 'other' });
+    expect(other!.scores[0][0]).toBe(2);
+  });
+
+  test("ignores echoes of other participants' writes", () => {
+    const round = freshRound();
+    expect(applyOwnEcho(round, { slot: 0, hole: 1, strokes: 4, ts: 1, by: 'not-me' })).toBeNull();
   });
 });
 
