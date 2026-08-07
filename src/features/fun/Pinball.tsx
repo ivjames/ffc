@@ -113,10 +113,13 @@ const SEGS: Seg[] = (() => {
     { ax: PF_R, ay: 168, bx: PF_R, by: H }, // shooter-lane inner wall
     { ax: PF_R, ay: 547, bx: OUT_R, by: 547 }, // lane floor (under the plunger)
     { ax: PF_R, ay: 119, bx: PF_R, by: 168, gNx: -1, gNy: 0 }, // one-way gate
-    { ax: 28, ay: 404, bx: 28, by: 468 }, // left outlane divider
-    { ax: 28, ay: 468, bx: 107, by: 489 }, // left inlane guide → flipper
-    { ax: 286, ay: 404, bx: 286, by: 468 }, // right outlane divider
-    { ax: 286, ay: 468, bx: 207, by: 489 }, // right inlane guide → flipper
+    // Outlane dividers + inlane guides. Channel widths are 28px against an
+    // effective ball diameter of 18 (BALL_R + WALL_PAD each side) — anything
+    // near 20px is a wedge pocket the ball jams in instead of falling through.
+    { ax: 36, ay: 404, bx: 36, by: 468 }, // left outlane divider
+    { ax: 36, ay: 468, bx: 107, by: 489 }, // left inlane guide → flipper
+    { ax: 278, ay: 404, bx: 278, by: 468 }, // right outlane divider
+    { ax: 278, ay: 468, bx: 207, by: 489 }, // right inlane guide → flipper
     // Rollover lane fins — short guides bracketing the lamps, detached from
     // the arch so the dome stays open playfield instead of walled columns.
     { ax: 94, ay: 136, bx: 94, by: 192 },
@@ -149,8 +152,8 @@ function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
 // horizontal ball ping-pong between the two faces indefinitely; the lean turns
 // every rebound slightly downward instead.
 const SLINGS: Sling[] = [
-  makeSling({ x: 53, y: 410 }, { x: 48, y: 468 }, { x: 96, y: 478 }),
-  makeSling({ x: 261, y: 410 }, { x: 266, y: 468 }, { x: 218, y: 478 }),
+  makeSling({ x: 69, y: 410 }, { x: 64, y: 468 }, { x: 96, y: 478 }),
+  makeSling({ x: 245, y: 410 }, { x: 250, y: 468 }, { x: 218, y: 478 }),
 ];
 
 const BUMPERS = [
@@ -523,12 +526,12 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   c.beginPath();
   c.moveTo(PF_R, 168);
   c.lineTo(PF_R, H);
-  // Outlane dividers + inlane guides.
-  c.moveTo(28, 404);
-  c.lineTo(28, 468);
+  // Outlane dividers + inlane guides (matching SEGS).
+  c.moveTo(36, 404);
+  c.lineTo(36, 468);
   c.lineTo(107, 489);
-  c.moveTo(286, 404);
-  c.lineTo(286, 468);
+  c.moveTo(278, 404);
+  c.lineTo(278, 468);
   c.lineTo(207, 489);
   // Rollover lane fins — short guides around the lamps (matching SEGS).
   c.moveTo(94, 136);
