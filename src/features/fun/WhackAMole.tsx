@@ -202,15 +202,21 @@ function drawGopher(ctx: CanvasRenderingContext2D, x: number, hy: number, kind: 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(x - 3.6, hy + 9, 3.2, 5.5);
   ctx.fillRect(x + 0.4, hy + 9, 3.2, 5.5);
-  // Golden gopher sparkle.
+  // Golden gopher twinkles — a little crown of white stars over the head,
+  // deliberately clear of the ears: the old single amber glint beside an ear
+  // sat almost exactly where the bomb draws its lit fuse spark, so at arcade
+  // size gold gophers read as bombs.
   if (gold) {
     ctx.save();
-    ctx.fillStyle = '#fef9c3';
-    ctx.shadowColor = '#fbbf24';
-    ctx.shadowBlur = 8;
-    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillStyle = '#fffbeb';
+    ctx.shadowColor = '#fde68a';
+    ctx.shadowBlur = 5;
     ctx.textAlign = 'center';
-    ctx.fillText('✦', x + 22, hy - 24);
+    ctx.font = 'bold 10px system-ui, sans-serif';
+    ctx.fillText('✦', x - 13, hy - 30);
+    ctx.fillText('✦', x + 13, hy - 30);
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.fillText('✦', x, hy - 37);
     ctx.restore();
   }
 }
