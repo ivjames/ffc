@@ -1,0 +1,29 @@
+[
+  {
+    "id": "plr_1001",
+    "cardNumber": "6039-5551-0001",
+    "name": "Avery Sample",
+    "email": "avery@example.com",
+    "tier": "gold",
+    "balances": { "cashCents": 2500, "gamePlayCredits": 120, "tickets": 4380 },
+    "createdAt": "2025-11-02T18:24:00Z"
+  },
+  {
+    "id": "plr_1002",
+    "cardNumber": "6039-5551-0002",
+    "name": "Jordan Sample",
+    "email": "jordan@example.com",
+    "tier": "standard",
+    "balances": { "cashCents": 0, "gamePlayCredits": 8, "tickets": 215 },
+    "createdAt": "2026-01-15T02:10:00Z"
+  },
+  {
+    "id": "plr_1003",
+    "cardNumber": "6039-5551-0003",
+    "name": "Riley Sample",
+    "email": "riley@example.com",
+    "tier": "standard",
+    "balances": { "cashCents": 1050, "gamePlayCredits": 0, "tickets": 0 },
+    "createdAt": "2026-03-28T21:47:00Z"
+  }
+]

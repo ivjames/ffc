@@ -1,0 +1,178 @@
+{
+  "locationId": "loc_ffc_main",
+  "currency": "USD",
+  "categories": [
+    {
+      "id": "cat_pizza",
+      "name": "Pizza",
+      "sortOrder": 1,
+      "items": [
+        {
+          "id": "itm_pizza_cheese_16",
+          "name": "16\" Cheese Pizza",
+          "description": "Hand-tossed, whole-milk mozzarella.",
+          "priceCents": 1899,
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mg_toppings",
+              "name": "Toppings",
+              "minSelections": 0,
+              "maxSelections": 5,
+              "modifiers": [
+                { "id": "mod_pepperoni", "name": "Pepperoni", "priceCents": 250 },
+                { "id": "mod_sausage", "name": "Italian Sausage", "priceCents": 250 },
+                { "id": "mod_mushroom", "name": "Mushrooms", "priceCents": 200 },
+                { "id": "mod_onion", "name": "Red Onion", "priceCents": 150 },
+                { "id": "mod_pepper", "name": "Green Peppers", "priceCents": 150 },
+                { "id": "mod_xcheese", "name": "Extra Cheese", "priceCents": 300 }
+              ]
+            },
+            {
+              "id": "mg_crust",
+              "name": "Crust",
+              "minSelections": 1,
+              "maxSelections": 1,
+              "modifiers": [
+                { "id": "mod_crust_hand", "name": "Hand-Tossed", "priceCents": 0 },
+                { "id": "mod_crust_thin", "name": "Thin Crust", "priceCents": 0 },
+                { "id": "mod_crust_gf", "name": "Gluten-Free (10\")", "priceCents": 400 }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "itm_pizza_slice",
+          "name": "Pizza Slice",
+          "description": "Cheese or pepperoni, by the slice.",
+          "priceCents": 399,
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mg_slice_type",
+              "name": "Type",
+              "minSelections": 1,
+              "maxSelections": 1,
+              "modifiers": [
+                { "id": "mod_slice_cheese", "name": "Cheese", "priceCents": 0 },
+                { "id": "mod_slice_pep", "name": "Pepperoni", "priceCents": 50 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cat_snacks",
+      "name": "Snacks & Baskets",
+      "sortOrder": 2,
+      "items": [
+        {
+          "id": "itm_tenders",
+          "name": "Chicken Tenders Basket",
+          "description": "Five tenders with fries and a dipping sauce.",
+          "priceCents": 1199,
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mg_sauce",
+              "name": "Dipping Sauce",
+              "minSelections": 1,
+              "maxSelections": 2,
+              "modifiers": [
+                { "id": "mod_ranch", "name": "Ranch", "priceCents": 0 },
+                { "id": "mod_bbq", "name": "BBQ", "priceCents": 0 },
+                { "id": "mod_honeymust", "name": "Honey Mustard", "priceCents": 0 },
+                { "id": "mod_buffalo", "name": "Buffalo", "priceCents": 0 }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "itm_pretzel",
+          "name": "Bavarian Pretzel",
+          "description": "Warm, salted, with cheese sauce.",
+          "priceCents": 799,
+          "available": true,
+          "modifierGroups": []
+        },
+        {
+          "id": "itm_nachos",
+          "name": "Loaded Nachos",
+          "description": "Queso, jalapeños, pico. (86'd in the mock to exercise the unavailable-item path.)",
+          "priceCents": 999,
+          "available": false,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "id": "cat_drinks",
+      "name": "Drinks",
+      "sortOrder": 3,
+      "items": [
+        {
+          "id": "itm_fountain",
+          "name": "Fountain Drink",
+          "description": "Free refills at the counter.",
+          "priceCents": 299,
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mg_size",
+              "name": "Size",
+              "minSelections": 1,
+              "maxSelections": 1,
+              "modifiers": [
+                { "id": "mod_size_sm", "name": "Small", "priceCents": 0 },
+                { "id": "mod_size_lg", "name": "Large", "priceCents": 100 }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "itm_icee",
+          "name": "ICEE",
+          "description": "Cherry or blue raspberry.",
+          "priceCents": 449,
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mg_icee_flavor",
+              "name": "Flavor",
+              "minSelections": 1,
+              "maxSelections": 1,
+              "modifiers": [
+                { "id": "mod_icee_cherry", "name": "Cherry", "priceCents": 0 },
+                { "id": "mod_icee_blue", "name": "Blue Raspberry", "priceCents": 0 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cat_desserts",
+      "name": "Desserts",
+      "sortOrder": 4,
+      "items": [
+        {
+          "id": "itm_dippin",
+          "name": "Ice Cream Dots",
+          "description": "Cookies and cream.",
+          "priceCents": 549,
+          "available": true,
+          "modifierGroups": []
+        },
+        {
+          "id": "itm_churros",
+          "name": "Churros (3)",
+          "description": "Cinnamon sugar, chocolate dip.",
+          "priceCents": 649,
+          "available": true,
+          "modifierGroups": []
+        }
+      ]
+    }
+  ]
+}
