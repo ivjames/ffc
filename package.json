@@ -13,6 +13,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "putt:sim": "node --experimental-strip-types scripts/putt-sim.ts",
+    "mock:centeredge": "node mock-centeredge/server.js",
+    "test:mock": "node --test mock-centeredge/server.test.js",
     "test:app": "vitest run --config vitest.app.config.ts",
     "test:admin": "vitest run --config vitest.admin.config.ts",
     "test:admin:watch": "vitest --config vitest.admin.config.ts",

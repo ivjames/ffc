@@ -1,0 +1,47 @@
+[
+  {
+    "playerId": "PLR-1001",
+    "cardNumber": "6039-5501-0000-1001",
+    "displayName": "Avery Test",
+    "email": "avery@example.com",
+    "phone": "+15555550101",
+    "tier": "gold",
+    "balances": {
+      "storedValueCents": 2500,
+      "gameCredits": 42,
+      "ticketCount": 1380
+    },
+    "memberSince": "2024-03-14T00:00:00Z",
+    "lastVisitAt": "2026-07-30T18:22:00Z"
+  },
+  {
+    "playerId": "PLR-1002",
+    "cardNumber": "6039-5501-0000-1002",
+    "displayName": "Jordan Test",
+    "email": "jordan@example.com",
+    "phone": "+15555550102",
+    "tier": "standard",
+    "balances": {
+      "storedValueCents": 0,
+      "gameCredits": 3,
+      "ticketCount": 25
+    },
+    "memberSince": "2026-01-02T00:00:00Z",
+    "lastVisitAt": "2026-08-01T14:05:00Z"
+  },
+  {
+    "playerId": "PLR-1003",
+    "cardNumber": "6039-5501-0000-1003",
+    "displayName": "Sam Bigspender",
+    "email": "sam@example.com",
+    "phone": "+15555550103",
+    "tier": "platinum",
+    "balances": {
+      "storedValueCents": 15000,
+      "gameCredits": 200,
+      "ticketCount": 99850
+    },
+    "memberSince": "2022-11-20T00:00:00Z",
+    "lastVisitAt": "2026-08-05T20:40:00Z"
+  }
+]

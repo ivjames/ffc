@@ -1,0 +1,178 @@
+{
+  "locationId": "LOC-001",
+  "locationName": "FFC Family Fun Center",
+  "currency": "USD",
+  "taxRatePercent": 7.0,
+  "categories": [
+    {
+      "id": "cat-pizza",
+      "name": "Pizza",
+      "sortOrder": 1,
+      "items": [
+        {
+          "id": "itm-pizza-cheese",
+          "sku": "FB-1001",
+          "name": "Cheese Pizza (16\")",
+          "description": "Hand-tossed 16\" pie with house marinara and whole-milk mozzarella.",
+          "priceCents": 1599,
+          "imageUrl": "/images/menu/pizza-cheese.jpg",
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mod-pizza-toppings",
+              "name": "Toppings",
+              "required": false,
+              "minSelections": 0,
+              "maxSelections": 5,
+              "options": [
+                { "id": "opt-pepperoni", "name": "Pepperoni", "priceCents": 200 },
+                { "id": "opt-sausage", "name": "Italian Sausage", "priceCents": 200 },
+                { "id": "opt-mushroom", "name": "Mushrooms", "priceCents": 150 },
+                { "id": "opt-onion", "name": "Red Onions", "priceCents": 100 },
+                { "id": "opt-pepper", "name": "Green Peppers", "priceCents": 100 },
+                { "id": "opt-extra-cheese", "name": "Extra Cheese", "priceCents": 250 }
+              ]
+            },
+            {
+              "id": "mod-pizza-crust",
+              "name": "Crust",
+              "required": true,
+              "minSelections": 1,
+              "maxSelections": 1,
+              "options": [
+                { "id": "opt-crust-hand", "name": "Hand Tossed", "priceCents": 0 },
+                { "id": "opt-crust-thin", "name": "Thin Crust", "priceCents": 0 },
+                { "id": "opt-crust-gf", "name": "Gluten-Free (12\")", "priceCents": 300 }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "itm-pizza-slice",
+          "sku": "FB-1002",
+          "name": "Pizza Slice",
+          "description": "One giant slice — cheese or pepperoni.",
+          "priceCents": 399,
+          "imageUrl": "/images/menu/pizza-slice.jpg",
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mod-slice-type",
+              "name": "Slice Type",
+              "required": true,
+              "minSelections": 1,
+              "maxSelections": 1,
+              "options": [
+                { "id": "opt-slice-cheese", "name": "Cheese", "priceCents": 0 },
+                { "id": "opt-slice-pep", "name": "Pepperoni", "priceCents": 50 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cat-snacks",
+      "name": "Snacks & Baskets",
+      "sortOrder": 2,
+      "items": [
+        {
+          "id": "itm-tenders",
+          "sku": "FB-2001",
+          "name": "Chicken Tender Basket",
+          "description": "Four crispy tenders with fries and a dipping sauce.",
+          "priceCents": 1099,
+          "imageUrl": "/images/menu/tenders.jpg",
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mod-sauce",
+              "name": "Dipping Sauce",
+              "required": true,
+              "minSelections": 1,
+              "maxSelections": 2,
+              "options": [
+                { "id": "opt-ranch", "name": "Ranch", "priceCents": 0 },
+                { "id": "opt-bbq", "name": "BBQ", "priceCents": 0 },
+                { "id": "opt-honey-mustard", "name": "Honey Mustard", "priceCents": 0 },
+                { "id": "opt-buffalo", "name": "Buffalo", "priceCents": 0 }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "itm-pretzel",
+          "sku": "FB-2002",
+          "name": "Soft Pretzel Bites",
+          "description": "Warm pretzel bites with cheese sauce.",
+          "priceCents": 799,
+          "imageUrl": "/images/menu/pretzel.jpg",
+          "available": true,
+          "modifierGroups": []
+        },
+        {
+          "id": "itm-nachos",
+          "sku": "FB-2003",
+          "name": "Loaded Nachos",
+          "description": "Tortilla chips, queso, jalapeños, pico. Currently 86'd — used to test sold-out handling.",
+          "priceCents": 899,
+          "imageUrl": "/images/menu/nachos.jpg",
+          "available": false,
+          "modifierGroups": []
+        }
+      ]
+    },
+    {
+      "id": "cat-drinks",
+      "name": "Drinks",
+      "sortOrder": 3,
+      "items": [
+        {
+          "id": "itm-fountain",
+          "sku": "FB-3001",
+          "name": "Fountain Drink",
+          "description": "Free refills at the counter.",
+          "priceCents": 299,
+          "imageUrl": "/images/menu/fountain.jpg",
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mod-drink-size",
+              "name": "Size",
+              "required": true,
+              "minSelections": 1,
+              "maxSelections": 1,
+              "options": [
+                { "id": "opt-size-sm", "name": "Small", "priceCents": 0 },
+                { "id": "opt-size-md", "name": "Medium", "priceCents": 50 },
+                { "id": "opt-size-lg", "name": "Large", "priceCents": 100 }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "itm-icee",
+          "sku": "FB-3002",
+          "name": "ICEE",
+          "description": "Cherry or blue raspberry.",
+          "priceCents": 449,
+          "imageUrl": "/images/menu/icee.jpg",
+          "available": true,
+          "modifierGroups": [
+            {
+              "id": "mod-icee-flavor",
+              "name": "Flavor",
+              "required": true,
+              "minSelections": 1,
+              "maxSelections": 1,
+              "options": [
+                { "id": "opt-icee-cherry", "name": "Cherry", "priceCents": 0 },
+                { "id": "opt-icee-blue", "name": "Blue Raspberry", "priceCents": 0 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

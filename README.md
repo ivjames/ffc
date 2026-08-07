@@ -197,6 +197,9 @@ public/
   maps/                    # bundled course map assets (SVG placeholders)
   icons/                   # PWA icons
 server/                    # Node/Express + Postgres API (see server/README.md)
+mock-centeredge/           # zero-dep local mock of the CenterEdge POS APIs
+                           # (F&B ordering + player/ticket loyalty) — run with
+                           # `npm run mock:centeredge`, see its README.md
 bin/ffc                    # operate CLI (setup/deploy/seed/wildcard-cert/admin-setup)
 deploy/                    # nginx vhost templates + ACME doctl hooks + seed JSON
 ```

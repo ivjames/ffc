@@ -1,0 +1,14 @@
+{
+  "name": "ffc-mock-centeredge",
+  "version": "0.1.0",
+  "description": "Zero-dependency local mock of the CenterEdge APIs (F&B ordering + player card / ticket loyalty) for FEC app development.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}
