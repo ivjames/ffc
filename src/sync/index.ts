@@ -111,22 +111,36 @@ export type CourseBoard = {
   rows: { rank: number; tag: string; total: number; completedAt: string }[];
 };
 
-/** Per-course top-N boards for the venue display wall — every live course of
- *  the venue is returned, empty boards included, so the column grid is stable. */
-export async function fetchCourseBoards(opts: {
+export type CourseBoardOpts = {
   locationId?: string;
   period?: 'day' | 'week' | 'month' | 'all';
   by?: 'player' | 'team';
   limit?: number;
-}): Promise<{ period: string; by: string; courses: CourseBoard[] }> {
+};
+
+function courseBoardsQuery(opts: CourseBoardOpts): string {
   const q = new URLSearchParams();
   if (opts.locationId) q.set('locationId', opts.locationId);
   if (opts.period) q.set('period', opts.period);
   if (opts.by) q.set('by', opts.by);
   if (opts.limit) q.set('limit', String(opts.limit));
-  const res = await fetch(apiUrl(`/api/leaderboard/courses?${q.toString()}`));
+  return q.toString();
+}
+
+/** Per-course top-N boards for the venue display wall — every live course of
+ *  the venue is returned, empty boards included, so the column grid is stable. */
+export async function fetchCourseBoards(
+  opts: CourseBoardOpts,
+): Promise<{ period: string; by: string; courses: CourseBoard[] }> {
+  const res = await fetch(apiUrl(`/api/leaderboard/courses?${courseBoardsQuery(opts)}`));
   if (!res.ok) throw new Error(`Leaderboard failed: HTTP ${res.status}`);
   return res.json();
+}
+
+/** SSE stream URL for the same boards — emits a `boards` event on connect and
+ *  whenever the standings change (see server routes/leaderboard.js). */
+export function courseBoardsStreamUrl(opts: CourseBoardOpts): string {
+  return apiUrl(`/api/leaderboard/courses/stream?${courseBoardsQuery(opts)}`);
 }
 
 /** Rewards earned by a round (punchlist #8 tier 1), fetched by the round's

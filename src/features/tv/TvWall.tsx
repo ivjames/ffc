@@ -4,7 +4,7 @@ import AnnouncementBanner from '../../ui/AnnouncementBanner';
 import { useCurrentLocationId } from '../../lib/location';
 import { LOCATIONS, locationById, courseById } from '../../data/courses';
 import { themeEmoji } from '../../lib/theme';
-import { fetchCourseBoards, type CourseBoard } from '../../sync';
+import { fetchCourseBoards, courseBoardsStreamUrl, type CourseBoard } from '../../sync';
 
 // The venue display wall — every course's board side by side on one big
 // screen, separate from the phone-first /tv route. Built for a TV stick
@@ -26,7 +26,9 @@ const PERIOD_LABEL: Record<Period, string> = {
   all: 'All time',
 };
 
-const POLL_MS = 10_000;
+// SSE is the live path (a board updates the moment a round syncs); this slow
+// poll runs alongside as a safety net for proxies that silently kill streams.
+const SAFETY_POLL_MS = 60_000;
 const DEFAULT_ACCENT = '#38bdf8';
 
 function resolveLocationId(param: string | null, fallback: string): string {
@@ -54,24 +56,43 @@ export default function TvWall() {
 
   useEffect(() => {
     let alive = true;
-    async function load() {
+    const opts = { locationId, period, by, limit };
+
+    const apply = (data: { courses: CourseBoard[] }) => {
+      if (!alive) return;
+      setBoards(data.courses);
+      setError(null);
+    };
+
+    async function pollOnce() {
       try {
-        const data = await fetchCourseBoards({ locationId, period, by, limit });
-        if (alive) {
-          setBoards(data.courses);
-          setError(null);
-        }
+        apply(await fetchCourseBoards(opts));
       } catch (e) {
-        // Keep showing the last good boards; only surface the error when we
-        // never had data (a wall flashing errors between polls helps no one).
+        // Keep showing the last good boards; the error only surfaces when we
+        // never had data (a wall flashing errors between updates helps no one).
         if (alive) setError(e instanceof Error ? e.message : 'Could not load boards');
       }
     }
-    void load();
-    const id = setInterval(load, POLL_MS);
+
+    // Live updates over SSE — the server pushes a `boards` event the moment a
+    // completed round syncs. EventSource reconnects on its own after drops;
+    // the slow safety poll keeps the wall fresh if a proxy silently kills the
+    // stream, and gives an instant first paint before the stream opens.
+    const es = new EventSource(courseBoardsStreamUrl(opts));
+    es.addEventListener('boards', (e) => {
+      try {
+        apply(JSON.parse((e as MessageEvent).data));
+      } catch {
+        /* malformed frame — the next push or poll corrects it */
+      }
+    });
+
+    void pollOnce();
+    const pollId = setInterval(pollOnce, SAFETY_POLL_MS);
     return () => {
       alive = false;
-      clearInterval(id);
+      es.close();
+      clearInterval(pollId);
     };
   }, [locationId, period, by, limit]);
 

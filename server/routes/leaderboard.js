@@ -16,6 +16,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { UUID_RE } from "../lib/validateLocation.js";
+import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
 
 export const router = Router();
 
@@ -153,34 +154,43 @@ router.get("/", async (req, res) => {
 
 // --- Per-course boards for the venue display wall ---------------------------
 // GET /api/leaderboard/courses?locationId=<uuid>&period=&by=&limit=
+//   -> one snapshot
+// GET /api/leaderboard/courses/stream (same params)
+//   -> SSE: a `boards` event on connect, then again whenever the standings
+//      change (a completed round syncing), plus a slow safety refresh.
 // One board per live course (top `limit` rows each), every course included
 // even when empty. Same scoring semantics as the main board; the time window
 // is made conditional in SQL ($2 null = no filter) so one statement serves
 // every period.
-router.get("/courses", async (req, res) => {
+
+/** Parse+validate the shared board params. Returns { error } or the values. */
+function parseBoardParams(req) {
   const period = typeof req.query.period === "string" ? req.query.period : "day";
   if (!(period in PERIOD_UNITS)) {
-    return res.status(400).json({ ok: false, error: "period must be day|week|month|all" });
+    return { error: "period must be day|week|month|all" };
   }
   const by = typeof req.query.by === "string" ? req.query.by : "player";
   if (by !== "player" && by !== "team") {
-    return res.status(400).json({ ok: false, error: "by must be player|team" });
+    return { error: "by must be player|team" };
   }
   const locationId = typeof req.query.locationId === "string" && req.query.locationId !== ""
     ? req.query.locationId
     : null;
   if (locationId !== null && !UUID_RE.test(locationId)) {
-    return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
+    return { error: "locationId must be a uuid" };
   }
   let limit = 10;
   if (req.query.limit !== undefined) {
     limit = Number(req.query.limit);
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
-      return res.status(400).json({ ok: false, error: "limit must be 1..50" });
+      return { error: "limit must be 1..50" };
     }
   }
-  const unit = PERIOD_UNITS[period]; // null for "all"
+  return { period, by, locationId, limit, unit: PERIOD_UNITS[period] };
+}
 
+/** Compute the per-course boards payload (shared by the GET and SSE routes). */
+async function computeCourseBoards({ period, by, locationId, limit, unit }) {
   // Shared window/venue filter: $1 tz fallback, $2 unit (null = all time),
   // $3 location (null = every venue).
   const zone = `coalesce(loc.tz, $1)`;
@@ -238,42 +248,112 @@ router.get("/courses", async (req, res) => {
            completed_at as "completedAt", rn
       from ranked where rn <= $4 order by course_id, rn`;
 
-  try {
-    const [courses, rows] = await Promise.all([
-      pool.query(
-        `select c.id, c.name, c.theme, c.sort_order as "sortOrder",
-                c.location_id as "locationId", l.name as "locationName"
-           from course c
-           left join location l on l.id = c.location_id
-          where c.archived_at is null
-            and (l.id is null or l.archived_at is null)
-            and ($1::uuid is null or c.location_id = $1)
-          order by c.sort_order, c.name`,
-        [locationId]
-      ),
-      pool.query(by === "team" ? teamRowsSql : playerRowsSql, [VENUE_TZ, unit, locationId, limit]),
-    ]);
+  const [courses, rows] = await Promise.all([
+    pool.query(
+      `select c.id, c.name, c.theme, c.sort_order as "sortOrder",
+              c.location_id as "locationId", l.name as "locationName"
+         from course c
+         left join location l on l.id = c.location_id
+        where c.archived_at is null
+          and (l.id is null or l.archived_at is null)
+          and ($1::uuid is null or c.location_id = $1)
+        order by c.sort_order, c.name`,
+      [locationId]
+    ),
+    pool.query(by === "team" ? teamRowsSql : playerRowsSql, [VENUE_TZ, unit, locationId, limit]),
+  ]);
 
-    const rowsByCourse = new Map();
-    for (const r of rows.rows) {
-      const list = rowsByCourse.get(r.courseId) ?? [];
-      list.push({ rank: Number(r.rn), tag: r.tag, total: r.total, completedAt: r.completedAt });
-      rowsByCourse.set(r.courseId, list);
-    }
-    return res.json({
-      period,
-      by,
-      courses: courses.rows.map((c) => ({
-        courseId: c.id,
-        courseName: c.name,
-        theme: c.theme,
-        locationId: c.locationId,
-        locationName: c.locationName,
-        rows: rowsByCourse.get(c.id) ?? [],
-      })),
-    });
+  const rowsByCourse = new Map();
+  for (const r of rows.rows) {
+    const list = rowsByCourse.get(r.courseId) ?? [];
+    list.push({ rank: Number(r.rn), tag: r.tag, total: r.total, completedAt: r.completedAt });
+    rowsByCourse.set(r.courseId, list);
+  }
+  return {
+    period,
+    by,
+    courses: courses.rows.map((c) => ({
+      courseId: c.id,
+      courseName: c.name,
+      theme: c.theme,
+      locationId: c.locationId,
+      locationName: c.locationName,
+      rows: rowsByCourse.get(c.id) ?? [],
+    })),
+  };
+}
+
+router.get("/courses", async (req, res) => {
+  const params = parseBoardParams(req);
+  if (params.error) return res.status(400).json({ ok: false, error: params.error });
+  try {
+    return res.json(await computeCourseBoards(params));
   } catch (err) {
     console.error("[leaderboard] courses error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
+});
+
+// --- SSE stream for the wall -------------------------------------------------
+// Pushes a `boards` event on connect and again whenever the standings may have
+// changed. Change signals, cheapest first:
+//  - ROUND_COMPLETED domain event (a fresh completed round committed) —
+//    debounced briefly so a burst of syncing devices recomputes once;
+//  - a slow safety refresh (60s) that also handles calendar-window rollover
+//    (a "day" board must empty at local midnight with no round in sight).
+// Recomputes are deduped against the last payload sent, so idle TVs get only
+// heartbeats. `X-Accel-Buffering: no` stops nginx buffering the stream.
+const STREAM_REFRESH_MS = 60_000;
+const STREAM_DEBOUNCE_MS = 300;
+const HEARTBEAT_MS = 25_000;
+
+router.get("/courses/stream", async (req, res) => {
+  const params = parseBoardParams(req);
+  if (params.error) return res.status(400).json({ ok: false, error: params.error });
+
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+
+  let closed = false;
+  let lastJson = "";
+  let debounce = null;
+
+  const send = async () => {
+    if (closed) return;
+    try {
+      const json = JSON.stringify(await computeCourseBoards(params));
+      if (closed || json === lastJson) return;
+      lastJson = json;
+      res.write(`event: boards\ndata: ${json}\n\n`);
+    } catch (err) {
+      // Transient DB hiccup: keep the stream open, the safety refresh retries.
+      console.error("[leaderboard] stream compute error:", err);
+    }
+  };
+
+  const onRound = () => {
+    if (debounce) clearTimeout(debounce);
+    debounce = setTimeout(() => void send(), STREAM_DEBOUNCE_MS);
+  };
+  domainEvents.on(ROUND_COMPLETED, onRound);
+  const refresh = setInterval(() => void send(), STREAM_REFRESH_MS);
+  const heartbeat = setInterval(() => {
+    if (!closed) res.write(`: ping\n\n`);
+  }, HEARTBEAT_MS);
+
+  req.on("close", () => {
+    closed = true;
+    domainEvents.off(ROUND_COMPLETED, onRound);
+    if (debounce) clearTimeout(debounce);
+    clearInterval(refresh);
+    clearInterval(heartbeat);
+    res.end();
+  });
+
+  await send();
 });

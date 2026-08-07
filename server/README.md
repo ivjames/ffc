@@ -108,6 +108,18 @@ is included even with no scores yet, so the wall's column grid stays stable.
                 "completedAt": "2026-08-07T18:00:00.000Z" } ] } ] }
 ```
 
+### `GET /api/leaderboard/courses/stream` (SSE)
+Same params and payload as `/courses`, pushed live: a `boards` event on
+connect, then again whenever the standings may have changed — a fresh
+completed round committing (in-process domain event from `POST /api/rounds`,
+debounced 300ms), plus a 60s safety refresh that also handles calendar-window
+rollover (a `day` board empties at local midnight with no round in sight).
+Recomputes are deduped against the last payload, so idle screens receive only
+heartbeat comments (every 25s). Sends `X-Accel-Buffering: no` so nginx doesn't
+buffer the stream. Single-process pm2 is assumed (same as the in-memory rate
+limiters) — multi-process would swap the emitter for Postgres LISTEN/NOTIFY
+(`server/lib/events.js`).
+
 → `200` array, sorted ascending by `total`:
 ```json
 [

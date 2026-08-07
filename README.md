@@ -69,8 +69,9 @@ items except player registration, which is a separate effort):
   side by side (one column per course) for a TV pointed at the URL, separate
   from the phone-first `/tv`. Zero interaction: venue/period/player-vs-team/
   row count all come from query params (`?location=upland&period=day`), fed by
-  `GET /api/leaderboard/courses`, polling every 10s with announcements across
-  the top.
+  `GET /api/leaderboard/courses`, updating live over SSE (a board changes the
+  moment a round syncs; a slow safety poll covers stream-hostile proxies) with
+  announcements across the top.
 - **Food & Drink card** — per-location menu/ordering deep links set in Master
   Control, shown on Home when set (grayed out offline). Ships via the normal
   content export.

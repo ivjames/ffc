@@ -134,6 +134,87 @@ test("by=team boards use avg-per-player and skip tagless rounds", async () => {
   );
 });
 
+// Incremental SSE frame reader over a fetch()ed stream: returns the parsed
+// payload of the next `boards` event, buffering partial frames across reads.
+function boardsEventReader(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  return {
+    async next(timeoutMs = 5000) {
+      const deadline = Date.now() + timeoutMs;
+      for (;;) {
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) !== -1) {
+          const frame = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const dataLine = frame.split("\n").find((l) => l.startsWith("data: "));
+          if (frame.includes("event: boards") && dataLine) {
+            return JSON.parse(dataLine.slice("data: ".length));
+          }
+        }
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) throw new Error("no boards event within timeout");
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise((resolve) => setTimeout(() => resolve("timeout"), remaining)),
+        ]);
+        if (chunk === "timeout" || chunk.done) throw new Error("no boards event within timeout");
+        buf += decoder.decode(chunk.value, { stream: true });
+      }
+    },
+  };
+}
+
+test("SSE stream: boards on connect, then a push when a round syncs", async () => {
+  const abort = new AbortController();
+  try {
+    const res = await fetch(
+      `${baseUrl}/api/leaderboard/courses/stream?locationId=${locationId}&period=all`,
+      { signal: abort.signal }
+    );
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type"), /text\/event-stream/);
+    const events = boardsEventReader(res.body);
+
+    // Initial snapshot arrives without any activity.
+    const first = await events.next();
+    const firstA = first.courses.find((c) => c.courseId === courseA);
+    assert.ok(!firstA.rows.some((r) => r.tag === "SSE"), "new tag not on the board yet");
+
+    // Sync a fresh completed round through the real route (the domain event
+    // fires on commit) — the stream must push updated boards on its own.
+    const post = await fetch(`${baseUrl}/api/rounds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clientId: `wall-sse-${Date.now()}`,
+        courseId: courseA,
+        playerTags: ["SSE"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(1) },
+      }),
+    });
+    assert.equal(post.status, 200);
+
+    const pushed = await events.next();
+    const pushedA = pushed.courses.find((c) => c.courseId === courseA);
+    assert.deepEqual(
+      pushedA.rows[0],
+      { ...pushedA.rows[0], rank: 1, tag: "SSE", total: 18 },
+      "the just-synced round leads the pushed board"
+    );
+  } finally {
+    abort.abort(); // close the stream so the server can shut down cleanly
+  }
+});
+
+test("SSE stream: bad params are rejected before the stream opens", async () => {
+  const res = await fetch(`${baseUrl}/api/leaderboard/courses/stream?period=fortnight`);
+  assert.equal(res.status, 400);
+});
+
 test("validation: bad period/by/locationId/limit all 400", async () => {
   for (const q of [
     "?period=fortnight",
