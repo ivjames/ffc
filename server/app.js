@@ -13,6 +13,8 @@ import { router as locationsRouter } from "./routes/locations.js";
 import { router as contentRouter } from "./routes/content.js";
 import { router as huntRouter } from "./routes/hunt.js";
 import { router as adminRouter } from "./routes/admin/index.js";
+import { router as authRouter } from "./routes/auth.js";
+import { attachUser } from "./lib/userAuth.js";
 
 export const app = express();
 
@@ -56,12 +58,19 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, build: BUILD_ID });
 });
 
+// Resolve the player-session cookie (if any) to req.user for every /api route.
+// Anonymous requests pass through with req.user = null — nothing public
+// changes behavior. Individual routers opt in to requiring a user.
+app.use("/api", attachUser);
+
 // Feature routes.
 app.use("/api/rounds", roundsRouter);
 app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/seed", seedRouter);
 app.use("/api/locations", locationsRouter);
 app.use("/api/content", contentRouter);
+// Player accounts — passwordless email sign-in.
+app.use("/api/auth", authRouter);
 // Master Control admin surface (token-guarded inside the router).
 app.use("/api/admin", adminRouter);
 // The hunt's /verify endpoint installs its own larger body parser for base64

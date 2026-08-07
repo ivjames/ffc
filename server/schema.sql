@@ -386,3 +386,63 @@ on conflict (id) do nothing;
 update location
    set org_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
  where org_id is null;
+
+-- ---------------------------------------------------------------------------
+-- Player accounts (passwordless email sign-in), teams, and shared multi-device
+-- games. Supersedes the original "no player identity" design: accounts are
+-- OPTIONAL — the anonymous walk-up flow is untouched, and identity is only
+-- required to create teams or host a shared game.
+-- ---------------------------------------------------------------------------
+
+-- A registered player. Email is the identity (verified by the sign-in code
+-- flow itself — the first successful verify proves the inbox). Phone is
+-- collected and format-checked only; nothing is ever sent to it today.
+create table if not exists app_user (
+  id                uuid primary key default gen_random_uuid(),
+  email             text not null unique,   -- stored lowercased
+  email_verified_at timestamptz,            -- set on first successful verify
+  phone             text,                   -- E.164-normalized, format-checked only
+  display_name      text,                   -- 1..40 chars
+  default_tag       text,                   -- [A-Z0-9]{3}, roster prefill
+  created_at        timestamptz not null default now(),
+  archived_at       timestamptz             -- soft-delete, house style
+);
+
+-- Server-side player sessions (lib/userAuth.js) — the admin_session pattern:
+-- `id` is an opaque high-entropy token (the ffc_session cookie's value, looked
+-- up, never decoded). 30-day sliding TTL, refreshed on use.
+create table if not exists user_session (
+  id           text primary key,
+  app_user_id  uuid not null references app_user(id) on delete cascade,
+  created_at   timestamptz not null default now(),
+  expires_at   timestamptz not null
+);
+create index if not exists user_session_expires_idx on user_session (expires_at);
+
+-- One row per emailed sign-in attempt (lib/authCodes.js). Carries BOTH the
+-- 6-digit OTP and the magic-link token, hashed — a DB leak reveals nothing
+-- typeable. `profile` stashes registration fields (phone/displayName/defaultTag)
+-- submitted with the request, applied to app_user on first successful verify.
+create table if not exists auth_code (
+  id               uuid primary key default gen_random_uuid(),
+  email            text not null,           -- lowercased; account may not exist yet
+  code_hash        text not null,           -- sha256(6-digit code)
+  magic_token_hash text not null,           -- sha256(32-byte hex token)
+  profile          jsonb,
+  attempts         int not null default 0,  -- wrong guesses; dead at 5
+  expires_at       timestamptz not null,    -- created + 10 minutes
+  consumed_at      timestamptz,             -- single-use
+  created_at       timestamptz not null default now()
+);
+create index if not exists auth_code_email_idx on auth_code (email, created_at);
+create index if not exists auth_code_magic_idx on auth_code (magic_token_hash);
+
+-- Email-send metering — the hunt_scan/HUNT_SCAN_CAP precedent applied to
+-- outbound mail: one row per send, backing MAIL_DAILY_CAP (lib/mailer.js).
+create table if not exists mail_send (
+  id         uuid primary key default gen_random_uuid(),
+  recipient  text not null,
+  kind       text not null,                 -- 'otp' | 'team_invite'
+  created_at timestamptz not null default now()
+);
+create index if not exists mail_send_created_idx on mail_send (created_at);

@@ -34,6 +34,7 @@ import MilkBottle from './features/fun/MilkBottle';
 import WaterGunRace from './features/fun/WaterGunRace';
 import Pinball from './features/fun/Pinball';
 import CoinPusher from './features/fun/CoinPusher';
+import Account from './features/account/Account';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import { BuildStamp } from './ui/BuildStamp';
@@ -86,6 +87,8 @@ export default function App() {
         <Route path="/fun/watergun" element={<WaterGunRace />} />
         <Route path="/fun/pinball" element={<Pinball />} />
         <Route path="/fun/pusher" element={<CoinPusher />} />
+        {/* Player account — passwordless email sign-in + profile. */}
+        <Route path="/account" element={<Account />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         {/* Living component inventory / style guide — the theming reference. */}

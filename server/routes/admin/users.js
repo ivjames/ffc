@@ -9,11 +9,11 @@ import { pool } from "../../db.js";
 import { audit, isSuperAdmin, actorLabel } from "../../lib/adminAuth.js";
 import { hashPassword } from "../../lib/adminPasswords.js";
 import { UUID_RE } from "../../lib/validateLocation.js";
+import { EMAIL_RE } from "../../lib/validateUser.js";
 
 export const router = Router();
 
 const USER_COLS = `id, email, role, org_id as "orgId", created_at as "createdAt"`;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function normalizeUserInput(body, { requirePassword }) {
   if (body == null || typeof body !== "object" || Array.isArray(body)) {
