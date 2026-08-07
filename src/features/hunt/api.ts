@@ -15,11 +15,15 @@ export type HuntItem = {
 
 // One row per verified find for a group (round), from GET /api/hunt/progress.
 export type HuntFind = {
+  id: string;
   itemId: string;
   itemSlug: string;
   playerTag: string;
   confidence: number | null;
   flagged: boolean;
+  // The stored photo passed auto-moderation and can be fetched/shared by the
+  // group (GET /api/hunt/photo/:id, keyed by the round clientId).
+  sharable: boolean;
   createdAt: string;
 };
 
@@ -69,6 +73,46 @@ export async function verifyFind(args: {
     throw new Error(body.error ?? `Verify failed: HTTP ${res.status}`);
   }
   return body as VerifyResult;
+}
+
+/**
+ * Share a find's photo (punchlist #9 tier 2). Fetches the group's own stored
+ * photo (auto-moderation approved — the server refuses anything else) and
+ * hands it to the Web Share API, falling back to a download on browsers
+ * without file sharing. Returns how it went out.
+ */
+export async function shareFindPhoto(
+  find: HuntFind,
+  roundClientId: string,
+  itemName: string,
+): Promise<'shared' | 'downloaded'> {
+  const res = await fetch(
+    apiUrl(`/api/hunt/photo/${find.id}?round=${encodeURIComponent(roundClientId)}`),
+  );
+  if (!res.ok) throw new Error(`Photo unavailable: HTTP ${res.status}`);
+  const blob = await res.blob();
+  const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+  const file = new File([blob], `hunt-${find.itemSlug}.${ext}`, { type: blob.type });
+  if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: `Scavenger hunt: ${itemName}`,
+        text: `${find.playerTag} found ${itemName} on the mini golf scavenger hunt! ⛳🔍`,
+      });
+      return 'shared';
+    } catch (err) {
+      // AbortError = the player closed the share sheet — nothing to recover.
+      if ((err as DOMException).name === 'AbortError') return 'shared';
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  a.click();
+  URL.revokeObjectURL(url);
+  return 'downloaded';
 }
 
 /** Read a Blob as base64 (data: URL prefix stripped). */

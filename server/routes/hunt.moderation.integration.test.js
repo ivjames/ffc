@@ -162,6 +162,54 @@ test("a safe verified photo with people stores the file as auto-approved with pe
   await access(row.rows[0].photo_path); // throws if the file isn't on disk
 });
 
+test("photo share: progress marks sharable finds, and the photo endpoint gates on round + approval", async () => {
+  verifyItemInImageMock.mock.mockImplementationOnce(async () => ({
+    present: true,
+    confidence: 0.9,
+    reason: "found",
+    photoOfPhoto: false,
+    unsafe: false,
+    unsafeReason: "",
+    peoplePresent: true,
+    minorsPresent: true, // policy: minors ARE sharable (group shares its own photo)
+  }));
+  const body = verifyBody();
+  await postVerify(body);
+
+  const progress = await (
+    await fetch(`${baseUrl}/api/hunt/progress?round=${encodeURIComponent(body.roundClientId)}`)
+  ).json();
+  assert.equal(progress.length, 1);
+  assert.equal(progress[0].sharable, true, "approved photo (minors included) is sharable");
+  const findId = progress[0].id;
+
+  // The right round fetches the actual bytes.
+  const img = await fetch(
+    `${baseUrl}/api/hunt/photo/${findId}?round=${encodeURIComponent(body.roundClientId)}`
+  );
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get("content-type"), "image/jpeg");
+  assert.equal(Buffer.from(await img.arrayBuffer()).toString(), "moderation-test-image");
+
+  // A different round (wrong group key) gets a generic 404.
+  const wrongRound = await fetch(`${baseUrl}/api/hunt/photo/${findId}?round=some-other-round`);
+  assert.equal(wrongRound.status, 404);
+
+  // A legacy pre-moderation photo (moderation null) is NOT served or sharable.
+  await testQuery(`update hunt_find set moderation = null where id = $1`, [findId]);
+  const unmoderated = await fetch(
+    `${baseUrl}/api/hunt/photo/${findId}?round=${encodeURIComponent(body.roundClientId)}`
+  );
+  assert.equal(unmoderated.status, 404);
+  const progress2 = await (
+    await fetch(`${baseUrl}/api/hunt/progress?round=${encodeURIComponent(body.roundClientId)}`)
+  ).json();
+  assert.equal(progress2[0].sharable, false);
+
+  const badId = await fetch(`${baseUrl}/api/hunt/photo/nope?round=x`);
+  assert.equal(badId.status, 400);
+});
+
 test("a verdict without moderation fields (older mock/verdict shape) defaults to safe", async () => {
   verifyItemInImageMock.mock.mockImplementationOnce(async () => ({
     present: true,

@@ -3,6 +3,7 @@
 //   GET  /api/hunt/items                 -> the fixed list of things to find
 //   POST /api/hunt/verify                -> submit a photo; vision judges it
 //   GET  /api/hunt/progress?round=<id>   -> a group's findings so far
+//   GET  /api/hunt/photo/:findId?round=  -> a group's own verified photo (share)
 //
 // Photos are stored on the droplet disk (HUNT_UPLOAD_DIR) and the vision call is
 // proxied server-side (server/lib/vision.js) so the model API key never reaches
@@ -186,11 +187,13 @@ router.get("/progress", async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `select f.item_id     as "itemId",
+      `select f.id,
+              f.item_id     as "itemId",
               i.slug        as "itemSlug",
               f.player_tag  as "playerTag",
               f.confidence,
               f.flagged,
+              coalesce(f.photo_path is not null and f.moderation = 'approved', false) as "sharable",
               f.created_at  as "createdAt"
          from hunt_find f
          join hunt_item i on i.id = f.item_id
@@ -202,6 +205,59 @@ router.get("/progress", async (req, res) => {
     return res.json(result.rows);
   } catch (err) {
     console.error("[hunt] progress error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// --- GET /api/hunt/photo/:findId?round=<clientId> ---------------------------
+// Serve a group's own verified photo, for the share flow. Two gates:
+//  - `round` must match the find's round_client_id — the unguessable device
+//    round id is the group's key, so only the group that took a photo (or
+//    whoever they hand the link to) can fetch it. There is no browse/list.
+//  - the photo must be auto-moderation 'approved' (legacy pre-moderation
+//    photos are not served until they've been through the vision pass).
+// Policy (venue decision): photos flagged minors_present ARE sharable — the
+// group sharing them is the group in them (parents sharing their own kids);
+// there is no public gallery.
+const MEDIA_BY_EXT = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+router.get("/photo/:findId", async (req, res) => {
+  const { findId } = req.params;
+  const round = req.query.round;
+  if (!UUID_RE.test(findId)) {
+    return res.status(400).json({ ok: false, error: "bad find id" });
+  }
+  if (typeof round !== "string" || round.length === 0 || round.length > 200) {
+    return res.status(400).json({ ok: false, error: "round (clientId) is required" });
+  }
+  try {
+    const result = await pool.query(
+      `select photo_path as "photoPath" from hunt_find
+        where id = $1 and round_client_id = $2
+          and photo_path is not null and moderation = 'approved'`,
+      [findId, round]
+    );
+    // One generic 404 for wrong-round, unmoderated, and missing alike — the
+    // response must not reveal whether a find id exists under another round.
+    if (result.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: "not found" });
+    }
+    const photoPath = result.rows[0].photoPath;
+    const ext = photoPath.split(".").pop();
+    res.set("Content-Type", MEDIA_BY_EXT[ext] ?? "application/octet-stream");
+    res.set("Cache-Control", "private, max-age=300");
+    return res.sendFile(photoPath, (err) => {
+      if (err && !res.headersSent) {
+        res.status(404).json({ ok: false, error: "not found" });
+      }
+    });
+  } catch (err) {
+    console.error("[hunt] photo error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });

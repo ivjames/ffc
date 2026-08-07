@@ -81,8 +81,12 @@ items except player registration, which is a separate effort):
   call that verifies the find (no extra model spend): unsafe content is blocked
   before it ever touches disk, and people/minors presence is recorded per
   photo. Auto-mod only for now (a human review surface is a later concern, and
-  will start with full history since every verdict is stored). This is the
-  gate that unblocks people-in-photos and the social photo share.
+  will start with full history since every verdict is stored).
+- **Hunt photo sharing** — verified, auto-approved photos get a share chip in
+  the hunt UI (Web Share API, download fallback). Photos are served only to
+  the group that took them (keyed by the unguessable round id — no public
+  gallery), and only when auto-moderation approved them. Venue policy: photos
+  with minors are sharable (a family sharing its own picture).
 
 ## Tech stack
 

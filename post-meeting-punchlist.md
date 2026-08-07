@@ -16,12 +16,13 @@ today, and a recommended next step, so the follow-up conversation can turn
 > POS/ticket integrations (#7/#8 tier 2, blocked on the venue's systems
 > answers below).
 >
-> **Update — photo auto-moderation built** (venue confirmed people in photos
-> are wanted): unsafe content is blocked at upload before storage, and
-> people/minors presence is recorded per photo. Auto-mod only by decision —
-> a human review surface is a later concern (it will start with full history,
-> since every verdict is stored). Photo share (#9 tier 2) is now unblocked
-> except for the minors display-policy decision.
+> **Update — photo auto-moderation + photo sharing built** (venue confirmed
+> people in photos are wanted): unsafe content is blocked at upload before
+> storage, people/minors presence is recorded per photo, and groups can share
+> their own auto-approved hunt photos from the hunt UI (round-keyed, no
+> public gallery). Auto-mod only by decision — a human review surface is a
+> later concern (it will start with full history, since every verdict is
+> stored). Minors policy (venue decision): sharable. #9 is now fully shipped.
 
 ## Raw notes (as captured)
 
@@ -218,17 +219,18 @@ leaves the venue's own storage.
 2. **Photo share (higher risk).** Sharing hunt photos re-opens moderation
    (the hunt verifier can screen for share-safety), consent (other people in
    frame), and minors. Gate behind the moderation work; don't bundle with
-   step 1. **Update: the moderation gate is now built** — every hunt photo is
-   auto-moderated in the verification vision call (unsafe content blocked
-   pre-storage; people/minors flags recorded). People in photos are welcome.
-   Auto-mod only for now; a human review surface is deferred by decision.
-   What photo share still needs: the sharing surface itself, and the
-   display-policy decision for photos flagged `minors_present` (share to own
-   group only vs. public).
+   step 1. **Update: BUILT.** Every hunt photo is auto-moderated in the
+   verification vision call (unsafe content blocked pre-storage; people/minors
+   flags recorded; human review surface deferred by decision), and the share
+   surface shipped: share chips in the hunt UI serve a group's own
+   auto-approved photos via the Web Share API — keyed to the round's
+   unguessable id, no public gallery. **Minors policy (venue decision):
+   sharable** — the group sharing a photo is the group in it.
 
 **Effort.** Score share small · photo share medium + policy work.
-**Depends on:** photo share → ~~moderation decision~~ **moderation built**;
-minors display policy; account attribution → #3.
+**Depends on:** ~~photo share → moderation decision; minors display policy~~
+**both resolved — score share and photo share are live**; account
+attribution → #3.
 
 ---
 

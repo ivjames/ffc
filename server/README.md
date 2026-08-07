@@ -315,10 +315,23 @@ Missing/invalid `course` → `400`.
 A group's verified finds so far (`round` is the device round id — §4 `LocalRound.clientId`).
 → `200` array:
 ```json
-[ { "itemId": "<uuid>", "itemSlug": "windmill", "playerTag": "ABC",
-    "confidence": 0.9, "flagged": false, "createdAt": "2026-07-17T12:00:00.000Z" } ]
+[ { "id": "<uuid>", "itemId": "<uuid>", "itemSlug": "windmill", "playerTag": "ABC",
+    "confidence": 0.9, "flagged": false, "sharable": true,
+    "createdAt": "2026-07-17T12:00:00.000Z" } ]
 ```
-Missing `round` → `400`.
+`sharable` = a stored photo that passed auto-moderation, fetchable via
+`GET /api/hunt/photo/:id` below. Missing `round` → `400`.
+
+#### `GET /api/hunt/photo/:findId?round=<clientId>`
+Streams a group's **own** verified photo, for the share flow. Two gates: the
+`round` clientId must match the find (the unguessable device round id is the
+group's key — there is no browse/list), and the photo must be auto-moderation
+`approved` (legacy pre-moderation photos are not served). Wrong round,
+unmoderated, and nonexistent all return the same generic `404`.
+
+**Policy (venue decision):** photos flagged `minors_present` ARE sharable —
+sharing is keyed to the group that took the photo, so it's a family sharing
+its own picture; there is no public gallery.
 
 #### `POST /api/hunt/verify`
 Submit a photo; one model call judges whether the target item is present,
