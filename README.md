@@ -32,8 +32,11 @@ lists. Players snap a photo of each, and a vision model verifies it. The model
 call is proxied by the Node API so the key (`ANTHROPIC_API_KEY`) stays
 server-side; verified photos are stored on the droplet disk. Findings are tracked
 per player and per group (the round's roster). The model also flags
-photo-of-a-photo attempts (anti-cheat). The lists are fixed for now; content
-moderation of stored photos is deferred.
+photo-of-a-photo attempts (anti-cheat). The lists are fixed for now. Every photo
+is **auto-moderated in the same vision call**: unsafe content (family-venue
+standard) is blocked before it touches disk, and stored photos carry
+people/minors flags plus a moderation status reviewable in Master Control →
+Photos (people in photos are welcome; only unsafe content blocks).
 
 The hunt is available **during gameplay only** — it's gated on an in-progress
 round, so it isn't an open invitation to wander the course during others' games.
@@ -74,6 +77,11 @@ items except player registration, which is a separate effort):
   Numbers only — no photos, so no moderation surface.
 - **Office reporting** — Master Control's Overview gains 30-day trend charts
   (rounds / players / hunt finds) and a rounds CSV export with a date range.
+- **Photo auto-moderation** — every hunt photo is moderated by the same vision
+  call that verifies the find (no extra model spend): unsafe content is blocked
+  before storage, people/minors presence is recorded, and Master Control →
+  Photos gives operators a review queue with permanent-delete rejection. This
+  is the gate that unblocks people-in-photos and the social photo share.
 
 ## Tech stack
 

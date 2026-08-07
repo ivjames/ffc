@@ -110,6 +110,24 @@ export type Reward = {
   locationName: string | null;
 };
 
+export type Photo = {
+  id: string;
+  playerTag: string;
+  roundClientId: string;
+  verified: boolean;
+  moderation: 'approved' | 'flagged' | 'rejected' | null;
+  moderationReason: string | null;
+  peoplePresent: boolean | null;
+  minorsPresent: boolean | null;
+  hasPhoto: boolean;
+  createdAt: string;
+  itemName: string;
+  courseName: string;
+  locationName: string | null;
+};
+
+export type PhotoFilter = 'review' | 'people' | 'minors' | 'approved' | 'flagged' | 'rejected' | 'all';
+
 export type SeriesBucket = {
   date: string; // YYYY-MM-DD in the admin timezone
   rounds: number;
@@ -228,6 +246,27 @@ export const api = {
     if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
     return res.blob();
   },
+
+  // Photo moderation review.
+  listPhotos: (filter: PhotoFilter = 'review') => req<Photo[]>('GET', `/photos?filter=${filter}`),
+  // Images need the auth header, so an <img src> can't load them directly for
+  // token-auth operators — fetch a Blob and object-URL it instead.
+  fetchPhotoBlob: async (id: string) => {
+    const res = await fetch(`/api/admin/photos/${id}/image`, {
+      credentials: 'same-origin',
+      headers: { 'x-app-token': getToken() },
+    });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
+  approvePhoto: (id: string) =>
+    req<{ ok: true; id: string; moderation: string }>('POST', `/photos/${id}/approve`),
+  rejectPhoto: (id: string) =>
+    req<{ ok: true; id: string; moderation: string }>('POST', `/photos/${id}/reject`),
 
   // Rewards (punchlist #8 tier 1).
   lookupReward: (code: string) => req<Reward[]>('GET', `/rewards?code=${encodeURIComponent(code)}`),

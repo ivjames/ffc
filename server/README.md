@@ -246,6 +246,9 @@ no domain history hangs off an account.)
 | `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
 | `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | look up one redemption code (case-insensitive), or list recent grants (default: unredeemed, limit 50); org-scoped via the round's course → location |
 | `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | mark a reward handed out (records who) / undo a mistaken redemption; audited |
+| `GET  /api/admin/photos?filter=review\|people\|minors\|approved\|flagged\|rejected\|all` | hunt-photo moderation queue (default `review` = legacy unreviewed photos + flagged events); org-scoped |
+| `GET  /api/admin/photos/:id/image` | stream the stored photo (admin-authed — hunt photos are never publicly served) |
+| `POST /api/admin/photos/:id/approve` · `…/reject` | operator verdict; **reject permanently deletes the image file from disk** (the find's DB row and gameplay credit stay); audited |
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of
@@ -288,8 +291,15 @@ original single-shared-secret `APP_TOKEN`:
 Each course has its **own themed list** — four courses, four lists — seeded by
 `schema.sql` (idempotent on `(course_id, slug)`). Photos are verified by a vision
 model proxied server-side (the key never reaches the browser) and stored on the
-droplet disk. Content moderation of stored photos is deferred — verified photos
-are kept but nothing is displayed publicly yet.
+droplet disk. **Every photo is auto-moderated in the same vision call** that
+verifies the find: content unsafe for a family venue is blocked before it ever
+touches disk (no credit, a `flagged` event row, one friendly retake message to
+the player — the model's content description is never echoed); safe stored
+photos carry `moderation = 'approved'` plus `people_present`/`minors_present`
+flags. People in photos are welcome — the flags exist so a future sharing
+surface can apply display policy, not to block anyone. Operators review and
+override in Master Control → Photos (`/api/admin/photos`, table above);
+nothing is displayed publicly yet.
 
 The hunt is a **play-time** activity: every find is tied to a group's in-progress
 round (`roundClientId` is required on verify), so it isn't an open invitation to
@@ -314,8 +324,9 @@ A group's verified finds so far (`round` is the device round id — §4 `LocalRo
 Missing `round` → `400`.
 
 #### `POST /api/hunt/verify`
-Submit a photo; the model judges whether the target item is present and whether
-the shot looks like a photo-of-a-photo (anti-cheat). Uses its own 16 MB body
+Submit a photo; one model call judges whether the target item is present,
+whether the shot looks like a photo-of-a-photo (anti-cheat), and the moderation
+verdict (unsafe content / people / minors). Uses its own 16 MB body
 parser for the base64 image (aligned with nginx's `client_max_body_size`); the
 decoded image itself is capped at 10 MB.
 
@@ -336,7 +347,9 @@ Request:
 - If the player already has a verified find for this item in this round, the call
   short-circuits (`alreadyFound: true`) without a model call.
 - A photo-of-a-photo is `flagged` and never counts as a find.
-- Only verified, unflagged photos are written to disk.
+- An **unsafe** photo (family-venue standard) never counts, is never written to
+  disk, and returns a fixed "keep it family-friendly" reason.
+- Only verified, unflagged, safe photos are written to disk (auto-`approved`).
 
 Cost controls: every model call is metered into `hunt_scan` — the API's exact
 `input_tokens`/`output_tokens` (what Anthropic bills), the model id, and the

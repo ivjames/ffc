@@ -444,3 +444,21 @@ create table if not exists reward_grant (
 );
 create index if not exists reward_grant_round_idx    on reward_grant (round_id);
 create index if not exists reward_grant_redeemed_idx on reward_grant (redeemed_at) where redeemed_at is null;
+
+-- Photo auto-moderation (unblocks people-in-photos + the social photo share).
+-- Every hunt photo is classified in the SAME vision call that verifies the
+-- find: content safety for a family venue, plus whether people / apparent
+-- minors are in frame (recorded now; display policy decided at the sharing
+-- surface). `moderation` on hunt_find:
+--   'approved'  auto-passed (or operator-approved) — displayable
+--   'flagged'   auto-blocked at upload: the photo was NEVER written to disk
+--   'rejected'  operator rejection in Master Control: image file deleted,
+--               DB row kept (photo_path nulled) so the audit trail survives
+--   null        legacy pre-moderation rows — surfaced for one-time human review
+alter table hunt_find add column if not exists moderation        text;
+alter table hunt_find add column if not exists moderation_reason text;
+alter table hunt_find add column if not exists people_present    boolean;
+alter table hunt_find add column if not exists minors_present    boolean;
+-- The review queue reads stored photos by moderation state.
+create index if not exists hunt_find_moderation_idx
+  on hunt_find (moderation) where photo_path is not null;

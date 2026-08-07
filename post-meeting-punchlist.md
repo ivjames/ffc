@@ -15,6 +15,12 @@ today, and a recommended next step, so the follow-up conversation can turn
 > (#9 tier 2), the email digest (#2 step 3, needs an email provider), and the
 > POS/ticket integrations (#7/#8 tier 2, blocked on the venue's systems
 > answers below).
+>
+> **Update — photo auto-moderation built** (venue confirmed people in photos
+> are wanted): unsafe content is blocked at upload before storage,
+> people/minors presence is recorded per photo, and Master Control → Photos is
+> the operator review queue. Photo share (#9 tier 2) is now unblocked except
+> for the minors display-policy decision.
 
 ## Raw notes (as captured)
 
@@ -211,10 +217,16 @@ leaves the venue's own storage.
 2. **Photo share (higher risk).** Sharing hunt photos re-opens moderation
    (the hunt verifier can screen for share-safety), consent (other people in
    frame), and minors. Gate behind the moderation work; don't bundle with
-   step 1.
+   step 1. **Update: the moderation gate is now built** — every hunt photo is
+   auto-moderated in the verification vision call (unsafe content blocked
+   pre-storage; people/minors flags recorded), with an operator review queue
+   in Master Control → Photos. People in photos are welcome. What photo share
+   still needs: the sharing surface itself, and the display-policy decision
+   for photos flagged `minors_present` (share to own group only vs. public).
 
 **Effort.** Score share small · photo share medium + policy work.
-**Depends on:** photo share → moderation decision; account attribution → #3.
+**Depends on:** photo share → ~~moderation decision~~ **moderation built**;
+minors display policy; account attribution → #3.
 
 ---
 

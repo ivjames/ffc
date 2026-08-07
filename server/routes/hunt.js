@@ -6,8 +6,11 @@
 //
 // Photos are stored on the droplet disk (HUNT_UPLOAD_DIR) and the vision call is
 // proxied server-side (server/lib/vision.js) so the model API key never reaches
-// the browser. Moderation of stored photos is deferred (Phase 3.x) — for now
-// photos are verified and kept, and nothing is displayed publicly.
+// the browser. Every photo is AUTO-MODERATED in the same vision call that
+// verifies the find: unsafe content (family-venue standard) is never written to
+// disk and never credited; safe photos are stored with their moderation verdict
+// (people/minors flags included) and reviewable in Master Control
+// (/api/admin/photos). People in photos are welcome — only unsafe content blocks.
 //
 // Cost controls: every model call is metered into hunt_scan (exact token counts
 // from the API's usage object, for monthly per-course cost rollups). On top of
@@ -347,7 +350,11 @@ router.post(
       // depicted — flag it and reject. TESTING: when ALLOW_PHOTO_OF_PHOTO is on
       // we treat it as un-flagged so a screenshot of a landmark still verifies.
       const flagged = ALLOW_PHOTO_OF_PHOTO ? false : verdict.photoOfPhoto;
-      const verified = verdict.present && !flagged;
+      // Moderation: unsafe content earns no credit and is never written to
+      // disk, whatever it depicts. (Verdicts without the field — old mocks —
+      // default to safe.)
+      const unsafe = Boolean(verdict.unsafe);
+      const verified = verdict.present && !flagged && !unsafe;
 
       // Meter the call we just paid for, before anything else can fail — the
       // tokens are billed whether or not the find persists.
@@ -362,8 +369,8 @@ router.post(
       });
 
       // Persist the photo, then record the find. We only keep the file for
-      // successful, unflagged finds; rejected attempts aren't stored (keeps disk
-      // usage and moderation surface down — see the deferred-moderation note).
+      // successful, unflagged, safe finds; rejected/unsafe attempts are never
+      // stored (an unsafe image must not exist on disk even transiently).
       let photoPath = null;
       if (verified) {
         await mkdir(UPLOAD_DIR, { recursive: true });
@@ -377,10 +384,15 @@ router.post(
       // INSERT aren't atomic, so a concurrent submission (double-tap, retry)
       // could pass the guard too. The partial unique index makes the DB the
       // arbiter — the loser DO-NOTHINGs instead of writing a second credit.
+      // Moderation verdict recorded with the find: stored (verified) photos
+      // are auto-'approved' by the vision pass; unsafe attempts are 'flagged'
+      // events (no photo on disk) so the operator can see they happened.
+      const moderation = unsafe ? "flagged" : verified ? "approved" : null;
       const ins = await pool.query(
         `insert into hunt_find
-           (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path, countable)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path, countable,
+            moderation, moderation_reason, people_present, minors_present)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          on conflict (round_client_id, player_tag, item_id) where verified and not countable
          do nothing
          returning id`,
@@ -394,6 +406,10 @@ router.post(
           flagged,
           photoPath,
           item.countable,
+          moderation,
+          unsafe ? verdict.unsafeReason || "unsafe content" : null,
+          verdict.peoplePresent ?? null,
+          verdict.minorsPresent ?? null,
         ]
       );
 
@@ -430,7 +446,11 @@ router.post(
         verified,
         flagged,
         confidence: verdict.confidence,
-        reason: verdict.reason,
+        // An unsafe photo gets one fixed, friendly line — never the model's
+        // content description — so the player just retakes the shot.
+        reason: unsafe
+          ? "That photo can't be used here — keep it family-friendly and try another shot."
+          : verdict.reason,
         count,
       });
     } catch (err) {

@@ -4,10 +4,13 @@
 // /api/hunt/verify, and this module proxies the call to Claude so the API key
 // (ANTHROPIC_API_KEY, already on the droplet) stays server-side.
 //
-// We ask the model two things at once:
+// We ask the model three things at once (one call, one bill):
 //   1. Is the target item actually present in the photo?  (the verdict)
 //   2. Does the photo look like a photo-of-a-photo — a picture of a screen or a
 //      printout rather than the real object?  (anti-cheat)
+//   3. Moderation: is the content safe for a family venue, and are people /
+//      apparent minors in frame? People in photos are WELCOME — the flags feed
+//      display/sharing policy, not a people ban; only unsafe content blocks.
 //
 // The answer is constrained to a JSON schema via structured outputs so the
 // caller gets a typed object, never free-form prose to parse.
@@ -67,8 +70,30 @@ const VERDICT_SCHEMA = {
       description:
         "True if the image looks like a picture of a screen, monitor, or printed photo rather than a real-world scene (a cheating attempt).",
     },
+    unsafe: {
+      type: "boolean",
+      description:
+        "True if the content is inappropriate for a family entertainment venue: nudity or sexual content, graphic violence or injury, obscene gestures, visible slurs or hate symbols, drug use, or someone being deliberately humiliated or harassed. Ordinary people having fun is NOT unsafe.",
+    },
+    unsafe_reason: {
+      type: "string",
+      description:
+        "When unsafe is true: one short neutral category phrase (e.g. 'obscene gesture'), never a graphic description. Empty string when safe.",
+    },
+    people_present: {
+      type: "boolean",
+      description: "True if any person is visible in the photo (even partially).",
+    },
+    minors_present: {
+      type: "boolean",
+      description:
+        "True if any visible person appears to be a child or teenager. When in doubt about age, err toward true.",
+    },
   },
-  required: ["present", "confidence", "reason", "photo_of_photo"],
+  required: [
+    "present", "confidence", "reason", "photo_of_photo",
+    "unsafe", "unsafe_reason", "people_present", "minors_present",
+  ],
 };
 
 /**
@@ -80,6 +105,7 @@ const VERDICT_SCHEMA = {
  * @param {string} args.itemName     Human description of the target, e.g. "A windmill".
  * @param {string} [args.itemHint]   Optional hint to give the model context.
  * @returns {Promise<{present:boolean, confidence:number, reason:string, photoOfPhoto:boolean,
+ *   unsafe:boolean, unsafeReason:string, peoplePresent:boolean, minorsPresent:boolean,
  *   usage:{model:string, inputTokens:number|null, outputTokens:number|null}}>}
  *   `usage` carries the API's exact token counts so the route can meter spend
  *   (hunt_scan) — it's the number Anthropic bills, not an estimate.
@@ -95,7 +121,13 @@ export async function verifyItemInImage({ imageBase64, mediaType, itemName, item
     `reasonably lenient about angle, lighting, and partial views, but do NOT credit a ` +
     `find where the item is absent, ambiguous, or only implied.\n\n` +
     `Also judge anti-cheat: set photo_of_photo to true if this looks like a picture of a ` +
-    `screen, monitor, phone, or a printed photograph rather than a real-world scene.`;
+    `screen, monitor, phone, or a printed photograph rather than a real-world scene.\n\n` +
+    `Also moderate the photo for a family entertainment venue. People posing or playing ` +
+    `in the photo are welcome and expected — that alone is never unsafe. Set unsafe to ` +
+    `true only for genuinely inappropriate content: nudity or sexual content, graphic ` +
+    `violence or injury, obscene gestures, visible slurs or hate symbols, drug use, or ` +
+    `someone being deliberately humiliated. Record whether any people are visible, and ` +
+    `whether any appear to be minors (when unsure about age, err toward true).`;
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -152,6 +184,10 @@ export async function verifyItemInImage({ imageBase64, mediaType, itemName, item
     confidence,
     reason: typeof parsed.reason === "string" ? parsed.reason : "",
     photoOfPhoto: Boolean(parsed.photo_of_photo),
+    unsafe: Boolean(parsed.unsafe),
+    unsafeReason: typeof parsed.unsafe_reason === "string" ? parsed.unsafe_reason : "",
+    peoplePresent: Boolean(parsed.people_present),
+    minorsPresent: Boolean(parsed.minors_present),
     usage,
   };
 }
