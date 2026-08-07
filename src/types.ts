@@ -26,6 +26,7 @@ export type LocalRound = {
   clientId: string; // UUID, becomes round.client_id on sync
   courseId: string;
   playerTags: string[]; // 1..4 tags, each [A-Z0-9]{3}
+  groupTag?: string | null; // optional team tag, same [A-Z0-9]{3} rule (punchlist #4)
   // playerIndex -> [18] strokes, null = unentered
   scores: Record<number, (number | null)[]>;
   createdAt: number;
@@ -61,6 +62,10 @@ export type LocationSeed = {
   lng: number;
   geofenceKm?: number; // detection radius; falls back to DEFAULT_GEOFENCE_KM
   sortOrder?: number;
+  // Food & drink deep links (punchlist #7 tier 1) — set per venue in Master
+  // Control; the Food & Drink card hides itself when neither is set.
+  menuUrl?: string;
+  orderingUrl?: string;
 };
 
 // §4 Course seed (bundled JSON for v1).

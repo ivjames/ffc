@@ -50,8 +50,13 @@ function newClientId(): string {
   return crypto.randomUUID();
 }
 
-/** Build a fresh, empty active round for the given course + roster. */
-export function createLocalRound(courseId: string, playerTags: string[]): LocalRound {
+/** Build a fresh, empty active round for the given course + roster (and an
+ *  optional team tag — punchlist #4 tier 1). */
+export function createLocalRound(
+  courseId: string,
+  playerTags: string[],
+  groupTag: string | null = null,
+): LocalRound {
   const scores: Record<number, (number | null)[]> = {};
   for (let p = 0; p < playerTags.length; p++) {
     scores[p] = Array<number | null>(HOLE_COUNT).fill(null);
@@ -60,6 +65,7 @@ export function createLocalRound(courseId: string, playerTags: string[]): LocalR
     clientId: newClientId(),
     courseId,
     playerTags,
+    groupTag,
     scores,
     createdAt: Date.now(),
     completedAt: null,

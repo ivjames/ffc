@@ -17,6 +17,8 @@ import { router as authRouter } from "./routes/auth.js";
 import { router as teamsRouter } from "./routes/teams.js";
 import { router as gamesRouter } from "./routes/games.js";
 import { attachUser } from "./lib/userAuth.js";
+import { router as announcementsRouter } from "./routes/announcements.js";
+import { router as rewardsRouter } from "./routes/rewards.js";
 
 export const app = express();
 
@@ -78,6 +80,8 @@ app.use("/api/teams", teamsRouter);
 // Shared multi-device games (create needs sign-in; join/score use the
 // per-device participant token; includes the SSE stream).
 app.use("/api/games", gamesRouter);
+app.use("/api/announcements", announcementsRouter);
+app.use("/api/rewards", rewardsRouter);
 // Master Control admin surface (token-guarded inside the router).
 app.use("/api/admin", adminRouter);
 // The hunt's /verify endpoint installs its own larger body parser for base64

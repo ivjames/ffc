@@ -11,6 +11,7 @@ import {
   fetchHuntProgress,
   verifyFind,
   fileToUpload,
+  shareFindPhoto,
   type HuntItem,
   type HuntFind,
 } from './api';
@@ -62,6 +63,21 @@ export default function Hunt() {
   const [itemStates, setItemStates] = useState<Record<string, ItemState>>({});
   // Hints are hidden until the player asks — track which item hints are revealed.
   const [revealedHints, setRevealedHints] = useState<Set<string>>(new Set());
+  // Which find's photo is currently being fetched for sharing.
+  const [sharingFindId, setSharingFindId] = useState<string | null>(null);
+
+  async function onSharePhoto(find: HuntFind, itemName: string) {
+    if (!roundClientId || sharingFindId) return;
+    setSharingFindId(find.id);
+    try {
+      await shareFindPhoto(find, roundClientId, itemName);
+    } catch {
+      // Photo unavailable (offline, or not yet approved) — quietly do nothing;
+      // the button is best-effort sugar, not a gameplay path.
+    } finally {
+      setSharingFindId(null);
+    }
+  }
 
   function toggleHint(itemId: string) {
     setRevealedHints((prev) => {
@@ -129,6 +145,23 @@ export default function Hunt() {
     for (const f of finds) {
       if (!map.has(f.itemId)) map.set(f.itemId, new Set());
       map.get(f.itemId)!.add(f.playerTag);
+    }
+    return map;
+  }, [finds]);
+
+  // itemId -> the group's sharable photos, one per player (their latest).
+  // Countable items can pile up many finds per player; one share chip each
+  // keeps the card sane.
+  const sharablePerItem = useMemo(() => {
+    const map = new Map<string, HuntFind[]>();
+    for (const f of finds) {
+      if (!f.sharable) continue;
+      const list = map.get(f.itemId) ?? [];
+      const existing = list.findIndex((x) => x.playerTag === f.playerTag);
+      // Progress is ordered oldest-first, so a later row replaces the earlier.
+      if (existing >= 0) list[existing] = f;
+      else list.push(f);
+      map.set(f.itemId, list);
     }
     return map;
   }, [finds]);
@@ -334,6 +367,22 @@ export default function Hunt() {
                           <span key={t} className="scale-75 origin-left">
                             <TagChip tag={t} />
                           </span>
+                        ))}
+                      </div>
+                    )}
+                    {/* Share the group's own photos (auto-moderation approved
+                        only — the server refuses anything else). */}
+                    {(sharablePerItem.get(item.id)?.length ?? 0) > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {sharablePerItem.get(item.id)!.map((f) => (
+                          <button
+                            key={f.id}
+                            onClick={() => void onSharePhoto(f, item.name)}
+                            disabled={sharingFindId !== null}
+                            className="surface-1 rounded-full border border-fairway-800/60 px-2.5 py-1 text-xs font-semibold text-fairway-200 transition-transform active:translate-y-px disabled:opacity-40"
+                          >
+                            {sharingFindId === f.id ? 'Sharing…' : `📤 ${f.playerTag}'s photo`}
+                          </button>
                         ))}
                       </div>
                     )}

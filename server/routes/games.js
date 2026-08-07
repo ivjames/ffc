@@ -21,6 +21,7 @@ import { applyCellWrite } from "../lib/lww.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { UUID_RE } from "../lib/validateLocation.js";
+import { grantRewards } from "./rounds.js";
 
 export const router = Router();
 
@@ -417,6 +418,20 @@ router.post("/:id/complete", async (req, res) => {
           [roundId, cell.slot, cell.hole, cell.strokes]
         );
       }
+      // Achievement rewards, same as a solo round syncing (routes/rounds.js):
+      // shared games are just another way a completed round comes to exist,
+      // and the redemption counter shouldn't care which path made it. Hunt
+      // finds already group under 'shared:<gameId>' — every device in the
+      // game plays the hunt against that same round_client_id.
+      const pars = await client.query(`select pars from course where id = $1`, [game.courseId]);
+      await grantRewards(client, {
+        roundId,
+        clientId: `shared:${game.id}`,
+        courseId: game.courseId,
+        playerTags: tags,
+        scoreRows: cells.rows.map((c) => ({ playerIndex: c.slot, hole: c.hole, strokes: c.strokes })),
+        pars: pars.rows[0].pars,
+      });
     } else {
       const existing = await client.query(`select id from round where client_id = $1`, [
         `shared:${game.id}`,

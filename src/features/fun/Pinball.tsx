@@ -113,10 +113,13 @@ const SEGS: Seg[] = (() => {
     { ax: PF_R, ay: 168, bx: PF_R, by: H }, // shooter-lane inner wall
     { ax: PF_R, ay: 547, bx: OUT_R, by: 547 }, // lane floor (under the plunger)
     { ax: PF_R, ay: 119, bx: PF_R, by: 168, gNx: -1, gNy: 0 }, // one-way gate
-    { ax: 28, ay: 404, bx: 28, by: 468 }, // left outlane divider
-    { ax: 28, ay: 468, bx: 107, by: 489 }, // left inlane guide → flipper
-    { ax: 286, ay: 404, bx: 286, by: 468 }, // right outlane divider
-    { ax: 286, ay: 468, bx: 207, by: 489 }, // right inlane guide → flipper
+    // Outlane dividers + inlane guides. Channel widths are 28px against an
+    // effective ball diameter of 18 (BALL_R + WALL_PAD each side) — anything
+    // near 20px is a wedge pocket the ball jams in instead of falling through.
+    { ax: 36, ay: 404, bx: 36, by: 468 }, // left outlane divider
+    { ax: 36, ay: 468, bx: 107, by: 489 }, // left inlane guide → flipper
+    { ax: 278, ay: 404, bx: 278, by: 468 }, // right outlane divider
+    { ax: 278, ay: 468, bx: 207, by: 489 }, // right inlane guide → flipper
     // Rollover lane fins — short guides bracketing the lamps, detached from
     // the arch so the dome stays open playfield instead of walled columns.
     { ax: 94, ay: 136, bx: 94, by: 192 },
@@ -148,16 +151,48 @@ function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
 // parallel to the outlane dividers beside them — a parallel channel lets a
 // horizontal ball ping-pong between the two faces indefinitely; the lean turns
 // every rebound slightly downward instead.
+// The slings float ~34px above the inlane guides — a ball can always pass
+// UNDER the wedge to reach the flipper, so nothing on the lower table forms a
+// closed pocket it could wedge into.
 const SLINGS: Sling[] = [
-  makeSling({ x: 53, y: 410 }, { x: 48, y: 468 }, { x: 96, y: 478 }),
-  makeSling({ x: 261, y: 410 }, { x: 266, y: 468 }, { x: 218, y: 478 }),
+  makeSling({ x: 69, y: 384 }, { x: 64, y: 442 }, { x: 96, y: 452 }),
+  makeSling({ x: 245, y: 384 }, { x: 250, y: 442 }, { x: 218, y: 452 }),
 ];
 
 const BUMPERS = [
   { x: 105, y: 238, r: 16 },
   { x: 209, y: 238, r: 16 },
   { x: 157, y: 302, r: 16 },
+  // Side pair below the triangle — fills the mid-table flanks.
+  { x: 62, y: 322, r: 14 },
+  { x: 252, y: 322, r: 14 },
 ];
+
+// Two 3-target drop banks angled along the upper flanks. Each target is a
+// short standup segment: a firm hit drops it (+150), and dropping all three
+// pays the bank bonus and pops them back up. The bank line stands 28px off
+// the side wall so the channel behind it stays ball-passable, open at both
+// ends — no new pockets.
+type BankTarget = { ax: number; ay: number; bx: number; by: number };
+function bankTargets(x0: number, y0: number, x1: number, y1: number): BankTarget[] {
+  const spans: Array<[number, number]> = [
+    [0.06, 0.26],
+    [0.4, 0.6],
+    [0.74, 0.94],
+  ];
+  return spans.map(([a, b]) => ({
+    ax: x0 + (x1 - x0) * a,
+    ay: y0 + (y1 - y0) * a,
+    bx: x0 + (x1 - x0) * b,
+    by: y0 + (y1 - y0) * b,
+  }));
+}
+const BANKS: BankTarget[][] = [
+  bankTargets(36, 202, 74, 282),
+  bankTargets(278, 202, 240, 282),
+];
+const BANK_PTS = 150;
+const BANK_BONUS = 1000;
 
 const LAMPS = [
   { x: 115, y: 168 },
@@ -182,7 +217,9 @@ type Ev =
   | { kind: 'sling'; x: number; y: number; i: number }
   | { kind: 'lane'; x: number; y: number }
   | { kind: 'lanes' }
-  | { kind: 'nudge'; x: number; y: number };
+  | { kind: 'nudge'; x: number; y: number }
+  | { kind: 'target'; x: number; y: number }
+  | { kind: 'bank'; x: number; y: number };
 type GS = {
   phase: Phase;
   time: number; // sim clock (s) — all cooldowns/deadlines live on this
@@ -197,6 +234,7 @@ type GS = {
   bumperCd: number[];
   slingCd: number[];
   lamps: boolean[];
+  banks: boolean[][]; // per-bank per-target: true = dropped
   pointers: Map<number, 'L' | 'R'>; // flipper pointers by pointerId
   events: Ev[]; // drained by the frame loop for sounds/fx
   stillT: number; // seconds the live ball has sat near-motionless (stuck watchdog)
@@ -217,9 +255,10 @@ function freshGS(): GS {
     plunger: { pointerId: null, t: 0 },
     fL: { px: 110, py: 490, rest: L_REST, raised: -0.55, angle: L_REST, omega: 0, pressed: false },
     fR: { px: 204, py: 490, rest: R_REST, raised: Math.PI + 0.55, angle: R_REST, omega: 0, pressed: false },
-    bumperCd: [0, 0, 0],
+    bumperCd: [0, 0, 0, 0, 0],
     slingCd: [0, 0],
     lamps: [false, false, false],
+    banks: BANKS.map((bank) => bank.map(() => false)),
     pointers: new Map(),
     events: [],
     stillT: 0,
@@ -399,6 +438,28 @@ function step(gs: GS): void {
       }
     }
 
+    // Drop-target banks: only standing targets collide; a firm hit drops the
+    // target, and clearing the bank pays the bonus and pops all three back up.
+    for (let bi = 0; bi < BANKS.length; bi++) {
+      for (let ti = 0; ti < BANKS[bi].length; ti++) {
+        if (gs.banks[bi][ti]) continue;
+        const t = BANKS[bi][ti];
+        const hit = collideSeg(b, t.ax, t.ay, t.bx, t.by, BALL_R + 2.5, 0.55);
+        if (hit > 60) {
+          gs.banks[bi][ti] = true;
+          gs.score += BANK_PTS;
+          const mx = (t.ax + t.bx) / 2;
+          const my = (t.ay + t.by) / 2;
+          gs.events.push({ kind: 'target', x: mx, y: my });
+          if (gs.banks[bi].every(Boolean)) {
+            gs.score += BANK_BONUS;
+            gs.banks[bi] = BANKS[bi].map(() => false);
+            gs.events.push({ kind: 'bank', x: mx, y: my });
+          }
+        }
+      }
+    }
+
     collideFlipper(b, gs.fL);
     collideFlipper(b, gs.fR);
   }
@@ -470,7 +531,7 @@ function freshFX(): FX {
     shake: 0,
     flash: 0,
     flashColor: '#fde68a',
-    bumperGlow: [0, 0, 0],
+    bumperGlow: [0, 0, 0, 0, 0],
     slingGlow: [0, 0],
     plungerPop: 0,
   };
@@ -523,12 +584,12 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   c.beginPath();
   c.moveTo(PF_R, 168);
   c.lineTo(PF_R, H);
-  // Outlane dividers + inlane guides.
-  c.moveTo(28, 404);
-  c.lineTo(28, 468);
+  // Outlane dividers + inlane guides (matching SEGS).
+  c.moveTo(36, 404);
+  c.lineTo(36, 468);
   c.lineTo(107, 489);
-  c.moveTo(286, 404);
-  c.lineTo(286, 468);
+  c.moveTo(278, 404);
+  c.lineTo(278, 468);
   c.lineTo(207, 489);
   // Rollover lane fins — short guides around the lamps (matching SEGS).
   c.moveTo(94, 136);
@@ -767,6 +828,26 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   for (let i = 0; i < SLINGS.length; i++) drawSlingShape(ctx, SLINGS[i], fx.slingGlow[i]);
   for (let i = 0; i < BUMPERS.length; i++) drawBumper(ctx, BUMPERS[i], fx.bumperGlow[i]);
 
+  // Drop-target banks: standing targets glow amber; dropped ones leave a dim
+  // socket line until the bank resets.
+  for (let bi = 0; bi < BANKS.length; bi++) {
+    for (let ti = 0; ti < BANKS[bi].length; ti++) {
+      const t = BANKS[bi][ti];
+      if (gs.banks[bi][ti]) {
+        ctx.save();
+        ctx.strokeStyle = withAlpha('#eab308', 0.18);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(t.ax, t.ay);
+        ctx.lineTo(t.bx, t.by);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        neonLine(ctx, t.ax, t.ay, t.bx, t.by, '#fde047', 4, 10);
+      }
+    }
+  }
+
   drawPlunger(ctx, gs.live ? 0 : gs.plunger.t, fx.plungerPop);
 
   // Charge meter up the shooter lane while the plunger is held.
@@ -926,6 +1007,17 @@ export default function Pinball() {
             playTick();
             fx.shake = Math.min(4, fx.shake + 2.5);
             spawnFloater(fx.floaters, ev.x, ev.y - 14, 'NUDGE', '#94a3b8', { size: 12, life: 600 });
+          } else if (ev.kind === 'target') {
+            playPinClack(1.2);
+            spawnBurst(fx.particles, ev.x, ev.y, 8, 190, '#fde047');
+            spawnFloater(fx.floaters, ev.x, ev.y - 12, `+${BANK_PTS}`, '#fde047', { size: 14 });
+          } else if (ev.kind === 'bank') {
+            playCup();
+            fx.flash = 1;
+            fx.flashColor = '#fde047';
+            fx.shake = Math.min(6, fx.shake + 4);
+            spawnBurst(fx.particles, ev.x, ev.y, 20, 280, '#fde047');
+            spawnFloater(fx.floaters, ev.x, ev.y - 18, `BANK! +${BANK_BONUS}`, '#fde047', { size: 18, life: 1000 });
           } else {
             playCup();
             fx.flash = 1;

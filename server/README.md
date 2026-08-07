@@ -66,10 +66,18 @@ Request:
 }
 ```
 - `playerTags`: 1..4 entries, each `[A-Z0-9]{3}`, not on the blocklist.
+- `groupTag` (optional): a team tag for the whole round, same `[A-Z0-9]{3}` rule
+  + blocklist. Rounds carrying one also appear on the team leaderboard.
 - `scores`: object keyed by player index (`0..playerTags.length-1`); each value
   an array of length 18 of `number|null`. Only non-null holes are stored; strokes
   must be integers >= 1.
 - `completedAt` may be `null`; `createdAt`/`completedAt` are ms-epoch numbers.
+- **Rewards**: when a *completed* round first syncs, achievement grants
+  (hole-in-one; under par on a full card; hunt master when the player's verified
+  finds cover the course's active non-countable hunt list) are written to
+  `reward_grant` in the same transaction — one short redemption code per
+  (player, achievement). A duplicate re-sync never re-grants. See
+  `GET /api/rewards` and the admin redemption flow below.
 
 Responses:
 - `200 { "ok": true, "roundId": "<uuid>" }` — created, or the existing round id
@@ -78,9 +86,15 @@ Responses:
 - `429 { "ok": false, "error": "rate limit exceeded" }` — per-IP write cap
   (30/min per IP by default).
 
-### `GET /api/leaderboard?period=day|week|month|all`
+### `GET /api/leaderboard?period=day|week|month|all&by=player|team`
 Arcade high-score board. For each player **tag**, computes total strokes per
 completed round per course and keeps that tag's best (lowest) total per course.
+
+`by=team` (default `player`) aggregates the same score rows by the round's
+optional `group_tag` instead: a team round is scored as **average strokes per
+rostered player** (teams are 1..4 players, so a raw sum would just reward small
+teams), rounded to 1 decimal, and each team keeps its best average per course.
+Rounds without a `group_tag` never appear on the team board.
 
 → `200` array, sorted ascending by `total`:
 ```json
@@ -152,6 +166,10 @@ Request:
 - `tz`: optional IANA name; validated when present. If omitted and no coords are
   given, it's stored `null` and the leaderboard falls back to `VENUE_TZ`.
 - `geofenceKm`: optional positive number. `sortOrder`: optional integer (default 0).
+- `menuUrl` / `orderingUrl` (optional): the venue's food & drink deep links,
+  absolute `http(s)` URLs only (max 500 chars; anything else — including
+  `javascript:` — is rejected). Empty string clears a link. They ship to the
+  player app's "Food & Drink" card via `GET /api/content` and the build export.
 
 Responses:
 - `200 { "ok": true, "location": { …, "tz": "…", "tzLabel": "Eastern Time (ET)" } }`
@@ -167,6 +185,37 @@ Open read. The live player-facing catalog — `{ locations: [...], courses: [...
 archived rows excluded — used by the build-time exporter
 (`scripts/export-content.mjs`) to regenerate `src/data/content.generated.ts`. The
 DB is the source of truth; a site rebuild publishes changes to players.
+
+### `GET /api/announcements?locationId=<uuid>`
+Open read — the live promo/update feed for the player app and TV board
+(managed in Master Control; **no rebuild needed**, this is the platform's first
+live content read). Returns non-archived rows whose `[startsAt, endsAt)` window
+contains now, that are either global (`locationId: null`) or pinned to the
+requested venue. Without `locationId` only global rows return.
+
+→ `200` array:
+```json
+[
+  { "id": "<uuid>", "title": "Taco Tuesday", "body": "Half-price tacos",
+    "locationId": null, "startsAt": null, "endsAt": "2026-08-31T07:00:00.000Z",
+    "sortOrder": 0 }
+]
+```
+
+### `GET /api/rewards?clientId=<device round id>`
+Open read keyed by the round's client-generated UUID (unguessable, same id the
+sync path dedupes on) — the final scorecard's "show this at the counter"
+screen. Returns the round's grants:
+
+```json
+[
+  { "code": "K7M2PX", "playerIndex": 0, "playerTag": "ACE",
+    "achievement": "hole_in_one", "redeemedAt": null,
+    "createdAt": "2026-08-07T18:00:00.000Z" }
+]
+```
+Achievements: `hole_in_one` · `under_par` · `hunt_master`. Staff redeem codes in
+Master Control (below), so a code pays out once.
 
 ### Master Control — `/api/admin/*`
 Back-office API for onboarding/managing orgs (owner/franchise), locations
@@ -197,6 +246,12 @@ no domain history hangs off an account.)
 | `POST /api/admin/locations/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
 | `POST /api/admin/courses` · `PATCH /api/admin/courses/:id` | create-update / edit course (`pars` length 18, values 2–4); `org_admin` must name a `locationId` in their own org (required, not optional, for that role) |
 | `POST /api/admin/courses/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping, resolved via the course's location) |
+| `GET  /api/admin/overview/series?days=1..90` | daily trend buckets (rounds, distinct player tags, verified hunt finds), zero-filled, calendar days in `ADMIN_TZ` (default `America/Los_Angeles`); org-scoped |
+| `GET  /api/admin/export/rounds.csv?from=&to=&locationId=` | CSV download, one row per (completed round, player); `from`/`to` are `YYYY-MM-DD` calendar days in `ADMIN_TZ`, inclusive, defaulting to the last 30 days; org-scoped |
+| `GET  /api/admin/announcements?archived=` · `POST /api/admin/announcements` | list / create-update announcements; global rows (`locationId: null`) are **super_admin only** to write, `org_admin` manages rows pinned to their own org's venues (and sees global ones read-only) |
+| `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
+| `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | look up one redemption code (case-insensitive), or list recent grants (default: unredeemed, limit 50); org-scoped via the round's course → location |
+| `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | mark a reward handed out (records who) / undo a mistaken redemption; audited |
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of
@@ -239,8 +294,15 @@ original single-shared-secret `APP_TOKEN`:
 Each course has its **own themed list** — four courses, four lists — seeded by
 `schema.sql` (idempotent on `(course_id, slug)`). Photos are verified by a vision
 model proxied server-side (the key never reaches the browser) and stored on the
-droplet disk. Content moderation of stored photos is deferred — verified photos
-are kept but nothing is displayed publicly yet.
+droplet disk. **Every photo is auto-moderated in the same vision call** that
+verifies the find: content unsafe for a family venue is blocked before it ever
+touches disk (no credit, a `flagged` event row, one friendly retake message to
+the player — the model's content description is never echoed); safe stored
+photos carry `moderation = 'approved'` plus `people_present`/`minors_present`
+flags. People in photos are welcome — the flags exist so a future sharing
+surface can apply display policy, not to block anyone. Auto-mod only for now:
+a human review surface is deferred, but every verdict is recorded so it will
+start with full history. Nothing is displayed publicly yet.
 
 The hunt is a **play-time** activity: every find is tied to a group's in-progress
 round (`roundClientId` is required on verify), so it isn't an open invitation to
@@ -259,14 +321,28 @@ Missing/invalid `course` → `400`.
 A group's verified finds so far (`round` is the device round id — §4 `LocalRound.clientId`).
 → `200` array:
 ```json
-[ { "itemId": "<uuid>", "itemSlug": "windmill", "playerTag": "ABC",
-    "confidence": 0.9, "flagged": false, "createdAt": "2026-07-17T12:00:00.000Z" } ]
+[ { "id": "<uuid>", "itemId": "<uuid>", "itemSlug": "windmill", "playerTag": "ABC",
+    "confidence": 0.9, "flagged": false, "sharable": true,
+    "createdAt": "2026-07-17T12:00:00.000Z" } ]
 ```
-Missing `round` → `400`.
+`sharable` = a stored photo that passed auto-moderation, fetchable via
+`GET /api/hunt/photo/:id` below. Missing `round` → `400`.
+
+#### `GET /api/hunt/photo/:findId?round=<clientId>`
+Streams a group's **own** verified photo, for the share flow. Two gates: the
+`round` clientId must match the find (the unguessable device round id is the
+group's key — there is no browse/list), and the photo must be auto-moderation
+`approved` (legacy pre-moderation photos are not served). Wrong round,
+unmoderated, and nonexistent all return the same generic `404`.
+
+**Policy (venue decision):** photos flagged `minors_present` ARE sharable —
+sharing is keyed to the group that took the photo, so it's a family sharing
+its own picture; there is no public gallery.
 
 #### `POST /api/hunt/verify`
-Submit a photo; the model judges whether the target item is present and whether
-the shot looks like a photo-of-a-photo (anti-cheat). Uses its own 16 MB body
+Submit a photo; one model call judges whether the target item is present,
+whether the shot looks like a photo-of-a-photo (anti-cheat), and the moderation
+verdict (unsafe content / people / minors). Uses its own 16 MB body
 parser for the base64 image (aligned with nginx's `client_max_body_size`); the
 decoded image itself is capped at 10 MB.
 
@@ -287,7 +363,9 @@ Request:
 - If the player already has a verified find for this item in this round, the call
   short-circuits (`alreadyFound: true`) without a model call.
 - A photo-of-a-photo is `flagged` and never counts as a find.
-- Only verified, unflagged photos are written to disk.
+- An **unsafe** photo (family-venue standard) never counts, is never written to
+  disk, and returns a fixed "keep it family-friendly" reason.
+- Only verified, unflagged, safe photos are written to disk (auto-`approved`).
 
 Cost controls: every model call is metered into `hunt_scan` — the API's exact
 `input_tokens`/`output_tokens` (what Anthropic bills), the model id, and the

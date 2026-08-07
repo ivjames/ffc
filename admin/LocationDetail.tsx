@@ -136,6 +136,8 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
   const [lat, setLat] = useState(location.lat?.toString() ?? '');
   const [lng, setLng] = useState(location.lng?.toString() ?? '');
   const [geofence, setGeofence] = useState(location.geofenceKm?.toString() ?? '');
+  const [menuUrl, setMenuUrl] = useState(location.menuUrl ?? '');
+  const [orderingUrl, setOrderingUrl] = useState(location.orderingUrl ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -157,6 +159,8 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
         lat: hasLat ? Number(lat) : null,
         lng: hasLng ? Number(lng) : null,
         geofenceKm: geofence.trim() ? Number(geofence) : null,
+        menuUrl: menuUrl.trim() || null,
+        orderingUrl: orderingUrl.trim() || null,
       });
       onSaved();
     } catch (e) {
@@ -187,6 +191,12 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
         </Field>
         <Field label="Timezone (derived)">
           <div className="px-1 py-1.5 text-sm text-slate-600">{location.tzLabel ?? '—'}</div>
+        </Field>
+        <Field label="Menu URL" hint="Shown on the app's Food & Drink card. Blank hides it.">
+          <Input value={menuUrl} onChange={(e) => setMenuUrl(e.target.value)} placeholder="https://…/menu" inputMode="url" />
+        </Field>
+        <Field label="Online ordering URL" hint="Deep link to the venue's ordering system.">
+          <Input value={orderingUrl} onChange={(e) => setOrderingUrl(e.target.value)} placeholder="https://order.…" inputMode="url" />
         </Field>
       </div>
       <div className="mt-2">

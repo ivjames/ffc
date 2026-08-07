@@ -6,8 +6,9 @@
 // round.client_id inside a transaction.
 import { Router } from "express";
 import { pool } from "../db.js";
-import { validateTags } from "../lib/sanitize.js";
+import { validateTags, isValidTag } from "../lib/sanitize.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
+import { scoreAchievements, newRewardCode } from "../lib/rewards.js";
 
 export const router = Router();
 
@@ -55,10 +56,67 @@ function collectScoreRows(scores, playerCount) {
   return { rows };
 }
 
+// --- Rewards ---------------------------------------------------------------
+/**
+ * Grant achievements for a freshly-synced completed round (same transaction).
+ * Score-based ones (hole-in-one, under par) come from lib/rewards.js; Hunt
+ * Master is granted to each player whose verified finds cover every active
+ * non-countable item on the course's hunt list (hunt_find is keyed by the
+ * device round id — our clientId — because the hunt runs during play, before
+ * the round exists server-side).
+ */
+export async function grantRewards(client, { roundId, clientId, courseId, playerTags, scoreRows, pars }) {
+  const grants = scoreAchievements(scoreRows, playerTags.length, pars);
+
+  const huntDone = await client.query(
+    `select f.player_tag as tag
+       from hunt_find f
+       join hunt_item i on i.id = f.item_id
+      where f.round_client_id = $1 and f.verified
+        and i.course_id = $2 and i.active and not i.countable
+      group by f.player_tag
+     having count(distinct i.id) = (
+        select count(*) from hunt_item
+         where course_id = $2 and active and not countable
+       )
+        and count(distinct i.id) > 0`,
+    [clientId, courseId]
+  );
+  for (const { tag } of huntDone.rows) {
+    // Hunt finds are keyed by tag, not roster position — credit the first
+    // roster slot with that tag (duplicate tags can't be told apart anyway).
+    const playerIndex = playerTags.indexOf(tag);
+    if (playerIndex !== -1) grants.push({ playerIndex, achievement: "hunt_master" });
+  }
+
+  for (const grant of grants) {
+    // Retry the random short code on the (rare) unique collision — behind a
+    // savepoint, because a unique violation otherwise aborts the whole round
+    // transaction. The per-(round, player, achievement) uniqueness makes
+    // re-grants no-ops.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await client.query("SAVEPOINT reward_grant_sp");
+      try {
+        await client.query(
+          `insert into reward_grant (code, round_id, player_index, player_tag, achievement)
+             values ($1, $2, $3, $4, $5)
+           on conflict (round_id, player_index, achievement) do nothing`,
+          [newRewardCode(), roundId, grant.playerIndex, playerTags[grant.playerIndex], grant.achievement]
+        );
+        await client.query("RELEASE SAVEPOINT reward_grant_sp");
+        break;
+      } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT reward_grant_sp");
+        if (!(err && err.code === "23505" && attempt < 4)) throw err;
+      }
+    }
+  }
+}
+
 // --- Route -----------------------------------------------------------------
 router.post("/", rateLimit, async (req, res) => {
   const body = req.body ?? {};
-  const { clientId, courseId, playerTags, createdAt, completedAt, scores } = body;
+  const { clientId, courseId, playerTags, groupTag, createdAt, completedAt, scores } = body;
 
   // clientId — required dedupe key.
   if (typeof clientId !== "string" || clientId.length === 0 || clientId.length > 200) {
@@ -74,6 +132,11 @@ router.post("/", rateLimit, async (req, res) => {
   const tagCheck = validateTags(playerTags);
   if (!tagCheck.ok) {
     return res.status(400).json({ ok: false, error: tagCheck.error });
+  }
+
+  // group (team) tag — optional, same charset + blocklist as a player tag.
+  if (groupTag !== undefined && groupTag !== null && !isValidTag(groupTag)) {
+    return res.status(400).json({ ok: false, error: "invalid or blocked groupTag" });
   }
 
   // timestamps — ms epoch numbers. completedAt may be null.
@@ -94,8 +157,8 @@ router.post("/", rateLimit, async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // Course must exist.
-    const courseRes = await client.query("select id from course where id = $1", [courseId]);
+    // Course must exist (pars feed the reward computation below).
+    const courseRes = await client.query("select id, pars from course where id = $1", [courseId]);
     if (courseRes.rowCount === 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ ok: false, error: "courseId does not exist" });
@@ -105,13 +168,14 @@ router.post("/", rateLimit, async (req, res) => {
     // returns 0 rows; we then look up the existing round and return its id
     // without touching its scores.
     const insertRound = await client.query(
-      `insert into round (course_id, player_tags, created_at, completed_at, client_id)
-         values ($1, $2, to_timestamp($3 / 1000.0), $4, $5)
+      `insert into round (course_id, player_tags, group_tag, created_at, completed_at, client_id)
+         values ($1, $2, $3, to_timestamp($4 / 1000.0), $5, $6)
        on conflict (client_id) do nothing
        returning id`,
       [
         courseId,
         playerTags,
+        groupTag ?? null,
         createdAt,
         completedAt === null ? null : new Date(completedAt),
         clientId,
@@ -129,6 +193,19 @@ router.post("/", rateLimit, async (req, res) => {
            on conflict (round_id, player_index, hole) do nothing`,
           [roundId, row.playerIndex, row.hole, row.strokes]
         );
+      }
+      // Rewards (punchlist #8): grant achievements for a COMPLETED fresh round.
+      // Same transaction as the round itself — a grant without its round (or
+      // vice versa) would be a lie at the redemption counter.
+      if (completedAt !== null) {
+        await grantRewards(client, {
+          roundId,
+          clientId,
+          courseId,
+          playerTags,
+          scoreRows: collected.rows,
+          pars: courseRes.rows[0].pars,
+        });
       }
     } else {
       // Duplicate sync — round already exists. Return its id, leave scores alone.
