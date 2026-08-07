@@ -57,8 +57,10 @@ const SWEEP_X0 = 26;
 const SWEEP_X1 = W - 26;
 const SWEEP_Y0 = 74;
 const SWEEP_Y1 = 362;
-const SWEEP_X_MS = 1300;
-const SWEEP_Y_MS = 1100;
+// Slower than AxeThrow's sweeps: the board's doubles/trebles are only a few
+// pixels tall, so the guides need more dwell time to aim at a specific bed.
+const SWEEP_X_MS = 1750;
+const SWEEP_Y_MS = 1500;
 
 const DARTS = 9;
 const VISIT_SIZE = 3;

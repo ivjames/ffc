@@ -50,7 +50,7 @@ const ZONES: Array<{ min: number; label: string; color: string }> = [
 ];
 
 const SWINGS = 5;
-const METER_MS = 700; // full triangle-wave period (0→100→0) — genuinely fast
+const METER_MS = 1050; // full triangle-wave period (0→100→0) — brisk but hittable
 // The meter renders ~1 value per frame, so an exact rendered 100 is nearly
 // unreachable; a tap in the top sliver of the sweep counts as the perfect 100
 // (≈one rendered frame per sweep), like a batting "perfect" window.
