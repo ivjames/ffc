@@ -62,7 +62,11 @@ const WALL_PAD = 2; // wall half-thickness (segment endpoints act as round posts
 const WALL_E = 0.52; // wall restitution
 const REST_VN = 40; // impacts slower than this don't bounce (lets the ball rest)
 
-const FLIP_LEN = 42;
+// Blade length + pivot spread size the center drain: resting tips sit
+// 106 − 2·cos(0.52)·39 ≈ 38px apart, ~10px more than the ball needs to pass
+// (2·(BALL_R + FLIP_R) = 28). The old 42px blades on 94px-apart pivots left
+// the gap 7px NEGATIVE — the table literally could not drain down the middle.
+const FLIP_LEN = 39;
 const FLIP_R = 7; // flipper capsule half-thickness
 const ANG_UP = 26; // flip-up angular speed (rad/s)
 const ANG_DOWN = 15; // drop-back angular speed (rad/s)
@@ -117,9 +121,12 @@ const SEGS: Seg[] = (() => {
     // effective ball diameter of 18 (BALL_R + WALL_PAD each side) — anything
     // near 20px is a wedge pocket the ball jams in instead of falling through.
     { ax: 36, ay: 404, bx: 36, by: 468 }, // left outlane divider
-    { ax: 36, ay: 468, bx: 107, by: 489 }, // left inlane guide → flipper
+    // The inlane guides run all the way to the flipper pivots: ending short
+    // left a notch at the guide-end/pivot junction where the ball could rest
+    // dead — unflippable too, since surface velocity at the pivot is ~zero.
+    { ax: 36, ay: 468, bx: 104, by: 490 }, // left inlane guide → flipper pivot
     { ax: 278, ay: 404, bx: 278, by: 468 }, // right outlane divider
-    { ax: 278, ay: 468, bx: 207, by: 489 }, // right inlane guide → flipper
+    { ax: 278, ay: 468, bx: 210, by: 490 }, // right inlane guide → flipper pivot
     // Rollover lane fins — short guides bracketing the lamps, detached from
     // the arch so the dome stays open playfield instead of walled columns.
     { ax: 94, ay: 136, bx: 94, by: 192 },
@@ -130,10 +137,14 @@ const SEGS: Seg[] = (() => {
   return segs;
 })();
 
-type Sling = { a: FxVec; b: FxVec; c: FxVec; nx: number; ny: number };
+type SlingFace = { p: FxVec; q: FxVec; nx: number; ny: number };
+type Sling = { a: FxVec; b: FxVec; c: FxVec; m: FxVec; faces: SlingFace[] };
 
-/** Triangular slingshot: edges a-b and b-c are passive walls; the a-c face
- *  kicks. The kick normal is oriented toward the playfield interior. */
+/** Triangular slingshot: edges a-b and b-c are passive walls; the kicking
+ *  face bulges outward through `m`, split into two chords with their own
+ *  normals. A flat face fires every kick along one fixed direction, which
+ *  lets the two slings volley the ball in a stable "tick-tock" — the convex
+ *  face varies the kick by contact point, so volleys diverge. */
 function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
   let nx = c.y - a.y;
   let ny = -(c.x - a.x);
@@ -144,7 +155,23 @@ function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
     ny = -ny;
   }
   const l = Math.hypot(nx, ny) || 1;
-  return { a, b, c, nx: nx / l, ny: ny / l };
+  nx /= l;
+  ny /= l;
+  const m = { x: mx + nx * 7, y: my + ny * 7 };
+  const faces = ([
+    [a, m],
+    [m, c],
+  ] as Array<[FxVec, FxVec]>).map(([p, q]) => {
+    let fx = q.y - p.y;
+    let fy = -(q.x - p.x);
+    if (fx * nx + fy * ny < 0) {
+      fx = -fx;
+      fy = -fy;
+    }
+    const fl = Math.hypot(fx, fy) || 1;
+    return { p, q, nx: fx / fl, ny: fy / fl };
+  });
+  return { a, b, c, m, faces };
 }
 
 // The slings' outer edges (a-b) lean 5px inward at the top so they are NOT
@@ -253,8 +280,8 @@ function freshGS(): GS {
     live: false,
     saveUntil: 0,
     plunger: { pointerId: null, t: 0 },
-    fL: { px: 110, py: 490, rest: L_REST, raised: -0.55, angle: L_REST, omega: 0, pressed: false },
-    fR: { px: 204, py: 490, rest: R_REST, raised: Math.PI + 0.55, angle: R_REST, omega: 0, pressed: false },
+    fL: { px: 104, py: 490, rest: L_REST, raised: -0.55, angle: L_REST, omega: 0, pressed: false },
+    fR: { px: 210, py: 490, rest: R_REST, raised: Math.PI + 0.55, angle: R_REST, omega: 0, pressed: false },
     bumperCd: [0, 0, 0, 0, 0],
     slingCd: [0, 0],
     lamps: [false, false, false],
@@ -399,13 +426,28 @@ function step(gs: GS): void {
       const sl = SLINGS[i];
       collideSeg(b, sl.a.x, sl.a.y, sl.b.x, sl.b.y, BALL_R + WALL_PAD, WALL_E);
       collideSeg(b, sl.b.x, sl.b.y, sl.c.x, sl.c.y, BALL_R + WALL_PAD, WALL_E);
-      const hit = collideSeg(b, sl.a.x, sl.a.y, sl.c.x, sl.c.y, BALL_R + WALL_PAD, 0.5);
+      let hit = 0;
+      let fnx = 0;
+      let fny = 0;
+      for (const f of sl.faces) {
+        const h = collideSeg(b, f.p.x, f.p.y, f.q.x, f.q.y, BALL_R + WALL_PAD, 0.5);
+        if (h > hit) {
+          hit = h;
+          fnx = f.nx;
+          fny = f.ny;
+        }
+      }
       if (hit > 70 && gs.time >= gs.slingCd[i]) {
         gs.slingCd[i] = gs.time + 0.15;
-        // Kick along the face normal, keeping a bit of tangential motion.
-        const vt = b.vx * -sl.ny + b.vy * sl.nx;
-        b.vx = sl.nx * SLING_V + -sl.ny * vt * 0.35;
-        b.vy = sl.ny * SLING_V + sl.nx * vt * 0.35;
+        // Kick along the struck chord's normal, wobbled a few degrees so
+        // repeat kicks never retrace the same line (keeps a bit of the
+        // tangential motion too).
+        const j = (Math.random() - 0.5) * 0.12;
+        const kx = fnx * Math.cos(j) - fny * Math.sin(j);
+        const ky = fnx * Math.sin(j) + fny * Math.cos(j);
+        const vt = b.vx * -ky + b.vy * kx;
+        b.vx = kx * SLING_V + -ky * vt * 0.35;
+        b.vy = ky * SLING_V + kx * vt * 0.35;
         gs.score += 50;
         gs.events.push({ kind: 'sling', x: b.x, y: b.y, i });
       }
@@ -471,20 +513,29 @@ function step(gs: GS): void {
   }
 
   // Stuck-ball watchdog. The table has no slope toward the drain, so the ball
-  // can come to a true dead rest cradled between wall tips (the outlane mouth
-  // is the classic spot) — REST_VN kills every bounce there and the anti-stall
-  // bounce jitter never fires on a resting contact. After ~1.2s of standstill,
-  // give it the bump a tilted playfield would: a kick toward the playfield
-  // center with a little lift. The flipper zone (y ≥ 462) is exempt so a ball
-  // deliberately trapped on a flipper stays trapped, as is the shooter lane
-  // (weak launches are allowed to fall back and re-rack in peace).
-  if (sp < 26 && b.y < 462 && b.x < PF_R - BALL_R) {
+  // can come to a true dead rest cradled between contacts — REST_VN kills
+  // every bounce there and the anti-stall bounce jitter never fires on a
+  // resting contact. After ~1.2s of standstill, give it the bump a tilted
+  // playfield would. The flipper zone is exempt only WHILE a flipper is held
+  // up (that's a deliberate trap); a ball dead-rested on lowered flippers —
+  // e.g. balanced at a flipper pivot, where flipping imparts ~zero surface
+  // velocity — is a stuck ball like any other. The shooter lane stays exempt
+  // so weak launches can fall back and re-rack in peace.
+  const flipperHeld = gs.fL.pressed || gs.fR.pressed;
+  if (sp < 26 && b.x < PF_R - BALL_R && (b.y < 462 || !flipperHeld)) {
     gs.stillT += DT;
     if (gs.stillT >= 1.2) {
       gs.stillT = 0;
-      const dir = b.x > PF_CX ? -1 : 1;
-      b.vx += dir * (90 + Math.random() * 60);
-      b.vy -= 30 + Math.random() * 40;
+      if (b.y >= 440) {
+        // At the flippers: pop mostly upward so the player gets a real save
+        // attempt — a sideways shove here would feed the drain.
+        b.vx += (b.x > PF_CX ? -1 : 1) * (30 + Math.random() * 30);
+        b.vy -= 150 + Math.random() * 50;
+      } else {
+        const dir = b.x > PF_CX ? -1 : 1;
+        b.vx += dir * (90 + Math.random() * 60);
+        b.vy -= 30 + Math.random() * 40;
+      }
       gs.events.push({ kind: 'nudge', x: b.x, y: b.y });
     }
   } else {
@@ -587,10 +638,10 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   // Outlane dividers + inlane guides (matching SEGS).
   c.moveTo(36, 404);
   c.lineTo(36, 468);
-  c.lineTo(107, 489);
+  c.lineTo(104, 490);
   c.moveTo(278, 404);
   c.lineTo(278, 468);
-  c.lineTo(207, 489);
+  c.lineTo(210, 490);
   // Rollover lane fins — short guides around the lamps (matching SEGS).
   c.moveTo(94, 136);
   c.lineTo(94, 192);
@@ -603,10 +654,14 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
 }
 
 function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
+  // Control point that makes the quadratic pass through the bulge point `m`.
+  const cpx = 2 * s.m.x - (s.a.x + s.c.x) / 2;
+  const cpy = 2 * s.m.y - (s.a.y + s.c.y) / 2;
   ctx.beginPath();
   ctx.moveTo(s.a.x, s.a.y);
   ctx.lineTo(s.b.x, s.b.y);
   ctx.lineTo(s.c.x, s.c.y);
+  ctx.quadraticCurveTo(cpx, cpy, s.a.x, s.a.y);
   ctx.closePath();
   const g = ctx.createLinearGradient(s.a.x, s.a.y, s.b.x, s.b.y);
   g.addColorStop(0, '#b91c1c');
@@ -616,7 +671,7 @@ function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
   ctx.strokeStyle = 'rgba(10,7,25,0.8)';
   ctx.lineWidth = 2;
   ctx.stroke();
-  // The kicking face, lit hotter while it fires.
+  // The curved kicking face, lit hotter while it fires.
   ctx.save();
   ctx.strokeStyle = withAlpha('#fbbf24', 0.7 + glow * 0.3);
   ctx.shadowColor = '#fbbf24';
@@ -625,7 +680,7 @@ function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(s.a.x, s.a.y);
-  ctx.lineTo(s.c.x, s.c.y);
+  ctx.quadraticCurveTo(cpx, cpy, s.c.x, s.c.y);
   ctx.stroke();
   ctx.restore();
 }
