@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Home from './features/home/Home';
 import CoursePicker from './features/scorecard/CoursePicker';
 import PlayerSetup from './features/scorecard/PlayerSetup';
@@ -9,6 +9,7 @@ import CourseMap from './features/courses/CourseMap';
 import LocationPicker from './features/locations/LocationPicker';
 import Rules from './features/rules/Rules';
 import TvLeaderboard from './features/tv/TvLeaderboard';
+import TvWall from './features/tv/TvWall';
 import Hunt from './features/hunt/Hunt';
 import PuttGolf from './features/putt/PuttGolf';
 import FunZone from './features/fun/FunZone';
@@ -44,6 +45,9 @@ import { DEV_MODE } from './lib/flags';
 
 // §7 Routes / screens.
 export default function App() {
+  // The venue display wall is landscape by design (a TV pointed at the URL),
+  // so it's exempt from the portrait nudge every phone screen gets.
+  const isWall = useLocation().pathname.startsWith('/tv/wall');
   return (
     <>
       <Routes>
@@ -58,6 +62,9 @@ export default function App() {
         <Route path="/rules" element={<Rules />} />
         {/* P2 preview — the API already serves the leaderboard. */}
         <Route path="/tv" element={<TvLeaderboard />} />
+        {/* Venue display wall — all of a venue's course boards side by side,
+            for a TV pointed at the URL (configured via query params). */}
+        <Route path="/tv/wall" element={<TvWall />} />
         {/* P3 — AI scavenger hunt. */}
         <Route path="/hunt" element={<Hunt />} />
         {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
@@ -122,8 +129,8 @@ export default function App() {
       <UpdateModal />
 
       {/* Every screen is portrait-first — nudge phones back to vertical when
-          held sideways. */}
-      <RotateNudge />
+          held sideways. Exception: the landscape-by-design display wall. */}
+      {!isWall && <RotateNudge />}
     </>
   );
 }

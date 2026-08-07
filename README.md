@@ -65,6 +65,12 @@ items except player registration, which is a separate effort):
 - **Team tag** — an optional 3-char team tag at round setup (same rules as
   player tags). The TV board gains a Players/Teams toggle; a team round scores
   as average strokes per player, best per course (`/api/leaderboard?by=team`).
+- **Venue display wall** — `/tv/wall` shows all of a venue's course boards
+  side by side (one column per course) for a TV pointed at the URL, separate
+  from the phone-first `/tv`. Zero interaction: venue/period/player-vs-team/
+  row count all come from query params (`?location=upland&period=day`), fed by
+  `GET /api/leaderboard/courses`, polling every 10s with announcements across
+  the top.
 - **Food & Drink card** — per-location menu/ordering deep links set in Master
   Control, shown on Home when set (grayed out offline). Ships via the normal
   content export.

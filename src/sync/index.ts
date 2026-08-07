@@ -101,6 +101,34 @@ export async function fetchLeaderboard(
   return res.json();
 }
 
+/** One course's board on the venue display wall (/tv/wall). */
+export type CourseBoard = {
+  courseId: string;
+  courseName: string;
+  theme: string;
+  locationId: string | null;
+  locationName: string | null;
+  rows: { rank: number; tag: string; total: number; completedAt: string }[];
+};
+
+/** Per-course top-N boards for the venue display wall — every live course of
+ *  the venue is returned, empty boards included, so the column grid is stable. */
+export async function fetchCourseBoards(opts: {
+  locationId?: string;
+  period?: 'day' | 'week' | 'month' | 'all';
+  by?: 'player' | 'team';
+  limit?: number;
+}): Promise<{ period: string; by: string; courses: CourseBoard[] }> {
+  const q = new URLSearchParams();
+  if (opts.locationId) q.set('locationId', opts.locationId);
+  if (opts.period) q.set('period', opts.period);
+  if (opts.by) q.set('by', opts.by);
+  if (opts.limit) q.set('limit', String(opts.limit));
+  const res = await fetch(apiUrl(`/api/leaderboard/courses?${q.toString()}`));
+  if (!res.ok) throw new Error(`Leaderboard failed: HTTP ${res.status}`);
+  return res.json();
+}
+
 /** Rewards earned by a round (punchlist #8 tier 1), fetched by the round's
  *  unguessable clientId once it has synced. */
 export type RewardRow = {
