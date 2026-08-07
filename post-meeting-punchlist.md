@@ -17,10 +17,11 @@ today, and a recommended next step, so the follow-up conversation can turn
 > answers below).
 >
 > **Update — photo auto-moderation built** (venue confirmed people in photos
-> are wanted): unsafe content is blocked at upload before storage,
-> people/minors presence is recorded per photo, and Master Control → Photos is
-> the operator review queue. Photo share (#9 tier 2) is now unblocked except
-> for the minors display-policy decision.
+> are wanted): unsafe content is blocked at upload before storage, and
+> people/minors presence is recorded per photo. Auto-mod only by decision —
+> a human review surface is a later concern (it will start with full history,
+> since every verdict is stored). Photo share (#9 tier 2) is now unblocked
+> except for the minors display-policy decision.
 
 ## Raw notes (as captured)
 
@@ -219,10 +220,11 @@ leaves the venue's own storage.
    frame), and minors. Gate behind the moderation work; don't bundle with
    step 1. **Update: the moderation gate is now built** — every hunt photo is
    auto-moderated in the verification vision call (unsafe content blocked
-   pre-storage; people/minors flags recorded), with an operator review queue
-   in Master Control → Photos. People in photos are welcome. What photo share
-   still needs: the sharing surface itself, and the display-policy decision
-   for photos flagged `minors_present` (share to own group only vs. public).
+   pre-storage; people/minors flags recorded). People in photos are welcome.
+   Auto-mod only for now; a human review surface is deferred by decision.
+   What photo share still needs: the sharing surface itself, and the
+   display-policy decision for photos flagged `minors_present` (share to own
+   group only vs. public).
 
 **Effort.** Score share small · photo share medium + policy work.
 **Depends on:** photo share → ~~moderation decision~~ **moderation built**;

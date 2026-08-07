@@ -246,9 +246,6 @@ no domain history hangs off an account.)
 | `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
 | `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | look up one redemption code (case-insensitive), or list recent grants (default: unredeemed, limit 50); org-scoped via the round's course → location |
 | `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | mark a reward handed out (records who) / undo a mistaken redemption; audited |
-| `GET  /api/admin/photos?filter=review\|people\|minors\|approved\|flagged\|rejected\|all` | hunt-photo moderation queue (default `review` = legacy unreviewed photos + flagged events); org-scoped |
-| `GET  /api/admin/photos/:id/image` | stream the stored photo (admin-authed — hunt photos are never publicly served) |
-| `POST /api/admin/photos/:id/approve` · `…/reject` | operator verdict; **reject permanently deletes the image file from disk** (the find's DB row and gameplay credit stay); audited |
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of
@@ -297,9 +294,9 @@ touches disk (no credit, a `flagged` event row, one friendly retake message to
 the player — the model's content description is never echoed); safe stored
 photos carry `moderation = 'approved'` plus `people_present`/`minors_present`
 flags. People in photos are welcome — the flags exist so a future sharing
-surface can apply display policy, not to block anyone. Operators review and
-override in Master Control → Photos (`/api/admin/photos`, table above);
-nothing is displayed publicly yet.
+surface can apply display policy, not to block anyone. Auto-mod only for now:
+a human review surface is deferred, but every verdict is recorded so it will
+start with full history. Nothing is displayed publicly yet.
 
 The hunt is a **play-time** activity: every find is tied to a group's in-progress
 round (`roundClientId` is required on verify), so it isn't an open invitation to

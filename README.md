@@ -35,8 +35,8 @@ per player and per group (the round's roster). The model also flags
 photo-of-a-photo attempts (anti-cheat). The lists are fixed for now. Every photo
 is **auto-moderated in the same vision call**: unsafe content (family-venue
 standard) is blocked before it touches disk, and stored photos carry
-people/minors flags plus a moderation status reviewable in Master Control →
-Photos (people in photos are welcome; only unsafe content blocks).
+people/minors flags plus a recorded moderation status (people in photos are
+welcome; only unsafe content blocks). A human review surface is deferred.
 
 The hunt is available **during gameplay only** — it's gated on an in-progress
 round, so it isn't an open invitation to wander the course during others' games.
@@ -79,9 +79,10 @@ items except player registration, which is a separate effort):
   (rounds / players / hunt finds) and a rounds CSV export with a date range.
 - **Photo auto-moderation** — every hunt photo is moderated by the same vision
   call that verifies the find (no extra model spend): unsafe content is blocked
-  before storage, people/minors presence is recorded, and Master Control →
-  Photos gives operators a review queue with permanent-delete rejection. This
-  is the gate that unblocks people-in-photos and the social photo share.
+  before it ever touches disk, and people/minors presence is recorded per
+  photo. Auto-mod only for now (a human review surface is a later concern, and
+  will start with full history since every verdict is stored). This is the
+  gate that unblocks people-in-photos and the social photo share.
 
 ## Tech stack
 

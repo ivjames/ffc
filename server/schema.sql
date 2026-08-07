@@ -449,16 +449,17 @@ create index if not exists reward_grant_redeemed_idx on reward_grant (redeemed_a
 -- Every hunt photo is classified in the SAME vision call that verifies the
 -- find: content safety for a family venue, plus whether people / apparent
 -- minors are in frame (recorded now; display policy decided at the sharing
--- surface). `moderation` on hunt_find:
---   'approved'  auto-passed (or operator-approved) — displayable
+-- surface). Auto-mod only for now — a human review surface is a later
+-- concern, but every verdict is recorded from day one so it starts with
+-- full history. `moderation` on hunt_find:
+--   'approved'  auto-passed by the vision moderation — displayable
 --   'flagged'   auto-blocked at upload: the photo was NEVER written to disk
---   'rejected'  operator rejection in Master Control: image file deleted,
---               DB row kept (photo_path nulled) so the audit trail survives
---   null        legacy pre-moderation rows — surfaced for one-time human review
+--   'rejected'  reserved for the future operator review surface
+--   null        legacy pre-moderation rows
 alter table hunt_find add column if not exists moderation        text;
 alter table hunt_find add column if not exists moderation_reason text;
 alter table hunt_find add column if not exists people_present    boolean;
 alter table hunt_find add column if not exists minors_present    boolean;
--- The review queue reads stored photos by moderation state.
+-- Reads of stored photos by moderation state (future review/sharing surfaces).
 create index if not exists hunt_find_moderation_idx
   on hunt_find (moderation) where photo_path is not null;

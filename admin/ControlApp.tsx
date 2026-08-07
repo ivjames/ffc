@@ -10,7 +10,6 @@ import LocationDetail from './LocationDetail';
 import Archived from './Archived';
 import Announcements from './Announcements';
 import Rewards from './Rewards';
-import Photos from './Photos';
 
 export function SignInGate({ onUnlock }: { onUnlock: (user: CurrentUser | null) => void }) {
   const [mode, setMode] = useState<'token' | 'login'>('token');
@@ -143,9 +142,6 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <NavLink to="/rewards" className={linkCls}>
               Rewards
             </NavLink>
-            <NavLink to="/photos" className={linkCls}>
-              Photos
-            </NavLink>
             <NavLink to="/archived" className={linkCls}>
               Archived
             </NavLink>
@@ -176,7 +172,6 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
           <Route path="/locations/:id" element={<LocationDetail />} />
           <Route path="/announcements" element={<Announcements isSuperAdmin={isSuperAdmin} />} />
           <Route path="/rewards" element={<Rewards />} />
-          <Route path="/photos" element={<Photos />} />
           <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
           <Route path="*" element={<Overview />} />
         </Routes>

@@ -19,7 +19,6 @@ import { router as huntUsageRouter } from "./huntUsage.js";
 import { router as announcementsRouter } from "./announcements.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as exportRouter } from "./export.js";
-import { router as photosRouter } from "./photos.js";
 
 export const router = Router();
 
@@ -37,4 +36,3 @@ router.use("/hunt-usage", huntUsageRouter);
 router.use("/announcements", announcementsRouter);
 router.use("/rewards", rewardsRouter);
 router.use("/export", exportRouter);
-router.use("/photos", photosRouter);
