@@ -44,25 +44,32 @@ anticipated that flip. Offline behavior: cache last-fetched, fail silent.
 
 **Effort.** Medium. **Depends on:** nothing — good early win.
 
-### 2. Office integrations — *Clarify*
+### 2. Office integrations — reporting & data access
 
-**Ask.** "Office integrations" — ambiguous as captured.
-
-**Possible readings.** (a) Back-office/ops integrations for Bullwinkle's staff
-(email digests of the admin overview rollup, calendar for league nights,
-export to spreadsheets); (b) Microsoft Office / Google Workspace documents
-(reports); (c) integration with the venue's existing POS/booking systems.
+**Ask.** Clarified post-meeting: this is about the office having **access to
+data/charts/reports** — not POS/booking-system integration (that's still an
+open question, tracked under #7/#8).
 
 **Today.** Master Control already has a read-only rollup
-(`GET /api/admin/overview`, `admin/Overview.tsx`) that could feed a scheduled
-email digest cheaply. No POS integration exists anywhere.
+(`GET /api/admin/overview`, `admin/Overview.tsx`): counts of orgs, locations,
+courses, rounds (7/30d), hunt finds, per location. It's a snapshot, not
+trends — no charts, no history view, no export, and it lives behind an admin
+login rather than arriving where the office already works.
 
-**Recommendation.** Get the specific ask before scoping. If it's (a), a weekly
-emailed overview digest is small; if it's (c), it's a project of its own and
-should be tied to the food-ordering and rewards items below, which also hinge
-on what POS the venue runs.
+**Recommendation.** Build out in three small steps, each independently useful:
+1. **Charts on the Overview.** Extend `/api/admin/overview` with time-bucketed
+   series (rounds/day, unique tags/day, hunt finds/day, fun-zone plays) and
+   render trend charts in `admin/Overview.tsx`. Pure additive work on
+   existing plumbing.
+2. **CSV export.** "Download CSV" for rounds/scores per date range — covers
+   the "get it into a spreadsheet" need with no integration at all.
+3. **Scheduled email digest.** A weekly summary (same rollup + deltas) mailed
+   to the office. First outbound-email dependency in the stack (pick a
+   provider or SMTP relay); a small cron on the droplet hitting the overview
+   endpoint.
 
-**Effort.** Unknown until clarified.
+**Effort.** Small–medium (each step small). **Depends on:** nothing —
+alongside #1 this is a good early win.
 
 ### 3. User data account registration
 
@@ -151,12 +158,12 @@ already uses — Toast/Square/etc.) reachable from the home screen and the
 scorecard. That's a per-location URL field in Master Control plus a UI card —
 small, and it validates demand. Building ordering *into* the app means POS
 integration, payments, and order status — only worth scoping if the venue's
-POS has an API worth integrating (ties into #2 clarification). Note the
+POS has an API worth integrating (an open question — see below). Note the
 offline-first caveat: ordering links require connectivity; the card should
 degrade gracefully offline.
 
 **Effort.** Links small · in-app ordering large. **Depends on:** venue's POS
-answer (see #2).
+answer (still unknown).
 
 ### 8. Rewards / tickets tie-in
 
@@ -175,7 +182,7 @@ leaderboard placement, hunt completions.
    without player accounts (per-round), better with them (#3).
 2. **Ticket-system integration.** Direct crediting into the venue's card/
    ticket system (Embed, Intercard, etc.) — needs to know what Bullwinkle's
-   runs; same POS/systems conversation as #2 and #7.
+   runs; same open systems question as #7.
 
 **Effort.** Phase 1 medium · Phase 2 unknown. **Depends on:** #3 (soft), the
 systems answer (hard, for phase 2). *Clarify:* which ticket/card system the
@@ -212,20 +219,23 @@ leaves the venue's own storage.
 | 1 | Leaderboard demo (#6) | Already built — show it, collect feedback |
 | 2 | Food & drink links (#7 tier 1) | Small, immediate venue value |
 | 3 | Announcements/ads (#1) | Self-contained; first live-content read |
-| 4 | Score sharing (#9 tier 1) | Small, no backend, marketing value |
-| 5 | Group/team tag (#4 tier 1) | Already designed as additive |
-| 6 | Player registration (#3) | The unlock for everything below |
-| 7 | Rewards manual redemption (#8 tier 1) | Rides on triggers + accounts |
-| 8 | Leagues (#4 tier 2), photo share (#9 tier 2), integrations (#2, #7/#8 tier 2) | Need accounts, clarifications, or policy work |
+| 4 | Office reporting (#2) | Additive on existing admin rollup |
+| 5 | Score sharing (#9 tier 1) | Small, no backend, marketing value |
+| 6 | Group/team tag (#4 tier 1) | Already designed as additive |
+| 7 | Player registration (#3) | The unlock for everything below |
+| 8 | Rewards manual redemption (#8 tier 1) | Rides on triggers + accounts |
+| 9 | Leagues (#4 tier 2), photo share (#9 tier 2), POS/ticket integrations (#7/#8 tier 2) | Need accounts, systems answers, or policy work |
 
 ## Questions to bring back to Bullwinkle's
 
-1. **"Office integrations"** — what specifically? Staff reports/email, or
-   POS/booking systems?
-2. **POS / ordering system** — what does the venue run for food orders, and
-   does it have online ordering we can deep-link to?
-3. **Ticket/rewards system** — what card/ticket platform is on the arcade
-   floor (Embed, Intercard, other), and is API crediting available?
+1. ~~**"Office integrations"** — what specifically?~~ **Answered:** access to
+   data/charts/reports (see #2). Follow-up: which reports matter most, and
+   should the digest arrive by email?
+2. **POS / ordering system** — still unknown. What does the venue run for
+   food orders, and does it have online ordering we can deep-link to?
+3. **Ticket/rewards system** — still unknown. What card/ticket platform is on
+   the arcade floor (Embed, Intercard, other), and is API crediting
+   available?
 4. **Advertisements** — house promos only, or third-party/sponsor ads (which
    would need scheduling/reporting)?
 5. **Player data** — what does the venue actually want to collect at
