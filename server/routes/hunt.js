@@ -8,6 +8,12 @@
 // proxied server-side (server/lib/vision.js) so the model API key never reaches
 // the browser. Moderation of stored photos is deferred (Phase 3.x) — for now
 // photos are verified and kept, and nothing is displayed publicly.
+//
+// Cost controls: every model call is metered into hunt_scan (exact token counts
+// from the API's usage object, for monthly per-course cost rollups), and each
+// round has a total scan budget (HUNT_SCAN_CAP, default 100) on top of the
+// per-IP rate limit below — the rate limit bounds burn *rate*, the cap bounds
+// total spend per round.
 import { Router } from "express";
 import express from "express";
 import { randomUUID } from "node:crypto";
@@ -36,6 +42,47 @@ const UPLOAD_DIR =
 // upload, but be generous so an uncompressed full-res phone photo (fallback
 // path, or a stale client bundle) still goes through rather than 413/400.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+// --- Per-round scan budget --------------------------------------------------
+// The per-IP rate limit below bounds *rate*, not *total*: one device pinning
+// 20/min for an hour is ~1,200 model calls. This cap bounds total vision spend
+// per round (the billing unit), so cost per round is a hard number, not an
+// estimate. Counted from hunt_scan (every model call, verdict or not); dedup
+// short-circuits don't call the model, so they don't count. Resolved per
+// request so tests (and ops) can adjust without a restart. 0 is a kill switch.
+const DEFAULT_SCAN_CAP = 100;
+function resolveScanCap() {
+  const raw = process.env.HUNT_SCAN_CAP;
+  if (raw === undefined || raw === "") return DEFAULT_SCAN_CAP;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_SCAN_CAP;
+}
+
+// Record one vision model call in hunt_scan — the metering row that backs the
+// scan cap and monthly per-course cost rollups. Metering must never break
+// gameplay, so failures are logged and swallowed.
+async function recordScan({ roundClientId, playerTag, itemId, courseId, usage, verified, flagged }) {
+  try {
+    await pool.query(
+      `insert into hunt_scan
+         (round_client_id, player_tag, item_id, course_id, model, input_tokens, output_tokens, verified, flagged)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        roundClientId,
+        playerTag,
+        itemId,
+        courseId,
+        usage?.model ?? null,
+        usage?.inputTokens ?? null,
+        usage?.outputTokens ?? null,
+        verified ?? null,
+        flagged ?? null,
+      ]
+    );
+  } catch (err) {
+    console.error("[hunt] scan metering insert failed:", err);
+  }
+}
 
 // See lib/huntAntiCheat.js for the fail-safe rules (TEST ONLY; forced off in
 // production even if left set).
@@ -233,6 +280,21 @@ router.post(
         }
       }
 
+      // Per-round scan budget: once the round has burned its cap of model
+      // calls, stop spending. 429 (not 200) so the client surfaces it as a
+      // limit rather than a failed find.
+      const scanCap = resolveScanCap();
+      const spent = await pool.query(
+        `select count(*)::int as n from hunt_scan where round_client_id = $1`,
+        [roundClientId]
+      );
+      if (spent.rows[0].n >= scanCap) {
+        return res.status(429).json({
+          ok: false,
+          error: "scan limit reached for this round",
+        });
+      }
+
       // Ask the model.
       const verdict = await verifyItemInImage({
         imageBase64,
@@ -246,6 +308,18 @@ router.post(
       // we treat it as un-flagged so a screenshot of a landmark still verifies.
       const flagged = ALLOW_PHOTO_OF_PHOTO ? false : verdict.photoOfPhoto;
       const verified = verdict.present && !flagged;
+
+      // Meter the call we just paid for, before anything else can fail — the
+      // tokens are billed whether or not the find persists.
+      await recordScan({
+        roundClientId,
+        playerTag,
+        itemId,
+        courseId,
+        usage: verdict.usage,
+        verified,
+        flagged,
+      });
 
       // Persist the photo, then record the find. We only keep the file for
       // successful, unflagged finds; rejected attempts aren't stored (keeps disk
@@ -326,8 +400,18 @@ router.post(
           .json({ ok: false, error: "vision is not configured on the server" });
       }
       if (err.code === "VISION_NO_OUTPUT") {
-        // Transient: the model returned no verdict. Nothing recorded — let the
-        // player retry with a fresh shot instead of failing hard.
+        // Transient: the model returned no verdict, but the call was still
+        // billed — meter it (usage rides on the error), record no find, and
+        // let the player retry with a fresh shot instead of failing hard.
+        await recordScan({
+          roundClientId,
+          playerTag,
+          itemId,
+          courseId,
+          usage: err.usage,
+          verified: null,
+          flagged: null,
+        });
         return res.json({
           ok: true,
           verified: false,

@@ -35,6 +35,7 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `VENUE_TZ`          | **Fallback** IANA timezone for leaderboard calendar windows, used only for a venue whose `location.tz` is unset. The real zone is per venue (see "Venue timezones" below). Default `America/Los_Angeles`. |
 | `ANTHROPIC_API_KEY` | Vision key for the scavenger hunt (`POST /api/hunt/verify`). Unset = hunt verification returns `503`; the rest of the API is unaffected. |
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
+| `HUNT_SCAN_CAP`     | Max vision (model) calls per round — the hard ceiling on hunt API spend per group. Default `100` (~$0.20 worst case on Haiku 4.5); `0` = kill switch (every verify `429`s). Read per request, so changes apply without a restart. |
 
 ## Endpoints
 
@@ -280,10 +281,19 @@ Request:
 - A photo-of-a-photo is `flagged` and never counts as a find.
 - Only verified, unflagged photos are written to disk.
 
+Cost controls: every model call is metered into `hunt_scan` — the API's exact
+`input_tokens`/`output_tokens` (what Anthropic bills), the model id, and the
+item's `course_id` for monthly per-venue cost rollups. On top of the per-IP
+rate limit, each round has a total scan budget (`HUNT_SCAN_CAP`, default 100):
+once a round has burned its budget of model calls, further submissions `429`.
+Dedupe short-circuits don't call the model, so they aren't metered or counted
+against the cap.
+
 Responses:
 - `200 { "ok": true, "verified": true|false, "flagged": bool, "confidence": num, "reason": "…" }`
 - `200 { "ok": true, "verified": true, "alreadyFound": true, "reason": "…" }` — dedupe.
-- `400` — validation failure. `429` — per-IP cap (20/min). `503` — `ANTHROPIC_API_KEY` unset.
+- `400` — validation failure. `429` — per-IP cap (20/min) or the round's scan
+  budget (`scan limit reached for this round`). `503` — `ANTHROPIC_API_KEY` unset.
 
 ## Testing
 
@@ -334,6 +344,9 @@ actually exercises:
 - `routes/hunt.js` (91%) — items/progress, verify's full validation +
   happy-path + dedupe + anti-cheat-flagged + countable-count + no-output
   branches, and the per-IP rate limit, all via a mocked `lib/vision.js`.
+  Cost controls live in their own file (`hunt.scanCap.integration.test.js`,
+  fresh process = fresh rate limiter): `hunt_scan` token metering (incl. the
+  billed-but-no-verdict path) and the `HUNT_SCAN_CAP` per-round budget 429.
 - `routes/rounds.js` (96%) — validation, idempotent re-sync (scores untouched
   on a duplicate `clientId`), the rate limit.
 - `routes/leaderboard.js` (97%) — best-per-(tag, course) aggregation, calendar
@@ -387,8 +400,9 @@ nothing assumes one global zone.
 - `db.js` — shared `pg` Pool from `DATABASE_URL`.
 - `test-support/testDb.js` — shared helpers for DB-backed tests (not itself a
   test file); see "Testing" above.
-- `schema.sql` — DDL (course / round / score / hunt_item / hunt_find) + per-course
-  hunt seed (ensures the four courses exist so the hunt FK resolves on a fresh migrate).
+- `schema.sql` — DDL (course / round / score / hunt_item / hunt_find / hunt_scan) +
+  per-course hunt seed (ensures the four courses exist so the hunt FK resolves on a
+  fresh migrate).
 - `migrate.js` — applies `schema.sql`.
 - `lib/sanitize.js` — tag validation + offensive-word blocklist (`isValidTag`,
   `validateTags`, `BLOCKLIST`). Mirrors the client's rules exactly.
@@ -418,8 +432,10 @@ nothing assumes one global zone.
   `courses.js`, `overview.js` (the latter four org-scoped for `org_admin` —
   see "Admin accounts & sessions" above).
 - `routes/hunt.js` — scavenger hunt: `GET /api/hunt/items`, `GET /api/hunt/progress`,
-  `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe).
+  `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe,
+  `HUNT_SCAN_CAP` per-round budget, `hunt_scan` token metering).
 - `lib/huntAntiCheat.js` — pure resolver for the `HUNT_ALLOW_PHOTO_OF_PHOTO`
   production fail-safe (`resolveAllowPhotoOfPhoto`); split out of `routes/hunt.js`
   so it's unit-testable without re-importing the route module.
-- `lib/vision.js` — Claude vision proxy (`claude-opus-4-8`, structured JSON verdict).
+- `lib/vision.js` — Claude vision proxy (`claude-haiku-4-5`, structured JSON
+  verdict + exact token usage for metering).
