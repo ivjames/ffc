@@ -117,10 +117,12 @@ const SEGS: Seg[] = (() => {
     { ax: 28, ay: 468, bx: 107, by: 489 }, // left inlane guide → flipper
     { ax: 286, ay: 404, bx: 286, by: 468 }, // right outlane divider
     { ax: 286, ay: 468, bx: 207, by: 489 }, // right inlane guide → flipper
-    { ax: 94, ay: 81, bx: 94, by: 190 }, // rollover lane dividers (hang from arch)
-    { ax: 136, ay: 68, bx: 136, by: 190 },
-    { ax: 178, ay: 66, bx: 178, by: 190 },
-    { ax: 220, ay: 72, bx: 220, by: 190 },
+    // Rollover lane fins — short guides bracketing the lamps, detached from
+    // the arch so the dome stays open playfield instead of walled columns.
+    { ax: 94, ay: 136, bx: 94, by: 192 },
+    { ax: 136, ay: 136, bx: 136, by: 192 },
+    { ax: 178, ay: 136, bx: 178, by: 192 },
+    { ax: 220, ay: 136, bx: 220, by: 192 },
   );
   return segs;
 })();
@@ -528,15 +530,15 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   c.moveTo(286, 404);
   c.lineTo(286, 468);
   c.lineTo(207, 489);
-  // Rollover lane dividers.
-  c.moveTo(94, 81);
-  c.lineTo(94, 190);
-  c.moveTo(136, 68);
-  c.lineTo(136, 190);
-  c.moveTo(178, 66);
-  c.lineTo(178, 190);
-  c.moveTo(220, 72);
-  c.lineTo(220, 190);
+  // Rollover lane fins — short guides around the lamps (matching SEGS).
+  c.moveTo(94, 136);
+  c.lineTo(94, 192);
+  c.moveTo(136, 136);
+  c.lineTo(136, 192);
+  c.moveTo(178, 136);
+  c.lineTo(178, 192);
+  c.moveTo(220, 136);
+  c.lineTo(220, 192);
 }
 
 function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
