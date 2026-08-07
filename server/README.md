@@ -96,6 +96,36 @@ rostered player** (teams are 1..4 players, so a raw sum would just reward small
 teams), rounded to 1 decimal, and each team keeps its best average per course.
 Rounds without a `group_tag` never appear on the team board.
 
+### `GET /api/leaderboard/courses?locationId=&period=&by=&limit=`
+Per-course boards for the **venue display wall** (`/tv/wall` — a TV pointed at
+a URL): instead of one mixed list, returns one board per live course with that
+course's top `limit` rows (default 10, max 50). Every live course of the venue
+is included even with no scores yet, so the wall's column grid stays stable.
+`locationId` scopes to one venue (omit for all); `period` defaults to `day`;
+`by=player|team` matches the main board's semantics; `total` is numeric here
+(`int` for players, 1-decimal float for teams).
+
+→ `200`:
+```json
+{ "period": "day", "by": "player", "courses": [
+  { "courseId": "<uuid>", "courseName": "Blue Course", "theme": "california",
+    "locationId": "<uuid>", "locationName": "Upland",
+    "rows": [ { "rank": 1, "tag": "ABC", "total": 41,
+                "completedAt": "2026-08-07T18:00:00.000Z" } ] } ] }
+```
+
+### `GET /api/leaderboard/courses/stream` (SSE)
+Same params and payload as `/courses`, pushed live: a `boards` event on
+connect, then again whenever the standings may have changed — a fresh
+completed round committing (in-process domain event from `POST /api/rounds`,
+debounced 300ms), plus a 60s safety refresh that also handles calendar-window
+rollover (a `day` board empties at local midnight with no round in sight).
+Recomputes are deduped against the last payload, so idle screens receive only
+heartbeat comments (every 25s). Sends `X-Accel-Buffering: no` so nginx doesn't
+buffer the stream. Single-process pm2 is assumed (same as the in-memory rate
+limiters) — multi-process would swap the emitter for Postgres LISTEN/NOTIFY
+(`server/lib/events.js`).
+
 → `200` array, sorted ascending by `total`:
 ```json
 [

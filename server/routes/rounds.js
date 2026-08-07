@@ -9,6 +9,7 @@ import { pool } from "../db.js";
 import { validateTags, isValidTag } from "../lib/sanitize.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { scoreAchievements, newRewardCode } from "../lib/rewards.js";
+import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
 
 export const router = Router();
 
@@ -217,6 +218,11 @@ router.post("/", rateLimit, async (req, res) => {
     }
 
     await client.query("COMMIT");
+    // Wake live subscribers (leaderboard SSE) — only a FRESH completed round
+    // can change a board, and only after its transaction is committed.
+    if (insertRound.rowCount === 1 && completedAt !== null) {
+      domainEvents.emit(ROUND_COMPLETED, { courseId });
+    }
     return res.json({ ok: true, roundId });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
