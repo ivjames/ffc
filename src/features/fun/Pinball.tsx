@@ -137,10 +137,14 @@ const SEGS: Seg[] = (() => {
   return segs;
 })();
 
-type Sling = { a: FxVec; b: FxVec; c: FxVec; nx: number; ny: number };
+type SlingFace = { p: FxVec; q: FxVec; nx: number; ny: number };
+type Sling = { a: FxVec; b: FxVec; c: FxVec; m: FxVec; faces: SlingFace[] };
 
-/** Triangular slingshot: edges a-b and b-c are passive walls; the a-c face
- *  kicks. The kick normal is oriented toward the playfield interior. */
+/** Triangular slingshot: edges a-b and b-c are passive walls; the kicking
+ *  face bulges outward through `m`, split into two chords with their own
+ *  normals. A flat face fires every kick along one fixed direction, which
+ *  lets the two slings volley the ball in a stable "tick-tock" — the convex
+ *  face varies the kick by contact point, so volleys diverge. */
 function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
   let nx = c.y - a.y;
   let ny = -(c.x - a.x);
@@ -151,7 +155,23 @@ function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
     ny = -ny;
   }
   const l = Math.hypot(nx, ny) || 1;
-  return { a, b, c, nx: nx / l, ny: ny / l };
+  nx /= l;
+  ny /= l;
+  const m = { x: mx + nx * 7, y: my + ny * 7 };
+  const faces = ([
+    [a, m],
+    [m, c],
+  ] as Array<[FxVec, FxVec]>).map(([p, q]) => {
+    let fx = q.y - p.y;
+    let fy = -(q.x - p.x);
+    if (fx * nx + fy * ny < 0) {
+      fx = -fx;
+      fy = -fy;
+    }
+    const fl = Math.hypot(fx, fy) || 1;
+    return { p, q, nx: fx / fl, ny: fy / fl };
+  });
+  return { a, b, c, m, faces };
 }
 
 // The slings' outer edges (a-b) lean 5px inward at the top so they are NOT
@@ -406,13 +426,28 @@ function step(gs: GS): void {
       const sl = SLINGS[i];
       collideSeg(b, sl.a.x, sl.a.y, sl.b.x, sl.b.y, BALL_R + WALL_PAD, WALL_E);
       collideSeg(b, sl.b.x, sl.b.y, sl.c.x, sl.c.y, BALL_R + WALL_PAD, WALL_E);
-      const hit = collideSeg(b, sl.a.x, sl.a.y, sl.c.x, sl.c.y, BALL_R + WALL_PAD, 0.5);
+      let hit = 0;
+      let fnx = 0;
+      let fny = 0;
+      for (const f of sl.faces) {
+        const h = collideSeg(b, f.p.x, f.p.y, f.q.x, f.q.y, BALL_R + WALL_PAD, 0.5);
+        if (h > hit) {
+          hit = h;
+          fnx = f.nx;
+          fny = f.ny;
+        }
+      }
       if (hit > 70 && gs.time >= gs.slingCd[i]) {
         gs.slingCd[i] = gs.time + 0.15;
-        // Kick along the face normal, keeping a bit of tangential motion.
-        const vt = b.vx * -sl.ny + b.vy * sl.nx;
-        b.vx = sl.nx * SLING_V + -sl.ny * vt * 0.35;
-        b.vy = sl.ny * SLING_V + sl.nx * vt * 0.35;
+        // Kick along the struck chord's normal, wobbled a few degrees so
+        // repeat kicks never retrace the same line (keeps a bit of the
+        // tangential motion too).
+        const j = (Math.random() - 0.5) * 0.12;
+        const kx = fnx * Math.cos(j) - fny * Math.sin(j);
+        const ky = fnx * Math.sin(j) + fny * Math.cos(j);
+        const vt = b.vx * -ky + b.vy * kx;
+        b.vx = kx * SLING_V + -ky * vt * 0.35;
+        b.vy = ky * SLING_V + kx * vt * 0.35;
         gs.score += 50;
         gs.events.push({ kind: 'sling', x: b.x, y: b.y, i });
       }
@@ -619,10 +654,14 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
 }
 
 function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
+  // Control point that makes the quadratic pass through the bulge point `m`.
+  const cpx = 2 * s.m.x - (s.a.x + s.c.x) / 2;
+  const cpy = 2 * s.m.y - (s.a.y + s.c.y) / 2;
   ctx.beginPath();
   ctx.moveTo(s.a.x, s.a.y);
   ctx.lineTo(s.b.x, s.b.y);
   ctx.lineTo(s.c.x, s.c.y);
+  ctx.quadraticCurveTo(cpx, cpy, s.a.x, s.a.y);
   ctx.closePath();
   const g = ctx.createLinearGradient(s.a.x, s.a.y, s.b.x, s.b.y);
   g.addColorStop(0, '#b91c1c');
@@ -632,7 +671,7 @@ function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
   ctx.strokeStyle = 'rgba(10,7,25,0.8)';
   ctx.lineWidth = 2;
   ctx.stroke();
-  // The kicking face, lit hotter while it fires.
+  // The curved kicking face, lit hotter while it fires.
   ctx.save();
   ctx.strokeStyle = withAlpha('#fbbf24', 0.7 + glow * 0.3);
   ctx.shadowColor = '#fbbf24';
@@ -641,7 +680,7 @@ function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(s.a.x, s.a.y);
-  ctx.lineTo(s.c.x, s.c.y);
+  ctx.quadraticCurveTo(cpx, cpy, s.c.x, s.c.y);
   ctx.stroke();
   ctx.restore();
 }
