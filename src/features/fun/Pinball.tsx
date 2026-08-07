@@ -151,9 +151,12 @@ function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
 // parallel to the outlane dividers beside them — a parallel channel lets a
 // horizontal ball ping-pong between the two faces indefinitely; the lean turns
 // every rebound slightly downward instead.
+// The slings float ~34px above the inlane guides — a ball can always pass
+// UNDER the wedge to reach the flipper, so nothing on the lower table forms a
+// closed pocket it could wedge into.
 const SLINGS: Sling[] = [
-  makeSling({ x: 69, y: 410 }, { x: 64, y: 468 }, { x: 96, y: 478 }),
-  makeSling({ x: 245, y: 410 }, { x: 250, y: 468 }, { x: 218, y: 478 }),
+  makeSling({ x: 69, y: 384 }, { x: 64, y: 442 }, { x: 96, y: 452 }),
+  makeSling({ x: 245, y: 384 }, { x: 250, y: 442 }, { x: 218, y: 452 }),
 ];
 
 const BUMPERS = [
