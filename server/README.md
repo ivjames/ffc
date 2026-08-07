@@ -35,7 +35,8 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `VENUE_TZ`          | **Fallback** IANA timezone for leaderboard calendar windows, used only for a venue whose `location.tz` is unset. The real zone is per venue (see "Venue timezones" below). Default `America/Los_Angeles`. |
 | `ANTHROPIC_API_KEY` | Vision key for the scavenger hunt (`POST /api/hunt/verify`). Unset = hunt verification returns `503`; the rest of the API is unaffected. |
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
-| `HUNT_SCAN_CAP`     | Max vision (model) calls per round — the hard ceiling on hunt API spend per group. Default `100` (~$0.20 worst case on Haiku 4.5); `0` = kill switch (every verify `429`s). Read per request, so changes apply without a restart. |
+| `HUNT_SCAN_CAP`     | Max vision (model) calls per round — the hard ceiling on hunt API spend per group. Default `240`, the legitimate max (4 players × 20 items max × 3 attempts; ~$0.50 full-burn on Haiku 4.5) — `HUNT_ATTEMPT_CAP` is the working spend control, this is the backstop (and the bound on countable-item grinding). `0` = kill switch (every verify `429`s). Read per request, so changes apply without a restart. |
+| `HUNT_ATTEMPT_CAP`  | Max judged shots per player per non-countable item per round (bounds failed attempts — successful finds dedupe, and "couldn't read that photo" retries don't count). Countable items are exempt; the round cap still bounds them. Default `3`. Read per request. |
 
 ## Endpoints
 
@@ -284,16 +285,21 @@ Request:
 Cost controls: every model call is metered into `hunt_scan` — the API's exact
 `input_tokens`/`output_tokens` (what Anthropic bills), the model id, and the
 item's `course_id` for monthly per-venue cost rollups. On top of the per-IP
-rate limit, each round has a total scan budget (`HUNT_SCAN_CAP`, default 100):
-once a round has burned its budget of model calls, further submissions `429`.
-Dedupe short-circuits don't call the model, so they aren't metered or counted
-against the cap.
+rate limit, each player gets `HUNT_ATTEMPT_CAP` (default 3) judged shots per
+non-countable item per round, and each round has a total scan budget
+(`HUNT_SCAN_CAP`, default 240 — the legitimate max of 4 players × 20 items ×
+3 attempts). Countable items are exempt from the attempt cap but still bounded
+by the round budget. Dedupe short-circuits don't call the
+model, so they aren't metered or counted against either cap; a
+`VISION_NO_OUTPUT` retry is metered (it was billed) but carries no verdict, so
+it doesn't burn an attempt.
 
 Responses:
 - `200 { "ok": true, "verified": true|false, "flagged": bool, "confidence": num, "reason": "…" }`
 - `200 { "ok": true, "verified": true, "alreadyFound": true, "reason": "…" }` — dedupe.
-- `400` — validation failure. `429` — per-IP cap (20/min) or the round's scan
-  budget (`scan limit reached for this round`). `503` — `ANTHROPIC_API_KEY` unset.
+- `400` — validation failure. `429` — per-IP cap (20/min), the round's scan
+  budget (`scan limit reached for this round`), or the player's attempts on an
+  item (`attempt limit reached for this item`). `503` — `ANTHROPIC_API_KEY` unset.
 
 ## Testing
 
@@ -346,7 +352,8 @@ actually exercises:
   branches, and the per-IP rate limit, all via a mocked `lib/vision.js`.
   Cost controls live in their own file (`hunt.scanCap.integration.test.js`,
   fresh process = fresh rate limiter): `hunt_scan` token metering (incl. the
-  billed-but-no-verdict path) and the `HUNT_SCAN_CAP` per-round budget 429.
+  billed-but-no-verdict path), the `HUNT_SCAN_CAP` per-round budget 429, and
+  the `HUNT_ATTEMPT_CAP` per-item 429 (countable items exempt).
 - `routes/rounds.js` (96%) — validation, idempotent re-sync (scores untouched
   on a duplicate `clientId`), the rate limit.
 - `routes/leaderboard.js` (97%) — best-per-(tag, course) aggregation, calendar

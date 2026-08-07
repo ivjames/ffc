@@ -183,12 +183,15 @@ test("a VISION_NO_OUTPUT call is still metered (billed but no verdict)", async (
 
 // --- HUNT_SCAN_CAP -----------------------------------------------------------
 
-test("the per-round scan cap 429s once the round's budget is spent", async () => {
-  process.env.HUNT_SCAN_CAP = "3";
+test("the per-round scan cap 429s once the round's budget is spent; countable items are exempt from the attempt cap", async () => {
+  process.env.HUNT_SCAN_CAP = "4";
   try {
     verifyItemInImageMock.mock.resetCalls();
     const roundClientId = `round-cap-${Date.now()}`;
     // A countable item never dedupes, so every submission wants a model call.
+    // Four passing scans on the SAME (player, item) also prove countable items
+    // are exempt from HUNT_ATTEMPT_CAP (default 3) — only the round budget
+    // stops them.
     const body = () => ({
       ...validBody(),
       itemId: countableItemId,
@@ -196,17 +199,67 @@ test("the per-round scan cap 429s once the round's budget is spent", async () =>
       roundClientId,
     });
 
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 4; i++) {
       const res = await postVerify(body());
-      assert.equal(res.status, 200, `scan ${i} should be within budget`);
+      assert.equal(res.status, 200, `scan ${i} should be within budget (and exempt from the attempt cap)`);
     }
-    const res4 = await postVerify(body());
-    assert.equal(res4.status, 429);
-    const json4 = await res4.json();
-    assert.equal(json4.ok, false);
-    assert.match(json4.error, /scan limit reached/);
-    assert.equal(verifyItemInImageMock.mock.callCount(), 3, "the capped request must not call the model");
+    const res5 = await postVerify(body());
+    assert.equal(res5.status, 429);
+    const json5 = await res5.json();
+    assert.equal(json5.ok, false);
+    assert.match(json5.error, /scan limit reached/);
+    assert.equal(verifyItemInImageMock.mock.callCount(), 4, "the capped request must not call the model");
   } finally {
     delete process.env.HUNT_SCAN_CAP;
   }
+});
+
+// --- HUNT_ATTEMPT_CAP --------------------------------------------------------
+
+test("a player's judged misses on one item stop at the attempt cap; no-output retries don't burn attempts", async () => {
+  verifyItemInImageMock.mock.resetCalls();
+  const roundClientId = `round-attempts-${Date.now()}`;
+  const body = () => ({ ...validBody(), playerTag: "T05", roundClientId });
+
+  // A billed-but-no-verdict call first: metered, but must NOT count as an
+  // attempt (verified is null) — otherwise the third miss below would 429.
+  verifyItemInImageMock.mock.mockImplementation(async () => {
+    const err = new Error("vision returned no text content");
+    err.code = "VISION_NO_OUTPUT";
+    err.usage = MOCK_USAGE;
+    throw err;
+  });
+  const resNoOut = await postVerify(body());
+  assert.equal(resNoOut.status, 200);
+
+  // Three judged misses — the full default attempt budget.
+  verifyItemInImageMock.mock.mockImplementation(async () => ({
+    present: false,
+    confidence: 0.8,
+    reason: "not in this shot",
+    photoOfPhoto: false,
+    usage: MOCK_USAGE,
+  }));
+  for (let i = 1; i <= 3; i++) {
+    const res = await postVerify(body());
+    assert.equal(res.status, 200, `miss ${i} should be within the attempt budget`);
+    assert.equal((await res.json()).verified, false);
+  }
+
+  // Fourth judged shot at the same item: out of attempts.
+  const res4 = await postVerify(body());
+  assert.equal(res4.status, 429);
+  const json4 = await res4.json();
+  assert.equal(json4.ok, false);
+  assert.match(json4.error, /attempt limit reached/);
+  assert.equal(verifyItemInImageMock.mock.callCount(), 4, "1 no-output + 3 misses; the capped request must not call the model");
+
+  // Restore the default happy-path mock.
+  verifyItemInImageMock.mock.mockImplementation(async () => ({
+    present: true,
+    confidence: 0.9,
+    reason: "ok",
+    photoOfPhoto: false,
+    usage: MOCK_USAGE,
+  }));
 });

@@ -10,10 +10,11 @@
 // photos are verified and kept, and nothing is displayed publicly.
 //
 // Cost controls: every model call is metered into hunt_scan (exact token counts
-// from the API's usage object, for monthly per-course cost rollups), and each
-// round has a total scan budget (HUNT_SCAN_CAP, default 100) on top of the
-// per-IP rate limit below — the rate limit bounds burn *rate*, the cap bounds
-// total spend per round.
+// from the API's usage object, for monthly per-course cost rollups). On top of
+// the per-IP rate limit below (bounds burn *rate*), each round has a total scan
+// budget (HUNT_SCAN_CAP, default 60) and each player gets HUNT_ATTEMPT_CAP
+// (default 3) judged shots per non-countable item — together they bound total
+// spend per round to a hard number.
 import { Router } from "express";
 import express from "express";
 import { randomUUID } from "node:crypto";
@@ -50,12 +51,33 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 // estimate. Counted from hunt_scan (every model call, verdict or not); dedup
 // short-circuits don't call the model, so they don't count. Resolved per
 // request so tests (and ops) can adjust without a restart. 0 is a kill switch.
-const DEFAULT_SCAN_CAP = 100;
+//
+// Default sizing: with the per-item attempt cap below at 3, the legitimate
+// maximum for a full group is 4 players × 20 items (the max hunt list) × 3
+// attempts = 240 scans (~$0.50 full-burn on Haiku 4.5) — so 240 never blocks
+// honest play; the attempt cap is the working spend control and this is the
+// backstop that also bounds countable-item (horseshoe) grinding.
+const DEFAULT_SCAN_CAP = 240;
 function resolveScanCap() {
   const raw = process.env.HUNT_SCAN_CAP;
   if (raw === undefined || raw === "") return DEFAULT_SCAN_CAP;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_SCAN_CAP;
+}
+
+// --- Per-item attempt cap ----------------------------------------------------
+// Max judged shots a player gets at one (non-countable) item per round. Counted
+// from hunt_scan rows that carry a verdict (`verified is not null`) — a
+// VISION_NO_OUTPUT retry ("couldn't read that photo") doesn't burn an attempt,
+// and a successful find dedupes before this check anyway, so in practice this
+// bounds *failed* attempts. Countable items are exempt (every shot is the
+// point); the round budget above still bounds them.
+const DEFAULT_ATTEMPT_CAP = 3;
+function resolveAttemptCap() {
+  const raw = process.env.HUNT_ATTEMPT_CAP;
+  if (raw === undefined || raw === "") return DEFAULT_ATTEMPT_CAP;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 1 ? n : DEFAULT_ATTEMPT_CAP;
 }
 
 // Record one vision model call in hunt_scan — the metering row that backs the
@@ -293,6 +315,24 @@ router.post(
           ok: false,
           error: "scan limit reached for this round",
         });
+      }
+
+      // Per-item attempt cap: after N judged misses on one item, stop paying
+      // for more shots at it. Countable items are exempt.
+      if (!item.countable) {
+        const attemptCap = resolveAttemptCap();
+        const attempts = await pool.query(
+          `select count(*)::int as n from hunt_scan
+            where round_client_id = $1 and player_tag = $2 and item_id = $3
+              and verified is not null`,
+          [roundClientId, playerTag, itemId]
+        );
+        if (attempts.rows[0].n >= attemptCap) {
+          return res.status(429).json({
+            ok: false,
+            error: "attempt limit reached for this item",
+          });
+        }
       }
 
       // Ask the model.
