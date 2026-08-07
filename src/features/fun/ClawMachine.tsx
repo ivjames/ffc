@@ -4,9 +4,10 @@ import { useFitCanvas } from './useFitCanvas';
 import {
   playStroke,
   playTick,
-  playCup,
+  playDing,
   playUndo,
   playBump,
+  playPinClack,
   playBuzz,
   playScore,
   playFanfare,
@@ -34,6 +35,12 @@ import {
 // chute. Grip AND mid-carry slip odds both scale with how well-centered the
 // stop was (rare prizes are slipperier), so the carry home is the tense part.
 // Five credits; common 5 / deluxe 10 / gold star 25. Canvas, offline.
+//
+// The pit is a real (tiny) physics scene: every plush is a circle body on a
+// fixed-timestep sim — gravity, bouncy floor/wall contacts, prize↔prize
+// impulse collisions, claw disturbance, and a sleep threshold so the settled
+// pile goes fully still. A slipped prize falls ballistically back INTO the
+// pile and shoves whatever it lands on.
 
 // —— Cabinet geometry (logical units; the canvas scales to fit) ———————————————
 const W = 340;
@@ -63,7 +70,24 @@ const RELEASE_MS = 340; // jaw open over the chute
 const BETWEEN_MS = 1150; // beat between credits
 const TICK_MS = 90; // cable-ratchet click cadence while descending
 const EMPTY_DROP_Y = 492; // tip depth when nothing is under the claw
-const GRAV = 0.0012; // px/ms² for tumbling / chute-dropped prizes
+const GRAV = 0.0012; // px/ms² for the chute-dropped prize
+
+// —— Pit physics (fixed-timestep circle bodies for the plush pile) ————————————
+const FIXED = 1000 / 120; // physics substep (ms)
+const GRAV_PIT = 0.0016; // pile gravity px/ms²
+const REST_WALL = 0.4; // floor/wall restitution — drops visibly bounce
+const REST_PAIR = 0.35; // prize↔prize restitution
+const AIR_DAMP = 0.999; // per-step velocity damping
+const FLOOR_FRICTION = 0.975; // per-step vx damping while touching the floor
+const MAX_V = 1.0; // px/ms speed clamp
+const SLEEP_V = 0.025; // below this speed a body counts as still…
+const SLEEP_MS = 300; // …and after this long it sleeps (no perpetual jitter)
+const WAKE_V = 0.035; // a neighbor moving faster than this wakes a sleeper
+const CLAW_R = 13; // kinematic radius the claw shoves plush aside with
+const CLAW_PUSH = 0.1; // px/ms the claw imparts to nudged plush
+const SETTLE_GRACE = 1300; // ms before impact sounds arm (initial pile drop-in)
+const BUMP_CD = 110; // ms between floor-bump sounds
+const CLACK_CD = 90; // ms between prize-on-prize clacks
 
 type Rarity = 'common' | 'uncommon' | 'rare';
 const PTS: Record<Rarity, number> = { common: 5, uncommon: 10, rare: 25 };
@@ -76,17 +100,25 @@ type Kind = 'teddy' | 'bunny' | 'star';
 type Prize = {
   kind: Kind;
   rarity: Rarity;
-  x: number; // home spot in the pit
+  x: number; // live physics-body center in the pit
   y: number;
+  vx: number; // px/ms
+  vy: number;
   r: number;
+  rot: number; // plush wobble angle (rad)
+  vrot: number;
+  asleep: boolean; // fully at rest — skipped by integration until woken
+  stillT: number; // ms spent below the motion threshold
   light: string;
   base: string;
   dark: string;
   inPit: boolean;
 };
 
-/** The fixed, hand-laid pit arrangement: five commons in the front row, two
- *  deluxe resting on top, the small gold star nestled dead center. */
+/** The pit population: fifteen plush seeded in three loose rows, which the
+ *  physics sim settles into a natural pile on the way in. Mostly commons, a
+ *  few deluxe in the middle, the two gold stars perched on top — exposed, but
+ *  slippery. */
 function makePrizes(): Prize[] {
   const p = (
     kind: Kind,
@@ -97,16 +129,42 @@ function makePrizes(): Prize[] {
     light: string,
     base: string,
     dark: string,
-  ): Prize => ({ kind, rarity, x, y, r, light, base, dark, inPit: true });
+  ): Prize => ({
+    kind,
+    rarity,
+    x,
+    y,
+    vx: 0,
+    vy: 0,
+    r,
+    rot: 0,
+    vrot: 0,
+    asleep: false,
+    stillT: 0,
+    light,
+    base,
+    dark,
+    inPit: true,
+  });
   return [
-    p('teddy', 'common', 100, 497, 22, '#e8b483', '#b4713a', '#6f4322'),
-    p('bunny', 'common', 148, 501, 20, '#f8fafc', '#cbd5e1', '#8a94a6'),
-    p('teddy', 'common', 196, 499, 21, '#f9a8d4', '#ec6bb0', '#9d2e6d'),
-    p('bunny', 'common', 246, 502, 20, '#a5d8ff', '#5aa9e6', '#2b6a9e'),
-    p('teddy', 'common', 296, 498, 21, '#b9f0c5', '#5fbf77', '#2e7a44'),
-    p('star', 'uncommon', 124, 464, 18, '#e9d5ff', '#a855f7', '#6b21a8'),
-    p('teddy', 'uncommon', 272, 466, 19, '#99f6e4', '#2dd4bf', '#0f766e'),
-    p('star', 'rare', 200, 458, 16, '#fef3c7', '#fbbf24', '#92400e'),
+    // Bottom row — commons.
+    p('teddy', 'common', 96, 500, 21, '#e8b483', '#b4713a', '#6f4322'),
+    p('bunny', 'common', 130, 502, 19, '#f8fafc', '#cbd5e1', '#8a94a6'),
+    p('teddy', 'common', 164, 499, 21, '#f9a8d4', '#ec6bb0', '#9d2e6d'),
+    p('bunny', 'common', 198, 503, 19, '#a5d8ff', '#5aa9e6', '#2b6a9e'),
+    p('teddy', 'common', 232, 500, 21, '#b9f0c5', '#5fbf77', '#2e7a44'),
+    p('bunny', 'common', 266, 502, 19, '#ddd6fe', '#a78bfa', '#5b21b6'),
+    p('teddy', 'common', 300, 499, 20, '#fed7aa', '#fb923c', '#9a3412'),
+    // Middle row — commons plus the deluxe pair.
+    p('teddy', 'common', 112, 464, 20, '#fecaca', '#f87171', '#991b1b'),
+    p('bunny', 'common', 150, 462, 18, '#f1f5f9', '#94a3b8', '#475569'),
+    p('star', 'uncommon', 190, 463, 18, '#e9d5ff', '#a855f7', '#6b21a8'),
+    p('teddy', 'uncommon', 230, 462, 19, '#99f6e4', '#2dd4bf', '#0f766e'),
+    p('bunny', 'common', 268, 464, 18, '#fbcfe8', '#f472b6', '#9d174d'),
+    // Top of the pile — a deluxe bunny and the two gold stars.
+    p('bunny', 'uncommon', 140, 430, 18, '#c7d2fe', '#818cf8', '#3730a3'),
+    p('star', 'rare', 200, 426, 15, '#fef3c7', '#fbbf24', '#92400e'),
+    p('star', 'rare', 252, 429, 16, '#fde68a', '#f59e0b', '#92400e'),
   ];
 }
 
@@ -127,15 +185,16 @@ type Phase =
   | 'between'
   | 'done';
 
+// A prize released over the chute, free-falling to the score line. (Mid-carry
+// slips don't use this — a slipped prize becomes a live pit body again and
+// falls ballistically into the pile.)
 type Fall = {
   prize: Prize;
   x: number;
   y: number;
-  vx: number;
   vy: number;
   rot: number;
   vrot: number;
-  toChute: boolean; // chute drop (score) vs pit tumble (slip)
 };
 
 type GS = {
@@ -159,6 +218,9 @@ type GS = {
   sweepBase: number;
   waitT: number;
   tickAcc: number;
+  simT: number; // total simulated pit time (arms impact sounds after settle-in)
+  bumpCd: number; // rate limiter for floor-bump sounds (ms)
+  clackCd: number; // rate limiter for prize-on-prize clacks (ms)
 };
 
 function freshGS(now: number): GS {
@@ -183,7 +245,180 @@ function freshGS(now: number): GS {
     sweepBase: now,
     waitT: 0,
     tickAcc: 0,
+    simT: 0,
+    bumpCd: 0,
+    clackCd: 0,
   };
+}
+
+// —— pit physics ——————————————————————————————————————————————————————————————
+function wake(p: Prize): void {
+  p.asleep = false;
+  p.stillT = 0;
+}
+
+/** Strongest impact speeds (px/ms) seen during a frame's physics substeps —
+ *  drained once per frame into rate-limited bump/clack sounds. */
+type Impacts = { floor: number; pair: number };
+
+/** One fixed physics substep for the plush pile: claw disturbance, gravity +
+ *  boundary bounces, prize↔prize collisions (positional separation + impulse),
+ *  then a rest/sleep pass so the settled pile goes fully still. */
+function stepPit(gs: GS, dt: number, impacts: Impacts): void {
+  const pit: Prize[] = [];
+  for (const p of gs.prizes) if (p.inPit) pit.push(p);
+
+  // The claw shoves plush aside while it's down among the pile (descending,
+  // squeezing, or pulling back out). The grab target itself is exempt so a
+  // well-aimed drop isn't pushed out from between the prongs.
+  const clawDown =
+    (gs.phase === 'descend' || gs.phase === 'grab' || gs.phase === 'hoist') && gs.clawY > 400;
+  if (clawDown) {
+    for (const p of pit) {
+      if (p === gs.target) continue;
+      const dx = p.x - gs.clawX;
+      const dy = p.y - (gs.clawY + 4);
+      const min = p.r + CLAW_R;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= min * min) continue;
+      const d = Math.sqrt(d2) || 0.0001;
+      const nx = dx / d;
+      const ny = dy / d;
+      wake(p);
+      p.x += nx * (min - d);
+      p.y += ny * (min - d);
+      const along = p.vx * nx + p.vy * ny;
+      if (along < CLAW_PUSH) {
+        p.vx += nx * (CLAW_PUSH - along);
+        p.vy += ny * (CLAW_PUSH - along) * 0.6;
+      }
+      p.vrot += nx * 0.01;
+    }
+  }
+
+  // Integrate awake bodies against gravity and the cabinet boundaries.
+  for (const p of pit) {
+    if (p.asleep) continue;
+    p.vy += GRAV_PIT * dt;
+    p.vx *= AIR_DAMP;
+    p.vy *= AIR_DAMP;
+    const sp = Math.hypot(p.vx, p.vy);
+    if (sp > MAX_V) {
+      p.vx = (p.vx / sp) * MAX_V;
+      p.vy = (p.vy / sp) * MAX_V;
+    }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.rot += p.vrot * dt;
+    p.vrot *= 0.985;
+    p.rot -= p.rot * Math.min(1, 0.004 * dt); // plush rights itself as it rests
+    if (p.rot > 0.6) p.rot = 0.6;
+    else if (p.rot < -0.6) p.rot = -0.6;
+
+    // Glass side walls.
+    if (p.x < WALL_L + p.r) {
+      p.x = WALL_L + p.r;
+      if (p.vx < 0) p.vx = -p.vx * REST_WALL;
+    } else if (p.x > WALL_R - p.r) {
+      p.x = WALL_R - p.r;
+      if (p.vx > 0) p.vx = -p.vx * REST_WALL;
+    }
+    // The chute housing is solid — plush bounce off its right wall instead of
+    // tumbling down the shaft.
+    if (p.y + p.r > CHUTE_RIM && p.x - p.r < CHUTE_R) {
+      p.x = CHUTE_R + p.r;
+      if (p.vx < 0) p.vx = -p.vx * REST_WALL;
+    }
+    // Pit floor: restitution only above a small threshold, so the floor never
+    // feeds perpetual micro-bounces.
+    if (p.y > FLOOR_Y - p.r) {
+      p.y = FLOOR_Y - p.r;
+      if (p.vy > 0) {
+        if (p.vy > 0.08) {
+          if (p.vy > impacts.floor) impacts.floor = p.vy;
+          p.vrot += p.vx * 0.004;
+          p.vy = -p.vy * REST_WALL;
+        } else {
+          p.vy = 0;
+        }
+      }
+      p.vx *= FLOOR_FRICTION;
+    }
+  }
+
+  // Prize↔prize: positional separation (mass ∝ r²) plus an impulse bounce, so
+  // a dropped plush knocks its neighbors around and the pile shifts naturally.
+  for (let i = 0; i < pit.length; i++) {
+    for (let j = i + 1; j < pit.length; j++) {
+      const a = pit[i];
+      const b = pit[j];
+      if (a.asleep && b.asleep) continue;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const min = a.r + b.r - 2; // plush squish: a couple of px of soft overlap
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= min * min) continue;
+      const d = Math.sqrt(d2) || 0.0001;
+      const nx = dx / d;
+      const ny = dy / d;
+      const overlap = min - d;
+      // Wake a sleeper only when it's genuinely being shoved, so a settled
+      // stack doesn't jitter itself awake.
+      if (a.asleep && (Math.hypot(b.vx, b.vy) > WAKE_V || overlap > 1.5)) wake(a);
+      if (b.asleep && (Math.hypot(a.vx, a.vy) > WAKE_V || overlap > 1.5)) wake(b);
+      const ma = a.r * a.r;
+      const mb = b.r * b.r;
+      let sa = mb / (ma + mb);
+      let sb = ma / (ma + mb);
+      if (a.asleep) {
+        sa = 0;
+        sb = 1;
+      } else if (b.asleep) {
+        sa = 1;
+        sb = 0;
+      }
+      a.x -= nx * overlap * sa;
+      a.y -= ny * overlap * sa;
+      b.x += nx * overlap * sb;
+      b.y += ny * overlap * sb;
+      const rvx = b.vx - a.vx;
+      const rvy = b.vy - a.vy;
+      const vn = rvx * nx + rvy * ny;
+      if (vn < 0) {
+        const e = -vn > 0.06 ? REST_PAIR : 0; // soft contacts don't rebound
+        const jn = (-(1 + e) * vn) / (1 / ma + 1 / mb);
+        if (!a.asleep) {
+          a.vx -= (jn / ma) * nx;
+          a.vy -= (jn / ma) * ny;
+        }
+        if (!b.asleep) {
+          b.vx += (jn / mb) * nx;
+          b.vy += (jn / mb) * ny;
+        }
+        if (-vn > impacts.pair) impacts.pair = -vn;
+        // A little tumble from the graze.
+        const tv = -rvx * ny + rvy * nx;
+        if (!a.asleep) a.vrot += tv * 0.002;
+        if (!b.asleep) b.vrot -= tv * 0.002;
+      }
+    }
+  }
+
+  // Rest: below the motion threshold long enough → sleep, fully still.
+  for (const p of pit) {
+    if (p.asleep) continue;
+    if (Math.hypot(p.vx, p.vy) < SLEEP_V && Math.abs(p.vrot) < 0.003) {
+      p.stillT += dt;
+      if (p.stillT >= SLEEP_MS) {
+        p.asleep = true;
+        p.vx = 0;
+        p.vy = 0;
+        p.vrot = 0;
+      }
+    } else {
+      p.stillT = 0;
+    }
+  }
 }
 
 // —— juice: rendering-only effects (no gameplay state) ————————————————————————
@@ -444,6 +679,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     drawShadow(ctx, p.x, p.y + p.r * 0.82, p.r * 0.9, p.r * 0.28, 0.35);
     ctx.save();
     ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
     drawPrize(ctx, p.kind, p.r, p.light, p.base, p.dark, p.rarity === 'rare');
     ctx.restore();
   }
@@ -487,7 +723,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   }
   drawClaw(ctx, gs.clawX, gs.clawY, gs.jaw);
 
-  // A tumbling (slipped) or chute-dropped prize in free fall.
+  // A chute-dropped prize in free fall toward the score line.
   if (gs.fall) {
     const f = gs.fall;
     ctx.save();
@@ -612,11 +848,14 @@ export default function ClawMachine() {
     let raf = 0;
     let sweepPausedAt = 0;
     let last = performance.now();
+    let acc = 0; // pit-physics fixed-timestep accumulator
     // Pause via visibilitychange too, not just the hidden-rAF branch: mobile
     // browsers can fully suspend requestAnimationFrame while backgrounded, so a
     // hidden frame may never run. Everything else here is dt-driven (and dt is
     // clamped), so only the sweep's time base needs shifting by the away span —
     // guarded so the hidden-rAF branch and this handler never both shift it.
+    // The physics accumulator is dropped on resume so the pile freezes with
+    // the tab instead of simulating the whole away span.
     let hiddenAt = 0;
     const onVisibility = () => {
       if (document.hidden) {
@@ -626,6 +865,7 @@ export default function ClawMachine() {
         hiddenAt = 0;
         if (!sweepPausedAt) gsRef.current.sweepBase += away;
         last = performance.now();
+        acc = 0;
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -673,10 +913,17 @@ export default function ClawMachine() {
             if (Math.random() < GRIP_BASE[t.rarity] * (0.35 + 0.65 * c)) {
               gs.held = t;
               t.inPit = false;
+              // Wake the neighbors so the pile settles into the gap the
+              // extraction leaves.
+              for (const q of gs.prizes) {
+                if (q.inPit && Math.hypot(q.x - t.x, q.y - t.y) < q.r + t.r + 26) wake(q);
+              }
               const slipChance = SLIP_BASE[t.rarity] * (0.2 + 0.8 * (1 - c));
               gs.slipAt = Math.random() < slipChance ? 0.15 + Math.random() * 0.7 : 2;
               setNote('Got one — hold on!');
-              playCup();
+              // Rising ding, not playCup: the cup sound's descending plunks
+              // read as a fail cue when they mark a successful grab.
+              playDing();
               spawnBurst(fx.particles, gs.clawX, gs.clawY + 8, 10, 160, t.light);
             } else {
               setNote('It wriggled free of the claw!');
@@ -720,16 +967,17 @@ export default function ClawMachine() {
           gs.held = null;
           gs.slipAt = 2;
           gs.jaw = 0.35;
-          gs.fall = {
-            prize: p,
-            x: hp.x,
-            y: hp.y,
-            vx: (p.x - hp.x) * 0.0009,
-            vy: 0.02,
-            rot: gs.theta,
-            vrot: (gs.theta >= 0 ? 1 : -1) * 0.004,
-            toChute: false,
-          };
+          // Back into the sim: the dropped plush falls ballistically into the
+          // pile (inheriting the trolley's leftward motion) and shoves
+          // whatever it lands on — no scripted return to a home spot.
+          p.x = hp.x;
+          p.y = hp.y;
+          p.vx = -CARRY_V * 0.7 + (Math.random() * 2 - 1) * 0.06;
+          p.vy = 0.02;
+          p.rot = gs.theta;
+          p.vrot = (gs.theta >= 0 ? 1 : -1) * 0.004;
+          p.inPit = true;
+          wake(p);
           fx.shake = 5;
           playUndo();
           spawnFloater(fx.floaters, hp.x, hp.y - 26, 'SO CLOSE!', '#fca5a5', { size: 18, life: 800 });
@@ -753,7 +1001,7 @@ export default function ClawMachine() {
           const p = gs.held;
           const hp = hangPoint(gs.clawX, gs.clawY, gs.theta, p.r);
           gs.held = null;
-          gs.fall = { prize: p, x: hp.x, y: hp.y, vx: 0, vy: 0.03, rot: gs.theta, vrot: 0.002, toChute: true };
+          gs.fall = { prize: p, x: hp.x, y: hp.y, vy: 0.03, rot: gs.theta, vrot: 0.002 };
         }
         if (gs.gripT >= RELEASE_MS) endCredit('Down the chute…');
       } else if (gs.phase === 'between') {
@@ -777,25 +1025,39 @@ export default function ClawMachine() {
         }
       }
 
-      // Free-fall integration runs across phases so a tumble started late in a
-      // carry can finish landing during the between-credits beat.
+      // Chute-drop integration runs across phases so a release late in the
+      // beat can finish banking during the between-credits pause.
       if (gs.fall) {
         const f = gs.fall;
         f.vy += GRAV * dt;
-        f.x += f.vx * dt;
         f.y += f.vy * dt;
         f.rot += f.vrot * dt;
-        if (f.toChute) {
-          if (f.y >= CHUTE_SCORE_Y) {
-            deliver(f.prize);
-            gs.fall = null;
-          }
-        } else if (f.y >= f.prize.y) {
-          // Tumbled home: back into the pit for another try.
-          f.prize.inPit = true;
+        if (f.y >= CHUTE_SCORE_Y) {
+          deliver(f.prize);
           gs.fall = null;
-          playBump(0.6);
-          spawnBurst(fx.particles, f.prize.x, f.prize.y + f.prize.r * 0.5, 6, 90, f.prize.light);
+        }
+      }
+
+      // —— Plush-pile physics: fixed-timestep accumulator (120 Hz), dt already
+      // clamped above so a stall never spirals. Impact maxima drain into soft,
+      // rate-limited bump/clack sounds once per frame.
+      const impacts: Impacts = { floor: 0, pair: 0 };
+      acc += dt;
+      while (acc >= FIXED) {
+        stepPit(gs, FIXED, impacts);
+        acc -= FIXED;
+      }
+      gs.simT += dt;
+      gs.bumpCd -= dt;
+      gs.clackCd -= dt;
+      if (gs.simT > SETTLE_GRACE) {
+        if (impacts.floor > 0.12 && gs.bumpCd <= 0) {
+          gs.bumpCd = BUMP_CD;
+          playBump(Math.min(1.3, 0.4 + impacts.floor * 0.9));
+        }
+        if (impacts.pair > 0.1 && gs.clackCd <= 0) {
+          gs.clackCd = CLACK_CD;
+          playPinClack(Math.min(1.3, 0.35 + impacts.pair));
         }
       }
 

@@ -98,9 +98,12 @@ const GO_MS = 500;
 const COUNTDOWN_MS = 3 * COUNT_STEP_MS + GO_MS;
 
 // Landing bands, in neck-scale-normalized units (see resolveLanding).
-const RINGER_D = 8; // dead-on: the ring drops around the neck
-const CLOSE_D = 11.5; // "so close" whisker inside the rim band
-const RIM_D = 16; // rim clink; anything wider bounces out between bottles
+// Generous on purpose: judging flick power is already the hard part, and at
+// the original 8-unit band a ringer was a few-pixel bullseye per bottle —
+// playtesting called it brutal.
+const RINGER_D = 12; // near the neck: the ring drops around it
+const CLOSE_D = 15; // "so close" whisker inside the rim band
+const RIM_D = 20; // rim clink; anything wider bounces out between bottles
 
 /** Map a flick (drag delta) to its landing spot, or null if it isn't a valid
  *  upward toss. Direction aims, length is power: short = front, hard = back. */
@@ -129,7 +132,7 @@ function resolveLanding(land: Pt): { outcome: Outcome; bottle: number; soClose: 
   let bestD = Infinity;
   for (let i = 0; i < BOTTLES.length; i++) {
     const n = neckPoint(BOTTLES[i]);
-    const d = Math.hypot((land.x - n.x) / BOTTLES[i].s, ((land.y - n.y) * 1.35) / BOTTLES[i].s);
+    const d = Math.hypot((land.x - n.x) / BOTTLES[i].s, ((land.y - n.y) * 1.15) / BOTTLES[i].s);
     if (d < bestD) {
       bestD = d;
       best = i;

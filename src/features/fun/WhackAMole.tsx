@@ -202,15 +202,43 @@ function drawGopher(ctx: CanvasRenderingContext2D, x: number, hy: number, kind: 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(x - 3.6, hy + 9, 3.2, 5.5);
   ctx.fillRect(x + 0.4, hy + 9, 3.2, 5.5);
-  // Golden gopher sparkle.
+  // The gold gopher wears an actual crown. (It replaced a single amber glint
+  // by the ear that sat almost exactly where the bomb draws its lit fuse
+  // spark — gold gophers were being read as bombs. Royalty is unambiguous.)
   if (gold) {
+    const cy = hy - 22; // band bottom rests on the crown of the head
     ctx.save();
-    ctx.fillStyle = '#fef9c3';
-    ctx.shadowColor = '#fbbf24';
-    ctx.shadowBlur = 8;
-    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.beginPath();
+    ctx.moveTo(x - 11, cy);
+    ctx.lineTo(x - 13, cy - 12);
+    ctx.lineTo(x - 6.5, cy - 5);
+    ctx.lineTo(x, cy - 15);
+    ctx.lineTo(x + 6.5, cy - 5);
+    ctx.lineTo(x + 13, cy - 12);
+    ctx.lineTo(x + 11, cy);
+    ctx.closePath();
+    const cg = ctx.createLinearGradient(x, cy - 15, x, cy);
+    cg.addColorStop(0, '#fde68a');
+    cg.addColorStop(1, '#d97706');
+    ctx.fillStyle = cg;
+    ctx.fill();
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // A ruby on the band.
+    ctx.beginPath();
+    ctx.arc(x, cy - 2.5, 2.2, 0, TWO_PI);
+    ctx.fillStyle = '#dc2626';
+    ctx.fill();
+    // Two white twinkles flanking the crown — clear of the ears, and cool
+    // white so nothing near the head shares the fuse spark's amber glow.
+    ctx.fillStyle = '#fffbeb';
+    ctx.shadowColor = '#fde68a';
+    ctx.shadowBlur = 5;
     ctx.textAlign = 'center';
-    ctx.fillText('✦', x + 22, hy - 24);
+    ctx.font = 'bold 10px system-ui, sans-serif';
+    ctx.fillText('✦', x - 20, hy - 33);
+    ctx.fillText('✦', x + 20, hy - 33);
     ctx.restore();
   }
 }

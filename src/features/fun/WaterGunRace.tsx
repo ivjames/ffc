@@ -713,12 +713,17 @@ export default function WaterGunRace() {
     };
   }, [active, endHeat]);
 
+  // The stream lands a fixed offset ABOVE the finger: aiming directly under a
+  // fingertip hides the bullseye behind the player's own hand, so the touch
+  // point is a handle you drag around below the board while the splash stays
+  // visible above it.
+  const AIM_LIFT = 72;
   const toField = useCallback((e: React.PointerEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
     return {
       x: clamp(((e.clientX - rect.left) / rect.width) * W, 12, W - 12),
       // Keep the aim above the counter so the jet always fires upward.
-      y: clamp(((e.clientY - rect.top) / rect.height) * H, 30, H - 130),
+      y: clamp(((e.clientY - rect.top) / rect.height) * H - AIM_LIFT, 30, H - 130),
     };
   }, []);
 
@@ -791,7 +796,7 @@ export default function WaterGunRace() {
 
   const hint =
     phase === 'ready'
-      ? 'Hold and drag to spray the moving bullseye — first balloon to pop wins the heat.'
+      ? 'Hold and drag below the target — the stream lands above your finger. First balloon to pop wins.'
       : phase === 'countdown'
         ? 'Get ready…'
         : phase === 'between'
@@ -832,7 +837,8 @@ export default function WaterGunRace() {
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
             <span className="text-5xl">🔫</span>
             <p className="text-sm text-fairway-100">
-              Hold and drag to spray the clown's drifting bullseye. On-target water inflates your
+              Hold and drag below the clown — the stream lands just above your finger, so keep the
+              drifting bullseye in view. On-target water inflates your
               balloon — pop it before MO, ZIP and SAL pop theirs. Best of {HEATS} heats.
             </p>
             <Button onClick={start}>Start</Button>

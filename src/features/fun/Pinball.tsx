@@ -117,10 +117,12 @@ const SEGS: Seg[] = (() => {
     { ax: 28, ay: 468, bx: 107, by: 489 }, // left inlane guide → flipper
     { ax: 286, ay: 404, bx: 286, by: 468 }, // right outlane divider
     { ax: 286, ay: 468, bx: 207, by: 489 }, // right inlane guide → flipper
-    { ax: 94, ay: 81, bx: 94, by: 190 }, // rollover lane dividers (hang from arch)
-    { ax: 136, ay: 68, bx: 136, by: 190 },
-    { ax: 178, ay: 66, bx: 178, by: 190 },
-    { ax: 220, ay: 72, bx: 220, by: 190 },
+    // Rollover lane fins — short guides bracketing the lamps, detached from
+    // the arch so the dome stays open playfield instead of walled columns.
+    { ax: 94, ay: 136, bx: 94, by: 192 },
+    { ax: 136, ay: 136, bx: 136, by: 192 },
+    { ax: 178, ay: 136, bx: 178, by: 192 },
+    { ax: 220, ay: 136, bx: 220, by: 192 },
   );
   return segs;
 })();
@@ -142,9 +144,13 @@ function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
   return { a, b, c, nx: nx / l, ny: ny / l };
 }
 
+// The slings' outer edges (a-b) lean 5px inward at the top so they are NOT
+// parallel to the outlane dividers beside them — a parallel channel lets a
+// horizontal ball ping-pong between the two faces indefinitely; the lean turns
+// every rebound slightly downward instead.
 const SLINGS: Sling[] = [
-  makeSling({ x: 48, y: 410 }, { x: 48, y: 468 }, { x: 96, y: 478 }),
-  makeSling({ x: 266, y: 410 }, { x: 266, y: 468 }, { x: 218, y: 478 }),
+  makeSling({ x: 53, y: 410 }, { x: 48, y: 468 }, { x: 96, y: 478 }),
+  makeSling({ x: 261, y: 410 }, { x: 266, y: 468 }, { x: 218, y: 478 }),
 ];
 
 const BUMPERS = [
@@ -175,7 +181,8 @@ type Ev =
   | { kind: 'bumper'; x: number; y: number; i: number }
   | { kind: 'sling'; x: number; y: number; i: number }
   | { kind: 'lane'; x: number; y: number }
-  | { kind: 'lanes' };
+  | { kind: 'lanes' }
+  | { kind: 'nudge'; x: number; y: number };
 type GS = {
   phase: Phase;
   time: number; // sim clock (s) — all cooldowns/deadlines live on this
@@ -192,6 +199,7 @@ type GS = {
   lamps: boolean[];
   pointers: Map<number, 'L' | 'R'>; // flipper pointers by pointerId
   events: Ev[]; // drained by the frame loop for sounds/fx
+  stillT: number; // seconds the live ball has sat near-motionless (stuck watchdog)
 };
 
 const L_REST = 0.52;
@@ -214,6 +222,7 @@ function freshGS(): GS {
     lamps: [false, false, false],
     pointers: new Map(),
     events: [],
+    stillT: 0,
   };
 }
 
@@ -255,6 +264,19 @@ function collideSeg(
     const eff = -vn < REST_VN ? 0 : e;
     b.vx -= (1 + eff) * vn * nx;
     b.vy -= (1 + eff) * vn * ny;
+    if (eff > 0) {
+      // Anti-stall: deflect every real bounce by a hair (±1.4°) so the ball
+      // can never settle into a periodic ping-pong between two facing walls
+      // (lane dividers, arch chords). Sub-REST_VN glides are exempt, so the
+      // ball still rolls smoothly along the arch. Sim-side RNG is fine here —
+      // only the draw path must stay deterministic.
+      const j = (Math.random() - 0.5) * 0.05;
+      const cj = Math.cos(j);
+      const sj = Math.sin(j);
+      const rvx = b.vx * cj - b.vy * sj;
+      b.vy = b.vx * sj + b.vy * cj;
+      b.vx = rvx;
+    }
     return -vn;
   }
   return 0;
@@ -387,6 +409,27 @@ function step(gs: GS): void {
     b.vy = (b.vy / sp) * MAXV;
   }
 
+  // Stuck-ball watchdog. The table has no slope toward the drain, so the ball
+  // can come to a true dead rest cradled between wall tips (the outlane mouth
+  // is the classic spot) — REST_VN kills every bounce there and the anti-stall
+  // bounce jitter never fires on a resting contact. After ~1.2s of standstill,
+  // give it the bump a tilted playfield would: a kick toward the playfield
+  // center with a little lift. The flipper zone (y ≥ 462) is exempt so a ball
+  // deliberately trapped on a flipper stays trapped, as is the shooter lane
+  // (weak launches are allowed to fall back and re-rack in peace).
+  if (sp < 26 && b.y < 462 && b.x < PF_R - BALL_R) {
+    gs.stillT += DT;
+    if (gs.stillT >= 1.2) {
+      gs.stillT = 0;
+      const dir = b.x > PF_CX ? -1 : 1;
+      b.vx += dir * (90 + Math.random() * 60);
+      b.vy -= 30 + Math.random() * 40;
+      gs.events.push({ kind: 'nudge', x: b.x, y: b.y });
+    }
+  } else {
+    gs.stillT = 0;
+  }
+
   // Rollover lanes: light the lamp, and all three lit pays the LANES bonus.
   for (let i = 0; i < LAMPS.length; i++) {
     if (gs.lamps[i]) continue;
@@ -487,15 +530,15 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   c.moveTo(286, 404);
   c.lineTo(286, 468);
   c.lineTo(207, 489);
-  // Rollover lane dividers.
-  c.moveTo(94, 81);
-  c.lineTo(94, 190);
-  c.moveTo(136, 68);
-  c.lineTo(136, 190);
-  c.moveTo(178, 66);
-  c.lineTo(178, 190);
-  c.moveTo(220, 72);
-  c.lineTo(220, 190);
+  // Rollover lane fins — short guides around the lamps (matching SEGS).
+  c.moveTo(94, 136);
+  c.lineTo(94, 192);
+  c.moveTo(136, 136);
+  c.lineTo(136, 192);
+  c.moveTo(178, 136);
+  c.lineTo(178, 192);
+  c.moveTo(220, 136);
+  c.lineTo(220, 192);
 }
 
 function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
@@ -879,6 +922,10 @@ export default function Pinball() {
             playDing();
             spawnBurst(fx.particles, ev.x, ev.y, 8, 150, '#fde68a');
             spawnFloater(fx.floaters, ev.x, ev.y + 22, '+500', '#fde68a', { size: 16, life: 800 });
+          } else if (ev.kind === 'nudge') {
+            playTick();
+            fx.shake = Math.min(4, fx.shake + 2.5);
+            spawnFloater(fx.floaters, ev.x, ev.y - 14, 'NUDGE', '#94a3b8', { size: 12, life: 600 });
           } else {
             playCup();
             fx.flash = 1;
