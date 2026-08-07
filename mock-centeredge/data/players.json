@@ -1,0 +1,80 @@
+{
+  "players": [
+    {
+      "playerId": "p-1001",
+      "cardNumber": "8014-2233-4455-6677",
+      "cardType": "virtual",
+      "displayName": "Avery Jordan",
+      "email": "avery@example.com",
+      "phone": "+15550001001",
+      "memberSince": "2024-03-12T00:00:00Z",
+      "tier": "gold",
+      "status": "active",
+      "balances": {
+        "cashBalanceCents": 2500,
+        "gamePlayCredits": 42,
+        "bonusCredits": 10,
+        "tickets": 1850
+      },
+      "recentActivity": [
+        {
+          "transactionId": "txn-seed-0003",
+          "type": "ticket-earn",
+          "description": "Skee-Ball — Lane 4",
+          "tickets": 120,
+          "occurredAt": "2026-08-01T19:42:00Z"
+        },
+        {
+          "transactionId": "txn-seed-0002",
+          "type": "credit-spend",
+          "description": "Down the Clown",
+          "credits": -4,
+          "occurredAt": "2026-08-01T19:30:00Z"
+        },
+        {
+          "transactionId": "txn-seed-0001",
+          "type": "reload",
+          "description": "Card reload — kiosk 2",
+          "amountCents": 2000,
+          "occurredAt": "2026-08-01T19:05:00Z"
+        }
+      ]
+    },
+    {
+      "playerId": "p-1002",
+      "cardNumber": "8014-8899-1122-3344",
+      "cardType": "physical",
+      "displayName": "Sam Rivera",
+      "email": "sam@example.com",
+      "phone": "+15550001002",
+      "memberSince": "2025-11-02T00:00:00Z",
+      "tier": "standard",
+      "status": "active",
+      "balances": {
+        "cashBalanceCents": 500,
+        "gamePlayCredits": 3,
+        "bonusCredits": 0,
+        "tickets": 65
+      },
+      "recentActivity": []
+    },
+    {
+      "playerId": "p-1003",
+      "cardNumber": "8014-0000-9999-0000",
+      "cardType": "physical",
+      "displayName": "Frozen Card Test",
+      "email": "frozen@example.com",
+      "phone": "+15550001003",
+      "memberSince": "2023-01-15T00:00:00Z",
+      "tier": "standard",
+      "status": "frozen",
+      "balances": {
+        "cashBalanceCents": 1200,
+        "gamePlayCredits": 8,
+        "bonusCredits": 2,
+        "tickets": 340
+      },
+      "recentActivity": []
+    }
+  ]
+}

@@ -1,0 +1,191 @@
+{
+  "menu": {
+    "id": "menu-main",
+    "name": "FFC Main Menu",
+    "revision": 1,
+    "currency": "USD",
+    "taxRateBps": 700,
+    "categories": [
+      {
+        "id": "cat-pizza",
+        "name": "Pizza",
+        "sortOrder": 1,
+        "items": [
+          {
+            "id": "item-pizza-cheese",
+            "sku": "PZ-CHZ-14",
+            "name": "14\" Cheese Pizza",
+            "description": "Hand-tossed 14-inch pizza with house red sauce and mozzarella.",
+            "priceCents": 1499,
+            "available": true,
+            "imageUrl": "/images/menu/pizza-cheese.jpg",
+            "modifierGroups": [
+              {
+                "id": "mg-pizza-toppings",
+                "name": "Toppings",
+                "required": false,
+                "minSelections": 0,
+                "maxSelections": 5,
+                "options": [
+                  { "id": "opt-pepperoni", "name": "Pepperoni", "priceDeltaCents": 200, "default": false },
+                  { "id": "opt-sausage", "name": "Italian Sausage", "priceDeltaCents": 200, "default": false },
+                  { "id": "opt-mushroom", "name": "Mushrooms", "priceDeltaCents": 150, "default": false },
+                  { "id": "opt-onion", "name": "Red Onions", "priceDeltaCents": 100, "default": false },
+                  { "id": "opt-extra-cheese", "name": "Extra Cheese", "priceDeltaCents": 250, "default": false }
+                ]
+              },
+              {
+                "id": "mg-pizza-crust",
+                "name": "Crust",
+                "required": true,
+                "minSelections": 1,
+                "maxSelections": 1,
+                "options": [
+                  { "id": "opt-crust-hand", "name": "Hand Tossed", "priceDeltaCents": 0, "default": true },
+                  { "id": "opt-crust-thin", "name": "Thin Crust", "priceDeltaCents": 0, "default": false },
+                  { "id": "opt-crust-stuffed", "name": "Stuffed Crust", "priceDeltaCents": 300, "default": false }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "item-pizza-slice",
+            "sku": "PZ-SLC-01",
+            "name": "Pizza Slice",
+            "description": "Single slice, cheese or pepperoni.",
+            "priceCents": 399,
+            "available": true,
+            "imageUrl": "/images/menu/pizza-slice.jpg",
+            "modifierGroups": [
+              {
+                "id": "mg-slice-type",
+                "name": "Slice Type",
+                "required": true,
+                "minSelections": 1,
+                "maxSelections": 1,
+                "options": [
+                  { "id": "opt-slice-cheese", "name": "Cheese", "priceDeltaCents": 0, "default": true },
+                  { "id": "opt-slice-pepperoni", "name": "Pepperoni", "priceDeltaCents": 50, "default": false }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "cat-snacks",
+        "name": "Snacks & Baskets",
+        "sortOrder": 2,
+        "items": [
+          {
+            "id": "item-wings",
+            "sku": "SN-WNG-10",
+            "name": "10pc Chicken Wings",
+            "description": "Bone-in wings tossed in your choice of sauce.",
+            "priceCents": 1199,
+            "available": true,
+            "imageUrl": "/images/menu/wings.jpg",
+            "modifierGroups": [
+              {
+                "id": "mg-wing-sauce",
+                "name": "Sauce",
+                "required": true,
+                "minSelections": 1,
+                "maxSelections": 1,
+                "options": [
+                  { "id": "opt-sauce-buffalo", "name": "Buffalo", "priceDeltaCents": 0, "default": true },
+                  { "id": "opt-sauce-bbq", "name": "BBQ", "priceDeltaCents": 0, "default": false },
+                  { "id": "opt-sauce-garlic-parm", "name": "Garlic Parmesan", "priceDeltaCents": 0, "default": false }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "item-fries",
+            "sku": "SN-FRY-01",
+            "name": "Basket of Fries",
+            "description": "Crinkle-cut fries with sea salt.",
+            "priceCents": 499,
+            "available": true,
+            "imageUrl": "/images/menu/fries.jpg",
+            "modifierGroups": [
+              {
+                "id": "mg-fries-addons",
+                "name": "Add-ons",
+                "required": false,
+                "minSelections": 0,
+                "maxSelections": 2,
+                "options": [
+                  { "id": "opt-cheese-sauce", "name": "Cheese Sauce", "priceDeltaCents": 100, "default": false },
+                  { "id": "opt-bacon-bits", "name": "Bacon Bits", "priceDeltaCents": 150, "default": false }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "item-pretzel",
+            "sku": "SN-PRZ-01",
+            "name": "Jumbo Soft Pretzel",
+            "description": "Warm salted pretzel with cheese dip.",
+            "priceCents": 649,
+            "available": false,
+            "imageUrl": "/images/menu/pretzel.jpg",
+            "modifierGroups": []
+          }
+        ]
+      },
+      {
+        "id": "cat-drinks",
+        "name": "Drinks",
+        "sortOrder": 3,
+        "items": [
+          {
+            "id": "item-fountain",
+            "sku": "DR-FTN-01",
+            "name": "Fountain Drink",
+            "description": "Free refills with souvenir cup.",
+            "priceCents": 299,
+            "available": true,
+            "imageUrl": "/images/menu/fountain.jpg",
+            "modifierGroups": [
+              {
+                "id": "mg-drink-size",
+                "name": "Size",
+                "required": true,
+                "minSelections": 1,
+                "maxSelections": 1,
+                "options": [
+                  { "id": "opt-size-sm", "name": "Small", "priceDeltaCents": 0, "default": true },
+                  { "id": "opt-size-md", "name": "Medium", "priceDeltaCents": 100, "default": false },
+                  { "id": "opt-size-lg", "name": "Large", "priceDeltaCents": 200, "default": false }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "item-icee",
+            "sku": "DR-ICE-01",
+            "name": "ICEE",
+            "description": "Frozen ICEE — cherry or blue raspberry.",
+            "priceCents": 449,
+            "available": true,
+            "imageUrl": "/images/menu/icee.jpg",
+            "modifierGroups": [
+              {
+                "id": "mg-icee-flavor",
+                "name": "Flavor",
+                "required": true,
+                "minSelections": 1,
+                "maxSelections": 1,
+                "options": [
+                  { "id": "opt-icee-cherry", "name": "Cherry", "priceDeltaCents": 0, "default": true },
+                  { "id": "opt-icee-blue", "name": "Blue Raspberry", "priceDeltaCents": 0, "default": false }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

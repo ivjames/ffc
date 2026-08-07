@@ -16,7 +16,9 @@
     "test:app": "vitest run --config vitest.app.config.ts",
     "test:admin": "vitest run --config vitest.admin.config.ts",
     "test:admin:watch": "vitest --config vitest.admin.config.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "mock:centeredge": "node mock-centeredge/server.js",
+    "test:mock": "node --test mock-centeredge/app.test.js"
   },
   "dependencies": {
     "@fontsource/baloo-2": "^5.3.0",
