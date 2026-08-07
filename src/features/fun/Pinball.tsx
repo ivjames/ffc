@@ -117,9 +117,12 @@ const SEGS: Seg[] = (() => {
     // effective ball diameter of 18 (BALL_R + WALL_PAD each side) — anything
     // near 20px is a wedge pocket the ball jams in instead of falling through.
     { ax: 36, ay: 404, bx: 36, by: 468 }, // left outlane divider
-    { ax: 36, ay: 468, bx: 107, by: 489 }, // left inlane guide → flipper
+    // The inlane guides run all the way to the flipper pivots: ending short
+    // left a notch at the guide-end/pivot junction where the ball could rest
+    // dead — unflippable too, since surface velocity at the pivot is ~zero.
+    { ax: 36, ay: 468, bx: 110, by: 490 }, // left inlane guide → flipper pivot
     { ax: 278, ay: 404, bx: 278, by: 468 }, // right outlane divider
-    { ax: 278, ay: 468, bx: 207, by: 489 }, // right inlane guide → flipper
+    { ax: 278, ay: 468, bx: 204, by: 490 }, // right inlane guide → flipper pivot
     // Rollover lane fins — short guides bracketing the lamps, detached from
     // the arch so the dome stays open playfield instead of walled columns.
     { ax: 94, ay: 136, bx: 94, by: 192 },
@@ -471,20 +474,29 @@ function step(gs: GS): void {
   }
 
   // Stuck-ball watchdog. The table has no slope toward the drain, so the ball
-  // can come to a true dead rest cradled between wall tips (the outlane mouth
-  // is the classic spot) — REST_VN kills every bounce there and the anti-stall
-  // bounce jitter never fires on a resting contact. After ~1.2s of standstill,
-  // give it the bump a tilted playfield would: a kick toward the playfield
-  // center with a little lift. The flipper zone (y ≥ 462) is exempt so a ball
-  // deliberately trapped on a flipper stays trapped, as is the shooter lane
-  // (weak launches are allowed to fall back and re-rack in peace).
-  if (sp < 26 && b.y < 462 && b.x < PF_R - BALL_R) {
+  // can come to a true dead rest cradled between contacts — REST_VN kills
+  // every bounce there and the anti-stall bounce jitter never fires on a
+  // resting contact. After ~1.2s of standstill, give it the bump a tilted
+  // playfield would. The flipper zone is exempt only WHILE a flipper is held
+  // up (that's a deliberate trap); a ball dead-rested on lowered flippers —
+  // e.g. balanced at a flipper pivot, where flipping imparts ~zero surface
+  // velocity — is a stuck ball like any other. The shooter lane stays exempt
+  // so weak launches can fall back and re-rack in peace.
+  const flipperHeld = gs.fL.pressed || gs.fR.pressed;
+  if (sp < 26 && b.x < PF_R - BALL_R && (b.y < 462 || !flipperHeld)) {
     gs.stillT += DT;
     if (gs.stillT >= 1.2) {
       gs.stillT = 0;
-      const dir = b.x > PF_CX ? -1 : 1;
-      b.vx += dir * (90 + Math.random() * 60);
-      b.vy -= 30 + Math.random() * 40;
+      if (b.y >= 440) {
+        // At the flippers: pop mostly upward so the player gets a real save
+        // attempt — a sideways shove here would feed the drain.
+        b.vx += (b.x > PF_CX ? -1 : 1) * (30 + Math.random() * 30);
+        b.vy -= 150 + Math.random() * 50;
+      } else {
+        const dir = b.x > PF_CX ? -1 : 1;
+        b.vx += dir * (90 + Math.random() * 60);
+        b.vy -= 30 + Math.random() * 40;
+      }
       gs.events.push({ kind: 'nudge', x: b.x, y: b.y });
     }
   } else {
@@ -587,10 +599,10 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   // Outlane dividers + inlane guides (matching SEGS).
   c.moveTo(36, 404);
   c.lineTo(36, 468);
-  c.lineTo(107, 489);
+  c.lineTo(110, 490);
   c.moveTo(278, 404);
   c.lineTo(278, 468);
-  c.lineTo(207, 489);
+  c.lineTo(204, 490);
   // Rollover lane fins — short guides around the lamps (matching SEGS).
   c.moveTo(94, 136);
   c.lineTo(94, 192);
