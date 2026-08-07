@@ -4,7 +4,7 @@ import { useFitCanvas } from './useFitCanvas';
 import {
   playStroke,
   playTick,
-  playCup,
+  playDing,
   playUndo,
   playBump,
   playPinClack,
@@ -921,7 +921,9 @@ export default function ClawMachine() {
               const slipChance = SLIP_BASE[t.rarity] * (0.2 + 0.8 * (1 - c));
               gs.slipAt = Math.random() < slipChance ? 0.15 + Math.random() * 0.7 : 2;
               setNote('Got one — hold on!');
-              playCup();
+              // Rising ding, not playCup: the cup sound's descending plunks
+              // read as a fail cue when they mark a successful grab.
+              playDing();
               spawnBurst(fx.particles, gs.clawX, gs.clawY + 8, 10, 160, t.light);
             } else {
               setNote('It wriggled free of the claw!');
