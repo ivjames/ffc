@@ -62,7 +62,11 @@ const WALL_PAD = 2; // wall half-thickness (segment endpoints act as round posts
 const WALL_E = 0.52; // wall restitution
 const REST_VN = 40; // impacts slower than this don't bounce (lets the ball rest)
 
-const FLIP_LEN = 42;
+// Blade length + pivot spread size the center drain: resting tips sit
+// 106 − 2·cos(0.52)·39 ≈ 38px apart, ~10px more than the ball needs to pass
+// (2·(BALL_R + FLIP_R) = 28). The old 42px blades on 94px-apart pivots left
+// the gap 7px NEGATIVE — the table literally could not drain down the middle.
+const FLIP_LEN = 39;
 const FLIP_R = 7; // flipper capsule half-thickness
 const ANG_UP = 26; // flip-up angular speed (rad/s)
 const ANG_DOWN = 15; // drop-back angular speed (rad/s)
@@ -120,9 +124,9 @@ const SEGS: Seg[] = (() => {
     // The inlane guides run all the way to the flipper pivots: ending short
     // left a notch at the guide-end/pivot junction where the ball could rest
     // dead — unflippable too, since surface velocity at the pivot is ~zero.
-    { ax: 36, ay: 468, bx: 110, by: 490 }, // left inlane guide → flipper pivot
+    { ax: 36, ay: 468, bx: 104, by: 490 }, // left inlane guide → flipper pivot
     { ax: 278, ay: 404, bx: 278, by: 468 }, // right outlane divider
-    { ax: 278, ay: 468, bx: 204, by: 490 }, // right inlane guide → flipper pivot
+    { ax: 278, ay: 468, bx: 210, by: 490 }, // right inlane guide → flipper pivot
     // Rollover lane fins — short guides bracketing the lamps, detached from
     // the arch so the dome stays open playfield instead of walled columns.
     { ax: 94, ay: 136, bx: 94, by: 192 },
@@ -256,8 +260,8 @@ function freshGS(): GS {
     live: false,
     saveUntil: 0,
     plunger: { pointerId: null, t: 0 },
-    fL: { px: 110, py: 490, rest: L_REST, raised: -0.55, angle: L_REST, omega: 0, pressed: false },
-    fR: { px: 204, py: 490, rest: R_REST, raised: Math.PI + 0.55, angle: R_REST, omega: 0, pressed: false },
+    fL: { px: 104, py: 490, rest: L_REST, raised: -0.55, angle: L_REST, omega: 0, pressed: false },
+    fR: { px: 210, py: 490, rest: R_REST, raised: Math.PI + 0.55, angle: R_REST, omega: 0, pressed: false },
     bumperCd: [0, 0, 0, 0, 0],
     slingCd: [0, 0],
     lamps: [false, false, false],
@@ -599,10 +603,10 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   // Outlane dividers + inlane guides (matching SEGS).
   c.moveTo(36, 404);
   c.lineTo(36, 468);
-  c.lineTo(110, 490);
+  c.lineTo(104, 490);
   c.moveTo(278, 404);
   c.lineTo(278, 468);
-  c.lineTo(204, 490);
+  c.lineTo(210, 490);
   // Rollover lane fins — short guides around the lamps (matching SEGS).
   c.moveTo(94, 136);
   c.lineTo(94, 192);
