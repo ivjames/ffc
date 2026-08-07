@@ -4,9 +4,10 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
 import { accentInk } from '../../lib/theme';
 import Confetti from '../../ui/Confetti';
-import { courseById } from '../../data/courses';
+import { courseById, locationById } from '../../data/courses';
 import { getRound, putRound } from '../../db';
-import { syncPending } from '../../sync';
+import { syncPending, fetchRewards, type RewardRow } from '../../sync';
+import { shareRound } from './shareImage';
 import { playFanfare } from '../../lib/sound';
 import type { CourseSeed, LocalRound } from '../../types';
 import {
@@ -24,6 +25,8 @@ export default function Summary() {
   const [round, setRound] = useState<LocalRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [syncFailed, setSyncFailed] = useState(false);
+  const [rewards, setRewards] = useState<RewardRow[]>([]);
+  const [sharing, setSharing] = useState(false);
   // Celebrate exactly once when the final scorecard first appears.
   const celebrated = useRef(false);
 
@@ -64,6 +67,24 @@ export default function Summary() {
       alive = false;
     };
   }, [clientId]);
+
+  // Rewards exist server-side only once the round has synced — fetch them
+  // then. Offline: the card simply doesn't show (the grants are still waiting
+  // on the server whenever the round lands).
+  const syncState = round?.syncState;
+  useEffect(() => {
+    if (syncState !== 'synced') return;
+    let alive = true;
+    fetchRewards(clientId).then(
+      (rows) => {
+        if (alive) setRewards(rows);
+      },
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [clientId, syncState]);
 
   const course = round ? courseById(round.courseId) : undefined;
 
@@ -202,7 +223,23 @@ export default function Summary() {
 
         <SyncNote state={round.syncState} failed={syncFailed} />
 
+        {/* Rewards earned this round (punchlist #8 tier 1) — show a code at
+            the counter; staff mark it redeemed in Master Control. */}
+        {rewards.length > 0 && <RewardsCard rewards={rewards} accent={course.accent} />}
+
         <div className="mt-4 space-y-2">
+          <Button
+            variant="ghost"
+            disabled={sharing}
+            onClick={() => {
+              setSharing(true);
+              void shareRound(round, course, locationById(course.locationId)?.name).finally(() =>
+                setSharing(false),
+              );
+            }}
+          >
+            {sharing ? 'Preparing…' : '📸 Share this round'}
+          </Button>
           <Button
             variant="ghost"
             onClick={() =>
@@ -311,6 +348,61 @@ function NineGrid({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// What each achievement is called on the card (mirrors server/lib/rewards.js).
+const REWARD_META: Record<string, { emoji: string; label: string }> = {
+  hole_in_one: { emoji: '🎯', label: 'Hole-in-One' },
+  under_par: { emoji: '⛳', label: 'Under Par' },
+  hunt_master: { emoji: '🕵️', label: 'Hunt Master' },
+};
+
+function RewardsCard({ rewards, accent }: { rewards: RewardRow[]; accent: string }) {
+  return (
+    <div
+      className="surface animate-pop-in mt-4 rounded-3xl border border-fairway-500/40 p-4"
+      style={{ '--i': 1 } as CSSProperties}
+    >
+      <div className="mb-1 text-center text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
+        🎟️ Rewards earned
+      </div>
+      <p className="mb-3 text-center text-xs text-fairway-100/70">
+        Show a code at the counter to claim your prize.
+      </p>
+      <div className="space-y-2">
+        {rewards.map((r) => {
+          const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
+          const claimed = r.redeemedAt != null;
+          return (
+            <div
+              key={`${r.playerIndex}-${r.achievement}`}
+              className="surface-1 flex items-center gap-3 rounded-2xl border border-fairway-800/60 px-4 py-2.5"
+            >
+              <span className="text-xl" aria-hidden="true">
+                {meta.emoji}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold text-fairway-50">{meta.label}</div>
+                <div className="text-xs text-fairway-100/70">{r.playerTag}</div>
+              </div>
+              {claimed ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
+                  Claimed ✓
+                </span>
+              ) : (
+                <span
+                  className="font-mono rounded-lg px-3 py-1.5 text-lg font-black tracking-[0.2em] text-fairway-50"
+                  style={{ background: `${accent}2e`, border: `1px solid ${accent}66` }}
+                >
+                  {r.code}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -7,8 +7,14 @@ today, and a recommended next step, so the follow-up conversation can turn
 (product phases) and [`master-control-plan.md`](./master-control-plan.md)
 (admin/back-office).
 
-> Status: **triage** — nothing here is committed work yet. Items marked
-> *Clarify* need an answer from Bullwinkle's before they can be scoped.
+> Status: **tier 1 built.** Everything in the sequencing table through row 5,
+> plus office reporting and rewards manual redemption, is implemented — see the
+> root `README.md` ("Post-meeting punchlist features") and `server/README.md`
+> for the shipped endpoints/UI. Still open: **player registration (#3)**
+> (breaking out to its own effort), leagues (#4 tier 2), photo sharing
+> (#9 tier 2), the email digest (#2 step 3, needs an email provider), and the
+> POS/ticket integrations (#7/#8 tier 2, blocked on the venue's systems
+> answers below).
 
 ## Raw notes (as captured)
 

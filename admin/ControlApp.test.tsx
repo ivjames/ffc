@@ -14,6 +14,7 @@ vi.mock('./api', async () => {
       login: vi.fn(),
       logout: vi.fn(),
       overview: vi.fn(),
+      overviewSeries: vi.fn(),
     },
   };
 });
@@ -45,6 +46,9 @@ beforeEach(() => {
       totals: { orgs: 0, locations: 0, courses: 0, roundsActive: 0, rounds7d: 0, rounds30d: 0, huntFinds: 0 },
       perLocation: [],
     });
+  vi.mocked(api.overviewSeries)
+    .mockReset()
+    .mockResolvedValue({ days: 30, tz: 'America/Los_Angeles', series: [] });
 });
 
 function renderApp() {

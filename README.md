@@ -50,6 +50,31 @@ list). See [`server/README.md`](./server/README.md) for the `/api/hunt/*` endpoi
   dev-only UI). Defaults **on**; set to `false` for production so players must
   take a real photo.
 
+## Post-meeting punchlist features
+
+Built to [`post-meeting-punchlist.md`](./post-meeting-punchlist.md) (all tier-1
+items except player registration, which is a separate effort):
+
+- **Announcements** — venue specials/updates managed in Master Control, shown
+  as a rotating banner on Home and the TV board. This is the platform's first
+  **live** content read (`GET /api/announcements`, polled + cached for offline);
+  no rebuild needed to publish a promo.
+- **Team tag** — an optional 3-char team tag at round setup (same rules as
+  player tags). The TV board gains a Players/Teams toggle; a team round scores
+  as average strokes per player, best per course (`/api/leaderboard?by=team`).
+- **Food & Drink card** — per-location menu/ordering deep links set in Master
+  Control, shown on Home when set (grayed out offline). Ships via the normal
+  content export.
+- **Rewards** — completed rounds earn achievements server-side (Hole-in-One,
+  Under Par, Hunt Master), each with a short redemption code shown on the final
+  scorecard; staff look codes up under Master Control → Rewards and mark them
+  redeemed at the counter.
+- **Score sharing** — "Share this round" on the final scorecard renders a
+  branded score image client-side (canvas → Web Share API, download fallback).
+  Numbers only — no photos, so no moderation surface.
+- **Office reporting** — Master Control's Overview gains 30-day trend charts
+  (rounds / players / hunt finds) and a rounds CSV export with a date range.
+
 ## Tech stack
 
 React + TypeScript + Vite · Tailwind CSS v4 · `vite-plugin-pwa` · IndexedDB

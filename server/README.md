@@ -60,10 +60,18 @@ Request:
 }
 ```
 - `playerTags`: 1..4 entries, each `[A-Z0-9]{3}`, not on the blocklist.
+- `groupTag` (optional): a team tag for the whole round, same `[A-Z0-9]{3}` rule
+  + blocklist. Rounds carrying one also appear on the team leaderboard.
 - `scores`: object keyed by player index (`0..playerTags.length-1`); each value
   an array of length 18 of `number|null`. Only non-null holes are stored; strokes
   must be integers >= 1.
 - `completedAt` may be `null`; `createdAt`/`completedAt` are ms-epoch numbers.
+- **Rewards**: when a *completed* round first syncs, achievement grants
+  (hole-in-one; under par on a full card; hunt master when the player's verified
+  finds cover the course's active non-countable hunt list) are written to
+  `reward_grant` in the same transaction — one short redemption code per
+  (player, achievement). A duplicate re-sync never re-grants. See
+  `GET /api/rewards` and the admin redemption flow below.
 
 Responses:
 - `200 { "ok": true, "roundId": "<uuid>" }` — created, or the existing round id
@@ -72,9 +80,15 @@ Responses:
 - `429 { "ok": false, "error": "rate limit exceeded" }` — per-IP write cap
   (30/min per IP by default).
 
-### `GET /api/leaderboard?period=day|week|month|all`
+### `GET /api/leaderboard?period=day|week|month|all&by=player|team`
 Arcade high-score board. For each player **tag**, computes total strokes per
 completed round per course and keeps that tag's best (lowest) total per course.
+
+`by=team` (default `player`) aggregates the same score rows by the round's
+optional `group_tag` instead: a team round is scored as **average strokes per
+rostered player** (teams are 1..4 players, so a raw sum would just reward small
+teams), rounded to 1 decimal, and each team keeps its best average per course.
+Rounds without a `group_tag` never appear on the team board.
 
 → `200` array, sorted ascending by `total`:
 ```json
@@ -146,6 +160,10 @@ Request:
 - `tz`: optional IANA name; validated when present. If omitted and no coords are
   given, it's stored `null` and the leaderboard falls back to `VENUE_TZ`.
 - `geofenceKm`: optional positive number. `sortOrder`: optional integer (default 0).
+- `menuUrl` / `orderingUrl` (optional): the venue's food & drink deep links,
+  absolute `http(s)` URLs only (max 500 chars; anything else — including
+  `javascript:` — is rejected). Empty string clears a link. They ship to the
+  player app's "Food & Drink" card via `GET /api/content` and the build export.
 
 Responses:
 - `200 { "ok": true, "location": { …, "tz": "…", "tzLabel": "Eastern Time (ET)" } }`
@@ -161,6 +179,37 @@ Open read. The live player-facing catalog — `{ locations: [...], courses: [...
 archived rows excluded — used by the build-time exporter
 (`scripts/export-content.mjs`) to regenerate `src/data/content.generated.ts`. The
 DB is the source of truth; a site rebuild publishes changes to players.
+
+### `GET /api/announcements?locationId=<uuid>`
+Open read — the live promo/update feed for the player app and TV board
+(managed in Master Control; **no rebuild needed**, this is the platform's first
+live content read). Returns non-archived rows whose `[startsAt, endsAt)` window
+contains now, that are either global (`locationId: null`) or pinned to the
+requested venue. Without `locationId` only global rows return.
+
+→ `200` array:
+```json
+[
+  { "id": "<uuid>", "title": "Taco Tuesday", "body": "Half-price tacos",
+    "locationId": null, "startsAt": null, "endsAt": "2026-08-31T07:00:00.000Z",
+    "sortOrder": 0 }
+]
+```
+
+### `GET /api/rewards?clientId=<device round id>`
+Open read keyed by the round's client-generated UUID (unguessable, same id the
+sync path dedupes on) — the final scorecard's "show this at the counter"
+screen. Returns the round's grants:
+
+```json
+[
+  { "code": "K7M2PX", "playerIndex": 0, "playerTag": "ACE",
+    "achievement": "hole_in_one", "redeemedAt": null,
+    "createdAt": "2026-08-07T18:00:00.000Z" }
+]
+```
+Achievements: `hole_in_one` · `under_par` · `hunt_master`. Staff redeem codes in
+Master Control (below), so a code pays out once.
 
 ### Master Control — `/api/admin/*`
 Back-office API for onboarding/managing orgs (owner/franchise), locations
@@ -191,6 +240,12 @@ no domain history hangs off an account.)
 | `POST /api/admin/locations/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
 | `POST /api/admin/courses` · `PATCH /api/admin/courses/:id` | create-update / edit course (`pars` length 18, values 2–4); `org_admin` must name a `locationId` in their own org (required, not optional, for that role) |
 | `POST /api/admin/courses/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping, resolved via the course's location) |
+| `GET  /api/admin/overview/series?days=1..90` | daily trend buckets (rounds, distinct player tags, verified hunt finds), zero-filled, calendar days in `ADMIN_TZ` (default `America/Los_Angeles`); org-scoped |
+| `GET  /api/admin/export/rounds.csv?from=&to=&locationId=` | CSV download, one row per (completed round, player); `from`/`to` are `YYYY-MM-DD` calendar days in `ADMIN_TZ`, inclusive, defaulting to the last 30 days; org-scoped |
+| `GET  /api/admin/announcements?archived=` · `POST /api/admin/announcements` | list / create-update announcements; global rows (`locationId: null`) are **super_admin only** to write, `org_admin` manages rows pinned to their own org's venues (and sees global ones read-only) |
+| `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
+| `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | look up one redemption code (case-insensitive), or list recent grants (default: unredeemed, limit 50); org-scoped via the round's course → location |
+| `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | mark a reward handed out (records who) / undo a mistaken redemption; audited |
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of

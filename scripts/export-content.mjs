@@ -44,6 +44,8 @@ function renderLocation(l) {
     geofenceKm: ${lit(l.geofenceKm)},
     tz: ${lit(l.tz)},
     sortOrder: ${lit(l.sortOrder ?? 0)},
+    menuUrl: ${lit(l.menuUrl)},
+    orderingUrl: ${lit(l.orderingUrl)},
     orgId: ${lit(l.orgId)},
   },`;
 }
@@ -76,6 +78,8 @@ export type GeneratedLocation = {
   geofenceKm: number | null;
   tz: string | null;
   sortOrder: number;
+  menuUrl: string | null;
+  orderingUrl: string | null;
   orgId: string | null;
 };
 

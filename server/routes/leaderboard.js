@@ -1,8 +1,13 @@
-// GET /api/leaderboard?period=day|week|month|all
+// GET /api/leaderboard?period=day|week|month|all&by=player|team
 //
 // Arcade high-score style: for each player TAG we compute the total strokes for
 // each completed round on each course, then keep that player's BEST (lowest)
 // total. Results are grouped by player_tag and sorted ascending by total.
+//
+// by=team (punchlist #4 tier 1) aggregates the SAME score rows by the round's
+// optional group_tag instead: a team round's score is its average strokes per
+// player (teams are 1..4 players, so a raw sum would just reward small teams),
+// and each team keeps its best average per course.
 import { Router } from "express";
 import { pool } from "../db.js";
 
@@ -27,6 +32,10 @@ router.get("/", async (req, res) => {
   const period = typeof req.query.period === "string" ? req.query.period : "all";
   if (!(period in PERIOD_UNITS)) {
     return res.status(400).json({ ok: false, error: "period must be day|week|month|all" });
+  }
+  const by = typeof req.query.by === "string" ? req.query.by : "player";
+  if (by !== "player" && by !== "team") {
+    return res.status(400).json({ ok: false, error: "by must be player|team" });
   }
   const unit = PERIOD_UNITS[period];
 
@@ -55,6 +64,43 @@ router.get("/", async (req, res) => {
   //  2. best_per_tag_course: DISTINCT ON (tag, course_id) ordered by total keeps
   //     each player's lowest total per course (their personal best on that course).
   //  3. final SELECT sorts the board ascending by total.
+  // Team board: one row per (team, course) with the team's best round, a round
+  // scored as average strokes per rostered player (1 decimal). Same structure
+  // as the player query below — per-round totals, then DISTINCT ON keeps the
+  // best, then sort ascending.
+  const teamSql = `
+    with team_totals as (
+      select
+        r.group_tag    as tag,
+        r.course_id    as course_id,
+        c.name         as course_name,
+        r.completed_at as completed_at,
+        sum(s.strokes)::numeric / cardinality(r.player_tags) as avg_total
+      from round r
+      join course c on c.id = r.course_id
+      left join location loc on loc.id = c.location_id
+      join score s on s.round_id = r.id
+      where r.completed_at is not null
+        and r.group_tag is not null
+        ${timeFilter}
+      group by r.id, r.group_tag, r.course_id, c.name, r.completed_at
+    ),
+    best_per_team_course as (
+      select distinct on (tag, course_id)
+        tag, course_id, course_name, avg_total, completed_at
+      from team_totals
+      order by tag, course_id, avg_total asc, completed_at asc
+    )
+    select
+      tag,
+      course_id    as "courseId",
+      course_name  as "courseName",
+      round(avg_total, 1)::float as total,
+      completed_at as "completedAt"
+    from best_per_team_course
+    order by total asc, completed_at asc
+  `;
+
   const sql = `
     with round_totals as (
       select
@@ -91,7 +137,7 @@ router.get("/", async (req, res) => {
   `;
 
   try {
-    const result = await pool.query(sql, params);
+    const result = await pool.query(by === "team" ? teamSql : sql, params);
     return res.json(result.rows);
   } catch (err) {
     console.error("[leaderboard] error:", err);
