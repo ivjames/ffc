@@ -386,3 +386,80 @@ on conflict (id) do nothing;
 update location
    set org_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
  where org_id is null;
+
+-- ---------------------------------------------------------------------------
+-- Post-meeting punchlist features. See post-meeting-punchlist.md. All DDL
+-- idempotent, appended after the tables it references.
+-- ---------------------------------------------------------------------------
+
+-- Announcements / special updates (punchlist #1). Managed in Master Control,
+-- read live by the player app + TV board (promos are too time-sensitive for
+-- the rebuild-to-publish pipeline). location_id null = shown at every venue.
+-- starts_at/ends_at bound the display window; null = open-ended on that side.
+-- Delete = archive, like every other admin-managed entity.
+create table if not exists announcement (
+  id          uuid primary key default gen_random_uuid(),
+  title       text not null,
+  body        text,
+  location_id uuid references location(id),
+  starts_at   timestamptz,
+  ends_at     timestamptz,
+  sort_order  int  not null default 0,
+  archived_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists announcement_active_idx on announcement (archived_at) where archived_at is null;
+
+-- Team tag (punchlist #4 tier 1) — the additive change the original plan
+-- reserved. An optional 3-char team tag on the whole round; the team
+-- leaderboard is a second aggregation over the same score rows. Same
+-- [A-Z0-9]{3} rule + blocklist as player tags, validated at the API.
+alter table round add column if not exists group_tag text;
+create index if not exists round_group_tag_idx on round (group_tag) where group_tag is not null;
+
+-- Food & drink links (punchlist #7 tier 1). Per-location deep links into
+-- whatever menu / online-ordering system the venue runs — content fields only,
+-- no ordering integration. Ship to players via the content export like every
+-- other location field.
+alter table location add column if not exists menu_url     text;
+alter table location add column if not exists ordering_url text;
+
+-- Rewards with manual redemption (punchlist #8 tier 1). One row per earned
+-- achievement, granted server-side when a completed round syncs. The short
+-- `code` is what the player shows at the counter; staff look it up in Master
+-- Control and mark it redeemed. Keyed by player_index (positional, like
+-- score) because tags can repeat within a round; player_tag is denormalized
+-- for display. Cascade with the round like score does.
+create table if not exists reward_grant (
+  id           uuid primary key default gen_random_uuid(),
+  code         text not null unique,     -- short human code, e.g. 'K7M2PX'
+  round_id     uuid not null references round(id) on delete cascade,
+  player_index int  not null,            -- 0..3
+  player_tag   text not null,            -- [A-Z0-9]{3} at grant time
+  achievement  text not null,            -- hole_in_one | under_par | hunt_master
+  created_at   timestamptz not null default now(),
+  redeemed_at  timestamptz,
+  redeemed_by  text,                     -- admin actor who marked it redeemed
+  unique (round_id, player_index, achievement)
+);
+create index if not exists reward_grant_round_idx    on reward_grant (round_id);
+create index if not exists reward_grant_redeemed_idx on reward_grant (redeemed_at) where redeemed_at is null;
+
+-- Photo auto-moderation (unblocks people-in-photos + the social photo share).
+-- Every hunt photo is classified in the SAME vision call that verifies the
+-- find: content safety for a family venue, plus whether people / apparent
+-- minors are in frame (recorded now; display policy decided at the sharing
+-- surface). Auto-mod only for now — a human review surface is a later
+-- concern, but every verdict is recorded from day one so it starts with
+-- full history. `moderation` on hunt_find:
+--   'approved'  auto-passed by the vision moderation — displayable
+--   'flagged'   auto-blocked at upload: the photo was NEVER written to disk
+--   'rejected'  reserved for the future operator review surface
+--   null        legacy pre-moderation rows
+alter table hunt_find add column if not exists moderation        text;
+alter table hunt_find add column if not exists moderation_reason text;
+alter table hunt_find add column if not exists people_present    boolean;
+alter table hunt_find add column if not exists minors_present    boolean;
+-- Reads of stored photos by moderation state (future review/sharing surfaces).
+create index if not exists hunt_find_moderation_idx
+  on hunt_find (moderation) where photo_path is not null;

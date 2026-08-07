@@ -26,6 +26,8 @@ const SAVED_LOCATION: Location = {
   geofenceKm: null,
   tz: null,
   tzLabel: null,
+  menuUrl: null,
+  orderingUrl: null,
   sortOrder: 0,
   orgId: null,
   archivedAt: null,

@@ -2,10 +2,13 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocation } from 'react-router-dom';
 import { TopBar } from '../../ui/components';
 import Confetti from '../../ui/Confetti';
+import AnnouncementBanner from '../../ui/AnnouncementBanner';
+import { useCurrentLocationId } from '../../lib/location';
 import { fetchLeaderboard, type LeaderboardRow } from '../../sync';
 
 type Period = 'day' | 'week' | 'month' | 'all';
 const PERIODS: Period[] = ['day', 'week', 'month', 'all'];
+type Board = 'player' | 'team';
 
 // Passed via router state when arriving from a round's final scorecard, so we
 // can highlight that session's scores on the board. A tag isn't a stable
@@ -27,11 +30,14 @@ export default function TvLeaderboard() {
   const highlightSet = new Set((highlightScores ?? []).map((s) => `${s.tag}:${s.total}`));
   const isHighlighted = (r: LeaderboardRow) =>
     r.courseId === highlightCourseId && highlightSet.has(`${r.tag}:${r.total}`);
-  const hasHighlight = (highlightScores ?? []).length > 0;
 
   const [period, setPeriod] = useState<Period>('day');
+  // Players vs Teams (punchlist #4 tier 1) — the team board aggregates rounds
+  // played under a team tag, scored as average strokes per player.
+  const [board, setBoard] = useState<Board>('player');
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const locationId = useCurrentLocationId();
   // Celebrate exactly once, the first time the board loads with any scores on
   // it. Firing on first populated load (not only when arriving from a finished
   // round) means the leaderboard always greets you with confetti — including
@@ -44,7 +50,7 @@ export default function TvLeaderboard() {
     let alive = true;
     async function load() {
       try {
-        const data = await fetchLeaderboard(period);
+        const data = await fetchLeaderboard(period, board);
         if (alive) {
           setRows(data);
           setError(null);
@@ -63,7 +69,11 @@ export default function TvLeaderboard() {
       alive = false;
       clearInterval(id);
     };
-  }, [period]);
+  }, [period, board]);
+
+  // Highlights carry player tags + totals, which only match rows on the
+  // player board — the team board aggregates differently, so no pinning there.
+  const hasHighlight = board === 'player' && (highlightScores ?? []).length > 0;
 
   // Board position is the rank in the full ascending-by-total standings. When we
   // arrive from a final scorecard, pin the just-played rows to the TOP of the
@@ -117,6 +127,24 @@ export default function TvLeaderboard() {
       <Confetti fire={celebrate} />
       <TopBar title="Leaderboard" back="/" />
       <main className="animate-page-in flex min-h-0 flex-1 flex-col px-4 py-4">
+        {/* Players vs Teams. Teams show when rounds are played under a team
+            tag (set at round setup); team scores are avg strokes per player. */}
+        <div className="mb-2 grid shrink-0 grid-cols-2 gap-2">
+          {(['player', 'team'] as const).map((b) => (
+            <button
+              key={b}
+              onClick={() => setBoard(b)}
+              className={`rounded-lg py-1.5 text-sm font-semibold transition-transform active:translate-y-px ${
+                board === b
+                  ? 'btn-accent text-fairway-50'
+                  : 'surface-1 border border-fairway-800/60 text-fairway-200'
+              }`}
+            >
+              {b === 'player' ? 'Players' : '🏅 Teams'}
+            </button>
+          ))}
+        </div>
+
         <div className="mb-4 grid shrink-0 grid-cols-4 gap-2">
           {PERIODS.map((p) => (
             <button
@@ -139,9 +167,15 @@ export default function TvLeaderboard() {
           </div>
         )}
 
+        {/* Venue announcements ride the board too — the TV is the venue's
+            biggest screen. Renders nothing when there's nothing to show. */}
+        <AnnouncementBanner locationId={locationId} className="mb-3 shrink-0" />
+
         {!error && rows && rows.length === 0 && (
           <p className="py-8 text-center text-fairway-100/70">
-            No scores yet — finish a round to get on the board.
+            {board === 'team'
+              ? 'No team scores yet — set a team tag when starting a round.'
+              : 'No scores yet — finish a round to get on the board.'}
           </p>
         )}
 

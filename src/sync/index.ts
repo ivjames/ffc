@@ -29,6 +29,7 @@ async function pushRound(round: LocalRound): Promise<void> {
       clientId: round.clientId,
       courseId: round.courseId,
       playerTags: round.playerTags,
+      groupTag: round.groupTag ?? null,
       createdAt: round.createdAt,
       completedAt: round.completedAt,
       scores: round.scores,
@@ -93,8 +94,25 @@ export type LeaderboardRow = {
 
 export async function fetchLeaderboard(
   period: 'day' | 'week' | 'month' | 'all',
+  by: 'player' | 'team' = 'player',
 ): Promise<LeaderboardRow[]> {
-  const res = await fetch(apiUrl(`/api/leaderboard?period=${period}`));
+  const res = await fetch(apiUrl(`/api/leaderboard?period=${period}&by=${by}`));
   if (!res.ok) throw new Error(`Leaderboard failed: HTTP ${res.status}`);
+  return res.json();
+}
+
+/** Rewards earned by a round (punchlist #8 tier 1), fetched by the round's
+ *  unguessable clientId once it has synced. */
+export type RewardRow = {
+  code: string;
+  playerIndex: number;
+  playerTag: string;
+  achievement: string;
+  redeemedAt: string | null;
+};
+
+export async function fetchRewards(clientId: string): Promise<RewardRow[]> {
+  const res = await fetch(apiUrl(`/api/rewards?clientId=${encodeURIComponent(clientId)}`));
+  if (!res.ok) throw new Error(`Rewards failed: HTTP ${res.status}`);
   return res.json();
 }

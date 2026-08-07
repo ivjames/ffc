@@ -17,7 +17,31 @@ function isFiniteNum(n) {
 // list SELECT so both responses have the same shape.
 export const LOCATION_RETURN_COLS = `id, name, slug, lat, lng,
   geofence_km as "geofenceKm", tz, sort_order as "sortOrder",
+  menu_url as "menuUrl", ordering_url as "orderingUrl",
   org_id as "orgId", archived_at as "archivedAt"`;
+
+/**
+ * Validate an optional http(s) URL field (food & drink links). Returns the
+ * normalized value (string or null) or an { error } — a plain http/https URL
+ * only, so a stored link can never be a javascript:/data: payload when the
+ * player app renders it as an <a href>.
+ */
+function normalizeHttpUrl(value, field) {
+  if (value === undefined || value === null || value === "") return { value: null };
+  if (typeof value !== "string" || value.length > 500) {
+    return { error: `${field} must be an http(s) URL (max 500 chars)` };
+  }
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return { error: `${field} must be a valid absolute URL` };
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return { error: `${field} must use http or https` };
+  }
+  return { value };
+}
 
 /** Add the derived friendly tz label so admin/consumers don't recompute it. */
 export function withLabel(loc) {
@@ -88,6 +112,13 @@ export function normalizeLocation(body) {
     sortOrder = body.sortOrder;
   }
 
+  // Food & drink links — optional http(s) deep links to the venue's menu and
+  // online-ordering system. Empty string clears the link (stored as null).
+  const menuUrl = normalizeHttpUrl(body.menuUrl, "menuUrl");
+  if (menuUrl.error) return { error: menuUrl.error, status: 400 };
+  const orderingUrl = normalizeHttpUrl(body.orderingUrl, "orderingUrl");
+  if (orderingUrl.error) return { error: orderingUrl.error, status: 400 };
+
   // Resolve the timezone. Explicit `tz` wins (validated); otherwise derive from
   // coordinates; otherwise leave null and let the leaderboard fall back to
   // VENUE_TZ. Onboarding normally sends just lat/lng and lets it derive.
@@ -119,6 +150,8 @@ export function normalizeLocation(body) {
       geofenceKm,
       tz,
       sortOrder,
+      menuUrl: menuUrl.value,
+      orderingUrl: orderingUrl.value,
       orgId: orgId ?? null,
     },
   };

@@ -78,8 +78,43 @@ export type Location = {
   tz: string | null;
   tzLabel: string | null;
   sortOrder: number;
+  menuUrl: string | null;
+  orderingUrl: string | null;
   orgId: string | null;
   archivedAt: string | null;
+};
+
+export type Announcement = {
+  id: string;
+  title: string;
+  body: string | null;
+  locationId: string | null;
+  locationName?: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  sortOrder: number;
+  archivedAt: string | null;
+  createdAt: string;
+};
+
+export type Reward = {
+  id: string;
+  code: string;
+  playerIndex: number;
+  playerTag: string;
+  achievement: string;
+  createdAt: string;
+  redeemedAt: string | null;
+  redeemedBy: string | null;
+  courseName: string;
+  locationName: string | null;
+};
+
+export type SeriesBucket = {
+  date: string; // YYYY-MM-DD in the admin timezone
+  rounds: number;
+  players: number;
+  huntFinds: number;
 };
 
 export type Course = {
@@ -159,4 +194,44 @@ export const api = {
     req<{ ok: true; course: Course }>('PATCH', `/courses/${id}`, fields),
   archiveCourse: (id: string, archived: boolean) =>
     req<{ ok: true; course: Course }>('POST', `/courses/${id}/${archived ? 'archive' : 'unarchive'}`),
+
+  // Announcements (punchlist #1).
+  listAnnouncements: (archived = false) =>
+    req<Announcement[]>('GET', `/announcements${archived ? '?archived=1' : ''}`),
+  saveAnnouncement: (a: Partial<Announcement>) =>
+    req<{ ok: true; announcement: Announcement }>('POST', '/announcements', a),
+  archiveAnnouncement: (id: string, archived: boolean) =>
+    req<{ ok: true; announcement: Announcement }>(
+      'POST',
+      `/announcements/${id}/${archived ? 'archive' : 'unarchive'}`
+    ),
+
+  // Office reporting (punchlist #2).
+  overviewSeries: (days = 30) =>
+    req<{ days: number; tz: string; series: SeriesBucket[] }>('GET', `/overview/series?days=${days}`),
+  // The CSV export needs the auth header, so it can't be a plain <a href> —
+  // fetch it and hand the caller a Blob to download.
+  exportRoundsCsv: async (opts: { from?: string; to?: string; locationId?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.from) q.set('from', opts.from);
+    if (opts.to) q.set('to', opts.to);
+    if (opts.locationId) q.set('locationId', opts.locationId);
+    const s = q.toString();
+    const res = await fetch(`/api/admin/export/rounds.csv${s ? `?${s}` : ''}`, {
+      credentials: 'same-origin',
+      headers: { 'x-app-token': getToken() },
+    });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
+
+  // Rewards (punchlist #8 tier 1).
+  lookupReward: (code: string) => req<Reward[]>('GET', `/rewards?code=${encodeURIComponent(code)}`),
+  listRewards: (redeemed = false) => req<Reward[]>('GET', `/rewards${redeemed ? '?redeemed=1' : ''}`),
+  redeemReward: (id: string, redeemed: boolean) =>
+    req<{ ok: true; reward: Reward }>('POST', `/rewards/${id}/${redeemed ? 'redeem' : 'unredeem'}`),
 };

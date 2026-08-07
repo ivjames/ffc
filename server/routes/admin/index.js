@@ -16,6 +16,9 @@ import { router as locationsRouter } from "./locations.js";
 import { router as coursesRouter } from "./courses.js";
 import { router as overviewRouter } from "./overview.js";
 import { router as huntUsageRouter } from "./huntUsage.js";
+import { router as announcementsRouter } from "./announcements.js";
+import { router as rewardsRouter } from "./rewards.js";
+import { router as exportRouter } from "./export.js";
 
 export const router = Router();
 
@@ -30,3 +33,6 @@ router.use("/locations", locationsRouter);
 router.use("/courses", coursesRouter);
 router.use("/overview", overviewRouter);
 router.use("/hunt-usage", huntUsageRouter);
+router.use("/announcements", announcementsRouter);
+router.use("/rewards", rewardsRouter);
+router.use("/export", exportRouter);

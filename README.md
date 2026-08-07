@@ -32,8 +32,11 @@ lists. Players snap a photo of each, and a vision model verifies it. The model
 call is proxied by the Node API so the key (`ANTHROPIC_API_KEY`) stays
 server-side; verified photos are stored on the droplet disk. Findings are tracked
 per player and per group (the round's roster). The model also flags
-photo-of-a-photo attempts (anti-cheat). The lists are fixed for now; content
-moderation of stored photos is deferred.
+photo-of-a-photo attempts (anti-cheat). The lists are fixed for now. Every photo
+is **auto-moderated in the same vision call**: unsafe content (family-venue
+standard) is blocked before it touches disk, and stored photos carry
+people/minors flags plus a recorded moderation status (people in photos are
+welcome; only unsafe content blocks). A human review surface is deferred.
 
 The hunt is available **during gameplay only** — it's gated on an in-progress
 round, so it isn't an open invitation to wander the course during others' games.
@@ -49,6 +52,41 @@ list). See [`server/README.md`](./server/README.md) for the `/api/hunt/*` endpoi
   phone's photo library, not just a live camera capture (it also gates the other
   dev-only UI). Defaults **on**; set to `false` for production so players must
   take a real photo.
+
+## Post-meeting punchlist features
+
+Built to [`post-meeting-punchlist.md`](./post-meeting-punchlist.md) (all tier-1
+items except player registration, which is a separate effort):
+
+- **Announcements** — venue specials/updates managed in Master Control, shown
+  as a rotating banner on Home and the TV board. This is the platform's first
+  **live** content read (`GET /api/announcements`, polled + cached for offline);
+  no rebuild needed to publish a promo.
+- **Team tag** — an optional 3-char team tag at round setup (same rules as
+  player tags). The TV board gains a Players/Teams toggle; a team round scores
+  as average strokes per player, best per course (`/api/leaderboard?by=team`).
+- **Food & Drink card** — per-location menu/ordering deep links set in Master
+  Control, shown on Home when set (grayed out offline). Ships via the normal
+  content export.
+- **Rewards** — completed rounds earn achievements server-side (Hole-in-One,
+  Under Par, Hunt Master), each with a short redemption code shown on the final
+  scorecard; staff look codes up under Master Control → Rewards and mark them
+  redeemed at the counter.
+- **Score sharing** — "Share this round" on the final scorecard renders a
+  branded score image client-side (canvas → Web Share API, download fallback).
+  Numbers only — no photos, so no moderation surface.
+- **Office reporting** — Master Control's Overview gains 30-day trend charts
+  (rounds / players / hunt finds) and a rounds CSV export with a date range.
+- **Photo auto-moderation** — every hunt photo is moderated by the same vision
+  call that verifies the find (no extra model spend): unsafe content is blocked
+  before it ever touches disk, and people/minors presence is recorded per
+  photo. Auto-mod only for now (a human review surface is a later concern, and
+  will start with full history since every verdict is stored).
+- **Hunt photo sharing** — verified, auto-approved photos get a share chip in
+  the hunt UI (Web Share API, download fallback). Photos are served only to
+  the group that took them (keyed by the unguessable round id — no public
+  gallery), and only when auto-moderation approved them. Venue policy: photos
+  with minors are sharable (a family sharing its own picture).
 
 ## Tech stack
 

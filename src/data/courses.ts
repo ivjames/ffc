@@ -115,6 +115,8 @@ export const LOCATIONS: LocationSeed[] = GENERATED_LOCATIONS.map((l) => ({
   lng: l.lng ?? 0,
   geofenceKm: l.geofenceKm ?? undefined,
   sortOrder: l.sortOrder,
+  menuUrl: l.menuUrl ?? undefined,
+  orderingUrl: l.orderingUrl ?? undefined,
 }));
 
 export const COURSES: CourseSeed[] = GENERATED_COURSES.map((c) => ({

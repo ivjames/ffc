@@ -13,6 +13,8 @@ import { router as locationsRouter } from "./routes/locations.js";
 import { router as contentRouter } from "./routes/content.js";
 import { router as huntRouter } from "./routes/hunt.js";
 import { router as adminRouter } from "./routes/admin/index.js";
+import { router as announcementsRouter } from "./routes/announcements.js";
+import { router as rewardsRouter } from "./routes/rewards.js";
 
 export const app = express();
 
@@ -62,6 +64,8 @@ app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/seed", seedRouter);
 app.use("/api/locations", locationsRouter);
 app.use("/api/content", contentRouter);
+app.use("/api/announcements", announcementsRouter);
+app.use("/api/rewards", rewardsRouter);
 // Master Control admin surface (token-guarded inside the router).
 app.use("/api/admin", adminRouter);
 // The hunt's /verify endpoint installs its own larger body parser for base64

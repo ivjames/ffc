@@ -13,6 +13,8 @@ export type GeneratedLocation = {
   geofenceKm: number | null;
   tz: string | null;
   sortOrder: number;
+  menuUrl: string | null;
+  orderingUrl: string | null;
   orgId: string | null;
 };
 
@@ -36,6 +38,8 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     geofenceKm: 2,
     tz: "America/Los_Angeles",
     sortOrder: 10,
+    menuUrl: null,
+    orderingUrl: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },
   {
@@ -47,6 +51,8 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     geofenceKm: 2,
     tz: "America/Los_Angeles",
     sortOrder: 20,
+    menuUrl: null,
+    orderingUrl: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },
   {
@@ -58,6 +64,8 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     geofenceKm: 2,
     tz: "America/Los_Angeles",
     sortOrder: 30,
+    menuUrl: null,
+    orderingUrl: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },
 ];

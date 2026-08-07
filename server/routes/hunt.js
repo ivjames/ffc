@@ -3,11 +3,15 @@
 //   GET  /api/hunt/items                 -> the fixed list of things to find
 //   POST /api/hunt/verify                -> submit a photo; vision judges it
 //   GET  /api/hunt/progress?round=<id>   -> a group's findings so far
+//   GET  /api/hunt/photo/:findId?round=  -> a group's own verified photo (share)
 //
 // Photos are stored on the droplet disk (HUNT_UPLOAD_DIR) and the vision call is
 // proxied server-side (server/lib/vision.js) so the model API key never reaches
-// the browser. Moderation of stored photos is deferred (Phase 3.x) — for now
-// photos are verified and kept, and nothing is displayed publicly.
+// the browser. Every photo is AUTO-MODERATED in the same vision call that
+// verifies the find: unsafe content (family-venue standard) is never written to
+// disk and never credited; safe photos are stored with their moderation verdict
+// (people/minors flags included) and reviewable in Master Control
+// (/api/admin/photos). People in photos are welcome — only unsafe content blocks.
 //
 // Cost controls: every model call is metered into hunt_scan (exact token counts
 // from the API's usage object, for monthly per-course cost rollups). On top of
@@ -183,11 +187,13 @@ router.get("/progress", async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `select f.item_id     as "itemId",
+      `select f.id,
+              f.item_id     as "itemId",
               i.slug        as "itemSlug",
               f.player_tag  as "playerTag",
               f.confidence,
               f.flagged,
+              coalesce(f.photo_path is not null and f.moderation = 'approved', false) as "sharable",
               f.created_at  as "createdAt"
          from hunt_find f
          join hunt_item i on i.id = f.item_id
@@ -199,6 +205,59 @@ router.get("/progress", async (req, res) => {
     return res.json(result.rows);
   } catch (err) {
     console.error("[hunt] progress error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// --- GET /api/hunt/photo/:findId?round=<clientId> ---------------------------
+// Serve a group's own verified photo, for the share flow. Two gates:
+//  - `round` must match the find's round_client_id — the unguessable device
+//    round id is the group's key, so only the group that took a photo (or
+//    whoever they hand the link to) can fetch it. There is no browse/list.
+//  - the photo must be auto-moderation 'approved' (legacy pre-moderation
+//    photos are not served until they've been through the vision pass).
+// Policy (venue decision): photos flagged minors_present ARE sharable — the
+// group sharing them is the group in them (parents sharing their own kids);
+// there is no public gallery.
+const MEDIA_BY_EXT = {
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+router.get("/photo/:findId", async (req, res) => {
+  const { findId } = req.params;
+  const round = req.query.round;
+  if (!UUID_RE.test(findId)) {
+    return res.status(400).json({ ok: false, error: "bad find id" });
+  }
+  if (typeof round !== "string" || round.length === 0 || round.length > 200) {
+    return res.status(400).json({ ok: false, error: "round (clientId) is required" });
+  }
+  try {
+    const result = await pool.query(
+      `select photo_path as "photoPath" from hunt_find
+        where id = $1 and round_client_id = $2
+          and photo_path is not null and moderation = 'approved'`,
+      [findId, round]
+    );
+    // One generic 404 for wrong-round, unmoderated, and missing alike — the
+    // response must not reveal whether a find id exists under another round.
+    if (result.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: "not found" });
+    }
+    const photoPath = result.rows[0].photoPath;
+    const ext = photoPath.split(".").pop();
+    res.set("Content-Type", MEDIA_BY_EXT[ext] ?? "application/octet-stream");
+    res.set("Cache-Control", "private, max-age=300");
+    return res.sendFile(photoPath, (err) => {
+      if (err && !res.headersSent) {
+        res.status(404).json({ ok: false, error: "not found" });
+      }
+    });
+  } catch (err) {
+    console.error("[hunt] photo error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });
@@ -347,7 +406,11 @@ router.post(
       // depicted — flag it and reject. TESTING: when ALLOW_PHOTO_OF_PHOTO is on
       // we treat it as un-flagged so a screenshot of a landmark still verifies.
       const flagged = ALLOW_PHOTO_OF_PHOTO ? false : verdict.photoOfPhoto;
-      const verified = verdict.present && !flagged;
+      // Moderation: unsafe content earns no credit and is never written to
+      // disk, whatever it depicts. (Verdicts without the field — old mocks —
+      // default to safe.)
+      const unsafe = Boolean(verdict.unsafe);
+      const verified = verdict.present && !flagged && !unsafe;
 
       // Meter the call we just paid for, before anything else can fail — the
       // tokens are billed whether or not the find persists.
@@ -362,8 +425,8 @@ router.post(
       });
 
       // Persist the photo, then record the find. We only keep the file for
-      // successful, unflagged finds; rejected attempts aren't stored (keeps disk
-      // usage and moderation surface down — see the deferred-moderation note).
+      // successful, unflagged, safe finds; rejected/unsafe attempts are never
+      // stored (an unsafe image must not exist on disk even transiently).
       let photoPath = null;
       if (verified) {
         await mkdir(UPLOAD_DIR, { recursive: true });
@@ -377,10 +440,15 @@ router.post(
       // INSERT aren't atomic, so a concurrent submission (double-tap, retry)
       // could pass the guard too. The partial unique index makes the DB the
       // arbiter — the loser DO-NOTHINGs instead of writing a second credit.
+      // Moderation verdict recorded with the find: stored (verified) photos
+      // are auto-'approved' by the vision pass; unsafe attempts are 'flagged'
+      // events (no photo on disk) so the operator can see they happened.
+      const moderation = unsafe ? "flagged" : verified ? "approved" : null;
       const ins = await pool.query(
         `insert into hunt_find
-           (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path, countable)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path, countable,
+            moderation, moderation_reason, people_present, minors_present)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          on conflict (round_client_id, player_tag, item_id) where verified and not countable
          do nothing
          returning id`,
@@ -394,6 +462,10 @@ router.post(
           flagged,
           photoPath,
           item.countable,
+          moderation,
+          unsafe ? verdict.unsafeReason || "unsafe content" : null,
+          verdict.peoplePresent ?? null,
+          verdict.minorsPresent ?? null,
         ]
       );
 
@@ -430,7 +502,11 @@ router.post(
         verified,
         flagged,
         confidence: verdict.confidence,
-        reason: verdict.reason,
+        // An unsafe photo gets one fixed, friendly line — never the model's
+        // content description — so the player just retakes the shot.
+        reason: unsafe
+          ? "That photo can't be used here — keep it family-friendly and try another shot."
+          : verdict.reason,
         count,
       });
     } catch (err) {

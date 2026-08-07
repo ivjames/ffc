@@ -36,11 +36,14 @@ export default function PlayerSetup() {
 
   const [count, setCount] = useState(2);
   const [tags, setTags] = useState<string[]>(['', '', '', '']);
+  const [teamTag, setTeamTag] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const activeTags = useMemo(() => tags.slice(0, count), [tags, count]);
-  const rosterValid = validateRoster(activeTags).ok;
+  // The team tag is optional — empty is fine, but a partial/blocked one isn't.
+  const teamErr = teamTag.length === 0 ? null : tagError(teamTag);
+  const rosterValid = validateRoster(activeTags).ok && teamErr === null;
 
   if (!course) {
     return (
@@ -68,8 +71,12 @@ export default function PlayerSetup() {
       setFormError(check.error ?? 'Fix player tags');
       return;
     }
+    if (teamErr) {
+      setFormError(`Team tag: ${teamErr}`);
+      return;
+    }
     setSubmitting(true);
-    const round = createLocalRound(courseId, activeTags);
+    const round = createLocalRound(courseId, activeTags, teamTag.length === TAG_LENGTH ? teamTag : null);
     await putRound(round);
     navigate(`/play/${round.clientId}`, { replace: true });
   }
@@ -137,6 +144,35 @@ export default function PlayerSetup() {
               </div>
             );
           })}
+        </div>
+
+        {/* Optional team tag (punchlist #4 tier 1) — one tag for the whole
+            group; the round then also lands on the TV board's Teams tab. */}
+        <label className="mb-2 mt-6 block text-sm font-semibold text-fairway-100/80">
+          Team tag{' '}
+          <span className="font-normal text-fairway-100/70">(optional — play as a team)</span>
+        </label>
+        <div className="flex items-center gap-3">
+          <span className="w-6 text-right text-sm" aria-hidden="true">
+            🏅
+          </span>
+          <input
+            value={teamTag}
+            onChange={(e) => {
+              setFormError(null);
+              setTeamTag(sanitizeTagInput(e.target.value));
+            }}
+            inputMode="text"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={TAG_LENGTH}
+            placeholder="TEA"
+            aria-label="Team tag (optional)"
+            className="surface-sunk font-arcade w-32 rounded-xl border border-fairway-800/60 px-4 py-2.5 text-center text-2xl font-bold uppercase tracking-widest text-fairway-50 focus:border-fairway-500 focus:outline-none"
+            style={{ borderColor: teamErr ? '#ef4444' : undefined }}
+          />
+          {teamErr && <span className="text-sm text-red-400">{teamErr}</span>}
         </div>
 
         {formError && <p className="mt-4 text-sm text-red-400">{formError}</p>}

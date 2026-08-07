@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
 import HeaderControls from '../../ui/HeaderControls';
+import AnnouncementBanner from '../../ui/AnnouncementBanner';
 import { getActiveRound } from '../../db';
 import { courseById, locationById, coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId, setCurrentLocationId, isLocationPinned } from '../../lib/location';
@@ -14,6 +15,62 @@ import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
 import { playClick, playCup } from '../../lib/sound';
 import type { LocalRound } from '../../types';
+
+// Food & drink deep links for the current venue. External links, so they open
+// in a new tab and need a connection — offline the card stays visible (the
+// venue still serves food!) but says so instead of dead-linking.
+function FoodDrinkCard({ menuUrl, orderingUrl }: { menuUrl?: string; orderingUrl?: string }) {
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
+
+  if (!menuUrl && !orderingUrl) return null;
+  const link = (url: string, label: string) => (
+    <a
+      href={online ? url : undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-disabled={!online}
+      className={`flex-1 rounded-xl py-2.5 text-center text-sm font-bold ${
+        online
+          ? 'btn-accent text-fairway-50 transition-transform active:translate-y-px'
+          : 'surface-sunk cursor-not-allowed text-fairway-100/50'
+      }`}
+      onClick={(e) => {
+        if (!online) e.preventDefault();
+      }}
+    >
+      {label}
+    </a>
+  );
+  return (
+    <div className="surface-1 mb-3 rounded-2xl border border-fairway-800/60 p-3.5">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-lg" aria-hidden="true">
+          🌭
+        </span>
+        <span className="text-sm font-bold text-fairway-50">Food &amp; Drink</span>
+        {!online && (
+          <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-fairway-400">
+            needs connection
+          </span>
+        )}
+      </div>
+      <div className="flex gap-2">
+        {menuUrl && link(menuUrl, 'See the menu')}
+        {orderingUrl && link(orderingUrl, '🛒 Order food')}
+      </div>
+    </div>
+  );
+}
 
 // §7 Home — start round, view maps/rules, resume an in-progress game.
 export default function Home() {
@@ -68,6 +125,10 @@ export default function Home() {
             {courseCount} {courseCount === 1 ? 'course' : 'courses'} · eighteen holes each
           </p>
         </div>
+
+        {/* Venue specials / updates — live from Master Control, cached for
+            offline. Renders nothing when there's nothing to announce. */}
+        <AnnouncementBanner locationId={locationId} className="mb-3" />
 
         {/* Current location — tap to switch sites (or pick "Use my location"
             there). GPS still auto-detects the venue silently when permitted. */}
@@ -151,6 +212,14 @@ export default function Home() {
             ))}
           </div>
         )}
+
+        {/* Food & drink (punchlist #7 tier 1) — deep links into the venue's
+            menu / ordering system, set per location in Master Control. Hidden
+            when the venue has no links; ordering needs a connection. */}
+        <FoodDrinkCard
+          menuUrl={location?.menuUrl}
+          orderingUrl={location?.orderingUrl}
+        />
 
         <div className="space-y-2">
           {/* The scavenger hunt is a play-time activity, reached from the
