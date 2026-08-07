@@ -142,9 +142,13 @@ function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
   return { a, b, c, nx: nx / l, ny: ny / l };
 }
 
+// The slings' outer edges (a-b) lean 5px inward at the top so they are NOT
+// parallel to the outlane dividers beside them — a parallel channel lets a
+// horizontal ball ping-pong between the two faces indefinitely; the lean turns
+// every rebound slightly downward instead.
 const SLINGS: Sling[] = [
-  makeSling({ x: 48, y: 410 }, { x: 48, y: 468 }, { x: 96, y: 478 }),
-  makeSling({ x: 266, y: 410 }, { x: 266, y: 468 }, { x: 218, y: 478 }),
+  makeSling({ x: 53, y: 410 }, { x: 48, y: 468 }, { x: 96, y: 478 }),
+  makeSling({ x: 261, y: 410 }, { x: 266, y: 468 }, { x: 218, y: 478 }),
 ];
 
 const BUMPERS = [
@@ -255,6 +259,19 @@ function collideSeg(
     const eff = -vn < REST_VN ? 0 : e;
     b.vx -= (1 + eff) * vn * nx;
     b.vy -= (1 + eff) * vn * ny;
+    if (eff > 0) {
+      // Anti-stall: deflect every real bounce by a hair (±1.4°) so the ball
+      // can never settle into a periodic ping-pong between two facing walls
+      // (lane dividers, arch chords). Sub-REST_VN glides are exempt, so the
+      // ball still rolls smoothly along the arch. Sim-side RNG is fine here —
+      // only the draw path must stay deterministic.
+      const j = (Math.random() - 0.5) * 0.05;
+      const cj = Math.cos(j);
+      const sj = Math.sin(j);
+      const rvx = b.vx * cj - b.vy * sj;
+      b.vy = b.vx * sj + b.vy * cj;
+      b.vx = rvx;
+    }
     return -vn;
   }
   return 0;
