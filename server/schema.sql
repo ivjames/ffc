@@ -446,3 +446,38 @@ create table if not exists mail_send (
   created_at timestamptz not null default now()
 );
 create index if not exists mail_send_created_idx on mail_send (created_at);
+
+-- Persistent named teams — membership + convenience (roster prefill, grouped
+-- history), NOT a gameplay entity: scores stay positional per round/game.
+create table if not exists team (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null,               -- 1..40 chars
+  owner_user_id uuid not null references app_user(id),
+  created_at    timestamptz not null default now(),
+  archived_at   timestamptz                  -- soft-delete, house style
+);
+create index if not exists team_owner_idx on team (owner_user_id);
+
+create table if not exists team_member (
+  team_id     uuid not null references team(id) on delete cascade,
+  app_user_id uuid not null references app_user(id) on delete cascade,
+  role        text not null default 'member', -- owner | member (app-enforced
+  joined_at   timestamptz not null default now(), --   vocab, house style: no CHECK)
+  primary key (team_id, app_user_id)
+);
+create index if not exists team_member_user_idx on team_member (app_user_id);
+
+-- Emailed team invites. The token in the accept link is the capability (the
+-- recipient may accept from any signed-in address); only its sha256 is stored.
+create table if not exists team_invite (
+  id          uuid primary key default gen_random_uuid(),
+  team_id     uuid not null references team(id) on delete cascade,
+  email       text not null,                 -- lowercased invitee address
+  token_hash  text not null,                 -- sha256(32-byte hex token)
+  invited_by  uuid not null references app_user(id),
+  expires_at  timestamptz not null,          -- created + 7 days
+  accepted_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists team_invite_team_idx  on team_invite (team_id);
+create index if not exists team_invite_token_idx on team_invite (token_hash);

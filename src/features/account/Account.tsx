@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { emailError, phoneError, normalizeEmail } from '../../lib/validateUser';
 import { sanitizeTagInput, tagError, TAG_LENGTH } from '../../lib/sanitize';
@@ -23,6 +23,7 @@ const labelClass = 'mb-1.5 block text-sm font-semibold text-fairway-100/80';
 type Stage = 'loading' | 'email' | 'code' | 'signedIn';
 
 export default function Account() {
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [stage, setStage] = useState<Stage>('loading');
   const [user, setUser] = useState<AppUser | null>(null);
@@ -314,6 +315,9 @@ export default function Account() {
             <div className="mt-6 space-y-2">
               <Button onClick={() => void saveProfile()} disabled={busy || !profileValid}>
                 {busy ? 'Saving…' : 'Save'}
+              </Button>
+              <Button variant="ghost" onClick={() => navigate('/teams')}>
+                👥 My teams
               </Button>
               <Button variant="ghost" onClick={() => void signOut()} disabled={busy}>
                 Sign out
