@@ -54,7 +54,10 @@ export async function syncPending(): Promise<SyncResult> {
   syncing = true;
   const result: SyncResult = { synced: 0, failed: 0 };
   try {
-    const pending = await getRoundsBySync('pending');
+    // Shared rounds never belong in this queue — the server finalizes them
+    // via POST /api/games/:id/complete (src/sync/shared.ts) — but filter
+    // defensively so a stray one can't wedge retries forever.
+    const pending = (await getRoundsBySync('pending')).filter((r) => !r.shared);
     for (const round of pending) {
       try {
         await pushRound(round);

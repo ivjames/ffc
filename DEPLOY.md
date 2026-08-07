@@ -95,6 +95,25 @@ Master Control is then live at `https://admin.ffc.lab980.com`, gated by the same
 service worker). Re-issue/rotate the cert with `ffc wildcard-cert`; rewrite the
 vhost with `ffc admin-vhost`.
 
+### Player accounts + shared games — deploy notes
+
+Two features lean on infrastructure beyond the code:
+
+- **Outbound email** (sign-in codes, team invites): set `MAIL_PROVIDER=resend`
+  + `RESEND_API_KEY` + `MAIL_FROM` in `server/.env`, and set `PUBLIC_APP_URL`
+  to the player origin (e.g. `https://ffc.lab980.com`) so magic links and
+  invite links point at production. **Before flipping to `resend`, verify the
+  sending domain in Resend (SPF + DKIM DNS records)** — unverified domains
+  don't deliver. Until then the default `console` provider logs codes to the
+  pm2 log (fine for dev, warned-about in production).
+- **SSE** (`GET /api/games/:id/events` — live shared scorecards): the endpoint
+  already sends `X-Accel-Buffering: no` so nginx doesn't buffer the stream,
+  and heartbeats every 25 s keep the connection inside nginx's default
+  `proxy_read_timeout 60s`. If a vhost overrides `proxy_read_timeout` below
+  ~30 s, raise it for `/api/` or the streams will cycle (EventSource
+  auto-reconnects, so it degrades rather than breaks — each reconnect re-syncs
+  from a full snapshot).
+
 ## Routine redeploys
 
 ```bash

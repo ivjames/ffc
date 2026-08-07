@@ -388,6 +388,163 @@ update location
  where org_id is null;
 
 -- ---------------------------------------------------------------------------
+-- Player accounts (passwordless email sign-in), teams, and shared multi-device
+-- games. Supersedes the original "no player identity" design: accounts are
+-- OPTIONAL — the anonymous walk-up flow is untouched, and identity is only
+-- required to create teams or host a shared game.
+-- ---------------------------------------------------------------------------
+
+-- A registered player. Email is the identity (verified by the sign-in code
+-- flow itself — the first successful verify proves the inbox). Phone is
+-- collected and format-checked only; nothing is ever sent to it today.
+create table if not exists app_user (
+  id                uuid primary key default gen_random_uuid(),
+  email             text not null unique,   -- stored lowercased
+  email_verified_at timestamptz,            -- set on first successful verify
+  phone             text,                   -- E.164-normalized, format-checked only
+  display_name      text,                   -- 1..40 chars
+  default_tag       text,                   -- [A-Z0-9]{3}, roster prefill
+  created_at        timestamptz not null default now(),
+  archived_at       timestamptz             -- soft-delete, house style
+);
+
+-- Server-side player sessions (lib/userAuth.js) — the admin_session pattern:
+-- `id` is an opaque high-entropy token (the ffc_session cookie's value, looked
+-- up, never decoded). 30-day sliding TTL, refreshed on use.
+create table if not exists user_session (
+  id           text primary key,
+  app_user_id  uuid not null references app_user(id) on delete cascade,
+  created_at   timestamptz not null default now(),
+  expires_at   timestamptz not null
+);
+create index if not exists user_session_expires_idx on user_session (expires_at);
+
+-- One row per emailed sign-in attempt (lib/authCodes.js). Carries BOTH the
+-- 6-digit OTP and the magic-link token, hashed — a DB leak reveals nothing
+-- typeable. `profile` stashes registration fields (phone/displayName/defaultTag)
+-- submitted with the request, applied to app_user on first successful verify.
+create table if not exists auth_code (
+  id               uuid primary key default gen_random_uuid(),
+  email            text not null,           -- lowercased; account may not exist yet
+  code_hash        text not null,           -- sha256(6-digit code)
+  magic_token_hash text not null,           -- sha256(32-byte hex token)
+  profile          jsonb,
+  attempts         int not null default 0,  -- wrong guesses; dead at 5
+  expires_at       timestamptz not null,    -- created + 10 minutes
+  consumed_at      timestamptz,             -- single-use
+  created_at       timestamptz not null default now()
+);
+create index if not exists auth_code_email_idx on auth_code (email, created_at);
+create index if not exists auth_code_magic_idx on auth_code (magic_token_hash);
+
+-- Email-send metering — the hunt_scan/HUNT_SCAN_CAP precedent applied to
+-- outbound mail: one row per send, backing MAIL_DAILY_CAP (lib/mailer.js).
+create table if not exists mail_send (
+  id         uuid primary key default gen_random_uuid(),
+  recipient  text not null,
+  kind       text not null,                 -- 'otp' | 'team_invite'
+  created_at timestamptz not null default now()
+);
+create index if not exists mail_send_created_idx on mail_send (created_at);
+
+-- Persistent named teams — membership + convenience (roster prefill, grouped
+-- history), NOT a gameplay entity: scores stay positional per round/game.
+create table if not exists team (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null,               -- 1..40 chars
+  owner_user_id uuid not null references app_user(id),
+  created_at    timestamptz not null default now(),
+  archived_at   timestamptz                  -- soft-delete, house style
+);
+create index if not exists team_owner_idx on team (owner_user_id);
+
+create table if not exists team_member (
+  team_id     uuid not null references team(id) on delete cascade,
+  app_user_id uuid not null references app_user(id) on delete cascade,
+  role        text not null default 'member', -- owner | member (app-enforced
+  joined_at   timestamptz not null default now(), --   vocab, house style: no CHECK)
+  primary key (team_id, app_user_id)
+);
+create index if not exists team_member_user_idx on team_member (app_user_id);
+
+-- Emailed team invites. The token in the accept link is the capability (the
+-- recipient may accept from any signed-in address); only its sha256 is stored.
+create table if not exists team_invite (
+  id          uuid primary key default gen_random_uuid(),
+  team_id     uuid not null references team(id) on delete cascade,
+  email       text not null,                 -- lowercased invitee address
+  token_hash  text not null,                 -- sha256(32-byte hex token)
+  invited_by  uuid not null references app_user(id),
+  expires_at  timestamptz not null,          -- created + 7 days
+  accepted_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists team_invite_team_idx  on team_invite (team_id);
+create index if not exists team_invite_token_idx on team_invite (token_hash);
+
+-- Shared multi-device games: players on separate phones mark up the SAME
+-- scorecard. Live state lives in these tables while the game is open; on
+-- completion the server materializes a canonical round (+ score rows) with
+-- round.client_id = 'shared:' || shared_game.id, so the leaderboard, TV
+-- screen, and admin all work on shared rounds with zero changes.
+create table if not exists shared_game (
+  id           uuid primary key default gen_random_uuid(),
+  join_code    text not null,                -- 6 chars, lib/joinCode.js alphabet
+  course_id    uuid not null references course(id),
+  team_id      uuid references team(id),     -- optional roster prefill / grouping
+  created_by   uuid not null references app_user(id),
+  status       text not null default 'open', -- open | completed | abandoned
+  round_id     uuid references round(id),    -- canonical round, set at completion
+  created_at   timestamptz not null default now(),
+  completed_at timestamptz,
+  archived_at  timestamptz
+);
+-- Join codes only need to be unique among OPEN games — completed/abandoned
+-- games retire theirs back into the pool.
+create unique index if not exists shared_game_join_code_open_idx
+  on shared_game (join_code) where status = 'open';
+create index if not exists shared_game_creator_idx on shared_game (created_by);
+
+-- Roster slots — positional, mirroring round.player_tags ordinals (max 4,
+-- enforced at the app layer like the 1..4 rule everywhere else). Tags are
+-- unique per game: the positional leaderboard join needs them unambiguous.
+create table if not exists shared_game_player (
+  game_id     uuid not null references shared_game(id) on delete cascade,
+  slot        int  not null,                 -- 0..3
+  tag         text not null,                 -- [A-Z0-9]{3}, validateTags rules
+  app_user_id uuid references app_user(id),  -- null = guest slot
+  created_at  timestamptz not null default now(),
+  primary key (game_id, slot),
+  unique (game_id, tag)
+);
+
+-- One row per device that joined; `id` is the device's bearer participant
+-- token (query-string auth for the SSE stream — EventSource can't set
+-- headers, and game/round ids are already bearer capabilities here, cf.
+-- GET /api/hunt/progress).
+create table if not exists shared_game_participant (
+  id           uuid primary key default gen_random_uuid(),
+  game_id      uuid not null references shared_game(id) on delete cascade,
+  app_user_id  uuid references app_user(id), -- null = guest device
+  joined_at    timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+create index if not exists sg_participant_game_idx on shared_game_participant (game_id);
+
+-- Live score cells. Per-cell last-write-wins on (ts_client, updated_by) —
+-- see lib/lww.js for the guarded upsert and the client mirror
+-- (src/lib/sharedMerge.ts) for the identical comparison devices apply.
+create table if not exists shared_score (
+  game_id    uuid not null references shared_game(id) on delete cascade,
+  slot       int  not null,                  -- 0..3
+  hole       int  not null,                  -- 1..18
+  strokes    int,                            -- null = cleared
+  ts_client  bigint not null,                -- device ms-epoch of the tap
+  updated_by uuid not null,                  -- participant id (LWW tiebreak)
+  updated_at timestamptz not null default now(),
+  primary key (game_id, slot, hole)
+);
+-- ---------------------------------------------------------------------------
 -- Post-meeting punchlist features. See post-meeting-punchlist.md. All DDL
 -- idempotent, appended after the tables it references.
 -- ---------------------------------------------------------------------------

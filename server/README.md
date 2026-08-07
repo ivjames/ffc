@@ -37,6 +37,12 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
 | `HUNT_SCAN_CAP`     | Max vision (model) calls per round — the hard ceiling on hunt API spend per group. Default `240`, the legitimate max (4 players × 20 items max × 3 attempts; ~$0.50 full-burn on Haiku 4.5) — `HUNT_ATTEMPT_CAP` is the working spend control, this is the backstop (and the bound on countable-item grinding). `0` = kill switch (every verify `429`s). Read per request, so changes apply without a restart. |
 | `HUNT_ATTEMPT_CAP`  | Max judged shots per player per non-countable item per round (bounds failed attempts — successful finds dedupe, and "couldn't read that photo" retries don't count). Countable items are exempt; the round cap still bounds them. Default `3`. Read per request. |
+| `MAIL_PROVIDER`     | Outbound email for player sign-in codes and team invites: `console` (default — logs the full message incl. the code to stdout; warns at startup in production), `resend` (raw fetch to Resend's API), or `smtp` (nodemailer over `SMTP_URL` — `npm i nodemailer` first; it is deliberately not a package dependency). **While this is unset/`console`, sign-in runs in BYPASS mode**: `POST /api/auth/request-code` returns the 6-digit code directly (`bypassCode`) and the app signs in without an inbox round-trip — the stopgap until a real provider is wired up. The trade-off is explicit: until then email "verification" proves nothing about inbox ownership. Setting a real provider retires the bypass instantly (checked per request, no restart). |
+| `MAIL_FROM`         | From header for outbound mail, e.g. `FFC <noreply@example.com>`. Default `FFC <noreply@localhost>`. |
+| `RESEND_API_KEY`    | API key when `MAIL_PROVIDER=resend`. The sending domain must be verified (SPF/DKIM) in Resend first — see DEPLOY.md. |
+| `SMTP_URL`          | SMTP connection URL when `MAIL_PROVIDER=smtp`, e.g. `smtps://user:pass@smtp.example.com`. |
+| `MAIL_DAILY_CAP`    | Max outbound emails per rolling 24 h across all kinds, metered in the `mail_send` table (the `hunt_scan` spend-cap precedent applied to email). Default `500`. Read per send. |
+| `PUBLIC_APP_URL`    | Public origin of the player PWA, used as the base for magic-link redirects and team-invite links. Default `http://localhost:5173`. |
 
 ## Endpoints
 
@@ -379,6 +385,69 @@ Responses:
 - `400` — validation failure. `429` — per-IP cap (20/min), the round's scan
   budget (`scan limit reached for this round`), or the player's attempts on an
   item (`attempt limit reached for this item`). `503` — `ANTHROPIC_API_KEY` unset.
+
+## Player accounts, teams & shared games
+
+Optional player identity layered on top of the anonymous arcade-tag flow
+(which is unchanged — solo rounds never touch any of this). Sign-in is
+**passwordless**: registration and sign-in are the same flow, and the first
+successful code verify both creates the account and proves the inbox
+(`email_verified_at`). Phone is collected and format-normalized (E.164-ish,
+bare 10-digit → `+1`) but nothing is ever sent to it.
+
+### `POST /api/auth/request-code` — `{email, profile?}`
+Emails a 6-digit code + magic link via `lib/mailer.js` (`MAIL_PROVIDER`).
+`profile` (`{phone?, displayName?, defaultTag?}`) is stashed with the code and
+applied to the account on first verify. Always answers `{ok:true}` — never
+reveals whether an address has an account. Limits: 3/15 min per email,
+10/hr per IP; codes die after 10 minutes or 5 wrong guesses; only sha256
+digests are stored. **Bypass mode** (no real mail provider configured): the
+response also carries `bypassCode` — the code itself — so the client signs in
+without an email; see `MAIL_PROVIDER` in the env table.
+
+### `POST /api/auth/verify` — `{email, code}` → `{ok, user}` + cookie
+Sets `ffc_session` (httpOnly, `Path=/`, `SameSite=Lax`, `Secure` in
+production) — an opaque token in `user_session` (the `admin_session` pattern)
+with a 30-day sliding TTL. `GET /api/auth/magic?token=…` is the emailed link's
+equivalent (302 to `PUBLIC_APP_URL`). `GET/PATCH /api/auth/me`,
+`POST /api/auth/logout` do what they say.
+
+### `/api/teams` (all require a session)
+`POST /` create · `GET /` mine with members · `PATCH|DELETE /:id` rename/
+archive (owner) · `POST /:id/invites` `{email}` emails a single-use accept
+link (7-day expiry, 20 invites/day per user, metered in `mail_send`) ·
+`POST /invites/accept` `{token}` · `DELETE /:id/members/:userId` (owner
+removes anyone; a member removes themself; owners archive instead of leaving).
+
+### `/api/games` — shared multi-device scorecards
+One scorecard, several phones. Create (session required) returns a 6-char
+join code (Crockford-style alphabet — no I/L/O/U, lookalikes normalized on
+input) plus a per-device **participant token**; joining by code needs **no
+account** (guests claim a slot with just a tag, 20 joins/min per IP, max 4
+slots, tags unique per game, same-user rejoin reuses its slot). The
+participant token is the bearer credential for everything after — including
+the SSE stream, where it rides the query string because `EventSource` can't
+set headers (game ids were already bearer capabilities here, cf.
+`GET /api/hunt/progress`).
+
+- `POST /` `{courseId, tag, teamId?}` → `{game, participantToken, slot}`
+- `POST /join` `{joinCode, tag}` → `{game, participantToken, slot, snapshot}`
+- `GET /:id?participant=…` → `{snapshot}` (roster + all live cells)
+- `POST /:id/scores` `{participant, writes:[{slot, hole(1-18), strokes|null, ts}]}`
+  — per-cell **last-write-wins** on `(ts, participantId)` via a guarded upsert
+  (`lib/lww.js`; the client mirror is `src/lib/sharedMerge.ts` — keep in
+  sync). `ts` is clamped to now+2 min so a broken clock can't wedge a cell.
+  120 writes/min per participant.
+- `POST /:id/complete` — transaction, row-locked, idempotent: materializes a
+  canonical `round` + `score` rows with `client_id = 'shared:<gameId>'`, so
+  the leaderboard/TV/admin serve shared rounds with **zero changes**.
+- `GET /:id/events?participant=…` — SSE: full `snapshot` on every (re)connect
+  (no event-log replay), then `score` / `player_joined` / `game_completed`;
+  `:hb` heartbeat every 25 s. Fan-out is in-process (`lib/gameBus.js`) — same
+  single-process caveat as the rate limiters; swap in Redis pub/sub or pg
+  LISTEN/NOTIFY if the app ever runs multi-process.
+
+Open games auto-abandon after 24 h (checked lazily), retiring their join code.
 
 ## Testing
 

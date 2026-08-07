@@ -14,6 +14,7 @@ import {
 import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
 import { playClick, playCup } from '../../lib/sound';
+import { fetchMe, type AppUser } from '../../lib/authApi';
 import type { LocalRound } from '../../types';
 
 // Food & drink deep links for the current venue. External links, so they open
@@ -76,6 +77,7 @@ function FoodDrinkCard({ menuUrl, orderingUrl }: { menuUrl?: string; orderingUrl
 export default function Home() {
   const navigate = useNavigate();
   const [resume, setResume] = useState<LocalRound | null>(null);
+  const [me, setMe] = useState<AppUser | null>(null);
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
   const courses = coursesByLocation(locationId);
@@ -83,6 +85,8 @@ export default function Home() {
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
+    // Best-effort session check — resolves null offline or signed out.
+    void fetchMe().then(setMe);
   }, []);
 
   // Silent GPS auto-detect: only when location is already granted (so we never
@@ -224,6 +228,9 @@ export default function Home() {
         <div className="space-y-2">
           {/* The scavenger hunt is a play-time activity, reached from the
               scorecard during a round — it's intentionally not on Home. */}
+          <Button variant="ghost" onClick={() => navigate('/join')}>
+            📲 Join a friend's game
+          </Button>
           <Button variant="ghost" onClick={() => navigate('/fun')}>
             🎡 While You Wait
           </Button>
@@ -232,6 +239,11 @@ export default function Home() {
           </Button>
           <Button variant="ghost" onClick={() => navigate('/tv')}>
             See the leaderboard
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/account')}>
+            {me
+              ? `👤 ${me.displayName || me.defaultTag || me.email}`
+              : '👤 Sign in / register'}
           </Button>
           {/* Only worth showing when we're running in a browser tab, not the
               already-installed standalone app. */}

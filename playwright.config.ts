@@ -13,6 +13,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const API_PORT = 8060;
 const ADMIN_PORT = 5174;
+const PLAYER_PORT = 5173;
 
 export default defineConfig({
   testDir: './e2e',
@@ -42,6 +43,14 @@ export default defineConfig({
     {
       command: 'npx vite --config vite.admin.config.ts',
       url: `http://localhost:${ADMIN_PORT}`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 15_000,
+    },
+    {
+      // Player PWA — shared-game specs drive two browser contexts against it
+      // (its /api proxy targets the same API instance above).
+      command: 'npx vite',
+      url: `http://localhost:${PLAYER_PORT}`,
       reuseExistingServer: !process.env.CI,
       timeout: 15_000,
     },

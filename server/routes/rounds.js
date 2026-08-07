@@ -7,43 +7,14 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { validateTags, isValidTag } from "../lib/sanitize.js";
+import { makeRateLimit } from "../lib/rateLimit.js";
 import { scoreAchievements, newRewardCode } from "../lib/rewards.js";
 
 export const router = Router();
 
-// --- Basic per-IP rate limiting -------------------------------------------
-// Writes are anonymous, so we cap how often a single IP can POST. This is a
-// simple in-memory fixed-window counter — good enough for a single-process pm2
-// app on the droplet. For multi-process / multi-host, swap in `express-rate-limit`
-// (npm i express-rate-limit) with a shared store (e.g. Redis).
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute window
-const RATE_LIMIT_MAX = 30; // max writes per IP per window
-const ipHits = new Map(); // ip -> { count, resetAt }
-
-function rateLimit(req, res, next) {
-  const ip = req.ip || req.socket?.remoteAddress || "unknown";
-  const now = Date.now();
-  let entry = ipHits.get(ip);
-  if (!entry || now >= entry.resetAt) {
-    entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
-    ipHits.set(ip, entry);
-  }
-  entry.count += 1;
-  if (entry.count > RATE_LIMIT_MAX) {
-    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-    res.set("Retry-After", String(retryAfter));
-    return res.status(429).json({ ok: false, error: "rate limit exceeded" });
-  }
-  next();
-}
-
-// Occasionally sweep expired entries so the Map doesn't grow unbounded.
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of ipHits) {
-    if (now >= entry.resetAt) ipHits.delete(ip);
-  }
-}, RATE_LIMIT_WINDOW_MS).unref?.();
+// Writes are anonymous, so cap how often a single IP can POST (in-memory
+// fixed-window — see lib/rateLimit.js for the multi-process caveat).
+const rateLimit = makeRateLimit({ windowMs: 60_000, max: 30, name: "rate limit" });
 
 // --- Helpers ---------------------------------------------------------------
 const UUID_RE =
@@ -94,7 +65,7 @@ function collectScoreRows(scores, playerCount) {
  * device round id — our clientId — because the hunt runs during play, before
  * the round exists server-side).
  */
-async function grantRewards(client, { roundId, clientId, courseId, playerTags, scoreRows, pars }) {
+export async function grantRewards(client, { roundId, clientId, courseId, playerTags, scoreRows, pars }) {
   const grants = scoreAchievements(scoreRows, playerTags.length, pars);
 
   const huntDone = await client.query(

@@ -13,6 +13,10 @@ import { router as locationsRouter } from "./routes/locations.js";
 import { router as contentRouter } from "./routes/content.js";
 import { router as huntRouter } from "./routes/hunt.js";
 import { router as adminRouter } from "./routes/admin/index.js";
+import { router as authRouter } from "./routes/auth.js";
+import { router as teamsRouter } from "./routes/teams.js";
+import { router as gamesRouter } from "./routes/games.js";
+import { attachUser } from "./lib/userAuth.js";
 import { router as announcementsRouter } from "./routes/announcements.js";
 import { router as rewardsRouter } from "./routes/rewards.js";
 
@@ -58,12 +62,24 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, build: BUILD_ID });
 });
 
+// Resolve the player-session cookie (if any) to req.user for every /api route.
+// Anonymous requests pass through with req.user = null — nothing public
+// changes behavior. Individual routers opt in to requiring a user.
+app.use("/api", attachUser);
+
 // Feature routes.
 app.use("/api/rounds", roundsRouter);
 app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/seed", seedRouter);
 app.use("/api/locations", locationsRouter);
 app.use("/api/content", contentRouter);
+// Player accounts — passwordless email sign-in.
+app.use("/api/auth", authRouter);
+// Persistent teams (signed-in players only — guarded inside the router).
+app.use("/api/teams", teamsRouter);
+// Shared multi-device games (create needs sign-in; join/score use the
+// per-device participant token; includes the SSE stream).
+app.use("/api/games", gamesRouter);
 app.use("/api/announcements", announcementsRouter);
 app.use("/api/rewards", rewardsRouter);
 // Master Control admin surface (token-guarded inside the router).

@@ -34,6 +34,12 @@ import MilkBottle from './features/fun/MilkBottle';
 import WaterGunRace from './features/fun/WaterGunRace';
 import Pinball from './features/fun/Pinball';
 import CoinPusher from './features/fun/CoinPusher';
+import Account from './features/account/Account';
+import Teams from './features/teams/Teams';
+import TeamDetail from './features/teams/TeamDetail';
+import AcceptInvite from './features/teams/AcceptInvite';
+import JoinGame from './features/shared/JoinGame';
+import Lobby from './features/shared/Lobby';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import { BuildStamp } from './ui/BuildStamp';
@@ -86,6 +92,16 @@ export default function App() {
         <Route path="/fun/watergun" element={<WaterGunRace />} />
         <Route path="/fun/pinball" element={<Pinball />} />
         <Route path="/fun/pusher" element={<CoinPusher />} />
+        {/* Player account — passwordless email sign-in + profile. */}
+        <Route path="/account" element={<Account />} />
+        {/* Persistent teams (signed-in). /teams/accept is the emailed-invite
+            deep link and must sit above the :id match. */}
+        <Route path="/teams" element={<Teams />} />
+        <Route path="/teams/accept" element={<AcceptInvite />} />
+        <Route path="/teams/:id" element={<TeamDetail />} />
+        {/* Shared multi-device games — join by code (QR target) + host lobby. */}
+        <Route path="/join" element={<JoinGame />} />
+        <Route path="/games/:gameId/lobby" element={<Lobby />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         {/* Living component inventory / style guide — the theming reference. */}

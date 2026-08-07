@@ -7,6 +7,8 @@ import Confetti from '../../ui/Confetti';
 import { courseById, locationById } from '../../data/courses';
 import { getRound, putRound } from '../../db';
 import { syncPending, fetchRewards, type RewardRow } from '../../sync';
+import { completeGame } from '../../lib/gamesApi';
+import { applyCompleted } from '../../lib/sharedMerge';
 import { shareRound } from './shareImage';
 import { playFanfare } from '../../lib/sound';
 import type { CourseSeed, LocalRound } from '../../types';
@@ -44,6 +46,26 @@ export default function Summary() {
         if (alive) setNotFound(true);
         return;
       }
+
+      // Shared game: the SERVER finalizes the canonical round (idempotent —
+      // another device may already have finished it). Nothing enters the
+      // pending push queue.
+      if (r.shared) {
+        if (alive) setRound(r);
+        if (r.syncState !== 'synced') {
+          const res = await completeGame(r.shared.gameId, r.shared.participantToken);
+          if (!alive) return;
+          if (res.ok) {
+            const done = applyCompleted(r) ?? r;
+            await putRound(done);
+            if (alive) setRound(done);
+          } else if (navigator.onLine) {
+            setSyncFailed(true);
+          }
+        }
+        return;
+      }
+
       // Mark complete + queue for sync exactly once.
       if (r.syncState === 'active') {
         r = { ...r, completedAt: r.completedAt ?? Date.now(), syncState: 'pending' };
