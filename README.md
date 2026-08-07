@@ -119,6 +119,18 @@ npm run migrate           # create tables
 npm start                 # http://localhost:8060
 ```
 
+For the CenterEdge integration work (mobile F&B ordering + player-card ticket
+rewards) there's a local mock backend while we wait on real API credentials:
+
+```bash
+cd mock-centeredge && npm install && cd ..   # first time only
+npm run mock:centeredge   # http://localhost:8070 (see mock-centeredge/README.md)
+```
+
+The typed client is `src/lib/centeredgeApi.ts`; the email template for
+requesting real credentials from CenterEdge is
+`mock-centeredge/API-ACCESS-REQUEST.md`.
+
 ## Build
 
 ```bash

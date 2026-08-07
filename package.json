@@ -6,6 +6,7 @@
   "description": "Mini golf scorecard PWA — offline-first, four themed 18-hole courses",
   "scripts": {
     "dev": "vite",
+    "mock:centeredge": "node mock-centeredge/index.js",
     "export-content": "node scripts/export-content.mjs",
     "build": "node scripts/export-content.mjs && tsc -b && vite build",
     "build:admin": "tsc -p tsconfig.admin.json --noEmit && vite build --config vite.admin.config.ts",
