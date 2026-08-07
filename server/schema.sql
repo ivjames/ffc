@@ -481,3 +481,66 @@ create table if not exists team_invite (
 );
 create index if not exists team_invite_team_idx  on team_invite (team_id);
 create index if not exists team_invite_token_idx on team_invite (token_hash);
+
+-- Shared multi-device games: players on separate phones mark up the SAME
+-- scorecard. Live state lives in these tables while the game is open; on
+-- completion the server materializes a canonical round (+ score rows) with
+-- round.client_id = 'shared:' || shared_game.id, so the leaderboard, TV
+-- screen, and admin all work on shared rounds with zero changes.
+create table if not exists shared_game (
+  id           uuid primary key default gen_random_uuid(),
+  join_code    text not null,                -- 6 chars, lib/joinCode.js alphabet
+  course_id    uuid not null references course(id),
+  team_id      uuid references team(id),     -- optional roster prefill / grouping
+  created_by   uuid not null references app_user(id),
+  status       text not null default 'open', -- open | completed | abandoned
+  round_id     uuid references round(id),    -- canonical round, set at completion
+  created_at   timestamptz not null default now(),
+  completed_at timestamptz,
+  archived_at  timestamptz
+);
+-- Join codes only need to be unique among OPEN games — completed/abandoned
+-- games retire theirs back into the pool.
+create unique index if not exists shared_game_join_code_open_idx
+  on shared_game (join_code) where status = 'open';
+create index if not exists shared_game_creator_idx on shared_game (created_by);
+
+-- Roster slots — positional, mirroring round.player_tags ordinals (max 4,
+-- enforced at the app layer like the 1..4 rule everywhere else). Tags are
+-- unique per game: the positional leaderboard join needs them unambiguous.
+create table if not exists shared_game_player (
+  game_id     uuid not null references shared_game(id) on delete cascade,
+  slot        int  not null,                 -- 0..3
+  tag         text not null,                 -- [A-Z0-9]{3}, validateTags rules
+  app_user_id uuid references app_user(id),  -- null = guest slot
+  created_at  timestamptz not null default now(),
+  primary key (game_id, slot),
+  unique (game_id, tag)
+);
+
+-- One row per device that joined; `id` is the device's bearer participant
+-- token (query-string auth for the SSE stream — EventSource can't set
+-- headers, and game/round ids are already bearer capabilities here, cf.
+-- GET /api/hunt/progress).
+create table if not exists shared_game_participant (
+  id           uuid primary key default gen_random_uuid(),
+  game_id      uuid not null references shared_game(id) on delete cascade,
+  app_user_id  uuid references app_user(id), -- null = guest device
+  joined_at    timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+create index if not exists sg_participant_game_idx on shared_game_participant (game_id);
+
+-- Live score cells. Per-cell last-write-wins on (ts_client, updated_by) —
+-- see lib/lww.js for the guarded upsert and the client mirror
+-- (src/lib/sharedMerge.ts) for the identical comparison devices apply.
+create table if not exists shared_score (
+  game_id    uuid not null references shared_game(id) on delete cascade,
+  slot       int  not null,                  -- 0..3
+  hole       int  not null,                  -- 1..18
+  strokes    int,                            -- null = cleared
+  ts_client  bigint not null,                -- device ms-epoch of the tap
+  updated_by uuid not null,                  -- participant id (LWW tiebreak)
+  updated_at timestamptz not null default now(),
+  primary key (game_id, slot, hole)
+);
