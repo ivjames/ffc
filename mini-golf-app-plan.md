@@ -46,7 +46,16 @@ An app for a mini golf venue with **four themed 18-hole courses**. Core is an ea
 
 **Persist finished rounds from v1, even though the leaderboard is P2.** The leaderboard needs score history to already exist. If v1 doesn't collect it, P2 starts empty. Syncing completed rounds to the Postgres-backed API costs nothing now and removes the cold-start problem.
 
-**Three-initial tags, arcade-style — no identity system, and collisions are the convention, not a bug.** Each player enters a 3-character tag (`[A-Z0-9]{3}`). No accounts, no PINs. Two different players who both pick "JIM" show as two separate leaderboard rows with their own scores and dates — exactly how arcade high-score tables always worked. This is the intended model, not a limitation. Group-level tracking is deferred; when it returns it's just a second aggregation over the same `score` rows.
+**Three-initial tags, arcade-style — collisions are the convention, not a bug.** Each player enters a 3-character tag (`[A-Z0-9]{3}`). Two different players who both pick "JIM" show as two separate leaderboard rows with their own scores and dates — exactly how arcade high-score tables always worked.
+
+> **Superseded in part:** the original "no accounts, no PINs" rule has been
+> relaxed. The app now ALSO offers optional player accounts (passwordless
+> email sign-in, phone collected; `server/README.md` "Player accounts"),
+> persistent teams, and shared multi-device games joined by code. The
+> anonymous walk-up flow above remains fully intact and is still the default;
+> identity is only required to host a shared game or manage teams. Tags remain
+> the on-card identity everywhere — accounts hang *behind* a tag, never
+> replace it.
 
 **Static content bundled, not fetched.** Maps and rules ship in the build so they work offline. Move them behind the API/DB later only if they need frequent editing.
 
