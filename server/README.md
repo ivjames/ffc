@@ -181,6 +181,7 @@ no domain history hangs off an account.)
 | `GET  /api/admin/users` · `POST /api/admin/users` | list / create `admin_user` accounts — **super_admin only** |
 | `PATCH /api/admin/users/:id` · `DELETE /api/admin/users/:id` | edit (incl. password reset) / remove an account — **super_admin only** |
 | `GET  /api/admin/overview` | rollup: counts + rounds 7/30d + per-location (org-scoped for `org_admin`) |
+| `GET  /api/admin/hunt-usage` | hunt vision-spend rollup from `hunt_scan`: monthly per-venue rounds/scans/tokens + list-price cost (`?months=1..24`, default 6; org-scoped for `org_admin`; see `HUNT-PRICING.md`) |
 | `GET  /api/admin/orgs` · `POST /api/admin/orgs` | list / create-update org — **create/update/archive is super_admin only**; `org_admin` can only read their own org |
 | `GET  /api/admin/orgs/:id` | one org + its live locations (`org_admin`: 403 on any org but their own) |
 | `POST /api/admin/orgs/:id/archive` · `…/unarchive` | soft-delete / restore — **super_admin only** |
@@ -436,7 +437,8 @@ nothing assumes one global zone.
 - `routes/admin/` — Master Control, mounted under `/api/admin` by `admin/index.js`
   (`requireAdminAuth`-guarded, `/login` excepted): `auth.js` (login/logout/me),
   `users.js` (admin_user CRUD, super_admin only), `orgs.js`, `locations.js`,
-  `courses.js`, `overview.js` (the latter four org-scoped for `org_admin` —
+  `courses.js`, `overview.js`, `huntUsage.js` (hunt vision-spend rollup —
+  see `HUNT-PRICING.md`; the latter five org-scoped for `org_admin` —
   see "Admin accounts & sessions" above).
 - `routes/hunt.js` — scavenger hunt: `GET /api/hunt/items`, `GET /api/hunt/progress`,
   `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe,

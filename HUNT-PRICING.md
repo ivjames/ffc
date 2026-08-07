@@ -92,7 +92,13 @@ constraint — including free-with-round (~$0.12/group absorbed as marketing).
 ## Reconciling against the Anthropic invoice
 
 `hunt_scan` records the API's exact token counts per call (the number Anthropic
-bills), plus model id and a denormalized `course_id`. Monthly per-venue rollup:
+bills), plus model id and a denormalized `course_id`.
+
+**In Master Control:** `GET /api/admin/hunt-usage?months=6` returns the monthly
+per-venue rollup (rounds, scans, token sums, list-price cost) — org-scoped for
+`org_admin`, no psql needed.
+
+**Raw SQL equivalent:**
 
 ```sql
 select l.name as venue, date_trunc('month', s.created_at) as month,
