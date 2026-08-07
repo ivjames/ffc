@@ -15,6 +15,7 @@ import { router as orgsRouter } from "./orgs.js";
 import { router as locationsRouter } from "./locations.js";
 import { router as coursesRouter } from "./courses.js";
 import { router as overviewRouter } from "./overview.js";
+import { router as huntUsageRouter } from "./huntUsage.js";
 
 export const router = Router();
 
@@ -28,3 +29,4 @@ router.use("/orgs", orgsRouter);
 router.use("/locations", locationsRouter);
 router.use("/courses", coursesRouter);
 router.use("/overview", overviewRouter);
+router.use("/hunt-usage", huntUsageRouter);

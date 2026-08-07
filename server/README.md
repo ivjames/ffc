@@ -35,6 +35,8 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `VENUE_TZ`          | **Fallback** IANA timezone for leaderboard calendar windows, used only for a venue whose `location.tz` is unset. The real zone is per venue (see "Venue timezones" below). Default `America/Los_Angeles`. |
 | `ANTHROPIC_API_KEY` | Vision key for the scavenger hunt (`POST /api/hunt/verify`). Unset = hunt verification returns `503`; the rest of the API is unaffected. |
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
+| `HUNT_SCAN_CAP`     | Max vision (model) calls per round — the hard ceiling on hunt API spend per group. Default `240`, the legitimate max (4 players × 20 items max × 3 attempts; ~$0.50 full-burn on Haiku 4.5) — `HUNT_ATTEMPT_CAP` is the working spend control, this is the backstop (and the bound on countable-item grinding). `0` = kill switch (every verify `429`s). Read per request, so changes apply without a restart. |
+| `HUNT_ATTEMPT_CAP`  | Max judged shots per player per non-countable item per round (bounds failed attempts — successful finds dedupe, and "couldn't read that photo" retries don't count). Countable items are exempt; the round cap still bounds them. Default `3`. Read per request. |
 
 ## Endpoints
 
@@ -179,6 +181,7 @@ no domain history hangs off an account.)
 | `GET  /api/admin/users` · `POST /api/admin/users` | list / create `admin_user` accounts — **super_admin only** |
 | `PATCH /api/admin/users/:id` · `DELETE /api/admin/users/:id` | edit (incl. password reset) / remove an account — **super_admin only** |
 | `GET  /api/admin/overview` | rollup: counts + rounds 7/30d + per-location (org-scoped for `org_admin`) |
+| `GET  /api/admin/hunt-usage` | hunt vision-spend rollup from `hunt_scan`: monthly per-venue rounds/scans/tokens + list-price cost (`?months=1..24`, default 6; org-scoped for `org_admin`; see `HUNT-PRICING.md`) |
 | `GET  /api/admin/orgs` · `POST /api/admin/orgs` | list / create-update org — **create/update/archive is super_admin only**; `org_admin` can only read their own org |
 | `GET  /api/admin/orgs/:id` | one org + its live locations (`org_admin`: 403 on any org but their own) |
 | `POST /api/admin/orgs/:id/archive` · `…/unarchive` | soft-delete / restore — **super_admin only** |
@@ -280,10 +283,24 @@ Request:
 - A photo-of-a-photo is `flagged` and never counts as a find.
 - Only verified, unflagged photos are written to disk.
 
+Cost controls: every model call is metered into `hunt_scan` — the API's exact
+`input_tokens`/`output_tokens` (what Anthropic bills), the model id, and the
+item's `course_id` for monthly per-venue cost rollups. On top of the per-IP
+rate limit, each player gets `HUNT_ATTEMPT_CAP` (default 3) judged shots per
+non-countable item per round, and each round has a total scan budget
+(`HUNT_SCAN_CAP`, default 240 — the legitimate max of 4 players × 20 items ×
+3 attempts). Countable items are exempt from the attempt cap but still bounded
+by the round budget. Dedupe short-circuits don't call the
+model, so they aren't metered or counted against either cap; a
+`VISION_NO_OUTPUT` retry is metered (it was billed) but carries no verdict, so
+it doesn't burn an attempt.
+
 Responses:
 - `200 { "ok": true, "verified": true|false, "flagged": bool, "confidence": num, "reason": "…" }`
 - `200 { "ok": true, "verified": true, "alreadyFound": true, "reason": "…" }` — dedupe.
-- `400` — validation failure. `429` — per-IP cap (20/min). `503` — `ANTHROPIC_API_KEY` unset.
+- `400` — validation failure. `429` — per-IP cap (20/min), the round's scan
+  budget (`scan limit reached for this round`), or the player's attempts on an
+  item (`attempt limit reached for this item`). `503` — `ANTHROPIC_API_KEY` unset.
 
 ## Testing
 
@@ -334,6 +351,10 @@ actually exercises:
 - `routes/hunt.js` (91%) — items/progress, verify's full validation +
   happy-path + dedupe + anti-cheat-flagged + countable-count + no-output
   branches, and the per-IP rate limit, all via a mocked `lib/vision.js`.
+  Cost controls live in their own file (`hunt.scanCap.integration.test.js`,
+  fresh process = fresh rate limiter): `hunt_scan` token metering (incl. the
+  billed-but-no-verdict path), the `HUNT_SCAN_CAP` per-round budget 429, and
+  the `HUNT_ATTEMPT_CAP` per-item 429 (countable items exempt).
 - `routes/rounds.js` (96%) — validation, idempotent re-sync (scores untouched
   on a duplicate `clientId`), the rate limit.
 - `routes/leaderboard.js` (97%) — best-per-(tag, course) aggregation, calendar
@@ -387,8 +408,9 @@ nothing assumes one global zone.
 - `db.js` — shared `pg` Pool from `DATABASE_URL`.
 - `test-support/testDb.js` — shared helpers for DB-backed tests (not itself a
   test file); see "Testing" above.
-- `schema.sql` — DDL (course / round / score / hunt_item / hunt_find) + per-course
-  hunt seed (ensures the four courses exist so the hunt FK resolves on a fresh migrate).
+- `schema.sql` — DDL (course / round / score / hunt_item / hunt_find / hunt_scan) +
+  per-course hunt seed (ensures the four courses exist so the hunt FK resolves on a
+  fresh migrate).
 - `migrate.js` — applies `schema.sql`.
 - `lib/sanitize.js` — tag validation + offensive-word blocklist (`isValidTag`,
   `validateTags`, `BLOCKLIST`). Mirrors the client's rules exactly.
@@ -415,11 +437,14 @@ nothing assumes one global zone.
 - `routes/admin/` — Master Control, mounted under `/api/admin` by `admin/index.js`
   (`requireAdminAuth`-guarded, `/login` excepted): `auth.js` (login/logout/me),
   `users.js` (admin_user CRUD, super_admin only), `orgs.js`, `locations.js`,
-  `courses.js`, `overview.js` (the latter four org-scoped for `org_admin` —
+  `courses.js`, `overview.js`, `huntUsage.js` (hunt vision-spend rollup —
+  see `HUNT-PRICING.md`; the latter five org-scoped for `org_admin` —
   see "Admin accounts & sessions" above).
 - `routes/hunt.js` — scavenger hunt: `GET /api/hunt/items`, `GET /api/hunt/progress`,
-  `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe).
+  `POST /api/hunt/verify` (photo → vision → find; per-IP rate limit, dedupe,
+  `HUNT_SCAN_CAP` per-round budget, `hunt_scan` token metering).
 - `lib/huntAntiCheat.js` — pure resolver for the `HUNT_ALLOW_PHOTO_OF_PHOTO`
   production fail-safe (`resolveAllowPhotoOfPhoto`); split out of `routes/hunt.js`
   so it's unit-testable without re-importing the route module.
-- `lib/vision.js` — Claude vision proxy (`claude-opus-4-8`, structured JSON verdict).
+- `lib/vision.js` — Claude vision proxy (`claude-haiku-4-5`, structured JSON
+  verdict + exact token usage for metering).

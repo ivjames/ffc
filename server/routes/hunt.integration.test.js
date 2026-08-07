@@ -100,6 +100,7 @@ before(async () => {
 after(async () => {
   if (close) await close();
   await testQuery(`delete from hunt_find where item_id in ($1, $2)`, [itemId, countableItemId]);
+  await testQuery(`delete from hunt_scan where item_id in ($1, $2)`, [itemId, countableItemId]);
   await testQuery(`delete from course where id = $1`, [courseId]); // cascades hunt_item
   await testQuery(`delete from location where id = $1`, [locationId]);
   await rmDir(uploadDir, { recursive: true, force: true });

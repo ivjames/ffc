@@ -129,6 +129,31 @@ create unique index if not exists hunt_find_verified_unique
   on hunt_find (round_client_id, player_tag, item_id)
   where verified and not countable;
 
+-- Vision-spend metering: one row per model call made by POST /api/hunt/verify,
+-- successful verdict or not. This is the billing/budget record, separate from
+-- hunt_find (the gameplay record): it backs the per-round scan cap (HUNT_SCAN_CAP
+-- in routes/hunt.js) and monthly cost rollups per course/venue, reconcilable
+-- against the Anthropic invoice via the token counts. `item_id` is SET NULL on
+-- item deletion (billing history outlives curation edits); `course_id` is
+-- denormalized at write time so rollups survive item deletion too.
+create table if not exists hunt_scan (
+  id              uuid primary key default gen_random_uuid(),
+  round_client_id text not null,           -- device round id (the group)
+  player_tag      text not null,           -- [A-Z0-9]{3}, who scanned
+  item_id         uuid references hunt_item(id) on delete set null,
+  course_id       uuid,                    -- item's course at scan time (no FK: history)
+  model           text,                    -- model id that served the call
+  input_tokens    int,                     -- from the API's usage object; null if unknown
+  output_tokens   int,
+  verified        boolean,                 -- verdict outcome; null when no verdict (VISION_NO_OUTPUT)
+  flagged         boolean,
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists hunt_scan_round_idx   on hunt_scan (round_client_id);
+create index if not exists hunt_scan_created_idx on hunt_scan (created_at);
+create index if not exists hunt_scan_course_idx  on hunt_scan (course_id);
+
 -- Bullwinkle's three venues. Idempotent on id; ids + coords mirror
 -- src/data/courses.ts (exact coordinates geocoded from the street addresses;
 -- 2 km geofence per venue, sites hundreds of km apart so no overlap).

@@ -31,6 +31,13 @@ delete from hunt_find
     where hi.course_id in (select id from _placeholder_course)
  );
 
+-- 1b. Hunt scans (vision-spend metering). Their item FK is SET NULL so the
+-- course delete below wouldn't fail, but placeholder-course metering rows are
+-- disposable test data too — match on the denormalized course_id, which
+-- survives even for scans whose item was already deleted.
+delete from hunt_scan
+ where course_id in (select id from _placeholder_course);
+
 -- 2. Rounds -> course(id) has no cascade (scores cascade with the round).
 delete from round
  where course_id in (select id from _placeholder_course);

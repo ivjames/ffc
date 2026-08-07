@@ -79,7 +79,10 @@ const VERDICT_SCHEMA = {
  * @param {string} args.mediaType    One of ALLOWED_MEDIA_TYPES.
  * @param {string} args.itemName     Human description of the target, e.g. "A windmill".
  * @param {string} [args.itemHint]   Optional hint to give the model context.
- * @returns {Promise<{present:boolean, confidence:number, reason:string, photoOfPhoto:boolean}>}
+ * @returns {Promise<{present:boolean, confidence:number, reason:string, photoOfPhoto:boolean,
+ *   usage:{model:string, inputTokens:number|null, outputTokens:number|null}}>}
+ *   `usage` carries the API's exact token counts so the route can meter spend
+ *   (hunt_scan) — it's the number Anthropic bills, not an estimate.
  */
 export async function verifyItemInImage({ imageBase64, mediaType, itemName, itemHint }) {
   const anthropic = getClient();
@@ -120,14 +123,24 @@ export async function verifyItemInImage({ imageBase64, mediaType, itemName, item
     ],
   });
 
+  // Exact token counts for this call, straight from the API's usage object —
+  // this is what Anthropic bills, so it's what the route records for metering.
+  const usage = {
+    model: response.model || MODEL,
+    inputTokens: response.usage?.input_tokens ?? null,
+    outputTokens: response.usage?.output_tokens ?? null,
+  };
+
   // With output_config.format the answer is a single JSON text block. If the
   // model produced none (e.g. the token budget went entirely to thinking), flag
   // it as retryable so the route can tell the player to try again rather than
-  // surfacing an opaque 500.
+  // surfacing an opaque 500. The call was still billed, so carry the usage on
+  // the error for the route to meter.
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock) {
     const err = new Error("vision returned no text content");
     err.code = "VISION_NO_OUTPUT";
+    err.usage = usage;
     throw err;
   }
   const parsed = JSON.parse(textBlock.text);
@@ -139,5 +152,6 @@ export async function verifyItemInImage({ imageBase64, mediaType, itemName, item
     confidence,
     reason: typeof parsed.reason === "string" ? parsed.reason : "",
     photoOfPhoto: Boolean(parsed.photo_of_photo),
+    usage,
   };
 }
