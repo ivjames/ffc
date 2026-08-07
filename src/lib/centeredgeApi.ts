@@ -90,6 +90,11 @@ export type PlayerTransaction = {
 
 type Fail = { ok: false; error: string; status?: number };
 
+/** 2422 → "$24.22". All CenterEdge money is integer cents (USD). */
+export function formatCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T | Fail> {
   try {
     const res = await fetch(`${BASE}/api/v1${path}`, {

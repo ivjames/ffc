@@ -35,6 +35,10 @@ import MilkBottle from './features/fun/MilkBottle';
 import WaterGunRace from './features/fun/WaterGunRace';
 import Pinball from './features/fun/Pinball';
 import CoinPusher from './features/fun/CoinPusher';
+import Food from './features/food/Food';
+import Checkout from './features/food/Checkout';
+import OrderStatusScreen from './features/food/OrderStatus';
+import Rewards from './features/rewards/Rewards';
 import Account from './features/account/Account';
 import Teams from './features/teams/Teams';
 import TeamDetail from './features/teams/TeamDetail';
@@ -99,6 +103,12 @@ export default function App() {
         <Route path="/fun/watergun" element={<WaterGunRace />} />
         <Route path="/fun/pinball" element={<Pinball />} />
         <Route path="/fun/pusher" element={<CoinPusher />} />
+        {/* Native F&B ordering + rewards card — the CenterEdge integration
+            (mock-centeredge in dev; see src/lib/centeredgeApi.ts). */}
+        <Route path="/food" element={<Food />} />
+        <Route path="/food/checkout" element={<Checkout />} />
+        <Route path="/food/order/:orderId" element={<OrderStatusScreen />} />
+        <Route path="/rewards" element={<Rewards />} />
         {/* Player account — passwordless email sign-in + profile. */}
         <Route path="/account" element={<Account />} />
         {/* Persistent teams (signed-in). /teams/accept is the emailed-invite

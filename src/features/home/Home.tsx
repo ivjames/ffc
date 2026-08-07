@@ -234,6 +234,15 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/fun')}>
             🎡 While You Wait
           </Button>
+          {/* Native in-app ordering + rewards (CenterEdge integration; the
+              FoodDrinkCard's external deep links above remain the venue
+              fallback until this ships). */}
+          <Button variant="ghost" onClick={() => navigate('/food')}>
+            🍕 Order food & drinks
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/rewards')}>
+            🎟️ Rewards card
+          </Button>
           <Button variant="ghost" onClick={() => navigate('/rules')}>
             Rules
           </Button>
