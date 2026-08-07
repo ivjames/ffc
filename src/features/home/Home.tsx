@@ -159,6 +159,9 @@ export default function Home() {
         <div className="space-y-2">
           {/* The scavenger hunt is a play-time activity, reached from the
               scorecard during a round — it's intentionally not on Home. */}
+          <Button variant="ghost" onClick={() => navigate('/join')}>
+            📲 Join a friend's game
+          </Button>
           <Button variant="ghost" onClick={() => navigate('/fun')}>
             🎡 While You Wait
           </Button>

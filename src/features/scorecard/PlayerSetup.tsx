@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
@@ -11,6 +11,9 @@ import {
   TAG_LENGTH,
 } from '../../lib/sanitize';
 import { createLocalRound, putRound } from '../../db';
+import { fetchMe, type AppUser } from '../../lib/authApi';
+import { createGame, fetchSnapshot } from '../../lib/gamesApi';
+import { createSharedLocalRound } from '../../lib/sharedMerge';
 import { DEV_MODE } from '../../lib/flags';
 
 // Testing aid — a random valid arcade tag (three A–Z/0–9 chars), retrying the
@@ -38,6 +41,12 @@ export default function PlayerSetup() {
   const [tags, setTags] = useState<string[]>(['', '', '', '']);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Shared-game hosting needs an account (the joiners don't).
+  const [me, setMe] = useState<AppUser | null | 'loading'>('loading');
+
+  useEffect(() => {
+    void fetchMe().then(setMe);
+  }, []);
 
   const activeTags = useMemo(() => tags.slice(0, count), [tags, count]);
   const rosterValid = validateRoster(activeTags).ok;
@@ -72,6 +81,39 @@ export default function PlayerSetup() {
     const round = createLocalRound(courseId, activeTags);
     await putRound(round);
     navigate(`/play/${round.clientId}`, { replace: true });
+  }
+
+  // Host a shared multi-device game: the host's own tag is player 1's field;
+  // everyone else joins by code from their own phone (no roster entry here).
+  async function startShared() {
+    const hostTag = tags[0];
+    if (!isValidTag(hostTag)) {
+      setFormError('Enter your own tag (player 1) to host a shared game');
+      return;
+    }
+    if (me === 'loading') return;
+    if (!me) {
+      navigate('/account');
+      return;
+    }
+    setSubmitting(true);
+    setFormError(null);
+    const res = await createGame(courseId, hostTag);
+    if (!res.ok) {
+      setSubmitting(false);
+      setFormError(
+        res.status === 401 ? 'Sign in to host a shared game' : res.error ?? 'Could not start',
+      );
+      return;
+    }
+    // Create returns the bare game; the snapshot fills the roster (just us).
+    const snap = await fetchSnapshot(res.game.id, res.participantToken);
+    const snapshot = snap.ok
+      ? snap.snapshot
+      : { game: res.game, players: [{ slot: 0, tag: hostTag, userId: me.id, displayName: me.displayName }], scores: [] };
+    const round = createSharedLocalRound(snapshot, res.participantToken, res.slot);
+    await putRound(round);
+    navigate(`/games/${res.game.id}/lobby`, { replace: true });
   }
 
   // Testing aid — roll a random roster (1..4 players, random tags), start the
@@ -145,6 +187,19 @@ export default function PlayerSetup() {
           <Button onClick={start} disabled={!rosterValid || submitting}>
             {submitting ? 'Starting…' : 'Start round'}
           </Button>
+        </div>
+
+        {/* Shared game — friends score the same card from their own phones.
+            Uses player 1's tag as the host's; the rest join by code. */}
+        <div className="mt-3">
+          <Button variant="ghost" onClick={() => void startShared()} disabled={submitting}>
+            📲 Play together (everyone on their own phone)
+          </Button>
+          {!me && me !== 'loading' && (
+            <p className="mt-1.5 text-center text-xs text-fairway-100/60">
+              Hosting needs a (free) account — friends join without one.
+            </p>
+          )}
         </div>
 
         {/* Auto-play (testing, dev-mode only) — skip the roster, roll a random

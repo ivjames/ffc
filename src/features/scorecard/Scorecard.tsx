@@ -14,6 +14,8 @@ import {
   isRoundComplete,
 } from '../../lib/scoring';
 import { playClick, playStroke, playUndo, playCup } from '../../lib/sound';
+import { openSharedRound, type SharedHandle, type SharedStatus } from '../../sync/shared';
+import { LivePill } from '../shared/Lobby';
 import { DEV_MODE } from '../../lib/flags';
 
 // Testing aid — the gap between simulated button taps. The auto-player drives
@@ -49,6 +51,11 @@ export default function Scorecard() {
   // number is keyed on it so the pop animation re-runs on a bump but NOT when
   // navigating between holes (which merely changes the displayed value).
   const [pops, setPops] = useState<Record<number, number>>({});
+  // Shared-game live sync: connection status for the header pill, and the
+  // manager handle local taps route through (it serializes local + remote
+  // mutations so neither clobbers the other).
+  const [sharedStatus, setSharedStatus] = useState<SharedStatus>('offline');
+  const sharedHandleRef = useRef<SharedHandle | null>(null);
 
   useEffect(() => {
     void getRound(clientId).then((r) => {
@@ -83,6 +90,19 @@ export default function Scorecard() {
     setFastForward(mode === 'fast');
     setAutoPlaying(true);
   }, [round, location.state, location.pathname, navigate]);
+
+  // Shared rounds: open the live-sync manager once the round has loaded and
+  // identified itself as shared; remote updates land via setRound.
+  const isShared = !!round?.shared;
+  useEffect(() => {
+    if (!isShared) return;
+    const handle = openSharedRound(clientId, setRound, setSharedStatus);
+    sharedHandleRef.current = handle;
+    return () => {
+      handle.close();
+      sharedHandleRef.current = null;
+    };
+  }, [isShared, clientId]);
 
   const course = round ? courseById(round.courseId) : undefined;
 
@@ -155,8 +175,15 @@ export default function Scorecard() {
   // hole is never left half-scored by moving on.
   const currentHoleScored = round.playerTags.every((_t, p) => round.scores[p]?.[hole] != null);
 
-  // Persist a single stroke edit (§5.1: persist on every edit).
+  // Persist a single stroke edit (§5.1: persist on every edit). Shared rounds
+  // route through the sync manager instead — it stamps the LWW metadata,
+  // queues the write for the server, and echoes the new round back via
+  // setRound; anyone in the group can edit any player's row.
   async function setStroke(playerIndex: number, value: number | null) {
+    if (sharedHandleRef.current) {
+      sharedHandleRef.current.applyLocal(playerIndex, hole, value);
+      return;
+    }
     setRound((prev) => {
       if (!prev) return prev;
       const row = [...(prev.scores[playerIndex] ?? Array(HOLE_COUNT).fill(null))];
@@ -211,6 +238,8 @@ export default function Scorecard() {
         back="/"
         right={
           <div className="flex items-center gap-1">
+            {/* Shared game: live-connection pill (tap targets stay elsewhere). */}
+            {round.shared && <LivePill status={sharedStatus} />}
             {/* Jump to the scavenger hunt, carrying where we came from so its
                 back button returns here rather than to Home (§Phase 3). */}
             <button
@@ -333,7 +362,11 @@ export default function Scorecard() {
                 </button>
                 {/* The count sits in a carved well so it reads as a recessed
                     readout between the two raised keys. */}
-                <div className="surface-sunk flex h-9 flex-1 items-center justify-center rounded-lg">
+                <div
+                  role="status"
+                  aria-label={`Strokes for ${tag}`}
+                  className="surface-sunk flex h-9 flex-1 items-center justify-center rounded-lg"
+                >
                   {/* Keyed on a per-player nonce that only changes on a real
                       stroke edit, so the punch fires on +/− but not when
                       navigating between holes. */}

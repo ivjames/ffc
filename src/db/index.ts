@@ -1,11 +1,12 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { LocalRound } from '../types';
+import type { LocalRound, OutboxEntry } from '../types';
 import { HOLE_COUNT } from '../lib/scoring';
 
 // §4 IndexedDB wrapper — the offline source of truth for round state.
 // Active rounds persist here on every stroke edit so a refresh/crash never
 // loses a game; completed rounds stay here (syncState) until the sync worker
-// pushes them to the API.
+// pushes them to the API. v2 adds the shared-game outbox: cell writes queued
+// while offline/mid-flight, drained to POST /api/games/:id/scores.
 
 interface FfcDB extends DBSchema {
   rounds: {
@@ -13,19 +14,30 @@ interface FfcDB extends DBSchema {
     value: LocalRound;
     indexes: { 'by-sync': string };
   };
+  outbox: {
+    key: number; // auto-increment
+    value: OutboxEntry;
+    indexes: { 'by-game': string };
+  };
 }
 
 const DB_NAME = 'ffc';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<FfcDB>> | null = null;
 
 function getDB(): Promise<IDBPDatabase<FfcDB>> {
   if (!dbPromise) {
     dbPromise = openDB<FfcDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const store = db.createObjectStore('rounds', { keyPath: 'clientId' });
-        store.createIndex('by-sync', 'syncState');
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const store = db.createObjectStore('rounds', { keyPath: 'clientId' });
+          store.createIndex('by-sync', 'syncState');
+        }
+        if (oldVersion < 2) {
+          const outbox = db.createObjectStore('outbox', { autoIncrement: true });
+          outbox.createIndex('by-game', 'gameId');
+        }
       },
     });
   }
@@ -85,4 +97,36 @@ export async function getActiveRound(): Promise<LocalRound | undefined> {
 export async function deleteRound(clientId: string): Promise<void> {
   const db = await getDB();
   await db.delete('rounds', clientId);
+}
+
+// --- Shared-game outbox ------------------------------------------------------
+
+export async function enqueueOutbox(entry: OutboxEntry): Promise<void> {
+  const db = await getDB();
+  await db.add('outbox', entry);
+}
+
+/** All queued writes for one game, oldest first, with their store keys. */
+export async function getOutbox(
+  gameId: string,
+): Promise<{ key: number; entry: OutboxEntry }[]> {
+  const db = await getDB();
+  const tx = db.transaction('outbox', 'readonly');
+  const out: { key: number; entry: OutboxEntry }[] = [];
+  for (
+    let cursor = await tx.store.index('by-game').openCursor(gameId);
+    cursor;
+    cursor = await cursor.continue()
+  ) {
+    out.push({ key: cursor.primaryKey, entry: cursor.value });
+  }
+  return out;
+}
+
+/** Remove delivered writes by store key. */
+export async function clearOutbox(keys: number[]): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction('outbox', 'readwrite');
+  await Promise.all(keys.map((k) => tx.store.delete(k)));
+  await tx.done;
 }

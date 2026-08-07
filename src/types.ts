@@ -2,6 +2,25 @@
 
 export type SyncState = 'active' | 'pending' | 'synced';
 
+// Per-cell last-write-wins metadata for a shared round: who wrote the cell
+// last and at what device timestamp. Mirrors the server's shared_score
+// (ts_client, updated_by) — see src/lib/sharedMerge.ts for the comparison.
+export type CellMeta = { ts: number; by: string } | null;
+
+// Extra state carried by a round that is a shared multi-device game. The
+// round's clientId is 'shared:' + gameId, so rejoining on the same device is
+// naturally idempotent and the server's finalized round matches what this
+// device references.
+export type SharedInfo = {
+  gameId: string;
+  joinCode: string;
+  participantToken: string; // this device's bearer credential
+  slot: number; // this device's own roster slot
+  status: 'open' | 'completed';
+  // playerIndex -> [18] CellMeta, aligned with LocalRound.scores
+  cellMeta: Record<number, CellMeta[]>;
+};
+
 // §4 Local state (IndexedDB) — the active round held locally while playing.
 export type LocalRound = {
   clientId: string; // UUID, becomes round.client_id on sync
@@ -12,6 +31,19 @@ export type LocalRound = {
   createdAt: number;
   completedAt: number | null;
   syncState: SyncState;
+  // Present only on shared multi-device rounds. Shared rounds never enter the
+  // 'pending' push queue — the server finalizes them at completion instead.
+  shared?: SharedInfo;
+};
+
+// One queued cell write from this device, awaiting delivery to the shared
+// game's API (IndexedDB 'outbox' store; key is an auto-increment number).
+export type OutboxEntry = {
+  gameId: string;
+  slot: number;
+  hole: number; // 1-based, matching the API
+  strokes: number | null;
+  ts: number; // the tap's ms-epoch, already stamped into cellMeta
 };
 
 // §4 Location seed. White-label: one client owns multiple physical locations,
