@@ -100,76 +100,11 @@ const TILES: Tile[] = [
     blurb: 'Bop the gophers — gold pays triple, bombs bite.',
     accent: '#84cc16',
   },
-  {
-    to: '/fun/hoops',
-    emoji: '🏀',
-    title: 'Pop-a-Shot',
-    blurb: '45 seconds of buckets — hit the bonus round.',
-    accent: '#fb923c',
-  },
-  {
-    to: '/fun/darts',
-    emoji: '🎯',
-    title: 'Darts',
-    blurb: 'Nine darts — trebles, doubles, and the bull.',
-    accent: '#dc2626',
-  },
-  {
-    to: '/fun/gallery',
-    emoji: '🦆',
-    title: 'Shooting Gallery',
-    blurb: 'Six shots, three shelves — drop the tin ducks.',
-    accent: '#facc15',
-  },
-  {
-    to: '/fun/claw',
-    emoji: '🧸',
-    title: 'Claw Machine',
-    blurb: 'Five credits — line it up, pray it grips.',
-    accent: '#ec4899',
-  },
-  {
-    to: '/fun/striker',
-    emoji: '🔔',
-    title: 'High Striker',
-    blurb: 'One perfect swing — ring the bell.',
-    accent: '#f43f5e',
-  },
-  {
-    to: '/fun/rings',
-    emoji: '🎪',
-    title: 'Ring Toss',
-    blurb: 'Flick rings onto the bottles — red pays five.',
-    accent: '#8b5cf6',
-  },
-  {
-    to: '/fun/bottles',
-    emoji: '🥛',
-    title: 'Milk Bottles',
-    blurb: 'Three racks — smash the pyramid clean.',
-    accent: '#e5e7eb',
-  },
-  {
-    to: '/fun/watergun',
-    emoji: '💦',
-    title: 'Water Gun Race',
-    blurb: 'Soak the bullseye — first balloon to pop wins.',
-    accent: '#2dd4bf',
-  },
-  {
-    to: '/fun/pinball',
-    emoji: '🕹️',
-    title: 'Pinball',
-    blurb: 'Three balls, two flippers — light the lanes.',
-    accent: '#d946ef',
-  },
-  {
-    to: '/fun/pusher',
-    emoji: '🪙',
-    title: 'Coin Pusher',
-    blurb: 'Time your drops — push the shelf over the edge.',
-    accent: '#fbbf24',
-  },
+  // The second arcade batch (Pop-a-Shot, Darts, Shooting Gallery, Claw
+  // Machine, High Striker, Ring Toss, Milk Bottles, Water Gun Race, Pinball,
+  // Coin Pusher) is unlisted while it's still being playtested — the game
+  // files remain in this directory; restore their tiles + routes from git
+  // history when they're demo-ready.
 ];
 
 export default function FunZone() {

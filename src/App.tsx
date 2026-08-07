@@ -24,16 +24,6 @@ import BattingCages from './features/fun/BattingCages';
 import Bowling from './features/fun/Bowling';
 import GoKarts from './features/fun/GoKarts';
 import WhackAMole from './features/fun/WhackAMole';
-import PopAShot from './features/fun/PopAShot';
-import Darts from './features/fun/Darts';
-import ShootingGallery from './features/fun/ShootingGallery';
-import ClawMachine from './features/fun/ClawMachine';
-import HighStriker from './features/fun/HighStriker';
-import RingToss from './features/fun/RingToss';
-import MilkBottle from './features/fun/MilkBottle';
-import WaterGunRace from './features/fun/WaterGunRace';
-import Pinball from './features/fun/Pinball';
-import CoinPusher from './features/fun/CoinPusher';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import { BuildStamp } from './ui/BuildStamp';
@@ -76,16 +66,6 @@ export default function App() {
         <Route path="/fun/bowling" element={<Bowling />} />
         <Route path="/fun/karts" element={<GoKarts />} />
         <Route path="/fun/mole" element={<WhackAMole />} />
-        <Route path="/fun/hoops" element={<PopAShot />} />
-        <Route path="/fun/darts" element={<Darts />} />
-        <Route path="/fun/gallery" element={<ShootingGallery />} />
-        <Route path="/fun/claw" element={<ClawMachine />} />
-        <Route path="/fun/striker" element={<HighStriker />} />
-        <Route path="/fun/rings" element={<RingToss />} />
-        <Route path="/fun/bottles" element={<MilkBottle />} />
-        <Route path="/fun/watergun" element={<WaterGunRace />} />
-        <Route path="/fun/pinball" element={<Pinball />} />
-        <Route path="/fun/pusher" element={<CoinPusher />} />
         {/* Install-to-home-screen landing page (QR-code target). */}
         <Route path="/install" element={<Install />} />
         {/* Living component inventory / style guide — the theming reference. */}
