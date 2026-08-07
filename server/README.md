@@ -37,7 +37,7 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
 | `HUNT_SCAN_CAP`     | Max vision (model) calls per round — the hard ceiling on hunt API spend per group. Default `240`, the legitimate max (4 players × 20 items max × 3 attempts; ~$0.50 full-burn on Haiku 4.5) — `HUNT_ATTEMPT_CAP` is the working spend control, this is the backstop (and the bound on countable-item grinding). `0` = kill switch (every verify `429`s). Read per request, so changes apply without a restart. |
 | `HUNT_ATTEMPT_CAP`  | Max judged shots per player per non-countable item per round (bounds failed attempts — successful finds dedupe, and "couldn't read that photo" retries don't count). Countable items are exempt; the round cap still bounds them. Default `3`. Read per request. |
-| `MAIL_PROVIDER`     | Outbound email for player sign-in codes and team invites: `console` (default — logs the full message incl. the code to stdout; warns at startup in production), `resend` (raw fetch to Resend's API), or `smtp` (nodemailer over `SMTP_URL` — `npm i nodemailer` first; it is deliberately not a package dependency). |
+| `MAIL_PROVIDER`     | Outbound email for player sign-in codes and team invites: `console` (default — logs the full message incl. the code to stdout; warns at startup in production), `resend` (raw fetch to Resend's API), or `smtp` (nodemailer over `SMTP_URL` — `npm i nodemailer` first; it is deliberately not a package dependency). **While this is unset/`console`, sign-in runs in BYPASS mode**: `POST /api/auth/request-code` returns the 6-digit code directly (`bypassCode`) and the app signs in without an inbox round-trip — the stopgap until a real provider is wired up. The trade-off is explicit: until then email "verification" proves nothing about inbox ownership. Setting a real provider retires the bypass instantly (checked per request, no restart). |
 | `MAIL_FROM`         | From header for outbound mail, e.g. `FFC <noreply@example.com>`. Default `FFC <noreply@localhost>`. |
 | `RESEND_API_KEY`    | API key when `MAIL_PROVIDER=resend`. The sending domain must be verified (SPF/DKIM) in Resend first — see DEPLOY.md. |
 | `SMTP_URL`          | SMTP connection URL when `MAIL_PROVIDER=smtp`, e.g. `smtps://user:pass@smtp.example.com`. |
@@ -323,7 +323,9 @@ Emails a 6-digit code + magic link via `lib/mailer.js` (`MAIL_PROVIDER`).
 applied to the account on first verify. Always answers `{ok:true}` — never
 reveals whether an address has an account. Limits: 3/15 min per email,
 10/hr per IP; codes die after 10 minutes or 5 wrong guesses; only sha256
-digests are stored.
+digests are stored. **Bypass mode** (no real mail provider configured): the
+response also carries `bypassCode` — the code itself — so the client signs in
+without an email; see `MAIL_PROVIDER` in the env table.
 
 ### `POST /api/auth/verify` — `{email, code}` → `{ok, user}` + cookie
 Sets `ffc_session` (httpOnly, `Path=/`, `SameSite=Lax`, `Secure` in

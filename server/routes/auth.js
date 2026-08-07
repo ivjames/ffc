@@ -14,7 +14,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { normalizeEmail, normalizeProfile } from "../lib/validateUser.js";
 import { createAuthCode, verifyAuthCode, verifyMagicToken } from "../lib/authCodes.js";
-import { sendMail } from "../lib/mailer.js";
+import { sendMail, isMailDeliveryConfigured } from "../lib/mailer.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import {
   USER_COOKIE_NAME,
@@ -81,6 +81,14 @@ router.post("/request-code", ipSendLimit, emailSendLimit, async (req, res) => {
     const { code, magicToken } = await createAuthCode(email, profileCheck.row);
     const { subject, text, html } = codeEmail(code, magicToken);
     await sendMail({ to: email, subject, text, html, kind: "otp" });
+    // BYPASS while no real mail provider is configured: hand the code straight
+    // back so the app can sign in without an inbox — the stopgap until Resend
+    // is wired up. Setting MAIL_PROVIDER retires this automatically (checked
+    // per request, no restart). Explicit trade-off: until then, sign-in
+    // proves nothing about inbox ownership.
+    if (!isMailDeliveryConfigured()) {
+      return res.json({ ok: true, bypassCode: code });
+    }
     // Uniform response — never reveals whether the address has an account, and
     // a mailer failure is not surfaced either (that too would leak, and the
     // client can only say "check your inbox" regardless).

@@ -18,6 +18,15 @@ function provider() {
   return process.env.MAIL_PROVIDER || "console";
 }
 
+/** True when a real delivery provider is configured. While this is false the
+ *  auth flow runs in BYPASS mode: request-code hands the sign-in code back in
+ *  its response so the app can sign in without an inbox (routes/auth.js) —
+ *  the stopgap until Resend/SMTP is wired up. Read per call so flipping
+ *  MAIL_PROVIDER retires the bypass without a restart. */
+export function isMailDeliveryConfigured() {
+  return provider() !== "console";
+}
+
 export function mailFrom() {
   return process.env.MAIL_FROM || "FFC <noreply@localhost>";
 }
@@ -26,7 +35,7 @@ export function mailFrom() {
 export function warnIfConsoleMailer() {
   if (process.env.NODE_ENV === "production" && provider() === "console") {
     console.warn(
-      "[mailer] MAIL_PROVIDER is unset/console in production — sign-in codes will only appear in server logs, not inboxes"
+      "[mailer] MAIL_PROVIDER is unset/console in production — sign-in emails are not delivered, codes go to this log, and /api/auth/request-code hands codes straight back to the caller (EMAIL SIGN-IN IS EFFECTIVELY UNVERIFIED until a real provider is set)"
     );
   }
 }

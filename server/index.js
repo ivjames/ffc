@@ -3,9 +3,11 @@
 // The Express app itself lives in app.js (importable without listen side effects).
 import { app } from "./app.js";
 import { warnIfNoToken } from "./lib/adminAuth.js";
+import { warnIfConsoleMailer } from "./lib/mailer.js";
 
 const port = process.env.PORT || 8060;
 app.listen(port, () => {
   console.log(`[ffc-server] listening on port ${port}`);
   warnIfNoToken();
+  warnIfConsoleMailer();
 });

@@ -71,11 +71,24 @@ export default function Account() {
       ...(defaultTag !== '' ? { defaultTag } : {}),
     };
     const res = await requestCode(normalized, profile);
-    setBusy(false);
     if (!res.ok) {
+      setBusy(false);
       setError(res.error ?? 'Could not send the code — try again.');
       return;
     }
+    // Email delivery not wired up yet on the server: it hands the code back
+    // directly, so skip the inbox round-trip and sign straight in.
+    if (res.bypassCode) {
+      const verified = await verifyCode(normalized, res.bypassCode);
+      setBusy(false);
+      if (verified.user) {
+        applyUser(verified.user);
+        return;
+      }
+      setError(verified.error ?? 'Sign-in failed — try again.');
+      return;
+    }
+    setBusy(false);
     setCode('');
     setStage('code');
   }

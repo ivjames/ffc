@@ -27,12 +27,17 @@ async function post(path: string, body?: unknown): Promise<Response> {
 }
 
 /** Ask the server to email a sign-in code. Resolves ok even for unknown
- *  addresses (the server never reveals which emails have accounts). */
-export async function requestCode(email: string, profile?: Profile): Promise<{ ok: boolean; error?: string }> {
+ *  addresses (the server never reveals which emails have accounts).
+ *  `bypassCode` is present while the server has no real mail provider
+ *  configured — sign in with it directly instead of waiting for an email. */
+export async function requestCode(
+  email: string,
+  profile?: Profile,
+): Promise<{ ok: boolean; error?: string; bypassCode?: string }> {
   const res = await post('/api/auth/request-code', { email, profile });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
-  return { ok: true };
+  return { ok: true, bypassCode: data.bypassCode };
 }
 
 /** Trade a typed 6-digit code for a session. */

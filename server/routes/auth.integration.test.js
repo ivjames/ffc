@@ -170,12 +170,39 @@ test("magic link signs in via redirect and is single-use", async () => {
   assert.equal(sessionCookie(again), null);
 });
 
-test("request-code responds identically for new and existing addresses", async () => {
+test("request-code responds with the same shape for new and existing addresses", async () => {
   const fresh = await requestCode(`player-${stamp}-fresh@example.com`);
   const existing = await requestCode(EMAIL);
   assert.equal(fresh.status, 200);
   assert.equal(existing.status, 200);
-  assert.deepEqual(await fresh.json(), await existing.json());
+  // The bypass code differs per request by design; the SHAPE must not — a
+  // field present only for known (or only unknown) emails would enumerate.
+  const freshBody = await fresh.json();
+  const existingBody = await existing.json();
+  assert.deepEqual(Object.keys(freshBody).sort(), Object.keys(existingBody).sort());
+  assert.equal(freshBody.ok, true);
+  assert.equal(existingBody.ok, true);
+});
+
+test("bypass: with no mail provider, request-code returns the code directly and it verifies", async () => {
+  const email = `player-${stamp}-bypass@example.com`;
+  const res = await requestCode(email);
+  const body = await res.json();
+  assert.match(body.bypassCode, /^[0-9]{6}$/);
+  const verifyRes = await verify(email, body.bypassCode);
+  assert.equal(verifyRes.status, 200);
+  assert.ok(sessionCookie(verifyRes));
+});
+
+test("bypass retires itself the moment a real mail provider is configured", async (t) => {
+  process.env.MAIL_PROVIDER = "resend"; // no RESEND_API_KEY → send fails silently
+  t.after(() => {
+    delete process.env.MAIL_PROVIDER;
+  });
+  const res = await requestCode(`player-${stamp}-nobypass@example.com`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.bypassCode, undefined);
 });
 
 test("per-email send rate limit 429s after 3 requests", async () => {
