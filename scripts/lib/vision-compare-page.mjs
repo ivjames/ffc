@@ -17,6 +17,10 @@ import { HUNT_PROMPT_TEMPLATE } from "./vision-compare-core.mjs";
 export function renderPage(apiBase, authMode = "bearer") {
   return PAGE.replaceAll("__API_BASE__", apiBase)
     .replaceAll("__AUTH_MODE__", authMode)
+    // On the admin mount, link back to the SPA so the bench isn't a dead end.
+    .replaceAll("__BACKLINK__", authMode === "admin"
+      ? '<a href="/">← Master Control</a> · '
+      : "")
     .replaceAll('"__HUNT_TEMPLATE_JSON__"', JSON.stringify(HUNT_PROMPT_TEMPLATE));
 }
 
@@ -150,9 +154,10 @@ const PAGE = `<!doctype html>
 <body>
 <div class="wrap">
   <h1>Vision vetting bench</h1>
-  <p class="sub">Vet zone images: source people-screened photos, label
-    subjects, and check hunt verdicts against the production judge — with
-    exact billed tokens and cost. History: <code>IMAGE-DESCRIPTION-PRICING.md</code>.</p>
+  <p class="sub">__BACKLINK__Vet zone images: source people-screened photos,
+    label subjects, and check hunt verdicts against the production judge —
+    with exact billed tokens and cost. History:
+    <code>IMAGE-DESCRIPTION-PRICING.md</code>.</p>
 
   <div class="panel">
     <h2>1 · Images (~5 real workload photos)</h2>
