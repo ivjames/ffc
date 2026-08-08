@@ -16,24 +16,53 @@ export const MAX_OUTPUT_TOKENS = 400;
 // Hunt-verify mode: the per-image prompt, kept close to the production
 // wording in server/lib/vision.js so cheap-tier results transfer. __SUBJECT__
 // is replaced per image (pre-populated by the Haiku pre-scan below, editable
-// in the UI). Production uses schema-enforced structured output; here the
-// JSON shape is just asked for in the prompt — how reliably each provider
-// honors that is itself one of the things being compared.
+// in the UI). Hardened for format obedience: exact-shape example, explicit
+// prohibitions, and the format demand repeated at the very end (models weight
+// the last lines heavily). Hunt calls ALSO switch on each provider's native
+// JSON enforcement (see describeImage opts.json) — the prompt is the belt,
+// the API mode is the suspenders, and the +prose flag catches what leaks.
 export const HUNT_PROMPT_TEMPLATE =
   `You are the judge for a mini-golf scavenger hunt. A player submitted this ` +
   `photo claiming it shows: "__SUBJECT__".\n\n` +
   `Decide whether the target item is genuinely, clearly visible in the photo. ` +
   `Be reasonably lenient about angle, lighting, and partial views, but do NOT ` +
   `credit a find where the item is absent, ambiguous, or only implied.\n\n` +
-  `Also judge anti-cheat: photo_of_photo is true if this looks like a picture ` +
-  `of a screen, monitor, phone, or a printed photograph rather than a ` +
-  `real-world scene.\n\n` +
-  `Also moderate for a family entertainment venue: people posing or playing ` +
-  `are welcome and never unsafe by themselves; unsafe is true only for ` +
-  `genuinely inappropriate content.\n\n` +
-  `Reply with ONLY this JSON object, no other text:\n` +
-  `{"present": true|false, "confidence": 0.0-1.0, "reason": "one short ` +
-  `sentence", "photo_of_photo": true|false, "unsafe": true|false}`;
+  `Anti-cheat: photo_of_photo is true if this looks like a picture of a ` +
+  `screen, monitor, phone, or a printed photograph rather than a real-world ` +
+  `scene.\n\n` +
+  `Moderation: people posing or playing are welcome and never unsafe by ` +
+  `themselves; unsafe is true only for genuinely inappropriate content.\n\n` +
+  `Respond with a single JSON object and nothing else. Exact shape:\n` +
+  `{"present":true,"confidence":0.95,"reason":"one short sentence",` +
+  `"photo_of_photo":false,"unsafe":false}\n\n` +
+  `Rules:\n` +
+  `- present, photo_of_photo, unsafe: lowercase true or false\n` +
+  `- confidence: a number between 0 and 1\n` +
+  `- reason: one short plain-text sentence\n` +
+  `- no markdown, no code fences, no preamble, no text after the JSON\n\n` +
+  `Your entire reply must start with { and end with }.`;
+
+// The verdict shape, for providers with schema-level enforcement
+// (Anthropic output_config, Gemini responseSchema).
+export const VERDICT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    present: { type: "boolean" },
+    confidence: { type: "number" },
+    reason: { type: "string" },
+    photo_of_photo: { type: "boolean" },
+    unsafe: { type: "boolean" },
+  },
+  required: ["present", "confidence", "reason", "photo_of_photo", "unsafe"],
+};
+
+// Gemini's responseSchema dialect doesn't take additionalProperties.
+const GEMINI_VERDICT_SCHEMA = {
+  type: "object",
+  properties: VERDICT_SCHEMA.properties,
+  required: VERDICT_SCHEMA.required,
+};
 
 // Pre-scan: one cheap Haiku call per image that names the likely hunt target
 // so the UI can pre-fill each image's subject field.
@@ -166,13 +195,17 @@ async function post(url, headers, body) {
 
 // Each caller returns { text, inputTokens, outputTokens } with the
 // provider-reported (billed) token counts.
-async function callAnthropic(p, key, img, prompt) {
+async function callAnthropic(p, key, img, prompt, opts) {
   const json = await post(
     "https://api.anthropic.com/v1/messages",
     { "x-api-key": key, "anthropic-version": "2023-06-01" },
     {
       model: p.model,
       max_tokens: MAX_OUTPUT_TOKENS,
+      // Same mechanism production vision.js uses — schema-guaranteed output.
+      ...(opts?.json
+        ? { output_config: { format: { type: "json_schema", schema: VERDICT_SCHEMA } } }
+        : {}),
       messages: [
         {
           role: "user",
@@ -194,7 +227,7 @@ async function callAnthropic(p, key, img, prompt) {
   };
 }
 
-async function callGemini(p, key, img, prompt) {
+async function callGemini(p, key, img, prompt, opts) {
   const json = await post(
     `https://generativelanguage.googleapis.com/v1beta/models/${p.model}:generateContent`,
     { "x-goog-api-key": key },
@@ -207,7 +240,12 @@ async function callGemini(p, key, img, prompt) {
           ],
         },
       ],
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+      generationConfig: {
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        ...(opts?.json
+          ? { responseMimeType: "application/json", responseSchema: GEMINI_VERDICT_SCHEMA }
+          : {}),
+      },
     },
   );
   const parts = json.candidates?.[0]?.content?.parts ?? [];
@@ -218,7 +256,7 @@ async function callGemini(p, key, img, prompt) {
   };
 }
 
-async function callOpenAICompatible(p, key, img, prompt) {
+async function callOpenAICompatible(p, key, img, prompt, opts) {
   const json = await post(
     `${p.baseUrl}/chat/completions`,
     { authorization: `Bearer ${key}` },
@@ -226,6 +264,10 @@ async function callOpenAICompatible(p, key, img, prompt) {
       model: p.model,
       max_completion_tokens: p.maxTokens || MAX_OUTPUT_TOKENS,
       ...(p.extra || {}),
+      // json_object is the widely-supported OpenAI-compatible mode (the
+      // prompt carries the exact shape). A provider that rejects it will
+      // error visibly in its cell — that itself is a finding.
+      ...(opts?.json ? { response_format: { type: "json_object" } } : {}),
       messages: [
         {
           role: "user",
@@ -262,11 +304,11 @@ const CALLERS = {
  * @returns {Promise<{text:string, inputTokens:number|null, outputTokens:number|null,
  *   ms:number, cost:number|null}>}
  */
-export async function describeImage(provider, img, prompt = DEFAULT_PROMPT) {
+export async function describeImage(provider, img, prompt = DEFAULT_PROMPT, opts = {}) {
   const key = process.env[provider.keyEnv];
   if (!key) throw new Error(`${provider.keyEnv} not set`);
   const started = Date.now();
-  const r = await CALLERS[provider.kind](provider, key, img, prompt);
+  const r = await CALLERS[provider.kind](provider, key, img, prompt, opts);
   return {
     ...r,
     ms: Date.now() - started,

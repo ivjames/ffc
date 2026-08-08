@@ -217,6 +217,7 @@ const server = createServer(async (req, res) => {
           provider,
           { base64: body.imageBase64, mediaType: body.mediaType },
           prompt,
+          { json: body.json === true },
         );
         return json(res, 200, result);
       } catch (err) {

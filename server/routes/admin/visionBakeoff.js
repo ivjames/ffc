@@ -181,6 +181,7 @@ router.post("/describe", express.json({ limit: "16mb" }), async (req, res) => {
       provider,
       { base64: req.body.imageBase64, mediaType: req.body.mediaType },
       prompt,
+      { json: req.body.json === true },
     );
     return res.json(result);
   } catch (err) {

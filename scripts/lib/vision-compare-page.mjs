@@ -990,6 +990,10 @@ document.getElementById("run").addEventListener("click", function () {
           imageBase64: img.base64,
           mediaType: img.mediaType,
           prompt: prompt,
+          // Hunt runs engage each provider's native JSON mode on top of the
+          // hardened prompt (Anthropic schema / Gemini responseSchema /
+          // OpenAI-compatible response_format).
+          json: hunt,
         }),
       })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
