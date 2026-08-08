@@ -272,6 +272,24 @@ function apiHeaders(extra) {
   return h;
 }
 
+// Any action that comes back unauthorized (per-tab sessionStorage token
+// missing — new tab, Safari eviction) gets an immediate re-auth path
+// instead of a dead-end error message.
+function reauthOn401(j) {
+  var unauthorized = j && (j.error === "unauthorized" ||
+    (typeof j.error === "string" && j.error.indexOf("wrong token") !== -1));
+  if (!unauthorized) return false;
+  if (AUTH_MODE === "admin") {
+    var t = window.prompt(
+      "Not signed in on this tab. Paste the admin token (APP_TOKEN):");
+    if (t) {
+      try { sessionStorage.setItem("ffc_admin_token", t); } catch (e) {}
+      location.reload();
+    }
+  }
+  return true;
+}
+
 function el(tag, cls, text) {
   var e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -697,7 +715,11 @@ document.getElementById("srcBtn").addEventListener("click", function () {
   })
     .then(function (r) { return r.json(); })
     .then(function (j) {
-      if (j.error) { s.textContent = "failed: " + j.error; return; }
+      if (j.error || j.ok === false) {
+        if (reauthOn401(j)) return;
+        s.textContent = "failed: " + j.error;
+        return;
+      }
       s.textContent = "added " + j.added.length + " \\u00b7 rejected " +
         j.rejectedPeople + " with people \\u00b7 " + j.failures + " fetch/scan misses \\u00b7 " +
         "scan cost $" + (j.usage && j.usage.cost ? j.usage.cost.toFixed(4) : "0");
@@ -715,6 +737,7 @@ document.getElementById("scrambleBtn").addEventListener("click", function () {
   fetch(API_BASE + "/dataset/scramble", { method: "POST", headers: apiHeaders() })
     .then(function (r) { return r.json(); })
     .then(function (j) {
+      if (reauthOn401(j)) return;
       document.getElementById("srcStatus").textContent =
         j.mismatched + " of " + j.total + " images now carry a wrong subject";
       reloadDataset();
