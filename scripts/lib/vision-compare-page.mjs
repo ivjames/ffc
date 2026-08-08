@@ -195,7 +195,9 @@ const PAGE = `<!doctype html>
     </div>
     <textarea id="prompt"></textarea>
     <p class="meta" id="promptHint" hidden>__SUBJECT__ is replaced with each
-      image's subject (auto-filled by the pre-scan; edit under the thumbnails).</p>
+      image's subject (auto-filled by the pre-scan; edit under the thumbnails).
+      __DISTRACTORS__ becomes a per-image "these other known items are not the
+      target" line built from the sourcing scan, or nothing when unknown.</p>
   </div>
 
   <div class="panel runrow">
@@ -398,6 +400,7 @@ function loadDataset() {
                 name: metaRow.name,
                 subject: metaRow.subject || "",
                 truth: metaRow.truth || "",
+                alsoVisible: metaRow.alsoVisible || [],
                 expected: typeof metaRow.expected === "boolean" ? metaRow.expected : true,
                 mediaType: metaRow.mediaType,
                 dataUrl: dataUrl,
@@ -1165,9 +1168,43 @@ document.getElementById("run").addEventListener("click", function () {
   wrap.appendChild(table);
   resultsBox.appendChild(wrap);
 
+  // Distractor context per image: other items KNOWN to be in/near the frame
+  // (the true subject when scrambled, plus the sourcing scan's also-visible
+  // list). Told to the judge as "not the target" — mirrors production, where
+  // a course's other hunt items constantly photobomb the claimed one. Items
+  // sharing a content word with the target are excluded so the list can
+  // never name the thing being judged.
+  function distractorText(img) {
+    var subWords = {};
+    String(img.subject || "").toLowerCase().split(/[^a-z]+/).forEach(function (w) {
+      if (w.length > 3 && w.charAt(w.length - 1) === "s") w = w.slice(0, -1);
+      if (w.length >= 3) subWords[w] = true;
+    });
+    var pool = [];
+    if (img.truth && img.truth !== img.subject) pool.push(img.truth);
+    (img.alsoVisible || []).forEach(function (x) { pool.push(x); });
+    var seen = {};
+    var safe = pool.filter(function (item) {
+      var k = String(item).toLowerCase();
+      if (!k || seen[k]) return false;
+      seen[k] = true;
+      return !k.split(/[^a-z]+/).some(function (w) {
+        if (w.length > 3 && w.charAt(w.length - 1) === "s") w = w.slice(0, -1);
+        return subWords[w];
+      });
+    }).slice(0, 8);
+    if (!safe.length) return "";
+    return "Known other items at this venue may appear in or near the frame: " +
+      safe.join(", ") + ". These are NOT the target \\u2014 their presence " +
+      "never counts toward the verdict; judge ONLY whether the quoted " +
+      "target itself is visible.\\n\\n";
+  }
+
   state.images.forEach(function (img, imgIdx) {
     var prompt = hunt
-      ? promptTemplate.replace(/__SUBJECT__/g, img.subject || "the target item")
+      ? promptTemplate
+          .replace(/__SUBJECT__/g, img.subject || "the target item")
+          .replace(/__DISTRACTORS__/g, distractorText(img))
       : promptTemplate;
     var tr = el("tr");
     var ic = el("td", "imgcell");

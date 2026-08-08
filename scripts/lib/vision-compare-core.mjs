@@ -32,6 +32,7 @@ export const HUNT_PROMPT_TEMPLATE =
   `scene.\n\n` +
   `Moderation: people posing or playing are welcome and never unsafe by ` +
   `themselves; unsafe is true only for genuinely inappropriate content.\n\n` +
+  `__DISTRACTORS__` +
   `Respond with a single JSON object and nothing else. Exact shape:\n` +
   `{"present":true,"confidence":0.95,"reason":"one short sentence",` +
   `"photo_of_photo":false,"unsafe":false}\n\n` +
