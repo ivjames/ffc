@@ -52,6 +52,7 @@ export async function sourceImagesFromWeb(countRaw) {
       added.push(addDatasetImage({
         name: "web-" + seed + ".jpg",
         subject: scan.subject,
+        alsoVisible: scan.alsoVisible,
         mediaType: "image/jpeg",
         base64,
       }));

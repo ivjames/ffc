@@ -67,11 +67,16 @@ const GEMINI_VERDICT_SCHEMA = geminiSchema(VERDICT_SCHEMA);
 // AND screens for people — sourced internet images are rejected when anyone
 // is visible (test-data policy: no people in images sent to third parties).
 export const SOURCE_SCAN_PROMPT =
-  "Two tasks for this photo. 1) subject: name its single most prominent " +
+  "Three tasks for this photo. 1) subject: name its single most prominent " +
   "object or feature in AT MOST three words, like a scavenger-hunt item " +
-  "(giant pumpkin, windmill, red door) — no articles. 2) people_present: " +
-  "true if any person is visible, even partially or in the background; " +
-  "when unsure, err toward true.";
+  "(giant pumpkin, windmill, red door) — no articles, and prefer something " +
+  "DISTINCTIVE over generic scenery words (avoid: stone, tree, grass, sky, " +
+  "path, wall) when anything distinctive exists. 2) people_present: true " +
+  "if any person is visible, even partially or in the background; when " +
+  "unsure, err toward true. 3) also_visible: up to 8 OTHER objects or " +
+  "features clearly visible anywhere in the frame, each 1-3 words — " +
+  "include mundane background items (rocks, fence, snow, bench); this list " +
+  "is used to avoid falsely claiming an object is absent.";
 
 export const SOURCE_SCAN_SCHEMA = {
   type: "object",
@@ -79,8 +84,9 @@ export const SOURCE_SCAN_SCHEMA = {
   properties: {
     subject: { type: "string" },
     people_present: { type: "boolean" },
+    also_visible: { type: "array", items: { type: "string" } },
   },
-  required: ["subject", "people_present"],
+  required: ["subject", "people_present", "also_visible"],
 };
 
 // Pre-scan: one cheap Haiku call per image that names the likely hunt target
@@ -393,6 +399,9 @@ export async function sourceScan(img) {
     ...r,
     subject: String(parsed.subject || "").trim(),
     peoplePresent: Boolean(parsed.people_present),
+    alsoVisible: Array.isArray(parsed.also_visible)
+      ? parsed.also_visible.map((s) => String(s).trim()).filter(Boolean).slice(0, 12)
+      : [],
     provider: provider.name,
   };
 }

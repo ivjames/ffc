@@ -42,7 +42,7 @@ export function listDataset() {
   return readDataset();
 }
 
-export function addDatasetImage({ name, subject, mediaType, base64 }) {
+export function addDatasetImage({ name, subject, mediaType, base64, alsoVisible }) {
   ensureDirs();
   const entry = {
     id: randomUUID(),
@@ -52,6 +52,10 @@ export function addDatasetImage({ name, subject, mediaType, base64 }) {
     // whether the current subject matches it (false after scrambling).
     truth: String(subject || ""),
     expected: true,
+    // Other objects visible in frame (from the sourcing scan) — the
+    // scrambler refuses to plant a subject that collides with any of them,
+    // so "expected: absent" stays honest for incidental background objects.
+    alsoVisible: Array.isArray(alsoVisible) ? alsoVisible : [],
     mediaType,
     createdAt: new Date().toISOString(),
   };
@@ -60,10 +64,34 @@ export function addDatasetImage({ name, subject, mediaType, base64 }) {
   return entry;
 }
 
+// Content-word extraction for collision checks: lowercase, alpha words of
+// 3+ chars, naive de-pluralization, stopwords dropped.
+const STOP = new Set(["the", "and", "with", "for", "large", "small", "big", "giant"]);
+function wordsOf(text) {
+  return String(text || "")
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w))
+    .filter((w) => w.length >= 3 && !STOP.has(w));
+}
+
+// True when planting `subject` on `entry` could be factually present anyway:
+// any content word shared with the entry's truth or its also-visible list.
+// ("stone" must not land on a snowy path whose scan noted rocks/stones.)
+function collides(subject, entry) {
+  const sub = new Set(wordsOf(subject));
+  if (!sub.size) return true; // empty/garbage subject — never plant it
+  const seen = wordsOf(entry.truth);
+  (entry.alsoVisible || []).forEach((x) => seen.push(...wordsOf(x)));
+  return seen.some((w) => sub.has(w));
+}
+
 /**
  * Reset every subject to its truth, then give a random half of the images a
- * DIFFERENT image's subject (expected=false). Re-running re-randomizes from
- * scratch, so repeated scrambles never compound.
+ * DIFFERENT image's subject (expected=false) — but never a subject that
+ * collides with what's actually visible in the frame (truth + alsoVisible
+ * words). An image with no safe donor subject stays unscrambled rather than
+ * carrying a lying "absent" label. Re-running re-randomizes from scratch.
  */
 export function scrambleDataset() {
   const rows = readDataset();
@@ -74,28 +102,35 @@ export function scrambleDataset() {
   });
   const eligible = rows.filter((r) => r.truth);
   const k = Math.floor(eligible.length / 2);
+  let skippedCollisions = 0;
   if (k >= 2) {
-    const picked = eligible
+    const shuffled = eligible
       .map((r) => ({ r, sort: Math.random() }))
       .sort((a, b) => a.sort - b.sort)
-      .slice(0, k)
       .map((x) => x.r);
-    // Rotate the picked subjects by one — nobody keeps their own (unless two
-    // truths are identical text, which the neq check below patches).
-    const subjects = picked.map((r) => r.truth);
-    picked.forEach((r, i) => {
-      r.subject = subjects[(i + 1) % subjects.length];
-      r.expected = false;
-    });
-    // A rotation can hand an image an identical-text subject if two truths
-    // match; those entries stay honest (expected=true).
+    const picked = shuffled.slice(0, k);
+    // Donor pool: every eligible truth, shuffled. Greedy-assign each picked
+    // image the first donor subject that is neither its own truth nor a
+    // collision with its visible contents.
+    const donors = shuffled
+      .map((r) => r.truth)
+      .map((s) => ({ s, sort: Math.random() }))
+      .sort((a, b) => a.sort - b.sort)
+      .map((x) => x.s);
     picked.forEach((r) => {
-      if (r.subject === r.truth) r.expected = true;
+      const donor = donors.find((s) => s !== r.truth && !collides(s, r));
+      if (donor) {
+        donors.splice(donors.indexOf(donor), 1);
+        r.subject = donor;
+        r.expected = false;
+      } else {
+        skippedCollisions += 1; // stays truthful rather than lying
+      }
     });
   }
   writeDataset(rows);
   const mismatched = rows.filter((r) => r.expected === false).length;
-  return { total: rows.length, mismatched };
+  return { total: rows.length, mismatched, skippedCollisions };
 }
 
 export function getDatasetImage(id) {

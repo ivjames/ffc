@@ -739,7 +739,10 @@ document.getElementById("scrambleBtn").addEventListener("click", function () {
     .then(function (j) {
       if (reauthOn401(j)) return;
       document.getElementById("srcStatus").textContent =
-        j.mismatched + " of " + j.total + " images now carry a wrong subject";
+        j.mismatched + " of " + j.total + " images now carry a wrong subject" +
+        (j.skippedCollisions
+          ? " \\u00b7 " + j.skippedCollisions + " left truthful (every donor subject was actually visible in them)"
+          : "");
       reloadDataset();
     });
 });
