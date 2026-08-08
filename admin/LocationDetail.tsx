@@ -138,12 +138,13 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
   const [geofence, setGeofence] = useState(location.geofenceKm?.toString() ?? '');
   const [menuUrl, setMenuUrl] = useState(location.menuUrl ?? '');
   const [orderingUrl, setOrderingUrl] = useState(location.orderingUrl ?? '');
-  // POS integration add-on. Vendor '' = no integration (saved as null).
-  const [posVendor, setPosVendor] = useState(location.pos?.vendor ?? '');
-  const [posOrdering, setPosOrdering] = useState(location.pos?.ordering ?? false);
-  const [posLoyalty, setPosLoyalty] = useState(location.pos?.loyalty ?? false);
-  const [posGameRewards, setPosGameRewards] = useState(location.pos?.gameRewards ?? false);
-  const [posApiBase, setPosApiBase] = useState(location.pos?.apiBase ?? '');
+  // POS integration add-on — capabilities decoupled, each with its own
+  // vendor. Vendor '' = that capability off; both off saves pos as null.
+  const [ordVendor, setOrdVendor] = useState(location.pos?.ordering?.vendor ?? '');
+  const [ordApiBase, setOrdApiBase] = useState(location.pos?.ordering?.apiBase ?? '');
+  const [loyVendor, setLoyVendor] = useState(location.pos?.loyalty?.vendor ?? '');
+  const [loyApiBase, setLoyApiBase] = useState(location.pos?.loyalty?.apiBase ?? '');
+  const [gameRewards, setGameRewards] = useState(location.pos?.loyalty?.gameRewards ?? false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -168,14 +169,17 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
         menuUrl: menuUrl.trim() || null,
         orderingUrl: orderingUrl.trim() || null,
         pos:
-          posVendor === ''
+          ordVendor === '' && loyVendor === ''
             ? null
             : {
-                vendor: posVendor,
-                ordering: posOrdering,
-                loyalty: posLoyalty,
-                gameRewards: posGameRewards,
-                apiBase: posApiBase.trim() || null,
+                ordering:
+                  ordVendor === ''
+                    ? null
+                    : { vendor: ordVendor, apiBase: ordApiBase.trim() || null },
+                loyalty:
+                  loyVendor === ''
+                    ? null
+                    : { vendor: loyVendor, apiBase: loyApiBase.trim() || null, gameRewards },
               },
       });
       onSaved();
@@ -216,64 +220,67 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
         </Field>
       </div>
 
-      {/* POS integration add-on — per-venue paid capabilities. "None" keeps the
-          venue on the deep links above; the app's native ordering/rewards
-          screens render only for capabilities enabled here. */}
+      {/* POS integration add-ons — per-venue paid capabilities, each with its
+          own vendor (a venue can mix, e.g. CenterEdge loyalty next to another
+          ordering system). "None" keeps that surface off; ordering falls back
+          to the deep links above. */}
       <div className="mt-3 border-t border-slate-200 pt-3">
         <div className="grid grid-cols-2 gap-2">
-          <Field label="POS integration" hint="Native in-app ordering / rewards. None = deep links only.">
+          <Field label="Food ordering POS" hint="Native in-app ordering. None = deep links only.">
             <select
-              value={posVendor}
-              onChange={(e) => setPosVendor(e.target.value)}
+              value={ordVendor}
+              onChange={(e) => setOrdVendor(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
             >
               <option value="">None</option>
               <option value="centeredge">CenterEdge</option>
             </select>
           </Field>
-          {posVendor !== '' && (
-            <Field label="API base URL" hint="Optional per-venue endpoint override.">
+          {ordVendor !== '' && (
+            <Field label="Ordering API base URL" hint="Optional per-venue endpoint override.">
               <Input
-                value={posApiBase}
-                onChange={(e) => setPosApiBase(e.target.value)}
+                value={ordApiBase}
+                onChange={(e) => setOrdApiBase(e.target.value)}
+                placeholder="https://pos.example.com"
+                inputMode="url"
+              />
+            </Field>
+          )}
+          <Field label="Loyalty / rewards POS" hint="Player card balances in the app. None = no rewards surface.">
+            <select
+              value={loyVendor}
+              onChange={(e) => {
+                setLoyVendor(e.target.value);
+                if (e.target.value === '') setGameRewards(false); // rides on loyalty
+              }}
+              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">None</option>
+              <option value="centeredge">CenterEdge</option>
+            </select>
+          </Field>
+          {loyVendor !== '' && (
+            <Field label="Loyalty API base URL" hint="Optional per-venue endpoint override.">
+              <Input
+                value={loyApiBase}
+                onChange={(e) => setLoyApiBase(e.target.value)}
                 placeholder="https://pos.example.com"
                 inputMode="url"
               />
             </Field>
           )}
         </div>
-        {posVendor !== '' && (
-          <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-700">
-            <label className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={posOrdering}
-                onChange={(e) => setPosOrdering(e.target.checked)}
-              />
-              Food ordering
-            </label>
-            <label className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={posLoyalty}
-                onChange={(e) => {
-                  setPosLoyalty(e.target.checked);
-                  if (!e.target.checked) setPosGameRewards(false); // needs loyalty
-                }}
-              />
-              Rewards card (loyalty)
-            </label>
-            <label className={`flex items-center gap-1.5 ${posLoyalty ? '' : 'opacity-40'}`}>
-              <input
-                type="checkbox"
-                checked={posGameRewards}
-                disabled={!posLoyalty}
-                onChange={(e) => setPosGameRewards(e.target.checked)}
-              />
-              Game ticket rewards
-            </label>
-          </div>
-        )}
+        <div className="mt-2">
+          <label className={`flex items-center gap-1.5 text-sm text-slate-700 ${loyVendor !== '' ? '' : 'opacity-40'}`}>
+            <input
+              type="checkbox"
+              checked={gameRewards}
+              disabled={loyVendor === ''}
+              onChange={(e) => setGameRewards(e.target.checked)}
+            />
+            Game ticket rewards (app mini-games credit tickets to the loyalty card)
+          </label>
+        </div>
       </div>
 
       <div className="mt-2">

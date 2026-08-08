@@ -90,53 +90,65 @@ test("normalizePos treats null/undefined/{} as no integration", () => {
   assert.equal(normalizePos({}).value, null);
 });
 
-test("normalizePos canonicalizes a valid config with explicit capabilities", () => {
-  const { value } = normalizePos({ vendor: "centeredge", ordering: true });
+test("normalizePos canonicalizes decoupled capability blocks", () => {
+  const { value } = normalizePos({ ordering: { vendor: "centeredge" } });
   assert.deepEqual(value, {
-    vendor: "centeredge",
-    ordering: true,
-    loyalty: false,
-    gameRewards: false,
-    apiBase: null,
+    ordering: { vendor: "centeredge", apiBase: null },
+    loyalty: null,
   });
 });
 
-test("normalizePos rejects unknown vendors and non-boolean capabilities", () => {
-  assert.match(normalizePos({ vendor: "square", ordering: true }).error, /pos\.vendor/);
-  assert.match(normalizePos({ vendor: "centeredge", ordering: "yes" }).error, /pos\.ordering/);
+test("normalizePos allows different vendors per capability", () => {
+  // The allowlist has one vendor today, so same-vendor blocks stand in for
+  // the mixed case — the shape itself carries a vendor per capability.
+  const { value } = normalizePos({
+    ordering: { vendor: "centeredge", apiBase: "https://food.example.com" },
+    loyalty: { vendor: "centeredge", gameRewards: true },
+  });
+  assert.equal(value.ordering.apiBase, "https://food.example.com");
+  assert.deepEqual(value.loyalty, {
+    vendor: "centeredge",
+    apiBase: null,
+    gameRewards: true,
+  });
 });
 
-test("normalizePos requires at least one capability", () => {
-  assert.match(normalizePos({ vendor: "centeredge" }).error, /at least one capability/);
+test("normalizePos rejects unknown vendors and malformed blocks", () => {
+  assert.match(normalizePos({ ordering: { vendor: "square" } }).error, /pos\.ordering\.vendor/);
+  assert.match(normalizePos({ loyalty: { vendor: "nope" } }).error, /pos\.loyalty\.vendor/);
+  assert.match(normalizePos({ ordering: [] }).error, /pos\.ordering must be/);
 });
 
-test("normalizePos requires loyalty under gameRewards", () => {
+test("normalizePos requires at least one capability block", () => {
+  assert.match(normalizePos({ ordering: null, loyalty: null }).error, /at least one capability/);
+});
+
+test("normalizePos keeps gameRewards inside loyalty", () => {
   assert.match(
-    normalizePos({ vendor: "centeredge", ordering: true, gameRewards: true }).error,
-    /gameRewards requires/
+    normalizePos({ ordering: { vendor: "centeredge" }, loyalty: { gameRewards: true } }).error,
+    /pos\.loyalty\.vendor/
   );
-  const { value } = normalizePos({ vendor: "centeredge", loyalty: true, gameRewards: true });
-  assert.equal(value.gameRewards, true);
+  assert.match(
+    normalizePos({ loyalty: { vendor: "centeredge", gameRewards: "yes" } }).error,
+    /gameRewards must be a boolean/
+  );
+  const { value } = normalizePos({ loyalty: { vendor: "centeredge" } });
+  assert.equal(value.loyalty.gameRewards, false);
 });
 
 test("normalizePos validates apiBase as an http(s) URL", () => {
   assert.match(
-    normalizePos({ vendor: "centeredge", ordering: true, apiBase: "ftp://x" }).error,
-    /pos\.apiBase/
+    normalizePos({ ordering: { vendor: "centeredge", apiBase: "ftp://x" } }).error,
+    /pos\.ordering\.apiBase/
   );
-  const { value } = normalizePos({
-    vendor: "centeredge",
-    ordering: true,
-    apiBase: "https://pos.example.com",
-  });
-  assert.equal(value.apiBase, "https://pos.example.com");
 });
 
 test("normalizeLocation carries pos through (and rejects a bad one)", () => {
   const ok = normalizeLocation(
-    validBody({ pos: { vendor: "centeredge", ordering: true, loyalty: true } })
+    validBody({ pos: { ordering: { vendor: "centeredge" } } })
   );
-  assert.equal(ok.row.pos.ordering, true);
+  assert.equal(ok.row.pos.ordering.vendor, "centeredge");
+  assert.equal(ok.row.pos.loyalty, null);
   assert.equal(normalizeLocation(validBody()).row.pos, null);
-  assert.equal(normalizeLocation(validBody({ pos: { vendor: "nope" } })).status, 400);
+  assert.equal(normalizeLocation(validBody({ pos: { ordering: { vendor: "nope" } } })).status, 400);
 });

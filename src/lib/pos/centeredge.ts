@@ -15,7 +15,7 @@ import type {
   Player,
   PlayerTransaction,
   PosAdapter,
-  PosConfig,
+  PosCapabilityConfig,
   RewardResult,
 } from './types';
 
@@ -51,7 +51,9 @@ export async function authenticate(
   }
 }
 
-export function createCenterEdgeAdapter(config: PosConfig): PosAdapter {
+// CenterEdge implements both capabilities; a venue's config decides which of
+// them it actually buys (and may point each capability at a different vendor).
+export function createCenterEdgeAdapter(config: PosCapabilityConfig): PosAdapter {
   const base = (config.apiBase ?? DEFAULT_BASE).replace(/\/$/, '');
 
   async function request<T>(path: string, init?: RequestInit): Promise<T | Fail> {

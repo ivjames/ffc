@@ -16,14 +16,12 @@ export type GeneratedLocation = {
   menuUrl: string | null;
   orderingUrl: string | null;
   // POS integration add-on (per-venue, set in Master Control). Structurally
-  // matches PosConfig in src/lib/pos/types.ts; kept inline so this generated
-  // file stays import-free.
+  // matches PosConfig in src/lib/pos/types.ts (capabilities decoupled — each
+  // names its own vendor); kept inline so this generated file stays
+  // import-free.
   pos: {
-    vendor: string;
-    ordering: boolean;
-    loyalty: boolean;
-    gameRewards: boolean;
-    apiBase: string | null;
+    ordering: { vendor: string; apiBase: string | null } | null;
+    loyalty: { vendor: string; apiBase: string | null; gameRewards: boolean } | null;
   } | null;
   orgId: string | null;
 };

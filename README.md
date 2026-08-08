@@ -121,7 +121,9 @@ npm start                 # http://localhost:8060
 
 **POS integration add-ons** (native F&B ordering + rewards card + game ticket
 rewards): per-venue paid capabilities, switched on in Master Control
-(`location.pos`) — never client-specific code. The app talks to a
+(`location.pos`) — never client-specific code. Ordering and loyalty are
+decoupled: each capability names its own vendor, so a venue can run one
+system's loyalty next to another's ordering. The app talks to a
 vendor-neutral adapter layer (`src/lib/pos/`); CenterEdge is the first
 adapter, and onboarding another vendor is a new adapter file + a
 `POS_VENDORS` entry server-side. In dev the surfaces run against a local

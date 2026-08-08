@@ -200,16 +200,19 @@ Request:
   absolute `http(s)` URLs only (max 500 chars; anything else — including
   `javascript:` — is rejected). Empty string clears a link. They ship to the
   player app's "Food & Drink" card via `GET /api/content` and the build export.
-- `pos` (optional): the POS-integration add-on config —
-  `{ "vendor": "centeredge", "ordering": true, "loyalty": true, "gameRewards": false, "apiBase": null }`.
+- `pos` (optional): the POS-integration add-on config. Capabilities are
+  **decoupled** — each names its own vendor, so a venue can mix systems:
+  `{ "ordering": { "vendor": "centeredge", "apiBase": null } | null,
+     "loyalty":  { "vendor": "centeredge", "apiBase": null, "gameRewards": false } | null }`.
   Gates the player app's native ordering / rewards surfaces per venue (see
-  `src/lib/pos/`). `vendor` must be a known adapter (`POS_VENDORS` in
-  `lib/validateLocation.js`); at least one of `ordering`/`loyalty` must be on
-  (send `null`/omit to remove the integration); `gameRewards` requires
-  `loyalty`; `apiBase` is an optional per-venue `http(s)` endpoint override.
-  Stored canonically with every capability explicit. **Credentials are never
-  part of this shape** — vendor secrets stay server-side. Ships via
-  `GET /api/content` like the deep links.
+  `src/lib/pos/`). Each block's `vendor` must be a known adapter
+  (`POS_VENDORS` in `lib/validateLocation.js`); at least one block must be
+  configured (send `null`/omit to remove the integration); `gameRewards`
+  rides inside `loyalty` (tickets need a loyalty balance to land in);
+  `apiBase` is an optional per-venue `http(s)` endpoint override. Stored
+  canonically with both keys explicit. **Credentials are never part of this
+  shape** — vendor secrets stay server-side. Ships via `GET /api/content`
+  like the deep links.
 
 Responses:
 - `200 { "ok": true, "location": { …, "tz": "…", "tzLabel": "Eastern Time (ET)" } }`

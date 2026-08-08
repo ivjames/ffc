@@ -8,16 +8,16 @@
 
 /** Per-venue integration config, set in Master Control and shipped via the
  *  content export (location.pos). Mirrors server/lib/validateLocation.js
- *  normalizePos — capabilities are explicit, and gameRewards layers on
- *  loyalty. `apiBase` overrides the vendor API endpoint per venue; vendor
- *  credentials are deliberately NOT part of this shape (they stay
- *  server-side). */
+ *  normalizePos. The capabilities are DELIBERATELY decoupled — each names its
+ *  own vendor, so a venue can run e.g. CenterEdge loyalty next to a different
+ *  ordering system. gameRewards rides inside loyalty (app-earned tickets need
+ *  a loyalty balance to land in). `apiBase` overrides that vendor's API
+ *  endpoint per venue; vendor credentials are deliberately NOT part of this
+ *  shape (they stay server-side). */
+export type PosCapabilityConfig = { vendor: string; apiBase: string | null };
 export type PosConfig = {
-  vendor: string;
-  ordering: boolean;
-  loyalty: boolean;
-  gameRewards: boolean;
-  apiBase: string | null;
+  ordering: PosCapabilityConfig | null;
+  loyalty: (PosCapabilityConfig & { gameRewards: boolean }) | null;
 };
 
 export type ModifierOption = { id: string; name: string; priceCents: number };
@@ -139,11 +139,12 @@ export type LoyaltyApi = {
   }): Promise<RewardResult>;
 };
 
-/** What a vendor adapter provides. Capability gating (which of these a venue
- *  has PAID for) happens in index.ts from PosConfig — an adapter always
- *  implements everything it can. */
+/** What a vendor adapter provides. A vendor implements whichever capabilities
+ *  its system actually has (an ordering-only vendor ships no loyalty);
+ *  capability gating — which of these a venue has PAID for, and from which
+ *  vendor — happens in index.ts from PosConfig. */
 export type PosAdapter = {
   vendor: string;
-  ordering: OrderingApi;
-  loyalty: LoyaltyApi;
+  ordering?: OrderingApi;
+  loyalty?: LoyaltyApi;
 };

@@ -51,13 +51,18 @@ function normalizeHttpUrl(value, field) {
 /**
  * Validate the optional POS-integration add-on config. `null`/`undefined`/`{}`
  * all mean "no integration" (stored NULL — the default for every venue).
- * Canonical stored shape, capabilities explicit so consumers never guess:
- *   { vendor, ordering, loyalty, gameRewards, apiBase }
- * Rules: vendor must be a known adapter; at least one capability must be on
- * (otherwise clear the config instead); gameRewards is an add-on ON TOP of
- * loyalty (tickets have nowhere to land without it); apiBase is an optional
- * per-venue http(s) override for the vendor API endpoint. Credentials are
- * deliberately not part of this shape — they never ship to the player app.
+ *
+ * The two capabilities are DELIBERATELY decoupled — each names its own vendor,
+ * so a venue can run e.g. CenterEdge loyalty next to a different ordering
+ * system. Canonical stored shape (both keys always present):
+ *   { ordering: { vendor, apiBase } | null,
+ *     loyalty:  { vendor, apiBase, gameRewards } | null }
+ * Rules: at least one capability must be configured (otherwise clear the
+ * config instead); each block's vendor must be a known adapter; gameRewards
+ * rides inside loyalty because app-earned tickets have nowhere to land
+ * without a loyalty balance; apiBase is an optional per-venue http(s)
+ * override for that vendor's API endpoint. Credentials are deliberately not
+ * part of this shape — they never ship to the player app.
  * @returns {{ value: object | null } | { error: string }}
  */
 export function normalizePos(value) {
@@ -67,31 +72,40 @@ export function normalizePos(value) {
   }
   if (Object.keys(value).length === 0) return { value: null };
 
-  const { vendor, ordering, loyalty, gameRewards } = value;
-  if (!POS_VENDORS.includes(vendor)) {
-    return { error: `pos.vendor must be one of: ${POS_VENDORS.join(", ")}` };
-  }
-  for (const [field, v] of [["ordering", ordering], ["loyalty", loyalty], ["gameRewards", gameRewards]]) {
-    if (v !== undefined && typeof v !== "boolean") {
-      return { error: `pos.${field} must be a boolean` };
+  const block = (field, raw) => {
+    if (raw === undefined || raw === null) return { value: null };
+    if (typeof raw !== "object" || Array.isArray(raw)) {
+      return { error: `pos.${field} must be an object or null` };
     }
+    if (!POS_VENDORS.includes(raw.vendor)) {
+      return { error: `pos.${field}.vendor must be one of: ${POS_VENDORS.join(", ")}` };
+    }
+    const apiBase = normalizeHttpUrl(raw.apiBase, `pos.${field}.apiBase`);
+    if (apiBase.error) return { error: apiBase.error };
+    return { value: { vendor: raw.vendor, apiBase: apiBase.value } };
+  };
+
+  const ordering = block("ordering", value.ordering);
+  if (ordering.error) return { error: ordering.error };
+  const loyalty = block("loyalty", value.loyalty);
+  if (loyalty.error) return { error: loyalty.error };
+
+  if (!ordering.value && !loyalty.value) {
+    return { error: "pos must configure at least one capability (ordering or loyalty) — send null to remove the integration" };
   }
-  if (gameRewards === true && loyalty !== true) {
-    return { error: "pos.gameRewards requires pos.loyalty (tickets need a loyalty balance to land in)" };
+
+  const gameRewards = value.loyalty?.gameRewards;
+  if (gameRewards !== undefined && typeof gameRewards !== "boolean") {
+    return { error: "pos.loyalty.gameRewards must be a boolean" };
   }
-  if (ordering !== true && loyalty !== true) {
-    return { error: "pos must enable at least one capability (ordering or loyalty) — send null to remove the integration" };
+  if (gameRewards === true && !loyalty.value) {
+    return { error: "pos.loyalty.gameRewards requires a configured loyalty block (tickets need a loyalty balance to land in)" };
   }
-  const apiBase = normalizeHttpUrl(value.apiBase, "pos.apiBase");
-  if (apiBase.error) return { error: apiBase.error };
 
   return {
     value: {
-      vendor,
-      ordering: ordering === true,
-      loyalty: loyalty === true,
-      gameRewards: gameRewards === true,
-      apiBase: apiBase.value,
+      ordering: ordering.value,
+      loyalty: loyalty.value ? { ...loyalty.value, gameRewards: gameRewards === true } : null,
     },
   };
 }

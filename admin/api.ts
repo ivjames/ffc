@@ -85,14 +85,12 @@ export type Location = {
   archivedAt: string | null;
 };
 
-// POS integration add-on config (mirrors server normalizePos). gameRewards
-// requires loyalty; at least one capability must be on, else save null.
+// POS integration add-on config (mirrors server normalizePos). Capabilities
+// are decoupled — each names its own vendor. At least one block must be
+// configured, else save null.
 export type PosConfig = {
-  vendor: string;
-  ordering: boolean;
-  loyalty: boolean;
-  gameRewards: boolean;
-  apiBase: string | null;
+  ordering: { vendor: string; apiBase: string | null } | null;
+  loyalty: { vendor: string; apiBase: string | null; gameRewards: boolean } | null;
 };
 
 export type Announcement = {
