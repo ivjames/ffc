@@ -62,14 +62,6 @@ export const PROVIDERS = [
     price: { in: 0.25, out: 1.5 },
   },
   {
-    // Reference only — the 2.5 family shuts down 2026-10-16. Do not ship on it.
-    name: "gemini-2.5-flash-lite",
-    kind: "gemini",
-    model: "gemini-2.5-flash-lite",
-    keyEnv: "GEMINI_API_KEY",
-    price: { in: 0.1, out: 0.4 },
-  },
-  {
     name: "gpt-5-mini",
     kind: "openai",
     model: "gpt-5-mini",
@@ -78,12 +70,14 @@ export const PROVIDERS = [
     price: { in: 0.25, out: 2.0 },
   },
   {
-    name: "qwen2.5-vl-7b (siliconflow)",
+    // Qwen2.5-VL-7B ($0.05/$0.05) was delisted by SiliconFlow (API returns
+    // 30003 "Model disabled") — this is its cheapest live VL successor.
+    name: "qwen3-vl-8b (siliconflow)",
     kind: "openai",
-    model: "Qwen/Qwen2.5-VL-7B-Instruct",
+    model: "Qwen/Qwen3-VL-8B-Instruct",
     baseUrl: "https://api.siliconflow.com/v1",
     keyEnv: "SILICONFLOW_API_KEY",
-    price: { in: 0.05, out: 0.05 },
+    price: { in: 0.18, out: 0.68 },
   },
   {
     name: "llama-4-scout (deepinfra)",

@@ -61,19 +61,26 @@ prints it, and production should meter it (same pattern as `hunt_scan`).
 
 | Model | $/MTok in/out | Per image | Per visit (20) | Notes |
 |---|---|---|---|---|
-| Qwen2.5-VL-7B (SiliconFlow) | $0.05 / $0.05 | $0.00009 | $0.0018 | Absolute floor; 7B open-weights; third-party host |
-| Llama 4 Scout (DeepInfra) | $0.08 / $0.30 | ~$0.0002 | ~$0.004 | Image tokens unverified |
-| Gemini 2.5 Flash-Lite | $0.10 / $0.40 | $0.00023 | $0.0047 | **Shuts down Oct 16, 2026** — do not build on |
+| ~~Qwen2.5-VL-7B (SiliconFlow)~~ | ~~$0.05 / $0.05~~ | — | — | **Delisted** (API: "Model disabled", found in round-1 bake-off) |
+| Llama 4 Scout (DeepInfra) | $0.08 / $0.30 | ~$0.0002 | ~$0.004 | Image tokens unverified; account needs credit |
+| ~~Gemini 2.5 Flash-Lite~~ | ~~$0.10 / $0.40~~ | — | — | **Closed to new users** (API 404, found in round-1 bake-off); full shutdown Oct 16, 2026 |
+| Qwen3-VL-8B (SiliconFlow) | $0.18 / $0.68 | $0.00044 | $0.0089 | Cheapest live SiliconFlow VL; successor to the delisted 2.5-VL floor |
 | Gemini 3.1 Flash-Lite | $0.25 / $1.50 | $0.00073 | $0.0146 | Cheapest *durable* major-provider tier |
 | GPT-5 mini | $0.25 / $2.00 | $0.00104 | $0.0208 | |
 | Haiku 4.5 (baseline) | $1.00 / $5.00 | $0.00290 | $0.0580 | Already integrated (`server/lib/vision.js` pattern, key on droplet, metering exists) |
 
 ## Annual cost at the volume range
 
-| Volume | Qwen2.5-VL | Gemini 3.1 Flash-Lite | GPT-5 mini | Haiku 4.5 |
+| Volume | Qwen3-VL-8B | Gemini 3.1 Flash-Lite | GPT-5 mini | Haiku 4.5 |
 |---|---|---|---|---|
-| 10k visits (200k img) | ~$18 | ~$146 | ~$208 | ~$580 |
-| 100k visits (2M img) | ~$175 | ~$1,460 | ~$2,080 | ~$5,800 |
+| 10k visits (200k img) | ~$88 | ~$146 | ~$208 | ~$580 |
+| 100k visits (2M img) | ~$880 | ~$1,460 | ~$2,080 | ~$5,800 |
+
+The 8× price-floor gap the original handoff chased is gone: with
+Qwen2.5-VL delisted, the floor (Qwen3-VL-8B) and the durable major-provider
+tier (Gemini 3.1 Flash-Lite) are now within ~1.7× of each other — which
+strengthens the case for picking on quality, provider durability, and
+integration simplicity rather than absolute price.
 
 With a 768px downscale + ~150-token description cap, every row roughly
 halves (Gemini 3.1 Flash-Lite drops to ~$600/yr at 2M images; Haiku to
@@ -90,11 +97,12 @@ The choice is really between three postures, gated by realistic volume:
    server-side key, spend metering, and Console spend-limit backstop already
    exist in this repo. Ship the feature on Haiku, meter it, and revisit when
    real volume data exists.
-2. **Ramping toward 100k visits/yr → adapter + cheap tier.** The durable
-   candidates are **Gemini 3.1 Flash-Lite** (major provider, ~$1.5k/yr at
-   2M images) and **Qwen2.5-VL-7B on SiliconFlow** (~$175/yr, but a 7B model
-   on a third-party host — quality and host-reliability risk). Pick via the
-   bake-off; wire whichever wins behind the provider adapter.
+2. **Ramping toward 100k visits/yr → adapter + cheap tier.** The candidates
+   are **Gemini 3.1 Flash-Lite** (major provider, ~$1.5k/yr at 2M images)
+   and **Qwen3-VL-8B on SiliconFlow** (~$880/yr — an 8B model on a
+   third-party host that has already delisted one model out from under this
+   evaluation). At a ~1.7× price gap, Gemini 3.1 Flash-Lite wins unless the
+   bake-off shows Qwen clearly better on quality.
 3. **Do not** build on Gemini 2.5-anything (dead in October) and don't
    treat any cheap-tier choice as permanent — re-verify rates and model
    availability at build time and at each re-negotiation of volume.
@@ -102,6 +110,17 @@ The choice is really between three postures, gated by realistic volume:
 Where the cheap tiers historically fall down is nuanced/dense-detail
 description, not basic tagging — which is exactly what the bake-off
 measures on our real images.
+
+## Round-1 bake-off findings (2026-08-08, hunt-verify mode)
+
+Run on a stored hunt photo (green doors). Quality: all three responding
+models verdicted correctly with high confidence; one wrapped its JSON in
+extra prose (flagged — a strike for a workload that needs machine-readable
+verdicts). Infrastructure: **three of six providers failed for
+availability reasons on day one** — Gemini 2.5 Flash-Lite 404s for new
+users, SiliconFlow delisted Qwen2.5-VL-7B outright, DeepInfra requires
+prepaid balance. The churn thesis needed no waiting period to confirm
+itself.
 
 ## Running the bake-off (handoff step 1)
 
