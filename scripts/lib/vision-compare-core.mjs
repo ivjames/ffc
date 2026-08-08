@@ -61,6 +61,23 @@ export const PROVIDERS = [
     keyEnv: "GEMINI_API_KEY",
     price: { in: 0.25, out: 1.5 },
   },
+  // Two incremental Gemini rungs above 3.1 Flash-Lite, to see where extra
+  // spend buys quality (same key). Note 3.6 Flash's per-image cost lands
+  // ABOVE Haiku 4.5 — it's here as a quality probe, not a candidate.
+  {
+    name: "gemini-3.5-flash-lite",
+    kind: "gemini",
+    model: "gemini-3.5-flash-lite",
+    keyEnv: "GEMINI_API_KEY",
+    price: { in: 0.3, out: 2.5 },
+  },
+  {
+    name: "gemini-3.6-flash",
+    kind: "gemini",
+    model: "gemini-3.6-flash",
+    keyEnv: "GEMINI_API_KEY",
+    price: { in: 1.5, out: 7.5 },
+  },
   {
     // Reasoning model: max_completion_tokens includes hidden reasoning
     // tokens, which at the shared 400 cap swallowed the whole budget and

@@ -68,7 +68,9 @@ prints it, and production should meter it (same pattern as `hunt_scan`).
 | Qwen3-VL-8B (SiliconFlow) | $0.18 / $0.68 | $0.00044 | $0.0089 | Cheapest live SiliconFlow VL; successor to the delisted 2.5-VL floor |
 | Grok 4.1 Fast (xAI) | $0.20 / $0.50 | ~$0.00035 | ~$0.0069 | Volume tier; image tokenization unverified |
 | Gemini 3.1 Flash-Lite | $0.25 / $1.50 | $0.00073 | $0.0146 | Cheapest *durable* major-provider tier |
-| GPT-5 mini | $0.25 / $2.00 | $0.00104 | $0.0208 | |
+| GPT-5 mini | $0.25 / $2.00 | $0.00104 | $0.0208 | reasoning_effort minimal (else reasoning eats the output cap) |
+| Gemini 3.5 Flash-Lite | $0.30 / $2.50 | $0.00109 | $0.0218 | Next Lite generation — quality probe |
+| Gemini 3.6 Flash | $1.50 / $7.50 | $0.00395 | $0.0790 | Full Flash tier — costs MORE than Haiku/image; quality probe only |
 | Haiku 4.5 (baseline) | $1.00 / $5.00 | $0.00290 | $0.0580 | Already integrated (`server/lib/vision.js` pattern, key on droplet, metering exists) |
 
 ## Annual cost at the volume range
