@@ -207,6 +207,9 @@ export default function Scorecard() {
 
   const par = course.pars[hole];
   const ink = accentInk(course.theme);
+  // The current hole's column wash — the course accent thinned way down, so
+  // the highlight reads as a marker stripe on the card, not a button.
+  const columnTint = `color-mix(in srgb, ${course.accent} 18%, transparent)`;
   const holeName = course.holeNames?.[hole];
   const complete = isRoundComplete(round.scores, round.playerTags.length);
   // Every player must have a score on the current hole before advancing, so a
@@ -402,8 +405,9 @@ export default function Scorecard() {
             the pinned −/+ keys only ever edit the highlighted column. Tags
             stay pinned on the left so you always know whose row is whose. */}
         <div className="flex items-stretch gap-2">
-          {/* Pinned left rail: spacer over the label row, then player tags. */}
-          <div className="flex shrink-0 flex-col gap-3">
+          {/* Pinned left rail: spacer over the label row, then player tags.
+              Rows are flush (no gaps) so they track the ruled grid rows. */}
+          <div className="flex shrink-0 flex-col">
             <div className="h-9" aria-hidden />
             {round.playerTags.map((tag, p) => (
               <div key={p} className="flex h-9 items-center">
@@ -413,20 +417,21 @@ export default function Scorecard() {
           </div>
 
           {/* Pinned − keys: always edit the current (highlighted) hole. */}
-          <div className="flex shrink-0 flex-col gap-3">
+          <div className="flex shrink-0 flex-col">
             <div className="h-9" aria-hidden />
             {round.playerTags.map((tag, p) => {
               const strokes = round.scores[p]?.[hole] ?? null;
               return (
-                <button
-                  key={p}
-                  onClick={() => bump(p, -1)}
-                  disabled={autoPlaying || strokes == null || strokes <= 1}
-                  className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
-                  aria-label={`Decrease strokes for ${tag}`}
-                >
-                  −
-                </button>
+                <div key={p} className="flex h-9 items-center">
+                  <button
+                    onClick={() => bump(p, -1)}
+                    disabled={autoPlaying || strokes == null || strokes <= 1}
+                    className="key flex h-8 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                    aria-label={`Decrease strokes for ${tag}`}
+                  >
+                    −
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -442,11 +447,14 @@ export default function Scorecard() {
             className="relative flex-1 overflow-x-auto"
             style={{ scrollbarWidth: 'none' }}
           >
-            <div className="flex w-max flex-col gap-3">
+            {/* Ruled like a paper card: thin lines between every row and
+                column (divide-*), cells flush with no chrome of their own.
+                The current hole is a tinted column running down the sheet
+                rather than a highlighted button. */}
+            <div className="w-max divide-y divide-fairway-700/40">
               {/* Hole label row. */}
-              <div role="tablist" aria-label="Holes" className="flex gap-1">
+              <div role="tablist" aria-label="Holes" className="flex divide-x divide-fairway-700/40">
                 {Array.from({ length: HOLE_COUNT }, (_, h) => {
-                  const done = round.playerTags.every((_t, p) => round.scores[p]?.[h] != null);
                   const active = h === hole;
                   return (
                     <button
@@ -458,13 +466,10 @@ export default function Scorecard() {
                       role="tab"
                       aria-selected={active}
                       aria-label={`Hole ${h + 1}`}
-                      className={`flex h-9 w-12 shrink-0 items-center justify-center rounded-xl text-base font-black transition-transform active:translate-y-px ${
-                        active
-                          ? 'btn-accent text-fairway-50'
-                          : done
-                            ? 'surface-1 text-fairway-200'
-                            : 'border border-fairway-700 text-fairway-300'
+                      className={`flex h-9 w-12 shrink-0 items-center justify-center text-base ${
+                        active ? 'font-black' : 'font-semibold text-fairway-300'
                       }`}
+                      style={active ? { color: ink, backgroundColor: columnTint } : undefined}
                     >
                       {h + 1}
                     </button>
@@ -477,7 +482,7 @@ export default function Scorecard() {
                   role and the punch animation); the rest is the read-only
                   rest of the scorecard. */}
               {round.playerTags.map((tag, p) => (
-                <div key={p} className="flex gap-1">
+                <div key={p} className="flex divide-x divide-fairway-700/40">
                   {Array.from({ length: HOLE_COUNT }, (_, h) => {
                     const strokes = round.scores[p]?.[h] ?? null;
                     const active = h === hole;
@@ -486,9 +491,8 @@ export default function Scorecard() {
                         key={h}
                         role={active ? 'status' : undefined}
                         aria-label={active ? `Strokes for ${tag}` : undefined}
-                        className={`flex h-9 w-12 shrink-0 items-center justify-center rounded-lg ${
-                          active ? 'surface-sunk' : ''
-                        }`}
+                        className="flex h-9 w-12 shrink-0 items-center justify-center"
+                        style={active ? { backgroundColor: columnTint } : undefined}
                       >
                         {strokes == null ? (
                           // No score yet — the ghosted dot, a shade brighter
@@ -520,22 +524,23 @@ export default function Scorecard() {
           </div>
 
           {/* Pinned + keys: always edit the current (highlighted) hole. */}
-          <div className="flex shrink-0 flex-col gap-3">
+          <div className="flex shrink-0 flex-col">
             <div className="h-9" aria-hidden />
             {round.playerTags.map((tag, p) => {
               const strokes = round.scores[p]?.[hole] ?? null;
               return (
-                <button
-                  key={p}
-                  onClick={() => bump(p, +1)}
-                  disabled={
-                    autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
-                  }
-                  className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
-                  aria-label={`Increase strokes for ${tag}`}
-                >
-                  +
-                </button>
+                <div key={p} className="flex h-9 items-center">
+                  <button
+                    onClick={() => bump(p, +1)}
+                    disabled={
+                      autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
+                    }
+                    className="key flex h-8 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                    aria-label={`Increase strokes for ${tag}`}
+                  >
+                    +
+                  </button>
+                </div>
               );
             })}
           </div>
