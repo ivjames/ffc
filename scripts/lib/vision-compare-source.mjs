@@ -26,10 +26,13 @@ export async function sourceImagesFromWeb(countRaw) {
   while (added.length < count && tried < count * TRIES_PER_IMAGE) {
     tried += 1;
     try {
-      // Random photo, sized near the app's real upload dimensions. `seed`
-      // keeps each fetch distinct without needing redirects disabled.
+      // Random photo at production dimensions — the hunt's client-side
+      // downscale caps uploads at 1280px long edge (4:3 phone shots land at
+      // 1280x960), so sourced test images bill the same tokens real player
+      // photos do. `seed` keeps each fetch distinct without needing
+      // redirects disabled.
       const seed = Math.random().toString(36).slice(2, 10);
-      const res = await fetch(`https://picsum.photos/seed/${seed}/1024/768`);
+      const res = await fetch(`https://picsum.photos/seed/${seed}/1280/960`);
       if (!res.ok) {
         failures += 1;
         continue;
