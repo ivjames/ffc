@@ -424,16 +424,22 @@ document.getElementById("loadStored").addEventListener("click", function () {
   status.textContent = "loading\\u2026";
   fetch(ADMIN_PHOTOS + "?limit=50", { headers: apiHeaders() })
     .then(function (r) { return r.json(); })
-    .then(function (rows) {
+    .then(function (allRows) {
       var list = document.getElementById("storedList");
       list.textContent = "";
-      if (!Array.isArray(rows)) {
-        status.textContent = (rows && rows.error) || "failed to list photos";
+      if (!Array.isArray(allRows)) {
+        status.textContent = (allRows && allRows.error) || "failed to list photos";
         return;
       }
-      status.textContent = rows.length
-        ? rows.length + " stored photos (newest first)"
-        : "no stored hunt photos";
+      // Test-data policy: no guests in bake-off images — these photos get
+      // sent to every enabled third-party provider, so photos the verifier
+      // flagged as containing people are excluded outright.
+      var rows = allRows.filter(function (p) { return !p.peoplePresent; });
+      var hidden = allRows.length - rows.length;
+      status.textContent = (rows.length
+        ? rows.length + " people-free photos (newest first)"
+        : "no people-free stored photos") +
+        (hidden ? " \\u00b7 " + hidden + " with people excluded" : "");
       rows.forEach(function (p) {
         var lab = el("label", "stored-item");
         var cb = document.createElement("input");
@@ -444,8 +450,7 @@ document.getElementById("loadStored").addEventListener("click", function () {
         lab.appendChild(el("span", null, p.itemName || "(unknown item)"));
         lab.appendChild(el("span", "meta",
           (p.courseName || "") + " \\u00b7 " +
-          new Date(p.createdAt).toLocaleDateString() +
-          (p.peoplePresent ? " \\u00b7 people" : "")));
+          new Date(p.createdAt).toLocaleDateString()));
         list.appendChild(lab);
       });
       document.getElementById("addStored").hidden = rows.length === 0;
