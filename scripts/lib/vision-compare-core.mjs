@@ -58,11 +58,10 @@ export const VERDICT_SCHEMA = {
 };
 
 // Gemini's responseSchema dialect doesn't take additionalProperties.
-const GEMINI_VERDICT_SCHEMA = {
-  type: "object",
-  properties: VERDICT_SCHEMA.properties,
-  required: VERDICT_SCHEMA.required,
-};
+function geminiSchema(schema) {
+  return { type: "object", properties: schema.properties, required: schema.required };
+}
+const GEMINI_VERDICT_SCHEMA = geminiSchema(VERDICT_SCHEMA);
 
 // Web-sourcing scan: one schema-enforced Haiku call that names the subject
 // AND screens for people — sourced internet images are rejected when anyone
@@ -279,7 +278,10 @@ async function callGemini(p, key, img, prompt, opts) {
         maxOutputTokens: p.maxTokens || MAX_OUTPUT_TOKENS,
         ...(p.geminiConfig || {}),
         ...(opts?.json
-          ? { responseMimeType: "application/json", responseSchema: GEMINI_VERDICT_SCHEMA }
+          ? {
+              responseMimeType: "application/json",
+              responseSchema: opts.schema ? geminiSchema(opts.schema) : GEMINI_VERDICT_SCHEMA,
+            }
           : {}),
       },
     },
@@ -357,11 +359,31 @@ export async function describeImage(provider, img, prompt = DEFAULT_PROMPT, opts
  * Returns describeImage's shape plus `subject` (cleaned one-line phrase).
  */
 /**
+ * The model used for pre-scans and sourcing scans (the "descriptor").
+ * BAKEOFF_SCAN_PROVIDER env picks by provider name; otherwise Gemini 3.1
+ * Flash-Lite when its key is set (~7x cheaper per scan than Haiku), else
+ * Haiku, else whatever is configured.
+ */
+export function scanProvider() {
+  const wanted = process.env.BAKEOFF_SCAN_PROVIDER;
+  if (wanted) {
+    const p = PROVIDERS.find((x) => x.name === wanted);
+    if (p && isConfigured(p)) return p;
+  }
+  const order = ["gemini-3.1-flash-lite", "haiku-4.5"];
+  for (const name of order) {
+    const p = PROVIDERS.find((x) => x.name === name);
+    if (p && isConfigured(p)) return p;
+  }
+  return PROVIDERS.find(isConfigured) || PROVIDERS[0];
+}
+
+/**
  * Scan a sourced web image: subject phrase + people screening, schema-forced.
- * Returns { subject, peoplePresent, ...usage }.
+ * Returns { subject, peoplePresent, provider, ...usage }.
  */
 export async function sourceScan(img) {
-  const provider = PROVIDERS.find((p) => p.kind === "anthropic");
+  const provider = scanProvider();
   const r = await describeImage(provider, img, SOURCE_SCAN_PROMPT, {
     json: true,
     schema: SOURCE_SCAN_SCHEMA,
@@ -371,15 +393,16 @@ export async function sourceScan(img) {
     ...r,
     subject: String(parsed.subject || "").trim(),
     peoplePresent: Boolean(parsed.people_present),
+    provider: provider.name,
   };
 }
 
 export async function prescanSubject(img) {
-  const provider = PROVIDERS.find((p) => p.kind === "anthropic");
+  const provider = scanProvider();
   const r = await describeImage(provider, img, PRESCAN_PROMPT);
   const subject = r.text
     .trim()
     .split("\n")[0]
     .replace(/^["'\s]+|["'.\s]+$/g, "");
-  return { ...r, subject };
+  return { ...r, subject, provider: provider.name };
 }

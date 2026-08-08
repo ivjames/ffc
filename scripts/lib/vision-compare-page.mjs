@@ -228,7 +228,9 @@ function huntMode() { return document.getElementById("modeHunt").checked; }
 function lbl(name) {
   var p = state.providers.find(function (x) { return x.name === name; });
   if (p && p.label) return p.label;
-  if (name === "prescan (haiku-4.5)") return "Pre-scan (Haiku 4.5)";
+  if (name.indexOf("prescan (") === 0 && name.charAt(name.length - 1) === ")") {
+    return "Pre-scan (" + lbl(name.slice(9, -1)) + ")";
+  }
   return name;
 }
 
@@ -927,7 +929,8 @@ function prescan(img) {
       }
       // Cache hits cost nothing and would only pad the all-time stats.
       if (!j.cached) logRun({
-        kind: "prescan", provider: "prescan (haiku-4.5)", image: img.name,
+        kind: "prescan", provider: "prescan (" + (j.provider || "?") + ")",
+        image: img.name,
         error: j.error || null, inputTokens: j.inputTokens,
         outputTokens: j.outputTokens, cost: j.cost, ms: j.ms,
         text: j.subject || null,
