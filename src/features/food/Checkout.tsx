@@ -15,10 +15,13 @@ import { useMenu } from './useMenu';
 
 // /food/checkout — review the cart, pay, hand the order to the kitchen.
 //
-// Payment is a placeholder: a real payment SDK (whatever CenterEdge supports)
-// will tokenize the card client-side and hand us an opaque token; until then
-// we send a mock token. The DEV-only "simulate declined card" switch sends the
-// mock's tok_declined to exercise the failure path.
+// Payment is a placeholder. Working assumption (unconfirmed — asked in
+// mock-centeredge/API-ACCESS-REQUEST.md): payment settles through CenterEdge
+// Payments so orders reconcile in the POS, and their client-side SDK will
+// tokenize the card and hand us the opaque reference we send as
+// payment.token. Until credentials land we send a mock token. The DEV-only
+// "simulate declined card" switch sends the mock's tok_declined to exercise
+// the failure path.
 
 function lineLabel(menu: Menu, line: StoredCartLine): { name: string; mods: string } {
   const item = menu.categories.flatMap((c) => c.items).find((i) => i.id === line.menuItemId);

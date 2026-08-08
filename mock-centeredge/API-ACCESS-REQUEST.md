@@ -37,11 +37,18 @@ system. Specifically, we're looking for:
      (redemption point) balances; and **crediting tickets/points** earned
      through app promotions and in-app games to a guest's account.
 
-3. **API documentation** — the current docs for Advantage Web Services (or
+3. **Payment handling for app orders** — we expect payment to settle
+   through CenterEdge Payments so orders reconcile in the POS. Please
+   confirm, and point us at the client-side SDK / tokenization flow the app
+   should use to take card (and ideally Apple Pay / Google Pay) payments
+   for orders it submits — or let us know if app orders should instead
+   carry an external payment reference.
+
+4. **API documentation** — the current docs for Advantage Web Services (or
    whichever API surface covers the above), including authentication flow,
    rate limits, and webhook/event options if available.
 
-4. **A technical contact** we can loop in our developer with for
+5. **A technical contact** we can loop in our developer with for
    integration questions.
 
 Our developer contact is [DEVELOPER NAME] ([DEVELOPER EMAIL]) — feel free
