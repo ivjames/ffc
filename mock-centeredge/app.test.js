@@ -50,7 +50,7 @@ test('menu has categories, priced items, and modifier groups', async () => {
     .flatMap((c) => c.items)
     .find((i) => i.id === 'item-pizza-cheese');
   assert.equal(pizza.priceCents, 1299);
-  assert.ok(pizza.modifierGroups.some((g) => g.name === 'Toppings'));
+  assert.ok(pizza.modifierGroups.some((g) => g.name === 'Extra Toppings'));
 });
 
 test('order happy path: server-priced total, kitchen status, polling progression', async () => {

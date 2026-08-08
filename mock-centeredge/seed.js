@@ -4,7 +4,92 @@
 // deliberately boring so remapping to the real API is a rename, not a rewrite.
 //
 // All money is integer cents. All ids are stable strings so the frontend can
-// hard-code fixtures in stories/tests.
+// hard-code fixtures in stories/tests — in particular the tests pin
+// item-pizza-cheese / mod-size-16 / mod-top-pepperoni / item-fountain /
+// mod-drink-lg prices; change those and update app.test.js's CART_TOTAL.
+
+// Shared modifier groups. Every pizza takes the same size + toppings choices.
+const PIZZA_SIZE = {
+  id: 'mg-pizza-size',
+  name: 'Size',
+  required: true,
+  minSelect: 1,
+  maxSelect: 1,
+  options: [
+    { id: 'mod-size-12', name: '12" Medium', priceCents: 0 },
+    { id: 'mod-size-16', name: '16" Large', priceCents: 400 },
+  ],
+};
+
+const PIZZA_TOPPINGS = {
+  id: 'mg-pizza-toppings',
+  name: 'Extra Toppings',
+  required: false,
+  minSelect: 0,
+  maxSelect: 5,
+  options: [
+    { id: 'mod-top-pepperoni', name: 'Pepperoni', priceCents: 150 },
+    { id: 'mod-top-sausage', name: 'Sausage', priceCents: 150 },
+    { id: 'mod-top-bacon', name: 'Bacon', priceCents: 150 },
+    { id: 'mod-top-mushroom', name: 'Mushroom', priceCents: 100 },
+    { id: 'mod-top-onion', name: 'Red Onion', priceCents: 100 },
+    { id: 'mod-top-pepper', name: 'Bell Pepper', priceCents: 100 },
+    { id: 'mod-top-olive', name: 'Black Olives', priceCents: 100 },
+    { id: 'mod-top-pineapple', name: 'Pineapple', priceCents: 100 },
+  ],
+};
+
+const BURGER_PREP = {
+  id: 'mg-burger-prep',
+  name: 'Preparation',
+  required: false,
+  minSelect: 0,
+  maxSelect: 4,
+  options: [
+    { id: 'mod-no-onion', name: 'No Onion', priceCents: 0 },
+    { id: 'mod-no-pickle', name: 'No Pickle', priceCents: 0 },
+    { id: 'mod-no-tomato', name: 'No Tomato', priceCents: 0 },
+    { id: 'mod-add-bacon', name: 'Add Bacon', priceCents: 200 },
+  ],
+};
+
+const SALAD_DRESSING = {
+  id: 'mg-dressing',
+  name: 'Dressing',
+  required: true,
+  minSelect: 1,
+  maxSelect: 1,
+  options: [
+    { id: 'mod-dress-ranch', name: 'Ranch', priceCents: 0 },
+    { id: 'mod-dress-caesar', name: 'Caesar', priceCents: 0 },
+    { id: 'mod-dress-balsamic', name: 'Balsamic Vinaigrette', priceCents: 0 },
+    { id: 'mod-dress-none', name: 'No Dressing', priceCents: 0 },
+  ],
+};
+
+const SALAD_PROTEIN = {
+  id: 'mg-salad-protein',
+  name: 'Add Protein',
+  required: false,
+  minSelect: 0,
+  maxSelect: 1,
+  options: [
+    { id: 'mod-prot-chicken', name: 'Grilled Chicken', priceCents: 350 },
+    { id: 'mod-prot-crispy', name: 'Crispy Chicken', priceCents: 350 },
+  ],
+};
+
+const DRINK_SIZE = {
+  id: 'mg-drink-size',
+  name: 'Size',
+  required: true,
+  minSelect: 1,
+  maxSelect: 1,
+  options: [
+    { id: 'mod-drink-sm', name: 'Small', priceCents: 0 },
+    { id: 'mod-drink-lg', name: 'Large', priceCents: 100 },
+  ],
+};
 
 export const MENU = {
   menuId: 'menu-main',
@@ -24,33 +109,7 @@ export const MENU = {
           priceCents: 1299,
           imageUrl: null,
           available: true,
-          modifierGroups: [
-            {
-              id: 'mg-pizza-size',
-              name: 'Size',
-              required: true,
-              minSelect: 1,
-              maxSelect: 1,
-              options: [
-                { id: 'mod-size-12', name: '12" Medium', priceCents: 0 },
-                { id: 'mod-size-16', name: '16" Large', priceCents: 400 },
-              ],
-            },
-            {
-              id: 'mg-pizza-toppings',
-              name: 'Toppings',
-              required: false,
-              minSelect: 0,
-              maxSelect: 5,
-              options: [
-                { id: 'mod-top-pepperoni', name: 'Pepperoni', priceCents: 150 },
-                { id: 'mod-top-sausage', name: 'Sausage', priceCents: 150 },
-                { id: 'mod-top-mushroom', name: 'Mushroom', priceCents: 100 },
-                { id: 'mod-top-onion', name: 'Red Onion', priceCents: 100 },
-                { id: 'mod-top-pineapple', name: 'Pineapple', priceCents: 100 },
-              ],
-            },
-          ],
+          modifierGroups: [PIZZA_SIZE, PIZZA_TOPPINGS],
         },
         {
           id: 'item-pizza-pep',
@@ -59,47 +118,68 @@ export const MENU = {
           priceCents: 1449,
           imageUrl: null,
           available: true,
-          modifierGroups: [
-            {
-              id: 'mg-pizza-size',
-              name: 'Size',
-              required: true,
-              minSelect: 1,
-              maxSelect: 1,
-              options: [
-                { id: 'mod-size-12', name: '12" Medium', priceCents: 0 },
-                { id: 'mod-size-16', name: '16" Large', priceCents: 400 },
-              ],
-            },
-          ],
+          modifierGroups: [PIZZA_SIZE, PIZZA_TOPPINGS],
+        },
+        {
+          id: 'item-pizza-meat',
+          name: 'Meat Lovers Pizza',
+          description: 'Pepperoni, sausage, and bacon.',
+          priceCents: 1649,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [PIZZA_SIZE, PIZZA_TOPPINGS],
+        },
+        {
+          id: 'item-pizza-veggie',
+          name: 'Veggie Pizza',
+          description: 'Mushroom, bell pepper, red onion, and olives.',
+          priceCents: 1549,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [PIZZA_SIZE, PIZZA_TOPPINGS],
+        },
+        {
+          id: 'item-pizza-bbq',
+          name: 'BBQ Chicken Pizza',
+          description: 'BBQ sauce, grilled chicken, and red onion.',
+          priceCents: 1599,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [PIZZA_SIZE, PIZZA_TOPPINGS],
         },
       ],
     },
     {
-      id: 'cat-baskets',
-      name: 'Burgers & Baskets',
+      id: 'cat-burgers',
+      name: 'Burgers',
       sortOrder: 20,
       items: [
         {
           id: 'item-burger',
-          name: 'Cheeseburger Basket',
+          name: 'Cheeseburger',
           description: 'Quarter-pound burger with fries.',
           priceCents: 1099,
           imageUrl: null,
           available: true,
-          modifierGroups: [
-            {
-              id: 'mg-burger-temp',
-              name: 'Preparation',
-              required: false,
-              minSelect: 0,
-              maxSelect: 1,
-              options: [
-                { id: 'mod-no-onion', name: 'No Onion', priceCents: 0 },
-                { id: 'mod-no-pickle', name: 'No Pickle', priceCents: 0 },
-              ],
-            },
-          ],
+          modifierGroups: [BURGER_PREP],
+        },
+        {
+          id: 'item-burger-double',
+          name: 'Double Cheeseburger',
+          description: 'Two patties, double cheese, with fries.',
+          priceCents: 1399,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [BURGER_PREP],
+        },
+        {
+          id: 'item-burger-veggie',
+          name: 'Veggie Burger',
+          description: 'Plant-based patty with fries.',
+          priceCents: 1199,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [BURGER_PREP],
         },
         {
           id: 'item-tenders',
@@ -126,9 +206,43 @@ export const MENU = {
       ],
     },
     {
+      id: 'cat-salads',
+      name: 'Salads',
+      sortOrder: 30,
+      items: [
+        {
+          id: 'item-salad-caesar',
+          name: 'Caesar Salad',
+          description: 'Romaine, parmesan, croutons.',
+          priceCents: 899,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [SALAD_DRESSING, SALAD_PROTEIN],
+        },
+        {
+          id: 'item-salad-garden',
+          name: 'Garden Salad',
+          description: 'Mixed greens, tomato, cucumber, carrot.',
+          priceCents: 799,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [SALAD_DRESSING, SALAD_PROTEIN],
+        },
+        {
+          id: 'item-salad-cobb',
+          name: 'Cobb Salad',
+          description: 'Greens, egg, bacon, avocado, blue cheese.',
+          priceCents: 1099,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [SALAD_DRESSING],
+        },
+      ],
+    },
+    {
       id: 'cat-snacks',
       name: 'Snacks',
-      sortOrder: 30,
+      sortOrder: 40,
       items: [
         {
           id: 'item-pretzel',
@@ -153,7 +267,7 @@ export const MENU = {
     {
       id: 'cat-drinks',
       name: 'Drinks',
-      sortOrder: 40,
+      sortOrder: 50,
       items: [
         {
           id: 'item-fountain',
@@ -162,19 +276,25 @@ export const MENU = {
           priceCents: 299,
           imageUrl: null,
           available: true,
-          modifierGroups: [
-            {
-              id: 'mg-drink-size',
-              name: 'Size',
-              required: true,
-              minSelect: 1,
-              maxSelect: 1,
-              options: [
-                { id: 'mod-drink-sm', name: 'Small', priceCents: 0 },
-                { id: 'mod-drink-lg', name: 'Large', priceCents: 100 },
-              ],
-            },
-          ],
+          modifierGroups: [DRINK_SIZE],
+        },
+        {
+          id: 'item-lemonade',
+          name: 'Fresh Lemonade',
+          description: 'Squeezed daily.',
+          priceCents: 399,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [DRINK_SIZE],
+        },
+        {
+          id: 'item-water',
+          name: 'Bottled Water',
+          description: '',
+          priceCents: 249,
+          imageUrl: null,
+          available: true,
+          modifierGroups: [],
         },
         {
           id: 'item-icee',
@@ -202,7 +322,7 @@ export const MENU = {
     {
       id: 'cat-desserts',
       name: 'Desserts',
-      sortOrder: 50,
+      sortOrder: 60,
       items: [
         {
           id: 'item-dippin',
