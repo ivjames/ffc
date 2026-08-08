@@ -147,9 +147,14 @@ var state = { providers: [], images: [], results: [], blindMap: null };
 var TOKEN = new URLSearchParams(location.search).get("token") || "";
 if (!TOKEN && AUTH_MODE === "admin") {
   // Same-origin with the Master Control SPA: reuse its stored APP_TOKEN
-  // (token-mode login). Session-cookie logins need nothing — the cookie
-  // rides same-origin fetches on its own.
-  try { TOKEN = localStorage.getItem("ffc_admin_token") || ""; } catch (e) {}
+  // (token-mode login; admin/api.ts keeps it in sessionStorage — which is
+  // per-tab, so this only works when this page is opened in the tab that
+  // logged in; the 401 fallback below covers fresh tabs). Session-cookie
+  // logins need nothing — the cookie rides same-origin fetches on its own.
+  try {
+    TOKEN = sessionStorage.getItem("ffc_admin_token") ||
+      localStorage.getItem("ffc_admin_token") || "";
+  } catch (e) {}
 }
 
 function apiHeaders(extra) {
@@ -170,9 +175,21 @@ function el(tag, cls, text) {
 
 fetch(API_BASE + "/providers", { headers: apiHeaders() }).then(function (r) {
   if (r.status === 401) {
-    document.querySelector(".sub").textContent = AUTH_MODE === "admin"
-      ? "401: log in to Master Control in this browser first, then reload this page."
-      : "401: open this page with ?token=<BAKEOFF_TOKEN> in the URL.";
+    var sub = document.querySelector(".sub");
+    if (AUTH_MODE === "admin") {
+      sub.textContent = "401: open this page from the tab where Master " +
+        "Control is signed in, or enter the admin token: ";
+      var btn = el("button", "btn ghost", "Enter admin token");
+      btn.addEventListener("click", function () {
+        var t = window.prompt("APP_TOKEN (stored for this tab only):");
+        if (!t) return;
+        try { sessionStorage.setItem("ffc_admin_token", t); } catch (e) {}
+        location.reload();
+      });
+      sub.appendChild(btn);
+    } else {
+      sub.textContent = "401: open this page with ?token=<BAKEOFF_TOKEN> in the URL.";
+    }
   }
   if (r.status === 403) {
     document.querySelector(".sub").textContent =
