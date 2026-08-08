@@ -747,7 +747,9 @@ function addFiles(files) {
       renderThumbs();
       updateRunButton();
       persistImage(img);
-      if (huntMode()) prescan(img);
+      // Label every upload up front (one cheap Haiku call) — the subject
+      // shows beside the file name in every mode, and hunt mode uses it.
+      prescan(img);
     };
     reader.readAsDataURL(f);
   });
@@ -778,11 +780,10 @@ function renderThumbs() {
     subj.className = "subj";
     subj.placeholder = img.scanning ? "scanning\\u2026" : "subject";
     subj.value = img.subject;
-    subj.hidden = !huntMode();
     subj.addEventListener("input", function () { img.subject = subj.value; });
     subj.addEventListener("change", function () { persistSubject(img); });
     t.appendChild(subj);
-    if (huntMode() && img.prescanMs) {
+    if (img.prescanMs) {
       t.appendChild(el("div", "nm", "scan " + img.prescanMs + "ms"));
     }
     box.appendChild(t);
@@ -910,7 +911,9 @@ document.getElementById("run").addEventListener("click", function () {
       ? promptTemplate.replace(/__SUBJECT__/g, img.subject || "the target item")
       : promptTemplate;
     var heading = blind ? "Image " + (imgIdx + 1) : img.name;
-    if (hunt) heading += " \\u2014 \\u201c" + (img.subject || "?") + "\\u201d";
+    if (hunt || img.subject) {
+      heading += " \\u2014 \\u201c" + (img.subject || "?") + "\\u201d";
+    }
     var sec = el("div", "imgsec");
     var im = document.createElement("img");
     im.src = img.dataUrl;
