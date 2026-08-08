@@ -31,9 +31,13 @@ function randomStrokes(par: number): number {
   return clampStrokes(1 + Math.floor(Math.random() * max));
 }
 
-// §5.1 step 3 — the play screen. One hole at a time; per-hole entry for all
-// players; par for the current hole; stroke cap; hole navigation and
-// edit; every edit persists to IndexedDB immediately (offline-first).
+// §5.1 step 3 — the play screen. Demo flow: instead of a page per hole, the
+// scorecard is a horizontally scrolling strip of all 18 holes with the current
+// hole highlighted. Swipe (or tap a hole) to move around the course; the strip
+// snaps the nearest hole to center when the scroll settles, and "Next"
+// advances and scrolls for you. Per-hole entry for all players below applies
+// to the highlighted hole; every edit persists to IndexedDB immediately
+// (offline-first).
 export default function Scorecard() {
   const { clientId = '' } = useParams();
   const navigate = useNavigate();
@@ -41,7 +45,6 @@ export default function Scorecard() {
   const [round, setRound] = useState<LocalRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [hole, setHole] = useState(0); // 0-based index
-  const [showJump, setShowJump] = useState(false);
   // Testing aid: auto-play walks the course, randomly scoring every player on
   // each hole and advancing to the end. Pause/stop halts it mid-course.
   // `fastForward` runs the same hole-by-hole walk with no delay between holes.
@@ -56,6 +59,15 @@ export default function Scorecard() {
   // mutations so neither clobbers the other).
   const [sharedStatus, setSharedStatus] = useState<SharedStatus>('offline');
   const sharedHandleRef = useRef<SharedHandle | null>(null);
+  // Horizontal hole strip: the scroller, one ref per hole cell, and the
+  // scroll-settle timer that turns a finished swipe into a selection.
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const cellRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const scrollIdleRef = useRef<number | undefined>(undefined);
+  // Swipe-to-select only arms on real user input on the strip. Programmatic
+  // moves (tapping a hole, "Next", auto-play) disarm it so the smooth scroll
+  // they trigger can't re-select an intermediate hole mid-flight.
+  const scrollSelectArmedRef = useRef(false);
 
   useEffect(() => {
     void getRound(clientId).then((r) => {
@@ -155,6 +167,25 @@ export default function Scorecard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoPlaying, fastForward, hole, round]);
 
+  // Keep the highlighted hole centered in the strip. Instant on first load
+  // (resuming mid-round shouldn't animate from hole 1), smooth afterwards.
+  const hasRound = !!round;
+  const centeredOnceRef = useRef(false);
+  useEffect(() => {
+    if (!hasRound) return;
+    const cell = cellRefs.current[hole];
+    // scrollIntoView is missing in jsdom; optional-call keeps tests happy.
+    cell?.scrollIntoView?.({
+      behavior: centeredOnceRef.current ? 'smooth' : 'auto',
+      inline: 'center',
+      block: 'nearest',
+    });
+    centeredOnceRef.current = true;
+  }, [hole, hasRound]);
+
+  // Clear any pending scroll-settle timer on unmount.
+  useEffect(() => () => window.clearTimeout(scrollIdleRef.current), []);
+
   if (notFound) {
     return (
       <Screen>
@@ -227,7 +258,59 @@ export default function Scorecard() {
   // Advance to the next hole with the satisfying "into the cup" sound.
   function goNext() {
     playCup();
+    scrollSelectArmedRef.current = false; // programmatic move — see armed ref
     setHole((h) => Math.min(HOLE_COUNT - 1, h + 1));
+  }
+
+  // Tap a hole cell to jump straight to it.
+  function selectHole(h: number) {
+    if (h === hole) return;
+    playClick();
+    scrollSelectArmedRef.current = false; // programmatic move — see armed ref
+    setHole(h);
+  }
+
+  // The hole whose cell center sits closest to the strip's visible center.
+  function nearestHole(): number {
+    const strip = stripRef.current;
+    if (!strip) return hole;
+    const center = strip.scrollLeft + strip.clientWidth / 2;
+    let best = hole;
+    let bestDist = Infinity;
+    cellRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const dist = Math.abs(el.offsetLeft + el.offsetWidth / 2 - center);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  // A user swipe settles → the hole nearest center becomes the current hole
+  // (the centering effect then magnetically snaps it the rest of the way).
+  function onStripScroll() {
+    window.clearTimeout(scrollIdleRef.current);
+    scrollIdleRef.current = window.setTimeout(() => {
+      if (!scrollSelectArmedRef.current) return;
+      const h = nearestHole();
+      if (h !== hole) setHole(h);
+      else {
+        // Already on the nearest hole — still nudge it back to center so a
+        // small drag doesn't leave the strip resting between holes.
+        cellRefs.current[h]?.scrollIntoView?.({
+          behavior: 'smooth',
+          inline: 'center',
+          block: 'nearest',
+        });
+      }
+    }, 140);
+  }
+
+  // Real user input on the strip arms swipe-to-select.
+  function armScrollSelect() {
+    scrollSelectArmedRef.current = true;
   }
 
   return (
@@ -265,45 +348,66 @@ export default function Scorecard() {
             >
               🎡
             </button>
-            <button
-              onClick={() => {
-                playClick();
-                setShowJump((v) => !v);
-              }}
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-fairway-300 active:bg-fairway-800"
-            >
-              Holes
-            </button>
           </div>
         }
       />
 
-      {showJump && (
-        <div className="grid grid-cols-6 gap-2 border-b border-fairway-800 bg-fairway-900/50 p-3">
-          {Array.from({ length: HOLE_COUNT }, (_, h) => {
-            const done = round.playerTags.every((_t, p) => round.scores[p]?.[h] != null);
-            return (
-              <button
-                key={h}
-                onClick={() => {
-                  playClick();
-                  setHole(h);
-                  setShowJump(false);
-                }}
-                className={`rounded-xl py-2 text-sm font-bold transition-transform active:translate-y-px ${
-                  h === hole
-                    ? 'btn-accent text-fairway-50'
-                    : done
-                      ? 'surface-1 text-fairway-200'
-                      : 'border border-fairway-700 text-fairway-300'
-                }`}
-              >
-                {h + 1}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* The scorecard strip — every hole as a cell in one horizontally
+          scrolling row (the demo's replacement for page-per-hole). Swipe to
+          browse; the nearest hole snaps to center and becomes current; tap a
+          cell to jump. Each cell shows the hole number, its par, and one dot
+          per player that fills in as that player's score is entered. */}
+      <div
+        ref={stripRef}
+        onScroll={onStripScroll}
+        onPointerDown={armScrollSelect}
+        onTouchStart={armScrollSelect}
+        onWheel={armScrollSelect}
+        className="flex gap-2 overflow-x-auto border-b border-fairway-800 bg-fairway-900/50 p-3"
+        style={{ scrollbarWidth: 'none' }}
+        role="tablist"
+        aria-label="Holes"
+      >
+        {Array.from({ length: HOLE_COUNT }, (_, h) => {
+          const done = round.playerTags.every((_t, p) => round.scores[p]?.[h] != null);
+          const active = h === hole;
+          return (
+            <button
+              key={h}
+              ref={(el) => {
+                cellRefs.current[h] = el;
+              }}
+              onClick={() => selectHole(h)}
+              role="tab"
+              aria-selected={active}
+              aria-label={`Hole ${h + 1}`}
+              className={`flex w-14 shrink-0 flex-col items-center rounded-xl py-2 transition-transform active:translate-y-px ${
+                active
+                  ? 'btn-accent text-fairway-50'
+                  : done
+                    ? 'surface-1 text-fairway-200'
+                    : 'border border-fairway-700 text-fairway-300'
+              }`}
+            >
+              <span className="text-lg font-black leading-tight">{h + 1}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
+                Par {course.pars[h]}
+              </span>
+              {/* One dot per player: filled = scored on this hole. */}
+              <span aria-hidden className="mt-1 flex gap-0.5">
+                {round.playerTags.map((_t, p) => (
+                  <span
+                    key={p}
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      round.scores[p]?.[h] != null ? 'bg-current' : 'bg-current opacity-25'
+                    }`}
+                  />
+                ))}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
       <Content>
         {/* Hole header — hole label on the left, par medallion on the right. */}
@@ -392,15 +496,9 @@ export default function Scorecard() {
           })}
         </div>
 
-        {/* Hole navigation */}
+        {/* Hole navigation — going back (or skipping around) is a swipe on the
+            strip; the one button drives the forward flow. */}
         <div className="mt-6 flex gap-3">
-          <Button
-            variant="ghost"
-            onClick={() => setHole((h) => Math.max(0, h - 1))}
-            disabled={hole === 0 || autoPlaying}
-          >
-            ‹ Prev
-          </Button>
           {hole < HOLE_COUNT - 1 ? (
             <Button
               variant="ghost"
