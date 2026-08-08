@@ -28,7 +28,7 @@ const FAST_FORWARD_MS = 62.5; // fast pace — a sixteenth of a second per tap
 // if you squint). Reads as "blank scorecard paper" rather than data, so
 // entered numbers stay the only things that look like scores.
 function ScoreWatermark({ className = '' }: { className?: string }) {
-  return <span aria-hidden className={`h-3 w-3 rounded-full bg-current ${className}`} />;
+  return <span aria-hidden className={`inline-block h-3 w-3 rounded-full bg-current ${className}`} />;
 }
 
 // A plausible-but-random stroke count for a hole, biased toward its par and
@@ -450,8 +450,16 @@ export default function Scorecard() {
             {/* Ruled like a paper card: thin lines between every row and
                 column (divide-*), cells flush with no chrome of their own.
                 The current hole is a tinted column running down the sheet
-                rather than a highlighted button. */}
-            <div className="w-max divide-y divide-fairway-700/40">
+                rather than a highlighted button. The inline padding leaves
+                half a viewport of lead-in/out (minus half a cell, 1.5rem) so
+                the first and last holes can reach dead center too — without
+                it, a tiny scroll on hole 1 would select hole 2 or 3, since
+                hole 1's cell could never be the one nearest center. The
+                percentage resolves against the scroller's visible width. */}
+            <div
+              className="w-max divide-y divide-fairway-700/40"
+              style={{ paddingInline: 'calc(50% - 1.5rem)' }}
+            >
               {/* Hole label row. */}
               <div role="tablist" aria-label="Holes" className="flex divide-x divide-fairway-700/40">
                 {Array.from({ length: HOLE_COUNT }, (_, h) => {
