@@ -410,7 +410,7 @@ export default function Scorecard() {
           <div className="flex shrink-0 flex-col">
             <div className="h-9" aria-hidden />
             {round.playerTags.map((tag, p) => (
-              <div key={p} className="flex h-9 items-center">
+              <div key={p} className="flex h-12 items-center">
                 <TagChip tag={tag} color={course.accent} />
               </div>
             ))}
@@ -422,11 +422,11 @@ export default function Scorecard() {
             {round.playerTags.map((tag, p) => {
               const strokes = round.scores[p]?.[hole] ?? null;
               return (
-                <div key={p} className="flex h-9 items-center">
+                <div key={p} className="flex h-12 items-center">
                   <button
                     onClick={() => bump(p, -1)}
                     disabled={autoPlaying || strokes == null || strokes <= 1}
-                    className="key flex h-8 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                    className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
                     aria-label={`Decrease strokes for ${tag}`}
                   >
                     −
@@ -491,7 +491,7 @@ export default function Scorecard() {
                         key={h}
                         role={active ? 'status' : undefined}
                         aria-label={active ? `Strokes for ${tag}` : undefined}
-                        className="flex h-9 w-12 shrink-0 items-center justify-center"
+                        className="flex h-12 w-12 shrink-0 items-center justify-center"
                         style={active ? { backgroundColor: columnTint } : undefined}
                       >
                         {strokes == null ? (
@@ -529,13 +529,13 @@ export default function Scorecard() {
             {round.playerTags.map((tag, p) => {
               const strokes = round.scores[p]?.[hole] ?? null;
               return (
-                <div key={p} className="flex h-9 items-center">
+                <div key={p} className="flex h-12 items-center">
                   <button
                     onClick={() => bump(p, +1)}
                     disabled={
                       autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
                     }
-                    className="key flex h-8 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                    className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
                     aria-label={`Increase strokes for ${tag}`}
                   >
                     +
