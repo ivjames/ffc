@@ -15,7 +15,8 @@ export const MAX_OUTPUT_TOKENS = 400;
 
 // Hunt-verify mode: the per-image prompt, kept close to the production
 // wording in server/lib/vision.js so cheap-tier results transfer. __SUBJECT__
-// is replaced per image (pre-populated by the Haiku pre-scan below, editable
+// is replaced per image (pre-populated by the descriptor pre-scan below,
+// editable
 // in the UI). Hardened for format obedience: exact-shape example, explicit
 // prohibitions, and the format demand repeated at the very end (models weight
 // the last lines heavily). Hunt calls ALSO switch on each provider's native
@@ -64,7 +65,8 @@ function geminiSchema(schema) {
 }
 const GEMINI_VERDICT_SCHEMA = geminiSchema(VERDICT_SCHEMA);
 
-// Web-sourcing scan: one schema-enforced Haiku call that names the subject
+// Web-sourcing scan: one schema-enforced descriptor call (scanProvider())
+// that names the subject
 // AND screens for people — sourced internet images are rejected when anyone
 // is visible (test-data policy: no people in images sent to third parties).
 export const SOURCE_SCAN_PROMPT =
@@ -90,7 +92,8 @@ export const SOURCE_SCAN_SCHEMA = {
   required: ["subject", "people_present", "also_visible"],
 };
 
-// Pre-scan: one cheap Haiku call per image that names the likely hunt target
+// Pre-scan: one cheap descriptor call (scanProvider()) per image that
+// names the likely hunt target
 // so the UI can pre-fill each image's subject field.
 export const PRESCAN_PROMPT =
   "This photo was taken for a scavenger hunt at a family entertainment " +
@@ -289,7 +292,7 @@ export async function describeImage(provider, img, prompt = DEFAULT_PROMPT, opts
 }
 
 /**
- * Name the likely hunt target in an image (Haiku pre-scan).
+ * Name the likely hunt target in an image (descriptor pre-scan).
  * Returns describeImage's shape plus `subject` (cleaned one-line phrase).
  */
 /**

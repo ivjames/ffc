@@ -101,9 +101,12 @@ export function scrambleDataset() {
     r.expected = true;
   });
   const eligible = rows.filter((r) => r.truth);
-  const k = Math.floor(eligible.length / 2);
+  // Any two eligible images can produce one mismatch (greedy donor
+  // assignment doesn't need the pair-rotation minimum) — floor(n/2) but
+  // never a silent no-op on a small valid dataset.
+  const k = eligible.length >= 2 ? Math.max(1, Math.floor(eligible.length / 2)) : 0;
   let skippedCollisions = 0;
-  if (k >= 2) {
+  if (k >= 1) {
     const shuffled = eligible
       .map((r) => ({ r, sort: Math.random() }))
       .sort((a, b) => a.sort - b.sort)

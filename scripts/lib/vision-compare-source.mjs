@@ -1,10 +1,12 @@
 // Web image sourcing for the bake-off dataset: pull random photos from
 // Lorem Picsum (no key, CC-licensed photo pool), screen each with a
-// schema-enforced Haiku scan that names the subject AND rejects any image
+// schema-enforced descriptor scan (core scanProvider(), Gemini 3.1
+// Flash-Lite by default) that names the subject AND rejects any image
 // with a person visible (test-data policy: nothing with people leaves our
 // infrastructure), then store the keepers with subject = ground truth.
 //
-// Cost: one Haiku scan (~$0.003) per CANDIDATE, including rejects — the
+// Cost: one descriptor scan (~$0.0005 on Gemini) per CANDIDATE, including
+// rejects — the
 // caller gets exact usage back for the burn ticker.
 import { sourceScan } from "./vision-compare-core.mjs";
 import { addDatasetImage } from "./vision-compare-store.mjs";

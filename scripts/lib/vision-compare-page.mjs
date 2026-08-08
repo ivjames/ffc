@@ -194,7 +194,7 @@ const PAGE = `<!doctype html>
       <label class="chk"><input type="radio" name="mode" id="modeDescribe" checked>
         Describe (open description)</label>
       <label class="chk"><input type="radio" name="mode" id="modeHunt">
-        Hunt verify (per-image subject, Haiku pre-scan)</label>
+        Hunt verify (per-image subject, descriptor pre-scan)</label>
     </div>
     <textarea id="prompt"></textarea>
     <p class="meta" id="promptHint" hidden>__SUBJECT__ is replaced with each
@@ -734,7 +734,7 @@ function reloadDataset() {
 document.getElementById("srcBtn").addEventListener("click", function () {
   var n = document.getElementById("srcCount").value;
   var s = document.getElementById("srcStatus");
-  s.textContent = "sourcing " + n + " people-free images (a Haiku scan each)\\u2026";
+  s.textContent = "sourcing " + n + " people-free images (a descriptor scan each)\\u2026";
   fetch(API_BASE + "/dataset/source", {
     method: "POST",
     headers: apiHeaders({ "content-type": "application/json" }),
@@ -811,15 +811,16 @@ document.getElementById("loadStored").addEventListener("click", function () {
         status.textContent = (allRows && allRows.error) || "failed to list photos";
         return;
       }
-      // Test-data policy: no guests in bake-off images — these photos get
-      // sent to every enabled third-party provider, so photos the verifier
-      // flagged as containing people are excluded outright.
-      var rows = allRows.filter(function (p) { return !p.peoplePresent; });
+      // Test-data policy: no guests in bench images — these photos get sent
+      // to every enabled third-party provider. Only an EXPLICIT people-free
+      // verdict passes: legacy rows with a null people_present are unknown,
+      // and unknown is not screened.
+      var rows = allRows.filter(function (p) { return p.peoplePresent === false; });
       var hidden = allRows.length - rows.length;
       status.textContent = (rows.length
         ? rows.length + " people-free photos (newest first)"
-        : "no people-free stored photos") +
-        (hidden ? " \\u00b7 " + hidden + " with people excluded" : "");
+        : "no explicitly people-free stored photos") +
+        (hidden ? " \\u00b7 " + hidden + " excluded (people present or unscreened)" : "");
       rows.forEach(function (p) {
         var lab = el("label", "stored-item");
         var cb = document.createElement("input");
@@ -863,6 +864,10 @@ document.getElementById("addStored").addEventListener("click", function () {
             dataUrl: dataUrl,
             base64: String(dataUrl).slice(String(dataUrl).indexOf(",") + 1),
             subject: cb.dataset.item || "",
+            // Verified find: the item name IS ground truth, effective
+            // immediately (not only after a reload restores server fields).
+            truth: cb.dataset.item || "",
+            expected: true,
             scanning: false,
           };
           state.images.push(img);
@@ -905,13 +910,17 @@ function addFiles(files) {
         dataUrl: dataUrl,
         base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
         subject: "",
+        // Mirror the server entry so runs BEFORE a reload grade against
+        // ground truth instead of silently falling back to consensus.
+        truth: "",
+        expected: true,
         scanning: false,
       };
       state.images.push(img);
       renderThumbs();
       updateRunButton();
       persistImage(img);
-      // Label every upload up front (one cheap Haiku call) — the subject
+      // Label every upload up front (one cheap descriptor call) — the subject
       // shows beside the file name in every mode, and hunt mode uses it.
       prescan(img);
     };
@@ -967,7 +976,8 @@ function renderThumbs() {
   });
 }
 
-// Haiku pre-scan: name the likely hunt target and pre-fill the subject
+// Descriptor pre-scan (Gemini 3.1 Flash-Lite; see core scanProvider()):
+// name the likely hunt target and pre-fill the subject
 // field. Never overwrites something the user already typed.
 function prescan(img) {
   img.scanning = true;
@@ -984,6 +994,7 @@ function prescan(img) {
       img.prescanCached = Boolean(j.cached);
       if (!img.subject && j.subject) {
         img.subject = j.subject;
+        img.truth = j.subject; // matches updateSubject's server-side behavior
         persistSubject(img);
       }
       // Cache hits cost nothing and would only pad the all-time stats.
