@@ -64,7 +64,9 @@ prints it, and production should meter it (same pattern as `hunt_scan`).
 | ~~Qwen2.5-VL-7B (SiliconFlow)~~ | ~~$0.05 / $0.05~~ | — | — | **Delisted** (API: "Model disabled", found in round-1 bake-off) |
 | Llama 4 Scout (DeepInfra) | $0.08 / $0.30 | ~$0.0002 | ~$0.004 | Image tokens unverified; account needs credit |
 | ~~Gemini 2.5 Flash-Lite~~ | ~~$0.10 / $0.40~~ | — | — | **Closed to new users** (API 404, found in round-1 bake-off); full shutdown Oct 16, 2026 |
+| Mistral Small 4 | $0.10 / $0.30 | ~$0.00022 | ~$0.0044 | Cheapest major-provider tier; image tokenization unverified |
 | Qwen3-VL-8B (SiliconFlow) | $0.18 / $0.68 | $0.00044 | $0.0089 | Cheapest live SiliconFlow VL; successor to the delisted 2.5-VL floor |
+| Grok 4.1 Fast (xAI) | $0.20 / $0.50 | ~$0.00035 | ~$0.0069 | Volume tier; image tokenization unverified |
 | Gemini 3.1 Flash-Lite | $0.25 / $1.50 | $0.00073 | $0.0146 | Cheapest *durable* major-provider tier |
 | GPT-5 mini | $0.25 / $2.00 | $0.00104 | $0.0208 | |
 | Haiku 4.5 (baseline) | $1.00 / $5.00 | $0.00290 | $0.0580 | Already integrated (`server/lib/vision.js` pattern, key on droplet, metering exists) |
@@ -127,10 +129,12 @@ itself.
 ```sh
 # Keys: set whichever you have; providers without keys are skipped.
 export ANTHROPIC_API_KEY=...      # Haiku 4.5 (quality reference)
-export GEMINI_API_KEY=...         # Gemini 3.1 Flash-Lite (+ 2.5 Flash-Lite for reference)
+export GEMINI_API_KEY=...         # Gemini 3.1 Flash-Lite
 export OPENAI_API_KEY=...         # GPT-5 mini
-export SILICONFLOW_API_KEY=...    # Qwen2.5-VL-7B
+export SILICONFLOW_API_KEY=...    # Qwen3-VL-8B
 export DEEPINFRA_API_KEY=...      # Llama 4 Scout
+export MISTRAL_API_KEY=...        # Mistral Small 4 (console.mistral.ai)
+export XAI_API_KEY=...            # Grok 4.1 Fast (console.x.ai)
 
 node scripts/compare-vision-describe.mjs photos/*.jpg
 

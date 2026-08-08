@@ -87,6 +87,26 @@ export const PROVIDERS = [
     keyEnv: "DEEPINFRA_API_KEY",
     price: { in: 0.08, out: 0.3 },
   },
+  {
+    // Vision is built into Small 4 (Pixtral retired) — currently the
+    // cheapest major-provider vision tier on the board.
+    name: "mistral-small-4",
+    kind: "openai",
+    model: "mistral-small-latest",
+    baseUrl: "https://api.mistral.ai/v1",
+    keyEnv: "MISTRAL_API_KEY",
+    price: { in: 0.1, out: 0.3 },
+  },
+  {
+    // xAI's volume tier; verify the exact model id against console.x.ai if
+    // the API rejects it.
+    name: "grok-4.1-fast",
+    kind: "openai",
+    model: "grok-4-1-fast",
+    baseUrl: "https://api.x.ai/v1",
+    keyEnv: "XAI_API_KEY",
+    price: { in: 0.2, out: 0.5 },
+  },
 ];
 
 export const MEDIA_TYPES = {
