@@ -14,7 +14,7 @@ import {
   readdirSync, rmSync, existsSync,
 } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 
 const DIR = process.env.BAKEOFF_DATA_DIR || join(process.cwd(), "bakeoff-data");
 const IMAGES = join(DIR, "images");
@@ -88,6 +88,35 @@ export function clearDataset() {
     for (const f of readdirSync(IMAGES)) rmSync(join(IMAGES, f), { force: true });
   }
   writeDataset([]);
+}
+
+// --- Pre-scan cache ---------------------------------------------------------
+// Subject labels keyed by image content hash, so re-adding an image that was
+// ever scanned before costs nothing. Deliberately survives dataset/run
+// clears — it's a cost cache, not test state.
+const PRESCAN_CACHE = join(DIR, "prescan-cache.json");
+
+function imageHash(base64) {
+  return createHash("sha256").update(base64).digest("hex");
+}
+
+function readPrescanCache() {
+  try {
+    return JSON.parse(readFileSync(PRESCAN_CACHE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export function prescanCacheGet(base64) {
+  return readPrescanCache()[imageHash(base64)] || null;
+}
+
+export function prescanCachePut(base64, subject) {
+  ensureDirs();
+  const cache = readPrescanCache();
+  cache[imageHash(base64)] = { subject, cachedAt: new Date().toISOString() };
+  writeFileSync(PRESCAN_CACHE, JSON.stringify(cache, null, 1));
 }
 
 export function appendRun(row) {

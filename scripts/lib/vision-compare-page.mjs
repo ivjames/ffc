@@ -794,7 +794,9 @@ function renderThumbs() {
     subj.addEventListener("input", function () { img.subject = subj.value; });
     subj.addEventListener("change", function () { persistSubject(img); });
     t.appendChild(subj);
-    if (img.prescanMs) {
+    if (img.prescanCached) {
+      t.appendChild(el("div", "nm", "scan cached"));
+    } else if (img.prescanMs) {
       t.appendChild(el("div", "nm", "scan " + img.prescanMs + "ms"));
     }
     box.appendChild(t);
@@ -815,11 +817,13 @@ function prescan(img) {
     .then(function (j) {
       addBurn(j);
       if (j.ms) img.prescanMs = j.ms;
+      img.prescanCached = Boolean(j.cached);
       if (!img.subject && j.subject) {
         img.subject = j.subject;
         persistSubject(img);
       }
-      logRun({
+      // Cache hits cost nothing and would only pad the all-time stats.
+      if (!j.cached) logRun({
         kind: "prescan", provider: "prescan (haiku-4.5)", image: img.name,
         error: j.error || null, inputTokens: j.inputTokens,
         outputTokens: j.outputTokens, cost: j.cost, ms: j.ms,

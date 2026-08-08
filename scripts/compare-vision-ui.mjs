@@ -36,6 +36,8 @@ import {
   appendRun,
   clearRuns,
   runsSummary,
+  prescanCacheGet,
+  prescanCachePut,
 } from "./lib/vision-compare-store.mjs";
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -181,11 +183,14 @@ const server = createServer(async (req, res) => {
         return json(res, 400, { error: "unsupported media type" });
       if (typeof body.imageBase64 !== "string" || !body.imageBase64)
         return json(res, 400, { error: "missing image" });
+      const hit = prescanCacheGet(body.imageBase64);
+      if (hit) return json(res, 200, { subject: hit.subject, cached: true });
       try {
         const result = await prescanSubject({
           base64: body.imageBase64,
           mediaType: body.mediaType,
         });
+        prescanCachePut(body.imageBase64, result.subject);
         return json(res, 200, result);
       } catch (err) {
         return json(res, 502, { error: String(err.message || err) });

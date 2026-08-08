@@ -34,6 +34,8 @@ import {
   appendRun,
   clearRuns,
   runsSummary,
+  prescanCacheGet,
+  prescanCachePut,
 } from "../../../scripts/lib/vision-compare-store.mjs";
 
 export const router = Router();
@@ -142,11 +144,16 @@ router.post("/prescan", express.json({ limit: "16mb" }), async (req, res) => {
     return res.status(400).json({ error: "unsupported media type" });
   if (typeof req.body.imageBase64 !== "string" || !req.body.imageBase64)
     return res.status(400).json({ error: "missing image" });
+  // Content-hash cache: an image ever scanned before costs nothing again.
+  // Token fields stay null on a hit so the client's burn ticker skips it.
+  const hit = prescanCacheGet(req.body.imageBase64);
+  if (hit) return res.json({ subject: hit.subject, cached: true });
   try {
     const result = await prescanSubject({
       base64: req.body.imageBase64,
       mediaType: req.body.mediaType,
     });
+    prescanCachePut(req.body.imageBase64, result.subject);
     return res.json(result);
   } catch (err) {
     return res.status(502).json({ error: String(err.message || err) });
