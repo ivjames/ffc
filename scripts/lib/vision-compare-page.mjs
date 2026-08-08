@@ -114,6 +114,12 @@ const PAGE = `<!doctype html>
   th { background: #f1f5f9; border-top: none; font-size: 12px;
     text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  #burn {
+    position: fixed; right: 14px; bottom: 14px; z-index: 10;
+    background: var(--ink); color: #fff; border-radius: 999px;
+    padding: 8px 16px; font-size: 13px; font-variant-numeric: tabular-nums;
+    box-shadow: 0 2px 10px rgba(0,0,0,.25);
+  }
 </style>
 </head>
 <body>
@@ -167,6 +173,7 @@ const PAGE = `<!doctype html>
   <div id="results"></div>
   <div id="summary"></div>
 </div>
+<div id="burn" hidden></div>
 
 <script>
 "use strict";
@@ -179,6 +186,23 @@ var state = {
 };
 
 function huntMode() { return document.getElementById("modeHunt").checked; }
+
+// Session-wide burn ticker: every model call this page makes (pre-scans AND
+// comparison runs, all providers) rolls into one always-visible pill.
+// Aggregated across providers, so it leaks nothing in blind mode.
+var burn = { calls: 0, inTok: 0, outTok: 0, cost: 0 };
+function addBurn(j) {
+  if (!j || j.inputTokens == null) return;
+  burn.calls += 1;
+  burn.inTok += j.inputTokens || 0;
+  burn.outTok += j.outputTokens || 0;
+  burn.cost += j.cost || 0;
+  var elp = document.getElementById("burn");
+  elp.hidden = false;
+  elp.textContent = burn.calls + " calls \\u00b7 " +
+    burn.inTok.toLocaleString() + " in / " +
+    burn.outTok.toLocaleString() + " out \\u00b7 $" + burn.cost.toFixed(4);
+}
 var TOKEN = new URLSearchParams(location.search).get("token") || "";
 if (!TOKEN && AUTH_MODE === "admin") {
   // Same-origin with the Master Control SPA: reuse its stored APP_TOKEN
@@ -417,6 +441,7 @@ function prescan(img) {
   })
     .then(function (r) { return r.json(); })
     .then(function (j) {
+      addBurn(j);
       if (!img.subject && j.subject) img.subject = j.subject;
       if (j.error && !img.subject) img.subject = "";
     })
@@ -436,8 +461,24 @@ function selectedProviders() {
 }
 
 function updateRunButton() {
+  var provs = selectedProviders();
   document.getElementById("run").disabled =
-    state.images.length === 0 || selectedProviders().length === 0;
+    state.images.length === 0 || provs.length === 0;
+  // Pre-flight estimate: calls and rough cost (assumes ~1,400 in / 300 out
+  // tokens per call — the ticker shows exact billed numbers as they land).
+  var status = document.getElementById("status");
+  if (state.images.length && provs.length) {
+    var est = 0;
+    provs.forEach(function (name) {
+      var p = state.providers.find(function (x) { return x.name === name; });
+      if (p) est += state.images.length * (1400 * p.priceIn + 300 * p.priceOut) / 1e6;
+    });
+    status.textContent = "next run: " + state.images.length + " \\u00d7 " +
+      provs.length + " = " + state.images.length * provs.length +
+      " calls, est ~$" + est.toFixed(4);
+  } else {
+    status.textContent = "";
+  }
 }
 document.getElementById("provs").addEventListener("change", updateRunButton);
 
@@ -547,6 +588,7 @@ document.getElementById("run").addEventListener("click", function () {
             txt.textContent = "ERROR: " + (r.j.error || "request failed");
             state.results.push({ provider: name, error: true });
           } else {
+            addBurn(r.j);
             if (hunt) renderVerdict(txt, r.j.text);
             else txt.textContent = r.j.text.trim();
             var m = r.j.inputTokens + " in / " + r.j.outputTokens + " out \\u00b7 $" +
