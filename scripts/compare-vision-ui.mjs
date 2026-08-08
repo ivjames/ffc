@@ -26,6 +26,17 @@ import {
   prescanSubject,
 } from "./lib/vision-compare-core.mjs";
 import { renderPage } from "./lib/vision-compare-page.mjs";
+import {
+  listDataset,
+  addDatasetImage,
+  getDatasetImage,
+  updateSubject,
+  removeDatasetImage,
+  clearDataset,
+  appendRun,
+  clearRuns,
+  runsSummary,
+} from "./lib/vision-compare-store.mjs";
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || "127.0.0.1";
@@ -110,6 +121,58 @@ const server = createServer(async (req, res) => {
         })),
       });
       return;
+    }
+
+    // Persistent dataset + run history (same store as the admin mount).
+    if (req.method === "GET" && req.url === "/api/dataset") {
+      return json(res, 200, { images: listDataset() });
+    }
+    if (req.method === "POST" && req.url === "/api/dataset") {
+      const body = JSON.parse(await readBody(req));
+      if (!ALLOWED_MEDIA_TYPES.has(body.mediaType))
+        return json(res, 400, { error: "unsupported media type" });
+      if (typeof body.imageBase64 !== "string" || !body.imageBase64)
+        return json(res, 400, { error: "missing image" });
+      return json(res, 200, addDatasetImage({
+        name: body.name,
+        subject: body.subject,
+        mediaType: body.mediaType,
+        base64: body.imageBase64,
+      }));
+    }
+    let m = req.url.match(/^\/api\/dataset\/([0-9a-f-]+)\/image$/);
+    if (req.method === "GET" && m) {
+      const found = getDatasetImage(m[1]);
+      if (!found) return json(res, 404, { error: "not found" });
+      res.writeHead(200, { "content-type": found.entry.mediaType });
+      return res.end(found.bytes);
+    }
+    m = req.url.match(/^\/api\/dataset\/([0-9a-f-]+)\/subject$/);
+    if (req.method === "POST" && m) {
+      const body = JSON.parse(await readBody(req));
+      const entry = updateSubject(m[1], body.subject);
+      return entry ? json(res, 200, entry) : json(res, 404, { error: "not found" });
+    }
+    m = req.url.match(/^\/api\/dataset\/([0-9a-f-]+)$/);
+    if (req.method === "DELETE" && m) {
+      return removeDatasetImage(m[1])
+        ? json(res, 200, { ok: true })
+        : json(res, 404, { error: "not found" });
+    }
+    if (req.method === "DELETE" && req.url === "/api/dataset") {
+      clearDataset();
+      return json(res, 200, { ok: true });
+    }
+    if (req.method === "POST" && req.url === "/api/runs") {
+      appendRun(JSON.parse(await readBody(req)) || {});
+      return json(res, 200, { ok: true });
+    }
+    if (req.method === "GET" && req.url === "/api/runs/summary") {
+      return json(res, 200, runsSummary());
+    }
+    if (req.method === "DELETE" && req.url === "/api/runs") {
+      clearRuns();
+      return json(res, 200, { ok: true });
     }
 
     if (req.method === "POST" && req.url === "/api/prescan") {

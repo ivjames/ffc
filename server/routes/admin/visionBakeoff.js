@@ -24,6 +24,17 @@ import {
   prescanSubject,
 } from "../../../scripts/lib/vision-compare-core.mjs";
 import { renderPage } from "../../../scripts/lib/vision-compare-page.mjs";
+import {
+  listDataset,
+  addDatasetImage,
+  getDatasetImage,
+  updateSubject,
+  removeDatasetImage,
+  clearDataset,
+  appendRun,
+  clearRuns,
+  runsSummary,
+} from "../../../scripts/lib/vision-compare-store.mjs";
 
 export const router = Router();
 export const publicRouter = Router();
@@ -64,6 +75,64 @@ router.get("/providers", (req, res) => {
       priceOut: p.price.out,
     })),
   });
+});
+
+// --- Persistent test dataset + run history (BAKEOFF_DATA_DIR on disk) ------
+// The operator accumulates a reusable image set and every model call's
+// result across many test rounds, and clears either at will from the page.
+const smallJson = express.json({ limit: "1mb" });
+
+router.get("/dataset", (req, res) => res.json({ images: listDataset() }));
+
+router.post("/dataset", express.json({ limit: "16mb" }), (req, res) => {
+  if (!ALLOWED_MEDIA_TYPES.has(req.body?.mediaType))
+    return res.status(400).json({ error: "unsupported media type" });
+  if (typeof req.body.imageBase64 !== "string" || !req.body.imageBase64)
+    return res.status(400).json({ error: "missing image" });
+  const entry = addDatasetImage({
+    name: req.body.name,
+    subject: req.body.subject,
+    mediaType: req.body.mediaType,
+    base64: req.body.imageBase64,
+  });
+  return res.json(entry);
+});
+
+router.get("/dataset/:id/image", (req, res) => {
+  const found = getDatasetImage(req.params.id);
+  if (!found) return res.status(404).json({ error: "not found" });
+  res.set("Content-Type", found.entry.mediaType);
+  res.set("Cache-Control", "private, max-age=300");
+  return res.send(found.bytes);
+});
+
+router.post("/dataset/:id/subject", smallJson, (req, res) => {
+  const entry = updateSubject(req.params.id, req.body?.subject);
+  if (!entry) return res.status(404).json({ error: "not found" });
+  return res.json(entry);
+});
+
+router.delete("/dataset/:id", (req, res) => {
+  if (!removeDatasetImage(req.params.id))
+    return res.status(404).json({ error: "not found" });
+  return res.json({ ok: true });
+});
+
+router.delete("/dataset", (req, res) => {
+  clearDataset();
+  return res.json({ ok: true });
+});
+
+router.post("/runs", smallJson, (req, res) => {
+  appendRun(req.body || {});
+  return res.json({ ok: true });
+});
+
+router.get("/runs/summary", (req, res) => res.json(runsSummary()));
+
+router.delete("/runs", (req, res) => {
+  clearRuns();
+  return res.json({ ok: true });
 });
 
 // Hunt-mode pre-scan: one Haiku call that names the likely hunt target so

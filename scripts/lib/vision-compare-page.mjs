@@ -142,6 +142,9 @@ const PAGE = `<!doctype html>
       <button class="btn" id="addStored" type="button" hidden>Add selected</button>
     </div>
     <div class="thumbs" id="thumbs"></div>
+    <p class="meta">The image set is saved on the server and reloads next
+      visit. <button class="btn ghost" id="clearDataset" type="button">Clear
+      image set</button></p>
   </div>
 
   <div class="panel">
@@ -172,6 +175,7 @@ const PAGE = `<!doctype html>
 
   <div id="results"></div>
   <div id="summary"></div>
+  <div id="alltime"></div>
 </div>
 <div id="burn" hidden></div>
 
@@ -280,6 +284,129 @@ fetch(API_BASE + "/providers", { headers: apiHeaders() }).then(function (r) {
   updateRunButton();
 });
 
+// --- persistent dataset + run history ------------------------------------
+// The server keeps the image set and every model call's result on disk;
+// the page loads both on open and clears either on demand.
+function persistImage(img) {
+  fetch(API_BASE + "/dataset", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({
+      name: img.name,
+      subject: img.subject,
+      mediaType: img.mediaType,
+      imageBase64: img.base64,
+    }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) { if (j.id) img.id = j.id; })
+    .catch(function () {});
+}
+
+function persistSubject(img) {
+  if (!img.id) return;
+  fetch(API_BASE + "/dataset/" + img.id + "/subject", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ subject: img.subject }),
+  }).catch(function () {});
+}
+
+function logRun(row) {
+  fetch(API_BASE + "/runs", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify(row),
+  }).catch(function () {});
+}
+
+function loadDataset() {
+  fetch(API_BASE + "/dataset", { headers: apiHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.images || !d.images.length) return;
+      d.images.forEach(function (metaRow) {
+        fetch(API_BASE + "/dataset/" + metaRow.id + "/image", { headers: apiHeaders() })
+          .then(function (r) { if (!r.ok) throw new Error(); return r.blob(); })
+          .then(function (blob) {
+            var reader = new FileReader();
+            reader.onload = function () {
+              var dataUrl = String(reader.result);
+              state.images.push({
+                id: metaRow.id,
+                name: metaRow.name,
+                subject: metaRow.subject || "",
+                mediaType: metaRow.mediaType,
+                dataUrl: dataUrl,
+                base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+                scanning: false,
+              });
+              renderThumbs();
+              updateRunButton();
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(function () {});
+      });
+    })
+    .catch(function () {});
+}
+
+function refreshAllTime() {
+  fetch(API_BASE + "/runs/summary", { headers: apiHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (s) {
+      var box = document.getElementById("alltime");
+      box.textContent = "";
+      if (!s.providers || !s.providers.length) return;
+      var h = el("h2", null, "All-time (since last clear)");
+      box.appendChild(h);
+      var head = el("p", "meta",
+        s.totals.calls + " calls \\u00b7 " + s.totals.inTok.toLocaleString() +
+        " in / " + s.totals.outTok.toLocaleString() + " out \\u00b7 $" +
+        s.totals.cost.toFixed(4) + " ");
+      var clr = el("button", "btn ghost", "Clear results");
+      clr.addEventListener("click", function () {
+        if (!window.confirm("Clear ALL stored run results?")) return;
+        fetch(API_BASE + "/runs", { method: "DELETE", headers: apiHeaders() })
+          .then(function () { refreshAllTime(); });
+      });
+      head.appendChild(clr);
+      box.appendChild(head);
+      var table = document.createElement("table");
+      var thead = el("tr");
+      ["Provider", "Calls", "Avg in-tok", "Total cost", "Latency min / avg / max", "Errors"]
+        .forEach(function (x, i) { thead.appendChild(el("th", i > 0 ? "num" : null, x)); });
+      table.appendChild(thead);
+      s.providers.forEach(function (p) {
+        var tr = el("tr");
+        tr.appendChild(el("td", null, p.name));
+        tr.appendChild(el("td", "num", String(p.calls)));
+        tr.appendChild(el("td", "num", p.avgInTok ? p.avgInTok.toLocaleString() : "\\u2014"));
+        tr.appendChild(el("td", "num", "$" + p.cost.toFixed(4)));
+        tr.appendChild(el("td", "num", p.latMin != null
+          ? p.latMin + " / " + p.latAvg + " / " + p.latMax + " ms" : "\\u2014"));
+        tr.appendChild(el("td", "num", String(p.errors)));
+        table.appendChild(tr);
+      });
+      box.appendChild(table);
+    })
+    .catch(function () {});
+}
+
+document.getElementById("clearDataset").addEventListener("click", function () {
+  if (!window.confirm("Clear the whole stored image set?")) return;
+  fetch(API_BASE + "/dataset", { method: "DELETE", headers: apiHeaders() })
+    .then(function () {
+      state.images = [];
+      renderThumbs();
+      updateRunButton();
+    });
+});
+
+loadDataset();
+refreshAllTime();
+
 // --- stored hunt photos (admin mount only) ------------------------------
 // GET /api/admin/photos already lists stored photos with the hunt item each
 // was submitted for; /:id/image serves the bytes. Selected photos join the
@@ -345,14 +472,16 @@ document.getElementById("addStored").addEventListener("click", function () {
           reader.onerror = reject;
           reader.readAsDataURL(blob);
         }).then(function (dataUrl) {
-          state.images.push({
+          var img = {
             name: cb.dataset.item || "stored photo",
             mediaType: blob.type,
             dataUrl: dataUrl,
             base64: String(dataUrl).slice(String(dataUrl).indexOf(",") + 1),
             subject: cb.dataset.item || "",
             scanning: false,
-          });
+          };
+          state.images.push(img);
+          persistImage(img);
           cb.checked = false;
           renderThumbs();
           updateRunButton();
@@ -396,6 +525,7 @@ function addFiles(files) {
       state.images.push(img);
       renderThumbs();
       updateRunButton();
+      persistImage(img);
       if (huntMode()) prescan(img);
     };
     reader.readAsDataURL(f);
@@ -412,6 +542,11 @@ function renderThumbs() {
     t.appendChild(im);
     var x = el("button", null, "\\u00d7");
     x.addEventListener("click", function () {
+      if (img.id) {
+        fetch(API_BASE + "/dataset/" + img.id, {
+          method: "DELETE", headers: apiHeaders(),
+        }).catch(function () {});
+      }
       state.images.splice(i, 1);
       renderThumbs();
       updateRunButton();
@@ -424,6 +559,7 @@ function renderThumbs() {
     subj.value = img.subject;
     subj.hidden = !huntMode();
     subj.addEventListener("input", function () { img.subject = subj.value; });
+    subj.addEventListener("change", function () { persistSubject(img); });
     t.appendChild(subj);
     if (huntMode() && img.prescanMs) {
       t.appendChild(el("div", "nm", "scan " + img.prescanMs + "ms"));
@@ -446,8 +582,16 @@ function prescan(img) {
     .then(function (j) {
       addBurn(j);
       if (j.ms) img.prescanMs = j.ms;
-      if (!img.subject && j.subject) img.subject = j.subject;
-      if (j.error && !img.subject) img.subject = "";
+      if (!img.subject && j.subject) {
+        img.subject = j.subject;
+        persistSubject(img);
+      }
+      logRun({
+        kind: "prescan", provider: "prescan (haiku-4.5)", image: img.name,
+        error: j.error || null, inputTokens: j.inputTokens,
+        outputTokens: j.outputTokens, cost: j.cost, ms: j.ms,
+        text: j.subject || null,
+      });
     })
     .catch(function () {})
     .then(function () {
@@ -591,8 +735,19 @@ document.getElementById("run").addEventListener("click", function () {
             cell.classList.add("err");
             txt.textContent = "ERROR: " + (r.j.error || "request failed");
             state.results.push({ provider: name, error: true });
+            logRun({
+              kind: hunt ? "hunt" : "describe", provider: name,
+              image: img.name, subject: hunt ? img.subject : null,
+              error: r.j.error || "request failed",
+            });
           } else {
             addBurn(r.j);
+            logRun({
+              kind: hunt ? "hunt" : "describe", provider: name,
+              image: img.name, subject: hunt ? img.subject : null,
+              inputTokens: r.j.inputTokens, outputTokens: r.j.outputTokens,
+              cost: r.j.cost, ms: r.j.ms, text: r.j.text,
+            });
             if (hunt) renderVerdict(txt, r.j.text);
             else txt.textContent = r.j.text.trim();
             var m = r.j.inputTokens + " in / " + r.j.outputTokens + " out \\u00b7 $" +
@@ -620,6 +775,7 @@ document.getElementById("run").addEventListener("click", function () {
           if (pending === 0) {
             runBtn.disabled = false;
             if (!blind) renderSummary();
+            refreshAllTime();
           }
         });
     });
