@@ -404,7 +404,7 @@ export default function Scorecard() {
         <div className="flex items-stretch gap-2">
           {/* Pinned left rail: spacer over the label row, then player tags. */}
           <div className="flex shrink-0 flex-col gap-3">
-            <div className="h-12" aria-hidden />
+            <div className="h-9" aria-hidden />
             {round.playerTags.map((tag, p) => (
               <div key={p} className="flex h-9 items-center">
                 <TagChip tag={tag} color={course.accent} />
@@ -414,7 +414,7 @@ export default function Scorecard() {
 
           {/* Pinned − keys: always edit the current (highlighted) hole. */}
           <div className="flex shrink-0 flex-col gap-3">
-            <div className="h-12" aria-hidden />
+            <div className="h-9" aria-hidden />
             {round.playerTags.map((tag, p) => {
               const strokes = round.scores[p]?.[hole] ?? null;
               return (
@@ -458,7 +458,7 @@ export default function Scorecard() {
                       role="tab"
                       aria-selected={active}
                       aria-label={`Hole ${h + 1}`}
-                      className={`flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl transition-transform active:translate-y-px ${
+                      className={`flex h-9 w-12 shrink-0 items-center justify-center rounded-xl text-base font-black transition-transform active:translate-y-px ${
                         active
                           ? 'btn-accent text-fairway-50'
                           : done
@@ -466,10 +466,7 @@ export default function Scorecard() {
                             : 'border border-fairway-700 text-fairway-300'
                       }`}
                     >
-                      <span className="text-base font-black leading-tight">{h + 1}</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
-                        Par {course.pars[h]}
-                      </span>
+                      {h + 1}
                     </button>
                   );
                 })}
@@ -524,7 +521,7 @@ export default function Scorecard() {
 
           {/* Pinned + keys: always edit the current (highlighted) hole. */}
           <div className="flex shrink-0 flex-col gap-3">
-            <div className="h-12" aria-hidden />
+            <div className="h-9" aria-hidden />
             {round.playerTags.map((tag, p) => {
               const strokes = round.scores[p]?.[hole] ?? null;
               return (
