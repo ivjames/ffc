@@ -10,8 +10,12 @@
 // the browser. Every photo is AUTO-MODERATED in the same vision call that
 // verifies the find: unsafe content (family-venue standard) is never written to
 // disk and never credited; safe photos are stored with their moderation verdict
-// (people/minors flags included) and reviewable in Master Control
-// (/api/admin/photos). People in photos are welcome — only unsafe content blocks.
+// (people/minors flags included) and reviewable/removable in Master Control
+// (routes/admin/photos.js). People in photos are welcome — only unsafe content
+// blocks. Stored photos are NOT kept forever: the retention sweep
+// (lib/photoRetention.js, HUNT_PHOTO_RETENTION_DAYS, default 30 days) deletes
+// the file and clears photo_path; the find row (credit/history) survives.
+// The player-facing disclosure for all of this lives at /privacy in the app.
 //
 // Cost controls: every model call is metered into hunt_scan (exact token counts
 // from the API's usage object, for monthly per-course cost rollups). On top of

@@ -37,11 +37,12 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
 | `HUNT_SCAN_CAP`     | Max vision (model) calls per round — the hard ceiling on hunt API spend per group. Default `240`, the legitimate max (4 players × 20 items max × 3 attempts; ~$0.50 full-burn on Haiku 4.5) — `HUNT_ATTEMPT_CAP` is the working spend control, this is the backstop (and the bound on countable-item grinding). `0` = kill switch (every verify `429`s). Read per request, so changes apply without a restart. |
 | `HUNT_ATTEMPT_CAP`  | Max judged shots per player per non-countable item per round (bounds failed attempts — successful finds dedupe, and "couldn't read that photo" retries don't count). Countable items are exempt; the round cap still bounds them. Default `3`. Read per request. |
-| `MAIL_PROVIDER`     | Outbound email for player sign-in codes and team invites: `console` (default — logs the full message incl. the code to stdout; warns at startup in production), `resend` (raw fetch to Resend's API), or `smtp` (nodemailer over `SMTP_URL` — `npm i nodemailer` first; it is deliberately not a package dependency). **While this is unset/`console`, sign-in runs in BYPASS mode**: `POST /api/auth/request-code` returns the 6-digit code directly (`bypassCode`) and the app signs in without an inbox round-trip — the stopgap until a real provider is wired up. The trade-off is explicit: until then email "verification" proves nothing about inbox ownership. Setting a real provider retires the bypass instantly (checked per request, no restart). |
+| `HUNT_PHOTO_RETENTION_DAYS` | Privacy: how many days a stored hunt photo lives before the retention sweep (`lib/photoRetention.js`, started from `index.js`) deletes the file from disk. The `hunt_find` row keeps its credit/history — only the image goes, which also stops both serving surfaces (`photo_path` is cleared). Default `30`; `0`/negative disables the sweep (photos then only go when an operator deletes them in Master Control → Photos). Keep the player-facing "/privacy" wording in step if changed. |
+| `MAIL_PROVIDER`     | Outbound email for player sign-in codes and team invites: `console` (default — in dev logs the full message incl. the code to stdout; **in production it redacts** — masked recipient, no body — so codes and addresses never land in a production log), `resend` (raw fetch to Resend's API), or `smtp` (nodemailer over `SMTP_URL` — `npm i nodemailer` first; it is deliberately not a package dependency). **While this is unset/`console` in dev, sign-in runs in BYPASS mode**: `POST /api/auth/request-code` returns the 6-digit code directly (`bypassCode`) and the app signs in without an inbox round-trip. The bypass is **dev-only**: in production a returned code would let anyone sign in as any address, so there the misconfiguration fails safe instead — no code in the response, none in the log, sign-in effectively disabled (the server warns loudly at startup) until a real provider is set. Setting one retires the bypass instantly (checked per request, no restart). |
 | `MAIL_FROM`         | From header for outbound mail, e.g. `FFC <noreply@example.com>`. Default `FFC <noreply@localhost>`. |
 | `RESEND_API_KEY`    | API key when `MAIL_PROVIDER=resend`. The sending domain must be verified (SPF/DKIM) in Resend first — see DEPLOY.md. |
 | `SMTP_URL`          | SMTP connection URL when `MAIL_PROVIDER=smtp`, e.g. `smtps://user:pass@smtp.example.com`. |
-| `MAIL_DAILY_CAP`    | Max outbound emails per rolling 24 h across all kinds, metered in the `mail_send` table (the `hunt_scan` spend-cap precedent applied to email). Default `500`. Read per send. |
+| `MAIL_DAILY_CAP`    | Max outbound emails per rolling 24 h across all kinds, metered in the `mail_send` table (the `hunt_scan` spend-cap precedent applied to email). Rows older than 24 h are pruned on every send — `mail_send` is a rate-limit ledger, not a permanent log of recipient addresses. Default `500`. Read per send. |
 | `PUBLIC_APP_URL`    | Public origin of the player PWA, used as the base for magic-link redirects and team-invite links. Default `http://localhost:5173`. |
 
 ## Endpoints
@@ -282,6 +283,9 @@ no domain history hangs off an account.)
 | `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
 | `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | look up one redemption code (case-insensitive), or list recent grants (default: unredeemed, limit 50); org-scoped via the round's course → location |
 | `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | mark a reward handed out (records who) / undo a mistaken redemption; audited |
+| `GET  /api/admin/photos?people=1\|minors=1&limit=` | stored hunt photos, newest first, with item/course/venue + moderation and people/minors flags; org-scoped via find → item → course → location |
+| `GET  /api/admin/photos/:id/image` | the image bytes, for the review UI (same scoping) |
+| `POST /api/admin/photos/:id/remove` | delete the photo file from disk and mark the find `moderation='rejected'` (the find keeps its credit); audited — the "please delete that photo" path. Time-based deletion is the retention sweep (`HUNT_PHOTO_RETENTION_DAYS`) |
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of
@@ -329,10 +333,14 @@ verifies the find: content unsafe for a family venue is blocked before it ever
 touches disk (no credit, a `flagged` event row, one friendly retake message to
 the player — the model's content description is never echoed); safe stored
 photos carry `moderation = 'approved'` plus `people_present`/`minors_present`
-flags. People in photos are welcome — the flags exist so a future sharing
-surface can apply display policy, not to block anyone. Auto-mod only for now:
-a human review surface is deferred, but every verdict is recorded so it will
-start with full history. Nothing is displayed publicly yet.
+flags. People in photos are welcome — the flags exist so sharing/review
+surfaces can apply display policy, not to block anyone. On top of the
+auto-mod, operators get a **human review surface** (Master Control → Photos,
+`/api/admin/photos`: list/filter by people/minors, view, delete — the "please
+delete that photo" path), and stored photos **age out automatically** after
+`HUNT_PHOTO_RETENTION_DAYS` (default 30; `lib/photoRetention.js`) — the find
+row keeps its credit, only the image goes. Nothing is displayed publicly; the
+player-facing disclosure of the whole pipeline is the app's `/privacy` page.
 
 The hunt is a **play-time** activity: every find is tied to a group's in-progress
 round (`roundClientId` is required on verify), so it isn't an open invitation to
@@ -422,18 +430,20 @@ Optional player identity layered on top of the anonymous arcade-tag flow
 (which is unchanged — solo rounds never touch any of this). Sign-in is
 **passwordless**: registration and sign-in are the same flow, and the first
 successful code verify both creates the account and proves the inbox
-(`email_verified_at`). Phone is collected and format-normalized (E.164-ish,
-bare 10-digit → `+1`) but nothing is ever sent to it.
+(`email_verified_at`). Email is the only contact detail collected — a phone
+field existed once but no code path ever used it, so it was dropped (data
+collected without a purpose is pure liability; `schema.sql` removes the
+column and scrubs stashed copies on migrate).
 
 ### `POST /api/auth/request-code` — `{email, profile?}`
 Emails a 6-digit code + magic link via `lib/mailer.js` (`MAIL_PROVIDER`).
-`profile` (`{phone?, displayName?, defaultTag?}`) is stashed with the code and
+`profile` (`{displayName?, defaultTag?}`) is stashed with the code and
 applied to the account on first verify. Always answers `{ok:true}` — never
 reveals whether an address has an account. Limits: 3/15 min per email,
 10/hr per IP; codes die after 10 minutes or 5 wrong guesses; only sha256
-digests are stored. **Bypass mode** (no real mail provider configured): the
-response also carries `bypassCode` — the code itself — so the client signs in
-without an email; see `MAIL_PROVIDER` in the env table.
+digests are stored. **Bypass mode** (dev only, no real mail provider
+configured): the response also carries `bypassCode` — the code itself — so
+the client signs in without an email; see `MAIL_PROVIDER` in the env table.
 
 ### `POST /api/auth/verify` — `{email, code}` → `{ok, user}` + cookie
 Sets `ffc_session` (httpOnly, `Path=/`, `SameSite=Lax`, `Secure` in

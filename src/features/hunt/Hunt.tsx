@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button, TagChip } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
 import { getActiveRound } from '../../db';
@@ -269,7 +269,7 @@ export default function Hunt() {
         onChange={onFileChosen}
       />
       <Content>
-        <p className="mb-4 text-sm text-fairway-100/70">
+        <p className="mb-1 text-sm text-fairway-100/70">
           {course ? (
             <>
               Things to find on <span className="font-semibold text-fairway-50">{course.name}</span>.
@@ -278,6 +278,14 @@ export default function Hunt() {
           ) : (
             <>Find each thing on the course and snap a photo. We'll check it and mark it off.</>
           )}
+        </p>
+        {/* The photo pipeline's player-facing disclosure — photos go to an AI
+            check and live on the venue server for a while (see /privacy). */}
+        <p className="mb-4 text-xs text-fairway-100/50">
+          Photos are checked by AI and kept briefly so your group can share them.{' '}
+          <Link to="/privacy" className="underline">
+            How photos are handled
+          </Link>
         </p>
 
         {/* Who's playing — pick from the round roster. */}

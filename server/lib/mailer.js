@@ -10,6 +10,13 @@
 // Every send is metered into mail_send, and MAIL_DAILY_CAP (default 500) caps
 // total sends per rolling 24h — the hunt_scan/HUNT_SCAN_CAP precedent applied
 // to email spend. Read per call so it can be tuned live.
+//
+// Privacy: mail_send exists ONLY to back the rolling-24h cap, so rows older
+// than 24h are pruned on every send — the table never becomes a permanent
+// registry of every address the system has mailed. And in production the
+// console provider redacts its output: recipient addresses and OTP codes must
+// never land in a production log (dev keeps the full message — that's the
+// whole dev workflow).
 import { pool } from "../db.js";
 
 const DEFAULT_DAILY_CAP = 500;
@@ -18,10 +25,24 @@ function provider() {
   return process.env.MAIL_PROVIDER || "console";
 }
 
+function isProd() {
+  return process.env.NODE_ENV === "production";
+}
+
+/** 'player@example.com' -> 'p***@example.com' — enough to correlate a support
+ *  report against the log without the log holding the address itself. */
+export function maskRecipient(to) {
+  const s = String(to ?? "");
+  const at = s.indexOf("@");
+  if (at < 1) return "***";
+  return `${s[0]}***${s.slice(at)}`;
+}
+
 /** True when a real delivery provider is configured. While this is false the
- *  auth flow runs in BYPASS mode: request-code hands the sign-in code back in
- *  its response so the app can sign in without an inbox (routes/auth.js) —
- *  the stopgap until Resend/SMTP is wired up. Read per call so flipping
+ *  auth flow runs in BYPASS mode — DEV ONLY, never in production
+ *  (routes/auth.js gates it on !isProd()): request-code hands the sign-in
+ *  code back in its response so the app can sign in without an inbox — the
+ *  stopgap until Resend/SMTP is wired up. Read per call so flipping
  *  MAIL_PROVIDER retires the bypass without a restart. */
 export function isMailDeliveryConfigured() {
   return provider() !== "console";
@@ -31,11 +52,11 @@ export function mailFrom() {
   return process.env.MAIL_FROM || "FFC <noreply@localhost>";
 }
 
-/** Log a startup warning when production is about to log OTPs to stdout. */
+/** Log a startup warning when production has no real mail provider. */
 export function warnIfConsoleMailer() {
-  if (process.env.NODE_ENV === "production" && provider() === "console") {
+  if (isProd() && provider() === "console") {
     console.warn(
-      "[mailer] MAIL_PROVIDER is unset/console in production — sign-in emails are not delivered, codes go to this log, and /api/auth/request-code hands codes straight back to the caller (EMAIL SIGN-IN IS EFFECTIVELY UNVERIFIED until a real provider is set)"
+      "[mailer] MAIL_PROVIDER is unset/console in production — sign-in emails are not delivered, and production neither logs codes nor returns them over HTTP (both are dev-only), so EMAIL SIGN-IN IS EFFECTIVELY DISABLED until a real provider is set"
     );
   }
 }
@@ -60,9 +81,20 @@ async function underDailyCap() {
 
 async function meter(recipient, kind) {
   await pool.query(`insert into mail_send (recipient, kind) values ($1, $2)`, [recipient, kind]);
+  // The cap only ever reads the last 24h, so older rows are pure liability
+  // (a growing log of recipient addresses) — trim them as we go. Best-effort:
+  // a failed prune must not fail the send it rode in on.
+  await pool
+    .query(`delete from mail_send where created_at < now() - interval '24 hours'`)
+    .catch((err) => console.error("[mailer] mail_send prune failed:", err));
 }
 
 async function sendConsole({ to, subject, text }) {
+  if (isProd()) {
+    // A production log must hold neither the address nor the code in the body.
+    console.log(`[mailer] console provider (production): message to ${maskRecipient(to)} withheld from the log — set a real MAIL_PROVIDER to deliver mail`);
+    return { ok: true, id: "console" };
+  }
   console.log(`[mailer] to=${to} subject=${JSON.stringify(subject)}\n${text}`);
   return { ok: true, id: "console" };
 }
@@ -103,7 +135,7 @@ async function sendSmtp({ to, subject, text, html }) {
  */
 export async function sendMail({ to, subject, text, html, kind = "otp" }) {
   if (!(await underDailyCap())) {
-    console.warn(`[mailer] daily send cap reached — dropping ${kind} to ${to}`);
+    console.warn(`[mailer] daily send cap reached — dropping ${kind} to ${maskRecipient(to)}`);
     return { ok: false, error: "daily send cap reached" };
   }
   let result;

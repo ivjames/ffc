@@ -1,4 +1,4 @@
-// Player-account input validation (email, phone, display name, default tag).
+// Player-account input validation (email, display name, default tag).
 // Keep the rules in sync with the client mirror (src/lib/validateUser.ts) —
 // the client check is only UX; anything reaching /api/auth is re-validated here.
 import { isValidTag } from "./sanitize.js";
@@ -16,25 +16,12 @@ export function normalizeEmail(email) {
 }
 
 /**
- * Normalize a phone number to E.164-ish form: strip separators, require 7-15
- * digits with optional leading +, and default bare 10-digit numbers to +1
- * (all current venues are US). Format check only — nothing is sent to it.
- * @returns {string|null} normalized number, or null if invalid.
- */
-export function normalizePhone(phone) {
-  if (typeof phone !== "string") return null;
-  const stripped = phone.replace(/[\s().-]/g, "");
-  if (!/^\+?[0-9]{7,15}$/.test(stripped)) return null;
-  if (stripped.startsWith("+")) return stripped;
-  if (stripped.length === 10) return `+1${stripped}`;
-  return `+${stripped}`;
-}
-
-/**
  * Validate the optional profile fields riding along on /api/auth/request-code
  * (and PATCH /api/auth/me). Unknown keys are dropped; absent keys are left
  * undefined so callers can distinguish "not provided" from "clear".
- * @returns {{ error: string } | { row: {phone?, displayName?, defaultTag?} }}
+ * (Phone was once one of these fields; it was dropped — collected for a
+ * "venue contact list" no code path ever read, i.e. data without a purpose.)
+ * @returns {{ error: string } | { row: {displayName?, defaultTag?} }}
  */
 export function normalizeProfile(body) {
   if (body == null) return { row: {} };
@@ -42,15 +29,6 @@ export function normalizeProfile(body) {
     return { error: "profile must be an object" };
   }
   const row = {};
-  if (body.phone !== undefined) {
-    if (body.phone === null || body.phone === "") {
-      row.phone = null;
-    } else {
-      const phone = normalizePhone(body.phone);
-      if (!phone) return { error: "phone must be a valid number (7-15 digits)" };
-      row.phone = phone;
-    }
-  }
   if (body.displayName !== undefined) {
     if (body.displayName === null || body.displayName === "") {
       row.displayName = null;

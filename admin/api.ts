@@ -110,6 +110,18 @@ export type Reward = {
   locationName: string | null;
 };
 
+export type AdminPhoto = {
+  id: string;
+  playerTag: string;
+  itemName: string;
+  courseName: string;
+  locationName: string | null;
+  createdAt: string;
+  moderation: string | null;
+  peoplePresent: boolean | null;
+  minorsPresent: boolean | null;
+};
+
 export type SeriesBucket = {
   date: string; // YYYY-MM-DD in the admin timezone
   rounds: number;
@@ -218,6 +230,25 @@ export const api = {
     if (opts.locationId) q.set('locationId', opts.locationId);
     const s = q.toString();
     const res = await fetch(`/api/admin/export/rounds.csv${s ? `?${s}` : ''}`, {
+      credentials: 'same-origin',
+      headers: { 'x-app-token': getToken() },
+    });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
+
+  // Hunt-photo review (privacy: the operator surface for stored photos).
+  listPhotos: (filter?: 'people' | 'minors') =>
+    req<AdminPhoto[]>('GET', `/photos${filter ? `?${filter}=1` : ''}`),
+  removePhoto: (id: string) => req<{ ok: true }>('POST', `/photos/${id}/remove`),
+  // Like the CSV export, <img src> can't carry the auth header — fetch the
+  // bytes and hand back a Blob for an object URL.
+  fetchPhotoImage: async (id: string) => {
+    const res = await fetch(`/api/admin/photos/${id}/image`, {
       credentials: 'same-origin',
       headers: { 'x-app-token': getToken() },
     });

@@ -6,14 +6,12 @@ import { apiUrl } from '../sync';
 export type AppUser = {
   id: string;
   email: string;
-  phone: string | null;
   displayName: string | null;
   defaultTag: string | null;
   emailVerifiedAt: string | null;
 };
 
 export type Profile = {
-  phone?: string | null;
   displayName?: string | null;
   defaultTag?: string | null;
 };
