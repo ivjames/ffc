@@ -149,6 +149,17 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <NavLink to="/archived" className={linkCls}>
               Archived
             </NavLink>
+            {isSuperAdmin && (
+              // Server-rendered page, not a SPA route (see
+              // server/routes/admin/visionBakeoff.js). Same-tab navigation
+              // keeps the sessionStorage admin token, so it auths seamlessly.
+              <a
+                href="/api/admin/vision-bakeoff/ui"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
+              >
+                Vision bench
+              </a>
+            )}
           </nav>
           <div className="ml-auto flex items-center gap-3">
             {user && (
