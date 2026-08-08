@@ -344,7 +344,7 @@ router.post(
     try {
       // Item must exist, be active, and belong to the round's course.
       const itemRes = await pool.query(
-        "select id, name, hint, countable from hunt_item where id = $1 and course_id = $2 and active = true",
+        "select id, name, hint, extra_prompt, countable from hunt_item where id = $1 and course_id = $2 and active = true",
         [itemId, courseId]
       );
       if (itemRes.rowCount === 0) {
@@ -415,6 +415,7 @@ router.post(
         mediaType,
         itemName: item.name,
         itemHint: item.hint,
+        itemExtraPrompt: item.extra_prompt,
       });
 
       // A photo-of-a-photo never counts as a genuine find, regardless of what's

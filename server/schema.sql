@@ -641,3 +641,34 @@ alter table hunt_find add column if not exists minors_present    boolean;
 -- Reads of stored photos by moderation state (future review/sharing surfaces).
 create index if not exists hunt_find_moderation_idx
   on hunt_find (moderation) where photo_path is not null;
+
+-- ---------------------------------------------------------------------------
+-- Scavenger-hunt admin (Master Control → Hunt): per-item judge guidance and
+-- vetting image sets. See routes/admin/huntItems.js.
+-- ---------------------------------------------------------------------------
+
+-- Extra judge guidance per item, written by the operator and appended to the
+-- production vision prompt (lib/vision.js) alongside name + hint — e.g.
+-- "credit only the RED windmill, not the blue one by hole 4". Null = none.
+alter table hunt_item add column if not exists extra_prompt text;
+
+-- An item's vetting test set: admin-sourced sample photos of the real prop,
+-- run against the hunt judge (vision bench) to tune name/hint/extra_prompt
+-- before the item goes live. ADMIN-ONLY test data — never shown to players
+-- and never sent along with player verifications. Test-data policy
+-- (CLAUDE.md): these images go to third-party model providers, so uploads
+-- are people-screened at the API and rejected if anyone is visible.
+-- Files live on disk under HUNT_ITEM_IMAGE_DIR (image_path), like
+-- hunt_find.photo_path; rows cascade with their item, files are removed by
+-- the delete routes.
+create table if not exists hunt_item_image (
+  id          uuid primary key default gen_random_uuid(),
+  item_id     uuid not null references hunt_item(id) on delete cascade,
+  image_path  text not null,            -- stored image path on the droplet disk
+  media_type  text not null,            -- image/jpeg | png | webp | gif
+  subject     text,                     -- descriptor's label from the upload screen
+  note        text,                     -- operator's free-text note
+  sort_order  int  not null default 0,
+  created_at  timestamptz not null default now()
+);
+create index if not exists hunt_item_image_item_idx on hunt_item_image (item_id);

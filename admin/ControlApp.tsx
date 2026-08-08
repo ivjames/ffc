@@ -11,6 +11,8 @@ import Archived from './Archived';
 import Announcements from './Announcements';
 import Rewards from './Rewards';
 import Photos from './Photos';
+import Hunt from './Hunt';
+import HuntItemDetail from './HuntItemDetail';
 
 export function SignInGate({ onUnlock }: { onUnlock: (user: CurrentUser | null) => void }) {
   const [mode, setMode] = useState<'token' | 'login'>('token');
@@ -143,23 +145,17 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <NavLink to="/rewards" className={linkCls}>
               Rewards
             </NavLink>
+            {/* The Hunt section also contains the vision bench (image
+                vetting) link, so the bench no longer sits in this nav. */}
+            <NavLink to="/hunt" className={linkCls}>
+              Hunt
+            </NavLink>
             <NavLink to="/photos" className={linkCls}>
               Photos
             </NavLink>
             <NavLink to="/archived" className={linkCls}>
               Archived
             </NavLink>
-            {isSuperAdmin && (
-              // Server-rendered page, not a SPA route (see
-              // server/routes/admin/visionBakeoff.js). Same-tab navigation
-              // keeps the sessionStorage admin token, so it auths seamlessly.
-              <a
-                href="/api/admin/vision-bakeoff/ui"
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-200"
-              >
-                Vision bench
-              </a>
-            )}
           </nav>
           <div className="ml-auto flex items-center gap-3">
             {user && (
@@ -187,6 +183,8 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
           <Route path="/locations/:id" element={<LocationDetail />} />
           <Route path="/announcements" element={<Announcements isSuperAdmin={isSuperAdmin} />} />
           <Route path="/rewards" element={<Rewards />} />
+          <Route path="/hunt" element={<Hunt isSuperAdmin={isSuperAdmin} />} />
+          <Route path="/hunt/items/:id" element={<HuntItemDetail />} />
           <Route path="/photos" element={<Photos />} />
           <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
           <Route path="*" element={<Overview />} />

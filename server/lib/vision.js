@@ -104,16 +104,24 @@ const VERDICT_SCHEMA = {
  * @param {string} args.mediaType    One of ALLOWED_MEDIA_TYPES.
  * @param {string} args.itemName     Human description of the target, e.g. "A windmill".
  * @param {string} [args.itemHint]   Optional hint to give the model context.
+ * @param {string} [args.itemExtraPrompt]  Optional operator-written judging
+ *   guidance for this item (hunt_item.extra_prompt, managed in Master
+ *   Control → Hunt), appended verbatim to the prompt.
  * @returns {Promise<{present:boolean, confidence:number, reason:string, photoOfPhoto:boolean,
  *   unsafe:boolean, unsafeReason:string, peoplePresent:boolean, minorsPresent:boolean,
  *   usage:{model:string, inputTokens:number|null, outputTokens:number|null}}>}
  *   `usage` carries the API's exact token counts so the route can meter spend
  *   (hunt_scan) — it's the number Anthropic bills, not an estimate.
  */
-export async function verifyItemInImage({ imageBase64, mediaType, itemName, itemHint }) {
+export async function verifyItemInImage({ imageBase64, mediaType, itemName, itemHint, itemExtraPrompt }) {
   const anthropic = getClient();
 
   const target = itemHint ? `${itemName} (${itemHint})` : itemName;
+  // extra_prompt is operator-authored (Master Control → Hunt, admin-gated),
+  // the same trust level as the name/hint already interpolated above it.
+  const extra = itemExtraPrompt
+    ? `\n\nAdditional judging guidance from the venue for this item:\n${itemExtraPrompt}`
+    : "";
   const prompt =
     `You are the judge for a mini-golf scavenger hunt. A player submitted this photo ` +
     `claiming it shows: "${target}".\n\n` +
@@ -127,7 +135,8 @@ export async function verifyItemInImage({ imageBase64, mediaType, itemName, item
     `true only for genuinely inappropriate content: nudity or sexual content, graphic ` +
     `violence or injury, obscene gestures, visible slurs or hate symbols, drug use, or ` +
     `someone being deliberately humiliated. Record whether any people are visible, and ` +
-    `whether any appear to be minors (when unsure about age, err toward true).`;
+    `whether any appear to be minors (when unsure about age, err toward true).` +
+    extra;
 
   const response = await anthropic.messages.create({
     model: MODEL,
