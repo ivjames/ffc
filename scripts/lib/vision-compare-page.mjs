@@ -65,6 +65,11 @@ const PAGE = `<!doctype html>
   .thumb .subj { width: 96px; margin-top: 4px; border: 1px solid var(--line);
     border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
   .modes { display: flex; gap: 16px; margin-bottom: 10px; }
+  #storedWrap { margin-top: 12px; }
+  #storedList { margin: 8px 0; max-height: 240px; overflow-y: auto; }
+  .stored-item { display: flex; align-items: center; gap: 8px; padding: 3px 0;
+    font-size: 14px; cursor: pointer; }
+  .stored-item .meta { font-size: 12px; }
   .verdict { font-weight: 600; }
   .verdict.yes { color: #15803d; }
   .verdict.no { color: var(--err); }
@@ -123,6 +128,13 @@ const PAGE = `<!doctype html>
       (jpg / png / webp / gif)</div>
     <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/gif"
       multiple hidden>
+    <div id="storedWrap" hidden>
+      <button class="btn ghost" id="loadStored" type="button">Browse stored hunt
+        photos</button>
+      <span class="meta" id="storedStatus"></span>
+      <div id="storedList"></div>
+      <button class="btn" id="addStored" type="button" hidden>Add selected</button>
+    </div>
     <div class="thumbs" id="thumbs"></div>
   </div>
 
@@ -242,6 +254,92 @@ fetch(API_BASE + "/providers", { headers: apiHeaders() }).then(function (r) {
     box.appendChild(lab);
   });
   updateRunButton();
+});
+
+// --- stored hunt photos (admin mount only) ------------------------------
+// GET /api/admin/photos already lists stored photos with the hunt item each
+// was submitted for; /:id/image serves the bytes. Selected photos join the
+// bake-off with subject pre-filled from that itemName — real production
+// pairings, no upload and no pre-scan needed. Note these are all verified
+// finds (ground truth present=true); for negative cases upload a photo or
+// edit a subject to something not in frame.
+var ADMIN_PHOTOS = API_BASE.replace(/\\/vision-bakeoff$/, "") + "/photos";
+if (AUTH_MODE === "admin") {
+  document.getElementById("storedWrap").hidden = false;
+}
+
+document.getElementById("loadStored").addEventListener("click", function () {
+  var status = document.getElementById("storedStatus");
+  status.textContent = "loading\\u2026";
+  fetch(ADMIN_PHOTOS + "?limit=50", { headers: apiHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (rows) {
+      var list = document.getElementById("storedList");
+      list.textContent = "";
+      if (!Array.isArray(rows)) {
+        status.textContent = (rows && rows.error) || "failed to list photos";
+        return;
+      }
+      status.textContent = rows.length
+        ? rows.length + " stored photos (newest first)"
+        : "no stored hunt photos";
+      rows.forEach(function (p) {
+        var lab = el("label", "stored-item");
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = p.id;
+        cb.dataset.item = p.itemName || "";
+        lab.appendChild(cb);
+        lab.appendChild(el("span", null, p.itemName || "(unknown item)"));
+        lab.appendChild(el("span", "meta",
+          (p.courseName || "") + " \\u00b7 " +
+          new Date(p.createdAt).toLocaleDateString() +
+          (p.peoplePresent ? " \\u00b7 people" : "")));
+        list.appendChild(lab);
+      });
+      document.getElementById("addStored").hidden = rows.length === 0;
+    })
+    .catch(function (e) { status.textContent = "failed: " + e; });
+});
+
+document.getElementById("addStored").addEventListener("click", function () {
+  var checks = document.querySelectorAll("#storedList input:checked");
+  var status = document.getElementById("storedStatus");
+  var remaining = checks.length;
+  if (!remaining) return;
+  status.textContent = "fetching " + remaining + " photos\\u2026";
+  Array.prototype.forEach.call(checks, function (cb) {
+    fetch(ADMIN_PHOTOS + "/" + cb.value + "/image", { headers: apiHeaders() })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.blob();
+      })
+      .then(function (blob) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(reader.result); };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        }).then(function (dataUrl) {
+          state.images.push({
+            name: cb.dataset.item || "stored photo",
+            mediaType: blob.type,
+            dataUrl: dataUrl,
+            base64: String(dataUrl).slice(String(dataUrl).indexOf(",") + 1),
+            subject: cb.dataset.item || "",
+            scanning: false,
+          });
+          cb.checked = false;
+          renderThumbs();
+          updateRunButton();
+        });
+      })
+      .catch(function () {})
+      .then(function () {
+        remaining -= 1;
+        if (remaining === 0) status.textContent = "added";
+      });
+  });
 });
 
 // --- image intake ---
