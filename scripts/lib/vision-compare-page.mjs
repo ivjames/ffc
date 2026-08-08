@@ -97,6 +97,8 @@ const PAGE = `<!doctype html>
   .btn:disabled { opacity: .5; cursor: default; }
   .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
   label.chk { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  #sendSize { border: 1px solid var(--line); border-radius: 6px; padding: 6px;
+    font: inherit; background: #fff; }
   .runtablewrap { overflow-x: auto; margin-top: 18px; border: 1px solid var(--line);
     border-radius: 10px; background: var(--card); }
   .runtable { border-collapse: collapse; width: 100%; }
@@ -202,6 +204,11 @@ const PAGE = `<!doctype html>
 
   <div class="panel runrow">
     <button class="btn" id="run" disabled>Run comparison</button>
+    <label class="chk">Send size
+      <select id="sendSize">
+        <option value="full">full (as stored)</option>
+        <option value="768">768px long edge</option>
+      </select></label>
     <label class="chk"><input type="checkbox" id="blind">
       Blind judging (hide who wrote what until reveal)</label>
     <button class="btn ghost" id="reveal" hidden>Reveal providers</button>
@@ -1055,6 +1062,51 @@ try {
 } catch (e) {}
 onModeChange();
 
+// Send size survives reloads too (same silent-reset lesson).
+try {
+  if (localStorage.getItem("ffc_bakeoff_size") === "768") {
+    document.getElementById("sendSize").value = "768";
+  }
+} catch (e) {}
+document.getElementById("sendSize").addEventListener("change", function () {
+  try { localStorage.setItem("ffc_bakeoff_size", this.value); } catch (e) {}
+});
+
+// Downscale to 768px long edge in-browser (canvas JPEG, quality .85) — the
+// same client-side technique production uses for uploads. Cached per image;
+// never upscales.
+function sendableImage(img) {
+  if (document.getElementById("sendSize").value !== "768") {
+    return Promise.resolve({ base64: img.base64, mediaType: img.mediaType });
+  }
+  if (img.small768) return Promise.resolve(img.small768);
+  return new Promise(function (resolve) {
+    var image = new Image();
+    image.onload = function () {
+      var long = Math.max(image.width, image.height);
+      if (long <= 768) {
+        img.small768 = { base64: img.base64, mediaType: img.mediaType };
+        return resolve(img.small768);
+      }
+      var scale = 768 / long;
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      var dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      img.small768 = {
+        base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+        mediaType: "image/jpeg",
+      };
+      resolve(img.small768);
+    };
+    image.onerror = function () {
+      resolve({ base64: img.base64, mediaType: img.mediaType });
+    };
+    image.src = img.dataUrl;
+  });
+}
+
 // --- run ---
 var blindLabels = "ABCDEFGHIJ";
 
@@ -1167,10 +1219,12 @@ document.getElementById("run").addEventListener("click", function () {
     return state.blindMap[a] < state.blindMap[b] ? -1 : 1;
   });
 
+  var send768 = document.getElementById("sendSize").value === "768";
   resultsBox.appendChild(el("p", "meta", (hunt
     ? "Hunt verify \\u2014 \\u2713/\\u2717 verdicts against each image's subject"
     : "Describe \\u2014 open descriptions") +
-    " \\u00b7 " + state.images.length + " images \\u00d7 " + provs.length + " providers"));
+    " \\u00b7 " + state.images.length + " images \\u00d7 " + provs.length + " providers" +
+    (send768 ? " \\u00b7 sent at 768px" : "")));
   var wrap = el("div", "runtablewrap");
   var table = el("table", "runtable");
   var thead = el("tr");
@@ -1235,10 +1289,19 @@ document.getElementById("run").addEventListener("click", function () {
     tr.appendChild(ic);
     table.appendChild(tr);
 
+    // Cells first (synchronous, keeps table layout stable), then the
+    // per-image send payload — possibly downscaled — then the fetches.
+    var cellFor = {};
     ordered.forEach(function (name) {
       var cell = el("td", "cell pending", "\\u2026");
       tr.appendChild(cell);
       cell.addEventListener("click", function () { cell.classList.toggle("open"); });
+      cellFor[name] = cell;
+    });
+
+    sendableImage(img).then(function (send) {
+    ordered.forEach(function (name) {
+      var cell = cellFor[name];
 
       function fill(build) {
         cell.classList.remove("pending");
@@ -1251,8 +1314,8 @@ document.getElementById("run").addEventListener("click", function () {
         headers: apiHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({
           provider: name,
-          imageBase64: img.base64,
-          mediaType: img.mediaType,
+          imageBase64: send.base64,
+          mediaType: send.mediaType,
           prompt: prompt,
           // Hunt runs engage each provider's native JSON mode on top of the
           // hardened prompt (Anthropic schema / Gemini responseSchema /
@@ -1276,6 +1339,7 @@ document.getElementById("run").addEventListener("click", function () {
                 kind: hunt ? "hunt" : "describe", provider: name,
                 image: img.name, subject: hunt ? img.subject : null,
                 expected: hunt && typeof img.expected === "boolean" ? img.expected : undefined,
+                sentPx: send768 ? 768 : undefined,
                 error: msg,
               },
             });
@@ -1325,6 +1389,7 @@ document.getElementById("run").addEventListener("click", function () {
                 kind: hunt ? "hunt" : "describe", provider: name,
                 image: img.name, subject: hunt ? img.subject : null,
                 expected: hunt && typeof img.expected === "boolean" ? img.expected : undefined,
+                sentPx: send768 ? 768 : undefined,
                 inputTokens: r.j.inputTokens, outputTokens: r.j.outputTokens,
                 cost: r.j.cost, ms: r.j.ms, text: r.j.text,
               },
@@ -1349,6 +1414,7 @@ document.getElementById("run").addEventListener("click", function () {
             refreshAllTime();
           }
         });
+    });
     });
   });
 });
