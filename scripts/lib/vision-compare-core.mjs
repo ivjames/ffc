@@ -104,12 +104,18 @@ export const PROVIDERS = [
     price: { in: 0.3, out: 2.5 },
   },
   {
+    // Thinking model: thought tokens count against maxOutputTokens, which
+    // truncated its replies at the shared 400 cap — same disease as
+    // gpt-5-mini. Minimal thinking (a verdict needs no chain of thought)
+    // plus headroom.
     name: "gemini-3.6-flash",
     label: "Gemini 3.6 Flash",
     kind: "gemini",
     model: "gemini-3.6-flash",
     keyEnv: "GEMINI_API_KEY",
     price: { in: 1.5, out: 7.5 },
+    maxTokens: 1024,
+    geminiConfig: { thinkingConfig: { thinkingLevel: "minimal" } },
   },
   {
     // Reasoning model: max_completion_tokens includes hidden reasoning
@@ -250,7 +256,8 @@ async function callGemini(p, key, img, prompt, opts) {
         },
       ],
       generationConfig: {
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        maxOutputTokens: p.maxTokens || MAX_OUTPUT_TOKENS,
+        ...(p.geminiConfig || {}),
         ...(opts?.json
           ? { responseMimeType: "application/json", responseSchema: GEMINI_VERDICT_SCHEMA }
           : {}),
