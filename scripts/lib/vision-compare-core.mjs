@@ -62,12 +62,19 @@ export const PROVIDERS = [
     price: { in: 0.25, out: 1.5 },
   },
   {
+    // Reasoning model: max_completion_tokens includes hidden reasoning
+    // tokens, which at the shared 400 cap swallowed the whole budget and
+    // returned empty replies. Minimal effort (a photo caption needs no
+    // chain of thought — production Haiku runs without thinking too) plus
+    // extra headroom.
     name: "gpt-5-mini",
     kind: "openai",
     model: "gpt-5-mini",
     baseUrl: "https://api.openai.com/v1",
     keyEnv: "OPENAI_API_KEY",
     price: { in: 0.25, out: 2.0 },
+    maxTokens: 1024,
+    extra: { reasoning_effort: "minimal" },
   },
   {
     // Qwen2.5-VL-7B ($0.05/$0.05) was delisted by SiliconFlow (API returns
@@ -200,7 +207,8 @@ async function callOpenAICompatible(p, key, img, prompt) {
     { authorization: `Bearer ${key}` },
     {
       model: p.model,
-      max_completion_tokens: MAX_OUTPUT_TOKENS,
+      max_completion_tokens: p.maxTokens || MAX_OUTPUT_TOKENS,
+      ...(p.extra || {}),
       messages: [
         {
           role: "user",

@@ -1002,9 +1002,19 @@ document.getElementById("run").addEventListener("click", function () {
             var m = r.j.inputTokens + " in / " + r.j.outputTokens + " out \\u00b7 $" +
               (r.j.cost != null ? r.j.cost.toFixed(6) : "?") + " \\u00b7 " + r.j.ms + "ms";
             fill(function (c) {
-              if (hunt) renderVerdict(c, r.j.text);
+              var replyText = (r.j.text || "").trim();
+              if (!replyText) {
+                // An empty reply must never render as a blank cell — it's a
+                // finding (usually a reasoning model eating its token cap).
+                var bad = el("div");
+                bad.appendChild(el("span", "flag", "empty reply"));
+                c.appendChild(bad);
+                c.appendChild(el("div", "detail",
+                  "Model returned no text \\u2014 output budget likely " +
+                  "consumed by hidden reasoning tokens."));
+              } else if (hunt) renderVerdict(c, replyText);
               else {
-                c.appendChild(el("div", "clamp", r.j.text.trim()));
+                c.appendChild(el("div", "clamp", replyText));
               }
               var meta = el("div", "meta detail", "");
               meta.textContent = blind ? "" : m;
