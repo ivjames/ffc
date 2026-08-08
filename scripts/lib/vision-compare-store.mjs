@@ -112,7 +112,13 @@ export function updateSubject(id, subject) {
   const rows = readDataset();
   const entry = rows.find((e) => e.id === id);
   if (!entry) return null;
+  // A manual edit is the operator declaring what the image shows: it
+  // redefines ground truth and the pairing becomes a match again. Mismatches
+  // are created by scrambling, never by hand-editing — otherwise a corrected
+  // label keeps grading every honest verdict as wrong.
   entry.subject = String(subject || "");
+  entry.truth = entry.subject;
+  entry.expected = true;
   writeDataset(rows);
   return entry;
 }

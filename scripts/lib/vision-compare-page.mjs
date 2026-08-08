@@ -915,7 +915,13 @@ function renderThumbs() {
     subj.placeholder = img.scanning ? "scanning\\u2026" : "subject";
     subj.value = img.subject;
     subj.addEventListener("input", function () { img.subject = subj.value; });
-    subj.addEventListener("change", function () { persistSubject(img); });
+    subj.addEventListener("change", function () {
+      // Mirrors the server: an edit redefines truth and clears any mismatch.
+      img.truth = img.subject;
+      img.expected = true;
+      persistSubject(img);
+      renderThumbs();
+    });
     t.appendChild(subj);
     if (img.expected === false) {
       var mm = el("div", "mismatch", "\\u2717 mismatched");
@@ -1079,11 +1085,24 @@ document.getElementById("run").addEventListener("click", function () {
     // should yield.
     if (typeof expected === "boolean") {
       entries.forEach(function (e) {
-        if (e.present !== null && e.present !== expected) {
+        if (e.present === null) return;
+        // On graded rows, chip color means CORRECTNESS (the glyph still
+        // shows the model's answer) — otherwise a wrong "present" glows
+        // green while every correct "absent" sits in red.
+        var chip = e.cell.querySelector(".verdict");
+        if (chip) {
+          chip.classList.remove("yes", "no");
+          chip.classList.add(e.present === expected ? "yes" : "no");
+        }
+        if (e.present !== expected) {
           e.cell.classList.add("err");
           var f = el("div");
-          f.appendChild(el("span", "flag",
-            "wrong \\u2014 truth: " + (expected ? "present" : "absent")));
+          var flag = el("span", "flag",
+            "wrong \\u2014 truth: " + (expected ? "present" : "absent"));
+          flag.title = "If most of a row is 'wrong', the planted truth is " +
+            "probably mislabeled \\u2014 edit the subject under the " +
+            "thumbnail to correct it (that resets truth).";
+          f.appendChild(flag);
           e.cell.insertBefore(f, e.cell.firstChild);
         }
       });
