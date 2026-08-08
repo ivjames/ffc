@@ -36,6 +36,11 @@ system. Specifically, we're looking for:
      card number; reading cash balance, game-play credits, and ticket
      (redemption point) balances; and **crediting tickets/points** earned
      through app promotions and in-app games to a guest's account.
+   - **Play / usage history**: reading a card's game-play and credit-usage
+     transactions (per-card activity at game readers), so the app can power
+     play-based reward offers (e.g. bonus tickets for credits spent). Please
+     also let us know if any event/webhook feed exists for this, or what
+     polling cadence you support.
 
 3. **Payment handling for app orders** — we expect payment to settle
    through CenterEdge Payments so orders reconcile in the POS. Please
