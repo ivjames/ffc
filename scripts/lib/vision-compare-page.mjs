@@ -425,6 +425,9 @@ function renderThumbs() {
     subj.hidden = !huntMode();
     subj.addEventListener("input", function () { img.subject = subj.value; });
     t.appendChild(subj);
+    if (huntMode() && img.prescanMs) {
+      t.appendChild(el("div", "nm", "scan " + img.prescanMs + "ms"));
+    }
     box.appendChild(t);
   });
 }
@@ -442,6 +445,7 @@ function prescan(img) {
     .then(function (r) { return r.json(); })
     .then(function (j) {
       addBurn(j);
+      if (j.ms) img.prescanMs = j.ms;
       if (!img.subject && j.subject) img.subject = j.subject;
       if (j.error && !img.subject) img.subject = "";
     })
@@ -665,19 +669,19 @@ function renderSummary() {
   var agg = {};
   state.results.forEach(function (r) {
     var a = agg[r.provider] ||
-      (agg[r.provider] = { n: 0, err: 0, inTok: 0, cost: 0, ms: 0 });
+      (agg[r.provider] = { n: 0, err: 0, inTok: 0, cost: 0, lat: [] });
     a.n += 1;
     if (r.error) { a.err += 1; return; }
     a.inTok += r.inputTokens || 0;
     a.cost += r.cost || 0;
-    a.ms += r.ms || 0;
+    if (r.ms) a.lat.push(r.ms);
   });
   var box = document.getElementById("summary");
   box.textContent = "";
   box.appendChild(el("h2", null, "Summary"));
   var table = document.createElement("table");
   var thead = el("tr");
-  ["Provider", "Avg in-tok/img", "Total cost", "Est / visit (20 img)", "Avg latency", "Errors"]
+  ["Provider", "Avg in-tok/img", "Total cost", "Est / visit (20 img)", "Latency min / avg / max", "Errors"]
     .forEach(function (h, i) { thead.appendChild(el("th", i > 0 ? "num" : null, h)); });
   table.appendChild(thead);
   Object.keys(agg).forEach(function (name) {
@@ -688,7 +692,13 @@ function renderSummary() {
     tr.appendChild(el("td", "num", ok ? Math.round(a.inTok / ok).toLocaleString() : "\\u2014"));
     tr.appendChild(el("td", "num", "$" + a.cost.toFixed(5)));
     tr.appendChild(el("td", "num", ok ? "$" + ((a.cost / ok) * 20).toFixed(4) : "\\u2014"));
-    tr.appendChild(el("td", "num", ok ? Math.round(a.ms / ok) + "ms" : "\\u2014"));
+    var latCell = "\\u2014";
+    if (a.lat.length) {
+      var sum = 0, min = a.lat[0], max = a.lat[0];
+      a.lat.forEach(function (v) { sum += v; if (v < min) min = v; if (v > max) max = v; });
+      latCell = min + " / " + Math.round(sum / a.lat.length) + " / " + max + " ms";
+    }
+    tr.appendChild(el("td", "num", latCell));
     tr.appendChild(el("td", "num", a.err ? String(a.err) : "0"));
     table.appendChild(tr);
   });

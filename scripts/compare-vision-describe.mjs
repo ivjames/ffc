@@ -48,9 +48,9 @@ if (active.length === 0) {
   process.exit(1);
 }
 
-// totals[providerName] = { in, out, cost, ms, calls, errors }
+// totals[providerName] = { in, out, cost, lat[], calls, errors }
 const totals = Object.fromEntries(
-  active.map((p) => [p.name, { in: 0, out: 0, cost: 0, ms: 0, calls: 0, errors: 0 }]),
+  active.map((p) => [p.name, { in: 0, out: 0, cost: 0, lat: [], calls: 0, errors: 0 }]),
 );
 
 for (const path of imagePaths) {
@@ -72,13 +72,13 @@ for (const path of imagePaths) {
   for (const r of results) {
     const t = totals[r.p.name];
     t.calls += 1;
-    t.ms += r.ms;
     console.log(`\n--- ${r.p.name} (${r.ms}ms) ---`);
     if (r.error) {
       t.errors += 1;
       console.log(`ERROR: ${r.error}`);
       continue;
     }
+    t.lat.push(r.ms);
     t.in += r.inputTokens ?? 0;
     t.out += r.outputTokens ?? 0;
     t.cost += r.cost ?? 0;
@@ -94,11 +94,14 @@ console.log(`\n${"=".repeat(72)}\n# Summary (${imagePaths.length} images)\n${"="
 for (const [name, t] of Object.entries(totals)) {
   const ok = t.calls - t.errors;
   const avgIn = ok ? Math.round(t.in / ok) : 0;
+  const lat = t.lat.length
+    ? `${Math.min(...t.lat)}/${Math.round(t.lat.reduce((a, b) => a + b) / t.lat.length)}/${Math.max(...t.lat)}ms`
+    : "—";
   console.log(
     `${name.padEnd(30)} avg ${String(avgIn).padStart(5)} in-tok/img  ` +
       `total $${t.cost.toFixed(5)}  ` +
       `est/visit(20): $${((t.cost / Math.max(ok, 1)) * 20).toFixed(4)}  ` +
-      `avg ${Math.round(t.ms / t.calls)}ms` +
+      `lat min/avg/max ${lat}` +
       (t.errors ? `  (${t.errors} errors)` : ""),
   );
 }
