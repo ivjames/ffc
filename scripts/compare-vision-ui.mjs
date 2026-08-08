@@ -10,9 +10,14 @@
 //   node scripts/compare-vision-ui.mjs        # http://127.0.0.1:8787
 //   PORT=9000 node scripts/compare-vision-ui.mjs
 //
-// Binds 127.0.0.1 only. To use from a droplet, tunnel instead of exposing it:
-//   ssh -L 8787:127.0.0.1:8787 user@droplet
+// Binds 127.0.0.1 by default. To judge from another device (phone/iPad)
+// without an SSH tunnel, expose it WITH a token — the /api routes proxy paid
+// model calls, so they must not sit open on the internet:
+//   HOST=0.0.0.0 BAKEOFF_TOKEN=$(openssl rand -hex 16) node scripts/compare-vision-ui.mjs
+//   # then open  http://<droplet-ip>:8787/?token=<that token>
+// Plain HTTP: fine for a short bake-off session; stop the server when done.
 import { createServer } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import {
   PROVIDERS,
   MEDIA_TYPES,
@@ -22,7 +27,29 @@ import {
 } from "./lib/vision-compare-core.mjs";
 
 const PORT = Number(process.env.PORT) || 8787;
-const HOST = "127.0.0.1";
+const HOST = process.env.HOST || "127.0.0.1";
+const TOKEN = process.env.BAKEOFF_TOKEN || "";
+const LOCAL_ONLY = HOST === "127.0.0.1" || HOST === "localhost";
+
+if (!LOCAL_ONLY && !TOKEN) {
+  console.error(
+    "refusing to bind " + HOST + " without BAKEOFF_TOKEN — the /api routes " +
+      "proxy paid model calls.\nRun: HOST=" + HOST +
+      " BAKEOFF_TOKEN=$(openssl rand -hex 16) node scripts/compare-vision-ui.mjs",
+  );
+  process.exit(1);
+}
+
+// Constant-time token check; token arrives as a Bearer header (the page pulls
+// it from its ?token= query param and attaches it to every API call).
+function authorized(req) {
+  if (!TOKEN) return true;
+  const header = req.headers.authorization || "";
+  const got = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const a = Buffer.from(got);
+  const b = Buffer.from(TOKEN);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 // Base64 photos from a phone can hit ~10MB; leave headroom.
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 const ALLOWED_MEDIA_TYPES = new Set(Object.values(MEDIA_TYPES));
@@ -52,10 +79,18 @@ function readBody(req) {
 
 const server = createServer(async (req, res) => {
   try {
-    if (req.method === "GET" && req.url === "/") {
+    // The page itself carries no secrets, so it's served unauthenticated;
+    // everything under /api requires the token when one is configured.
+    if (req.method === "GET" && (req.url === "/" || req.url.startsWith("/?"))) {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(PAGE);
       return;
+    }
+
+    if (req.url.startsWith("/api/") && !authorized(req)) {
+      return json(res, 401, {
+        error: "missing or wrong token — open the page as /?token=<BAKEOFF_TOKEN>",
+      });
     }
 
     if (req.method === "GET" && req.url === "/api/providers") {
@@ -234,6 +269,13 @@ const PAGE = `<!doctype html>
 <script>
 "use strict";
 var state = { providers: [], images: [], results: [], blindMap: null };
+var TOKEN = new URLSearchParams(location.search).get("token") || "";
+
+function apiHeaders(extra) {
+  var h = extra || {};
+  if (TOKEN) h["authorization"] = "Bearer " + TOKEN;
+  return h;
+}
 
 function el(tag, cls, text) {
   var e = document.createElement(tag);
@@ -242,7 +284,14 @@ function el(tag, cls, text) {
   return e;
 }
 
-fetch("/api/providers").then(function (r) { return r.json(); }).then(function (d) {
+fetch("/api/providers", { headers: apiHeaders() }).then(function (r) {
+  if (r.status === 401) {
+    document.querySelector(".sub").textContent =
+      "401: open this page with ?token=<BAKEOFF_TOKEN> in the URL.";
+  }
+  return r.json();
+}).then(function (d) {
+  if (!d.providers) return;
   state.providers = d.providers;
   document.getElementById("prompt").value = d.defaultPrompt;
   var box = document.getElementById("provs");
@@ -396,7 +445,7 @@ document.getElementById("run").addEventListener("click", function () {
 
       fetch("/api/describe", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: apiHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({
           provider: name,
           imageBase64: img.base64,
@@ -494,7 +543,11 @@ function renderSummary() {
 
 const active = PROVIDERS.filter(isConfigured).map((p) => p.name);
 server.listen(PORT, HOST, () => {
-  console.log(`vision bake-off UI: http://${HOST}:${PORT}`);
+  console.log(
+    TOKEN
+      ? `vision bake-off UI: http://<this-machine>:${PORT}/?token=${TOKEN}`
+      : `vision bake-off UI: http://${HOST}:${PORT}`,
+  );
   console.log(
     active.length
       ? `providers with keys: ${active.join(", ")}`
