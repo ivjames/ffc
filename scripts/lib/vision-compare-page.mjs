@@ -1,12 +1,22 @@
 // The bake-off page, shared by the standalone server
 // (scripts/compare-vision-ui.mjs) and the temporary Master Control mount
 // (server/routes/admin/visionBakeoff.js). One HTML string, no build step;
-// `renderPage(apiBase)` points its two API calls at whichever backend serves
-// it. Client JS deliberately avoids template literals so this server-side
-// template literal stays escape-free.
+// `renderPage(apiBase, authMode)` points its two API calls at whichever
+// backend serves it. Client JS deliberately avoids template literals so this
+// server-side template literal stays escape-free.
+//
+// authMode:
+//   "bearer" (standalone) — ?token= from the URL, sent as a Bearer header.
+//   "admin"  (Master Control) — reuses the SPA's login: the admin session
+//     cookie flows on same-origin fetches automatically, and a token login
+//     (APP_TOKEN kept in localStorage under 'ffc_admin_token', same key as
+//     admin/api.ts) is re-sent as the x-app-token header.
 
-export function renderPage(apiBase) {
-  return PAGE.replaceAll("__API_BASE__", apiBase);
+export function renderPage(apiBase, authMode = "bearer") {
+  return PAGE.replaceAll("__API_BASE__", apiBase).replaceAll(
+    "__AUTH_MODE__",
+    authMode,
+  );
 }
 
 const PAGE = `<!doctype html>
@@ -132,12 +142,22 @@ const PAGE = `<!doctype html>
 <script>
 "use strict";
 var API_BASE = "__API_BASE__";
+var AUTH_MODE = "__AUTH_MODE__";
 var state = { providers: [], images: [], results: [], blindMap: null };
 var TOKEN = new URLSearchParams(location.search).get("token") || "";
+if (!TOKEN && AUTH_MODE === "admin") {
+  // Same-origin with the Master Control SPA: reuse its stored APP_TOKEN
+  // (token-mode login). Session-cookie logins need nothing — the cookie
+  // rides same-origin fetches on its own.
+  try { TOKEN = localStorage.getItem("ffc_admin_token") || ""; } catch (e) {}
+}
 
 function apiHeaders(extra) {
   var h = extra || {};
-  if (TOKEN) h["authorization"] = "Bearer " + TOKEN;
+  if (TOKEN) {
+    if (AUTH_MODE === "admin") h["x-app-token"] = TOKEN;
+    else h["authorization"] = "Bearer " + TOKEN;
+  }
   return h;
 }
 
@@ -150,8 +170,13 @@ function el(tag, cls, text) {
 
 fetch(API_BASE + "/providers", { headers: apiHeaders() }).then(function (r) {
   if (r.status === 401) {
+    document.querySelector(".sub").textContent = AUTH_MODE === "admin"
+      ? "401: log in to Master Control in this browser first, then reload this page."
+      : "401: open this page with ?token=<BAKEOFF_TOKEN> in the URL.";
+  }
+  if (r.status === 403) {
     document.querySelector(".sub").textContent =
-      "401: open this page with ?token=<BAKEOFF_TOKEN> in the URL, or log in to Master Control first.";
+      "403: this page is super_admin only (it spends real money on provider keys).";
   }
   return r.json();
 }).then(function (d) {

@@ -20,11 +20,15 @@ import { router as photosRouter } from "./photos.js";
 import { router as announcementsRouter } from "./announcements.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as exportRouter } from "./export.js";
-import { router as visionBakeoffRouter } from "./visionBakeoff.js";
+import {
+  router as visionBakeoffRouter,
+  publicRouter as visionBakeoffPublicRouter,
+} from "./visionBakeoff.js";
 
 export const router = Router();
 
 router.use(authPublicRouter); // POST /login — no auth required
+router.use(visionBakeoffPublicRouter); // GET /vision-bakeoff/ui — static page, no secrets; its API calls auth themselves
 
 router.use(requireAdminAuth); // everything below needs APP_TOKEN or a session
 

@@ -25,21 +25,28 @@ import {
 import { renderPage } from "../../../scripts/lib/vision-compare-page.mjs";
 
 export const router = Router();
+export const publicRouter = Router();
 
 const ALLOWED_MEDIA_TYPES = new Set(Object.values(MEDIA_TYPES));
 
-// Page fetches relative to this mount; admin session cookie carries auth.
-const PAGE = renderPage("/api/admin/vision-bakeoff");
+// "admin" auth mode: the page rides Master Control's login — session cookie
+// on same-origin fetches, or the SPA's stored APP_TOKEN re-sent as the
+// x-app-token header (a token-mode login can't attach headers to a plain
+// page navigation, so the page must be reachable pre-auth and authenticate
+// its own API calls instead).
+const PAGE = renderPage("/api/admin/vision-bakeoff", "admin");
+
+// Pre-auth like POST /login: the page is a static shell with no secrets in
+// it — every data/spend endpoint below still requires super_admin.
+publicRouter.get("/vision-bakeoff/ui", (req, res) => {
+  res.type("html").send(PAGE);
+});
 
 router.use((req, res, next) => {
   if (!isSuperAdmin(req)) {
     return res.status(403).json({ ok: false, error: "super_admin only" });
   }
   next();
-});
-
-router.get("/ui", (req, res) => {
-  res.type("html").send(PAGE);
 });
 
 router.get("/providers", (req, res) => {
