@@ -36,6 +36,7 @@ import {
   isVisionConfigured,
   ALLOWED_MEDIA_TYPES,
 } from "../lib/vision.js";
+import { resolvePhotoRetentionDays } from "../lib/photoRetention.js";
 
 export const router = Router();
 
@@ -158,6 +159,16 @@ setInterval(() => {
     if (now >= entry.resetAt) ipHits.delete(ip);
   }
 }, RATE_LIMIT_WINDOW_MS).unref?.();
+
+// --- GET /api/hunt/photo-retention ------------------------------------------
+// Public: how long stored hunt photos live before the retention sweep deletes
+// them, so the /privacy page discloses the venue's ACTUAL configuration
+// instead of a hardcoded number (which HUNT_PHOTO_RETENTION_DAYS could
+// silently contradict). days <= 0 = the sweep is disabled (manual deletion
+// only) — the page words that case honestly too.
+router.get("/photo-retention", (_req, res) => {
+  res.json({ days: resolvePhotoRetentionDays() });
+});
 
 // --- GET /api/hunt/items?course=<uuid> -------------------------------------
 // Each course has its own themed list, so the caller must say which course.

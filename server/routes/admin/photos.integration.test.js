@@ -158,6 +158,39 @@ test("remove deletes the file, marks the find rejected, audits, and keeps the cr
   assert.ok(!list.map((r) => r.id).includes(id));
 });
 
+test("list paginates older photos via the before cursor", async () => {
+  const newest = await insertPhotoFind({ tag: "PG1", ageDays: 1 });
+  const middle = await insertPhotoFind({ tag: "PG2", ageDays: 2 });
+  const oldest = await insertPhotoFind({ tag: "PG3", ageDays: 3 });
+
+  // Page 1: the two newest of our trio (other tests' photos are newer still,
+  // so walk pages by cursor rather than assuming absolute positions).
+  const page1 = await (await get("?limit=500")).json();
+  const ids1 = page1.map((r) => r.id);
+  assert.ok(ids1.includes(newest.id) && ids1.includes(middle.id) && ids1.includes(oldest.id));
+
+  // Cursor strictly-older-than the middle row: oldest is in, newer two are out.
+  const middleRow = page1.find((r) => r.id === middle.id);
+  const older = await (await get(`?before=${encodeURIComponent(middleRow.createdAt)}`)).json();
+  const olderIds = older.map((r) => r.id);
+  assert.ok(olderIds.includes(oldest.id));
+  assert.ok(!olderIds.includes(middle.id) && !olderIds.includes(newest.id));
+
+  assert.equal((await get("?before=not-a-date")).status, 400);
+});
+
+test("GET /api/hunt/photo-retention reports the live retention config", async (t) => {
+  t.after(() => {
+    delete process.env.HUNT_PHOTO_RETENTION_DAYS;
+  });
+  delete process.env.HUNT_PHOTO_RETENTION_DAYS;
+  assert.deepEqual(await (await fetch(`${baseUrl}/api/hunt/photo-retention`)).json(), { days: 30 });
+  process.env.HUNT_PHOTO_RETENTION_DAYS = "7";
+  assert.deepEqual(await (await fetch(`${baseUrl}/api/hunt/photo-retention`)).json(), { days: 7 });
+  process.env.HUNT_PHOTO_RETENTION_DAYS = "0";
+  assert.deepEqual(await (await fetch(`${baseUrl}/api/hunt/photo-retention`)).json(), { days: 0 });
+});
+
 test("retention sweep deletes only photos older than the window", async (t) => {
   t.after(() => {
     delete process.env.HUNT_PHOTO_RETENTION_DAYS;

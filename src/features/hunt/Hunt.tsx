@@ -282,7 +282,7 @@ export default function Hunt() {
         {/* The photo pipeline's player-facing disclosure — photos go to an AI
             check and live on the venue server for a while (see /privacy). */}
         <p className="mb-4 text-xs text-fairway-100/50">
-          Photos are checked by AI and kept briefly so your group can share them.{' '}
+          Photos are checked by AI and stored so your group can share them.{' '}
           <Link to="/privacy" className="underline">
             How photos are handled
           </Link>

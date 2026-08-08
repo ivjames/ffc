@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, type AdminPhoto } from './api';
-import { Button, Card, Banner, Spinner, Pill, useAsync, fmtDateTime } from './ui';
+import { Button, Card, Banner, Spinner, Pill, fmtDateTime } from './ui';
 
 // Hunt-photo review — the operator side of the scavenger-hunt photo pipeline.
 // Every stored photo is listed here (auto-moderation already blocked unsafe
@@ -90,12 +90,43 @@ function PhotoRow({ photo, onRemoved }: { photo: AdminPhoto; onRemoved: () => vo
   );
 }
 
+const PAGE_SIZE = 100;
+
 export default function Photos() {
   const [filter, setFilter] = useState<Filter>('all');
-  const photos = useAsync(
-    () => api.listPhotos(filter === 'all' ? undefined : filter),
+  // Paged by hand rather than useAsync: a full page signals more may exist,
+  // and "Load more" appends the next page via the last row's createdAt cursor
+  // — an active venue can hold far more photos than one page.
+  const [photos, setPhotos] = useState<AdminPhoto[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const loadPage = useCallback(
+    async (existing: AdminPhoto[]) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const page = await api.listPhotos({
+          filter: filter === 'all' ? undefined : filter,
+          before: existing.length > 0 ? existing[existing.length - 1].createdAt : undefined,
+          limit: PAGE_SIZE,
+        });
+        setPhotos([...existing, ...page]);
+        setHasMore(page.length === PAGE_SIZE);
+      } catch (err) {
+        setError(err as Error);
+      } finally {
+        setLoading(false);
+      }
+    },
     [filter]
   );
+
+  useEffect(() => {
+    setPhotos(null);
+    void loadPage([]);
+  }, [loadPage]);
 
   const filterBtn = (value: Filter, label: string) => (
     <button
@@ -124,18 +155,29 @@ export default function Photos() {
         {filterBtn('minors', 'With minors')}
       </div>
 
-      {photos.loading && <Spinner />}
-      {photos.error && <Banner kind="error">{photos.error.message}</Banner>}
-      {photos.data && (
+      {error && <Banner kind="error">{error.message}</Banner>}
+      {photos && (
         <div className="space-y-2">
-          {photos.data.map((p) => (
-            <PhotoRow key={p.id} photo={p} onRemoved={photos.reload} />
+          {photos.map((p) => (
+            <PhotoRow
+              key={p.id}
+              photo={p}
+              onRemoved={() => setPhotos((cur) => cur?.filter((x) => x.id !== p.id) ?? null)}
+            />
           ))}
-          {photos.data.length === 0 && (
+          {photos.length === 0 && !loading && (
             <p className="py-4 text-center text-sm text-slate-400">
               {filter === 'all' ? 'No photos stored right now.' : 'No photos match this filter.'}
             </p>
           )}
+        </div>
+      )}
+      {loading && <Spinner />}
+      {photos && hasMore && !loading && (
+        <div className="text-center">
+          <Button variant="ghost" onClick={() => void loadPage(photos)}>
+            Load older photos
+          </Button>
         </div>
       )}
     </div>

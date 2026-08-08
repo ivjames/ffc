@@ -37,7 +37,7 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `HUNT_UPLOAD_DIR`   | Where verified hunt photos are stored on disk. Default `<cwd>/data/hunt-uploads`; point at a durable volume in production. |
 | `HUNT_SCAN_CAP`     | Max vision (model) calls per round — the hard ceiling on hunt API spend per group. Default `240`, the legitimate max (4 players × 20 items max × 3 attempts; ~$0.50 full-burn on Haiku 4.5) — `HUNT_ATTEMPT_CAP` is the working spend control, this is the backstop (and the bound on countable-item grinding). `0` = kill switch (every verify `429`s). Read per request, so changes apply without a restart. |
 | `HUNT_ATTEMPT_CAP`  | Max judged shots per player per non-countable item per round (bounds failed attempts — successful finds dedupe, and "couldn't read that photo" retries don't count). Countable items are exempt; the round cap still bounds them. Default `3`. Read per request. |
-| `HUNT_PHOTO_RETENTION_DAYS` | Privacy: how many days a stored hunt photo lives before the retention sweep (`lib/photoRetention.js`, started from `index.js`) deletes the file from disk. The `hunt_find` row keeps its credit/history — only the image goes, which also stops both serving surfaces (`photo_path` is cleared). Default `30`; `0`/negative disables the sweep (photos then only go when an operator deletes them in Master Control → Photos). Keep the player-facing "/privacy" wording in step if changed. |
+| `HUNT_PHOTO_RETENTION_DAYS` | Privacy: how many days a stored hunt photo lives before the retention sweep (`lib/photoRetention.js`, started from `index.js`) deletes the file from disk. The `hunt_find` row keeps its credit/history — only the image goes, which also stops both serving surfaces (`photo_path` is cleared). Default `30`; `0`/negative disables the sweep (photos then only go when an operator deletes them in Master Control → Photos). The app's `/privacy` page reads the value live via `GET /api/hunt/photo-retention`, so the player-facing disclosure tracks this setting automatically — including the disabled case. |
 | `MAIL_PROVIDER`     | Outbound email for player sign-in codes and team invites: `console` (default — in dev logs the full message incl. the code to stdout; **in production it redacts** — masked recipient, no body — so codes and addresses never land in a production log), `resend` (raw fetch to Resend's API), or `smtp` (nodemailer over `SMTP_URL` — `npm i nodemailer` first; it is deliberately not a package dependency). **While this is unset/`console` in dev, sign-in runs in BYPASS mode**: `POST /api/auth/request-code` returns the 6-digit code directly (`bypassCode`) and the app signs in without an inbox round-trip. The bypass is **dev-only**: in production a returned code would let anyone sign in as any address, so there the misconfiguration fails safe instead — no code in the response, none in the log, sign-in effectively disabled (the server warns loudly at startup) until a real provider is set. Setting one retires the bypass instantly (checked per request, no restart). |
 | `MAIL_FROM`         | From header for outbound mail, e.g. `FFC <noreply@example.com>`. Default `FFC <noreply@localhost>`. |
 | `RESEND_API_KEY`    | API key when `MAIL_PROVIDER=resend`. The sending domain must be verified (SPF/DKIM) in Resend first — see DEPLOY.md. |
@@ -283,7 +283,7 @@ no domain history hangs off an account.)
 | `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
 | `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | look up one redemption code (case-insensitive), or list recent grants (default: unredeemed, limit 50); org-scoped via the round's course → location |
 | `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | mark a reward handed out (records who) / undo a mistaken redemption; audited |
-| `GET  /api/admin/photos?people=1\|minors=1&limit=` | stored hunt photos, newest first, with item/course/venue + moderation and people/minors flags; org-scoped via find → item → course → location |
+| `GET  /api/admin/photos?people=1\|minors=1&limit=&before=` | stored hunt photos, newest first, with item/course/venue + moderation and people/minors flags; `before` (the previous page's last `createdAt`) keyset-paginates older photos; org-scoped via find → item → course → location |
 | `GET  /api/admin/photos/:id/image` | the image bytes, for the review UI (same scoping) |
 | `POST /api/admin/photos/:id/remove` | delete the photo file from disk and mark the find `moderation='rejected'` (the find keeps its credit); audited — the "please delete that photo" path. Time-based deletion is the retention sweep (`HUNT_PHOTO_RETENTION_DAYS`) |
 
@@ -346,6 +346,11 @@ The hunt is a **play-time** activity: every find is tied to a group's in-progres
 round (`roundClientId` is required on verify), so it isn't an open invitation to
 wander the course during others' games. A future expansion is at most new
 **zones** — each a course-like area with its own list, so the shape is unchanged.
+
+#### `GET /api/hunt/photo-retention`
+Public: `{days}` — the venue's actual `HUNT_PHOTO_RETENTION_DAYS` (`<= 0` =
+sweep disabled). Read live by the app's `/privacy` page so the player-facing
+retention disclosure can never contradict the server's configuration.
 
 #### `GET /api/hunt/items?course=<uuid>`
 The list is scoped to a course (a round is one course), so `course` is required.

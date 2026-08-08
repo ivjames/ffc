@@ -242,8 +242,16 @@ export const api = {
   },
 
   // Hunt-photo review (privacy: the operator surface for stored photos).
-  listPhotos: (filter?: 'people' | 'minors') =>
-    req<AdminPhoto[]>('GET', `/photos${filter ? `?${filter}=1` : ''}`),
+  // `before` (the previous page's last createdAt) keyset-paginates older
+  // photos so the whole backlog stays reachable, page by page.
+  listPhotos: (opts: { filter?: 'people' | 'minors'; before?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.filter) q.set(opts.filter, '1');
+    if (opts.before) q.set('before', opts.before);
+    if (opts.limit) q.set('limit', String(opts.limit));
+    const s = q.toString();
+    return req<AdminPhoto[]>('GET', `/photos${s ? `?${s}` : ''}`);
+  },
   removePhoto: (id: string) => req<{ ok: true }>('POST', `/photos/${id}/remove`),
   // Like the CSV export, <img src> can't carry the auth header — fetch the
   // bytes and hand back a Blob for an object URL.

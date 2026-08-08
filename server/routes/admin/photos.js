@@ -10,7 +10,9 @@
 // (lib/photoRetention.js, HUNT_PHOTO_RETENTION_DAYS); this surface is for
 // human judgment inside the window.
 //
-//   GET  /api/admin/photos?people=1|minors=1&limit=  stored photos, newest first
+//   GET  /api/admin/photos?people=1|minors=1&limit=&before=   stored photos,
+//        newest first; `before` (a createdAt timestamp from a previous page)
+//        keyset-paginates older photos so the whole backlog stays reachable
 //   GET  /api/admin/photos/:id/image                 the image bytes
 //   POST /api/admin/photos/:id/remove                delete from disk
 //
@@ -53,6 +55,15 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ ok: false, error: "limit must be 1..500" });
     }
   }
+  // Keyset cursor: `before` is the last row's createdAt from the previous
+  // page — stable under concurrent removals, unlike an offset.
+  let before = null;
+  if (req.query.before !== undefined) {
+    before = req.query.before;
+    if (typeof before !== "string" || Number.isNaN(Date.parse(before))) {
+      return res.status(400).json({ ok: false, error: "before must be a timestamp" });
+    }
+  }
   try {
     const result = await pool.query(
       `select ${PHOTO_COLS} ${PHOTO_FROM}
@@ -60,9 +71,10 @@ router.get("/", async (req, res) => {
           and ($1::uuid is null or l.org_id = $1)
           and (not $2::boolean or f.people_present = true)
           and (not $3::boolean or f.minors_present = true)
+          and ($4::timestamptz is null or f.created_at < $4)
         order by f.created_at desc
-        limit $4`,
-      [scope, people, minors, limit]
+        limit $5`,
+      [scope, people, minors, before, limit]
     );
     return res.json(result.rows);
   } catch (err) {
