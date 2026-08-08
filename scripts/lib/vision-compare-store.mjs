@@ -148,7 +148,7 @@ export function runsSummary() {
     const p = perProvider[r.provider] ||
       (perProvider[r.provider] = {
         calls: 0, errors: 0, inTok: 0, outTok: 0, cost: 0, lat: [],
-        huntN: 0, jsonOk: 0, presentN: 0, confSum: 0, confN: 0,
+        huntN: 0, jsonOk: 0, presentN: 0, confSum: 0, confN: 0, outliers: 0,
       });
     totals.calls += 1;
     p.calls += 1;
@@ -167,6 +167,7 @@ export function runsSummary() {
     // page can chart JSON-validity, present-rate, and confidence.
     if (r.kind === "hunt" && typeof r.text === "string") {
       p.huntN += 1;
+      if (r.outlier) p.outliers += 1;
       const m = r.text.match(/\{[\s\S]*\}/);
       let v = null;
       if (m) {
@@ -207,6 +208,7 @@ export function runsSummary() {
         jsonOk: p.jsonOk,
         presentN: p.presentN,
         confAvg: p.confN ? p.confSum / p.confN : null,
+        outliers: p.outliers,
       };
     }),
   };

@@ -562,6 +562,15 @@ function drawCharts(container, s) {
       };
     }), { color: VIZ.bar, max: 100, tick: pct }));
 
+    box.appendChild(chartCard("Consensus outliers (hunt)", huntProvs.map(function (p) {
+      var rate = (p.outliers / p.huntN) * 100;
+      return {
+        label: lbl(p.name), value: rate, display: p.outliers + "/" + p.huntN,
+        hover: lbl(p.name) + ": disagreed with the majority verdict on " +
+          p.outliers + " of " + p.huntN + " hunt calls",
+      };
+    }), { color: VIZ.err, max: 100, tick: pct }));
+
     box.appendChild(chartCard("\\u201cPresent\\u201d verdict rate (hunt)", huntProvs.map(function (p) {
       var rate = p.jsonOk ? (p.presentN / p.jsonOk) * 100 : 0;
       return {
@@ -942,6 +951,46 @@ document.getElementById("run").addEventListener("click", function () {
   var status = document.getElementById("status");
   status.textContent = pending + " calls in flight\\u2026";
 
+  // Hunt mode: per-image consensus tracking. Once every provider has
+  // answered for an image, the minority side of a present/not-present split
+  // is flagged as an outlier (error styling + outlier:true in the history).
+  // Run rows are buffered until their image completes so the flag lands in
+  // the log. Errors and invalid JSON never vote.
+  var rowTrack = state.images.map(function () {
+    return { done: 0, entries: [] };
+  });
+
+  function rowComplete(imgIdx) {
+    var entries = rowTrack[imgIdx].entries;
+    var yes = 0, no = 0;
+    entries.forEach(function (e) {
+      if (e.present === true) yes += 1;
+      if (e.present === false) no += 1;
+    });
+    if (yes > 0 && no > 0 && yes !== no) {
+      var minority = yes > no ? false : true;
+      var tally = (yes > no ? yes : no) + "\\u2013" + (yes > no ? no : yes);
+      entries.forEach(function (e) {
+        if (e.present === minority) {
+          e.cell.classList.add("err");
+          var f = el("div");
+          f.appendChild(el("span", "flag", "outlier vs " + tally));
+          e.cell.insertBefore(f, e.cell.firstChild);
+          if (e.logRow) e.logRow.outlier = true;
+        }
+      });
+    }
+    entries.forEach(function (e) { if (e.logRow) logRun(e.logRow); });
+  }
+
+  function trackResult(imgIdx, entry) {
+    var t = rowTrack[imgIdx];
+    t.entries.push(entry);
+    t.done += 1;
+    if (hunt && t.done === ordered.length) rowComplete(imgIdx);
+    else if (!hunt && entry.logRow) logRun(entry.logRow);
+  }
+
   // One compact matrix per run: images as rows, providers as columns. Tap a
   // cell for the reason/full text and the tokens-cost-latency line.
   var ordered = provs.slice();
@@ -1018,21 +1067,19 @@ document.getElementById("run").addEventListener("click", function () {
               c.appendChild(el("div", "detail", msg));
             });
             state.results.push({ provider: name, error: true });
-            logRun({
-              kind: hunt ? "hunt" : "describe", provider: name,
-              image: img.name, subject: hunt ? img.subject : null,
-              error: msg,
+            trackResult(imgIdx, {
+              present: null, cell: cell,
+              logRow: {
+                kind: hunt ? "hunt" : "describe", provider: name,
+                image: img.name, subject: hunt ? img.subject : null,
+                error: msg,
+              },
             });
           } else {
             addBurn(r.j);
-            logRun({
-              kind: hunt ? "hunt" : "describe", provider: name,
-              image: img.name, subject: hunt ? img.subject : null,
-              inputTokens: r.j.inputTokens, outputTokens: r.j.outputTokens,
-              cost: r.j.cost, ms: r.j.ms, text: r.j.text,
-            });
             var m = r.j.inputTokens + " in / " + r.j.outputTokens + " out \\u00b7 $" +
               (r.j.cost != null ? r.j.cost.toFixed(6) : "?") + " \\u00b7 " + r.j.ms + "ms";
+            var verdict = null;
             fill(function (c) {
               var replyText = (r.j.text || "").trim();
               if (!replyText) {
@@ -1044,7 +1091,7 @@ document.getElementById("run").addEventListener("click", function () {
                 c.appendChild(el("div", "detail",
                   "Model returned no text \\u2014 output budget likely " +
                   "consumed by hidden reasoning tokens."));
-              } else if (hunt) renderVerdict(c, replyText);
+              } else if (hunt) verdict = renderVerdict(c, replyText);
               else {
                 c.appendChild(el("div", "clamp", replyText));
               }
@@ -1060,6 +1107,17 @@ document.getElementById("run").addEventListener("click", function () {
               cost: r.j.cost,
               ms: r.j.ms,
             });
+            trackResult(imgIdx, {
+              present: verdict && typeof verdict.present === "boolean"
+                ? verdict.present : null,
+              cell: cell,
+              logRow: {
+                kind: hunt ? "hunt" : "describe", provider: name,
+                image: img.name, subject: hunt ? img.subject : null,
+                inputTokens: r.j.inputTokens, outputTokens: r.j.outputTokens,
+                cost: r.j.cost, ms: r.j.ms, text: r.j.text,
+              },
+            });
           }
         })
         .catch(function (e) {
@@ -1069,6 +1127,7 @@ document.getElementById("run").addEventListener("click", function () {
             c.appendChild(el("div", "detail", String(e)));
           });
           state.results.push({ provider: name, error: true });
+          trackResult(imgIdx, { present: null, cell: cell, logRow: null });
         })
         .then(function () {
           pending -= 1;
@@ -1096,7 +1155,7 @@ function renderVerdict(node, raw) {
     bad.appendChild(el("span", "flag", "not valid JSON"));
     node.appendChild(bad);
     node.appendChild(el("div", "detail", text));
-    return;
+    return null;
   }
   var line = el("div");
   var pct = typeof v.confidence === "number"
@@ -1110,6 +1169,7 @@ function renderVerdict(node, raw) {
   if (m[0].length !== text.length) flags.appendChild(el("span", "flag", "+prose"));
   if (flags.childNodes.length) node.appendChild(flags);
   if (v.reason) node.appendChild(el("div", "detail", String(v.reason)));
+  return v;
 }
 
 document.getElementById("reveal").addEventListener("click", function () {
