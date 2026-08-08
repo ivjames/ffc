@@ -1,16 +1,62 @@
-# CenterEdge API access — email template for the venue owner
+# CenterEdge API access — outreach kit
 
 The developer cannot request API credentials directly: CenterEdge provisions
 API access to the **license holder**, so the venue owner (or whoever owns the
 CenterEdge support relationship) must submit the request through the
-CenterEdge Support Portal or their account manager. Send them the template
-below — fill in the bracketed bits, attach nothing.
+CenterEdge Support Portal or their account manager. Two pieces here:
 
-Once credentials arrive, drop the sandbox base URL into
-`VITE_CENTEREDGE_API_BASE` and start reconciling `mock-centeredge/` against
-the real docs (see `README.md` → "Swapping in the real API later").
+1. **Cover email** — developer → owner, asking them to send the request and
+   name the developer as an authorized technical contact.
+2. **The request itself** — owner → CenterEdge, ready to forward.
 
 ---
+
+## 1. Cover email (developer → owner)
+
+**Subject:** CenterEdge API access — need you to submit this request (5-minute task)
+
+Hi [OWNER NAME],
+
+Quick status on the app, plus one ask that only you can do.
+
+Good news first: the mobile ordering and rewards features are built and
+working end to end — menu browsing, cart, kitchen-status tracking, player
+card balances, and ticket rewards from the in-app games. I can demo any
+time. It's all running against a stand-in for CenterEdge's system right
+now, which is the one thing we can't fix ourselves: **CenterEdge only
+grants API access to the license holder, so the request has to come from
+you.**
+
+The ask (about 5 minutes):
+
+1. Open a ticket on the CenterEdge Support Portal (or email your account
+   manager) and paste in everything below the line at the bottom of this
+   email.
+2. Fill in the few [BRACKETED] details.
+3. Please keep the line naming me as an **authorized technical contact**
+   on your account for this project — that lets their integration team
+   work with me directly instead of routing every technical question
+   through you.
+
+Everything after their first reply, I'll handle.
+
+What we're asking them for, in plain terms: a sandbox to build against,
+credentials and documentation, and answers to three questions that shape
+the build — how payment for app orders should settle, whether the app can
+credit tickets to guests' play cards, and whether we can read a card's
+play activity (that's what powers "spend 100 credits, get bonus tickets"
+offers down the road).
+
+One timing note: this is the only item on the critical path — everything
+else keeps moving while we wait, but integration vendors typically take a
+week or two to respond, so the sooner this goes in, the better.
+
+Thanks!
+[DEVELOPER NAME]
+
+--- forward everything below this line to CenterEdge ---
+
+## 2. The request (owner → CenterEdge)
 
 **To:** CenterEdge Support (via the Support Portal, or your account manager)
 **Subject:** API access request — third-party mobile app integration for [VENUE NAME]
@@ -56,8 +102,9 @@ system. Specifically, we're looking for:
 5. **A technical contact** we can loop in our developer with for
    integration questions.
 
-Our developer contact is [DEVELOPER NAME] ([DEVELOPER EMAIL]) — feel free
-to include them on technical follow-ups.
+**[DEVELOPER NAME] ([DEVELOPER EMAIL]) is our authorized technical contact
+on this account for this project** — please work with them directly on all
+technical follow-ups, sandbox setup, and documentation.
 
 Could you let us know the process, any partner/agreement paperwork required,
 and expected timelines? Happy to jump on a call if that's easier.
@@ -65,3 +112,10 @@ and expected timelines? Happy to jump on a call if that's easier.
 Thanks!
 [OWNER NAME]
 [VENUE NAME] · [PHONE] · [EMAIL]
+
+---
+
+*Developer note (not part of the email): once credentials arrive, drop the
+sandbox base URL into `VITE_CENTEREDGE_API_BASE` (or the venue's
+`pos.*.apiBase` in Master Control) and start reconciling `mock-centeredge/`
+against the real docs — see `README.md` → "Swapping in the real API later".*
