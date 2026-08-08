@@ -39,7 +39,9 @@ const PAGE = renderPage("/api/admin/vision-bakeoff", "admin");
 // Pre-auth like POST /login: the page is a static shell with no secrets in
 // it — every data/spend endpoint below still requires super_admin.
 publicRouter.get("/vision-bakeoff/ui", (req, res) => {
-  res.type("html").send(PAGE);
+  // no-store: without it Safari heuristically caches this URL — including a
+  // pre-deploy 401 body — and keeps serving the stale response after the fix.
+  res.set("Cache-Control", "no-store").type("html").send(PAGE);
 });
 
 router.use((req, res, next) => {
