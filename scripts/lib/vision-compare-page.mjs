@@ -622,8 +622,24 @@ function drawCharts(container, s) {
         };
       }), { color: VIZ.err, max: 100, tick: pct }));
     }
+    var frProvs = huntProvs.filter(function (p) { return p.expTrueN > 0; });
+    if (frProvs.length) {
+      box.appendChild(chartCard("False rejects (truth: present)", frProvs.map(function (p) {
+        var rate = (p.falseReject / p.expTrueN) * 100;
+        return {
+          label: lbl(p.name), value: rate, display: p.falseReject + "/" + p.expTrueN,
+          hover: lbl(p.name) + ": rejected " + p.falseReject + " of " + p.expTrueN +
+            " genuine subjects \\u2014 the player-frustrating failure",
+        };
+      }), { color: VIZ.err, max: 100, tick: pct }));
+    }
 
-    box.appendChild(chartCard("Consensus outliers (hunt)", huntProvs.map(function (p) {
+    // Consensus outliers only accumulate on UNGRADED rows (no ground truth
+    // to grade against) — hidden entirely once truth-graded charts carry
+    // the signal, so a stale zero-chart doesn't imply "no disagreements".
+    var outlierTotal = 0;
+    huntProvs.forEach(function (p) { outlierTotal += p.outliers; });
+    if (outlierTotal > 0) box.appendChild(chartCard("Consensus outliers (ungraded rows)", huntProvs.map(function (p) {
       var rate = (p.outliers / p.huntN) * 100;
       return {
         label: lbl(p.name), value: rate, display: p.outliers + "/" + p.huntN,
