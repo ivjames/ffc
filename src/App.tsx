@@ -8,6 +8,7 @@ import CourseList from './features/courses/CourseList';
 import CourseMap from './features/courses/CourseMap';
 import LocationPicker from './features/locations/LocationPicker';
 import Rules from './features/rules/Rules';
+import Privacy from './features/privacy/Privacy';
 import TvLeaderboard from './features/tv/TvLeaderboard';
 import TvWall from './features/tv/TvWall';
 import Hunt from './features/hunt/Hunt';
@@ -66,6 +67,8 @@ export default function App() {
         <Route path="/courses" element={<CourseList />} />
         <Route path="/courses/:id/map" element={<CourseMap />} />
         <Route path="/rules" element={<Rules />} />
+        {/* Plain-language disclosure of everything the app records. */}
+        <Route path="/privacy" element={<Privacy />} />
         {/* P2 preview — the API already serves the leaderboard. */}
         <Route path="/tv" element={<TvLeaderboard />} />
         {/* Venue display wall — all of a venue's course boards side by side,

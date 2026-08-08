@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { emailError, phoneError, normalizeEmail } from '../../lib/validateUser';
+import { emailError, normalizeEmail } from '../../lib/validateUser';
 import { sanitizeTagInput, tagError, TAG_LENGTH } from '../../lib/sanitize';
 import {
   requestCode,
@@ -13,8 +13,8 @@ import {
 } from '../../lib/authApi';
 
 // Account — passwordless email sign-in (registration IS sign-in: verifying the
-// first code creates the account) plus profile editing once signed in. Phone is
-// collected for the venue's contact list; only email is ever verified.
+// first code creates the account) plus profile editing once signed in. Email is
+// the only contact detail collected, and it's verified by the code flow itself.
 
 const inputClass =
   'surface-sunk w-full rounded-xl border border-fairway-800/60 px-4 py-2.5 text-base text-fairway-50 placeholder:text-fairway-100/40 focus:border-fairway-500 focus:outline-none';
@@ -30,7 +30,6 @@ export default function Account() {
 
   // Sign-in form state.
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [defaultTag, setDefaultTag] = useState('');
   const [code, setCode] = useState('');
@@ -53,7 +52,6 @@ export default function Account() {
 
   function applyUser(u: AppUser) {
     setUser(u);
-    setPhone(u.phone ?? '');
     setDisplayName(u.displayName ?? '');
     setDefaultTag(u.defaultTag ?? '');
     setStage('signedIn');
@@ -66,7 +64,6 @@ export default function Account() {
     setError(null);
     setNotice(null);
     const profile = {
-      ...(phone.trim() !== '' ? { phone } : {}),
       ...(displayName.trim() !== '' ? { displayName } : {}),
       ...(defaultTag !== '' ? { defaultTag } : {}),
     };
@@ -112,7 +109,6 @@ export default function Account() {
     setError(null);
     setSaved(false);
     const res = await updateProfile({
-      phone: phone.trim() === '' ? null : phone,
       displayName: displayName.trim() === '' ? null : displayName,
       defaultTag: defaultTag === '' ? null : defaultTag,
     });
@@ -131,7 +127,6 @@ export default function Account() {
     setBusy(false);
     setUser(null);
     setEmail('');
-    setPhone('');
     setDisplayName('');
     setDefaultTag('');
     setCode('');
@@ -140,9 +135,8 @@ export default function Account() {
   }
 
   const emailErr = emailError(email);
-  const phoneErr = phoneError(phone);
   const tagErr = defaultTag.length === TAG_LENGTH ? tagError(defaultTag) : null;
-  const profileValid = !phoneErr && !tagErr && (defaultTag === '' || defaultTag.length === TAG_LENGTH);
+  const profileValid = !tagErr && (defaultTag === '' || defaultTag.length === TAG_LENGTH);
 
   return (
     <Screen>
@@ -190,21 +184,6 @@ export default function Account() {
               </div>
               <div>
                 <label className={labelClass}>
-                  Phone <span className="font-normal text-fairway-100/60">(optional)</span>
-                </label>
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  placeholder="(555) 555-5555"
-                  className={inputClass}
-                />
-                {phoneErr && <p className="mt-1.5 text-sm text-red-400">{phoneErr}</p>}
-              </div>
-              <div>
-                <label className={labelClass}>
                   Arcade tag <span className="font-normal text-fairway-100/60">(optional — prefills rosters)</span>
                 </label>
                 <input
@@ -225,11 +204,16 @@ export default function Account() {
             <div className="mt-6">
               <Button
                 onClick={() => void sendCode()}
-                disabled={busy || email.trim() === '' || !!emailErr || !!phoneErr || !!tagErr}
+                disabled={busy || email.trim() === '' || !!emailErr || !!tagErr}
               >
                 {busy ? 'Sending…' : 'Email me a code'}
               </Button>
             </div>
+            <p className="mt-4 text-xs text-fairway-100/50">
+              <Link to="/privacy" className="underline">
+                How we handle your info
+              </Link>
+            </p>
           </>
         )}
 
@@ -290,21 +274,6 @@ export default function Account() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Phone</label>
-                <input
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    setSaved(false);
-                  }}
-                  type="tel"
-                  inputMode="tel"
-                  placeholder="(555) 555-5555"
-                  className={inputClass}
-                />
-                {phoneErr && <p className="mt-1.5 text-sm text-red-400">{phoneErr}</p>}
-              </div>
-              <div>
                 <label className={labelClass}>Arcade tag</label>
                 <input
                   value={defaultTag}
@@ -336,6 +305,11 @@ export default function Account() {
                 Sign out
               </Button>
             </div>
+            <p className="mt-4 text-xs text-fairway-100/50">
+              <Link to="/privacy" className="underline">
+                How we handle your info
+              </Link>
+            </p>
           </>
         )}
       </Content>

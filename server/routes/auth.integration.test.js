@@ -83,7 +83,6 @@ function sessionCookie(res) {
 
 test("request-code + verify registers the user, applies profile, sets a session", async () => {
   const reqRes = await requestCode(EMAIL, {
-    phone: "(415) 555-0100",
     displayName: "Test Player",
     defaultTag: "TPL",
   });
@@ -95,7 +94,6 @@ test("request-code + verify registers the user, applies profile, sets a session"
   assert.equal(verifyRes.status, 200);
   const body = await verifyRes.json();
   assert.equal(body.user.email, EMAIL);
-  assert.equal(body.user.phone, "+14155550100");
   assert.equal(body.user.displayName, "Test Player");
   assert.equal(body.user.defaultTag, "TPL");
   assert.ok(body.user.emailVerifiedAt);
@@ -223,12 +221,11 @@ test("PATCH /me updates profile fields; logout kills the session", async () => {
   const patchRes = await fetch(`${baseUrl}/api/auth/me`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ displayName: "Renamed", phone: null }),
+    body: JSON.stringify({ displayName: "Renamed" }),
   });
   assert.equal(patchRes.status, 200);
   const patched = await patchRes.json();
   assert.equal(patched.user.displayName, "Renamed");
-  assert.equal(patched.user.phone, null);
   assert.equal(patched.user.defaultTag, "TPL"); // untouched field survives
 
   const logoutRes = await fetch(`${baseUrl}/api/auth/logout`, {
@@ -277,5 +274,20 @@ test("me without a cookie 401s; PATCH without a cookie 401s", async () => {
 
 test("invalid email / profile 400", async () => {
   assert.equal((await requestCode("not-an-email")).status, 400);
-  assert.equal((await requestCode(EMAIL, { phone: "nope" })).status, 400);
+  assert.equal((await requestCode(EMAIL, { displayName: "x".repeat(41) })).status, 400);
+});
+
+test("production: no bypass code over HTTP and no code/address in the log", async (t) => {
+  process.env.NODE_ENV = "production";
+  t.after(() => {
+    delete process.env.NODE_ENV;
+  });
+  const email = `player-${stamp}-prod@example.com`;
+  const res = await requestCode(email);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.bypassCode, undefined, "production must never return a sign-in code over HTTP");
+  // The console mailer redacts in production: no OTP, no full address.
+  assert.doesNotMatch(lastMail(), /sign-in code is: [0-9]{6}/);
+  assert.doesNotMatch(lastMail(), new RegExp(email));
 });

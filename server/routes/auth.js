@@ -5,7 +5,7 @@
 //   POST /api/auth/verify        {email, code}       -> {ok, user} + session cookie
 //   GET  /api/auth/magic?token=...                   -> 302 to the app + session cookie
 //   GET  /api/auth/me                                -> {ok, user} | 401
-//   PATCH /api/auth/me           {phone?, displayName?, defaultTag?}
+//   PATCH /api/auth/me           {displayName?, defaultTag?}
 //   POST /api/auth/logout                            -> {ok} + cookie clear
 //
 // request-code answers {ok:true} whether or not the address has an account —
@@ -84,9 +84,10 @@ router.post("/request-code", ipSendLimit, emailSendLimit, async (req, res) => {
     // BYPASS while no real mail provider is configured: hand the code straight
     // back so the app can sign in without an inbox — the stopgap until Resend
     // is wired up. Setting MAIL_PROVIDER retires this automatically (checked
-    // per request, no restart). Explicit trade-off: until then, sign-in
-    // proves nothing about inbox ownership.
-    if (!isMailDeliveryConfigured()) {
+    // per request, no restart). DEV ONLY: in production a returned code would
+    // let anyone sign in as any address, so there the misconfiguration fails
+    // safe (no code anywhere — sign-in is down until a provider is set).
+    if (!isMailDeliveryConfigured() && !isProd()) {
       return res.json({ ok: true, bypassCode: code });
     }
     // Uniform response — never reveals whether the address has an account, and
@@ -147,19 +148,17 @@ router.get("/me", (req, res) => {
 router.patch("/me", requireUser, async (req, res) => {
   const profileCheck = normalizeProfile(req.body);
   if (profileCheck.error) return res.status(400).json({ ok: false, error: profileCheck.error });
-  const { phone, displayName, defaultTag } = profileCheck.row;
+  const { displayName, defaultTag } = profileCheck.row;
   try {
     const result = await pool.query(
       `update app_user
-          set phone        = case when $2::boolean then $3 else phone end,
-              display_name = case when $4::boolean then $5 else display_name end,
-              default_tag  = case when $6::boolean then $7 else default_tag end
+          set display_name = case when $2::boolean then $3 else display_name end,
+              default_tag  = case when $4::boolean then $5 else default_tag end
         where id = $1
-        returning id, email, phone, display_name as "displayName",
+        returning id, email, display_name as "displayName",
                   default_tag as "defaultTag", email_verified_at as "emailVerifiedAt"`,
       [
         req.user.id,
-        phone !== undefined, phone ?? null,
         displayName !== undefined, displayName ?? null,
         defaultTag !== undefined, defaultTag ?? null,
       ]
