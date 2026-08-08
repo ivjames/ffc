@@ -5,10 +5,10 @@ image descriptions, ~20 images per user visit, 10k–100k visits/year →
 200k–2M images/year). Batch processing and prompt caching are ruled out
 (realtime UX; prompts too short to cache).
 
-**Decision status: no provider committed.** The next gate is the quality
-bake-off — run `scripts/compare-vision-describe.mjs` on ~5 real workload
-images (see "Running the bake-off" below), then pick using the decision rule
-at the bottom.
+**DECIDED 2026-08-08: Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`,
+$0.25/$1.50 per MTok). See "The decision" below for ranking, evidence, and
+revisit triggers. Re-verify the rate and the model's deprecation status at
+build time — that instruction outlives every decision in this file.
 
 ## ⚠️ What changed since the last analysis
 
@@ -114,6 +114,43 @@ The choice is really between three postures, gated by realistic volume:
 Where the cheap tiers historically fall down is nuanced/dense-detail
 description, not basic tagging — which is exactly what the bake-off
 measures on our real images.
+
+## The decision (2026-08-08)
+
+Operator ranking after multi-round graded testing (ground-truth scrambled
+sets + stored hunt photos, hunt-verify mode, steelmanned prompt with native
+JSON enforcement, real 1280×960 dimensions):
+
+1. **Gemini 3.1 Flash-Lite — selected.** $0.0082/visit measured (billed
+   tokens, 20 images), ~$820/yr at the 100k-visit ceiling. Latency
+   769/964/1598ms min/avg/max. Zero format errors. Cheapest durable
+   major-provider tier; native responseSchema JSON enforcement.
+2. **Gemini 3.5 Flash-Lite — runner-up.** Best latency profile on the board
+   (716/931/1153ms), +35% cost over 3.1 with no measured quality edge.
+   The natural migration target when 3.1 eventually deprecates.
+3. **Haiku 4.5.** No format errors, fewer billed input tokens than Gemini
+   at the same image size (Anthropic downscales internally), but 3.5× the
+   cost ($0.0286/visit) and the worst latency tail (max 3.5s). Remains the
+   production hunt verifier — that decision is separate and untouched.
+4. **Gemini 3.6 Flash.** The quality probe: costs more per image than
+   Haiku ($0.0479/visit) without a measured accuracy edge over the Lites
+   on the graded set. Retired from future rounds.
+
+Field notes: Mistral Small 4 ($0.10/$0.30) remains the untested cheaper
+alternative if Google's pricing moves; SiliconFlow/Qwen was dropped on
+operational grounds (delisted a model mid-evaluation, split-wallet billing
+friction); Llama 4 Scout was never funded; GPT-5 Mini needed
+reasoning_effort tuning to function and priced mid-pack.
+
+**Revisit triggers:** Gemini 3.1 Flash-Lite deprecation notice (migrate to
+the current Flash-Lite tier, re-run the bake-off as regression); any rate
+change; false-credit/false-reject regression in production metering; volume
+falling low enough (≲20k visits/yr) that consolidating on the
+already-integrated Anthropic key beats carrying a second provider.
+
+**Open optimization:** 768px send size — measured 4× image-token cut on
+Gemini (one tile vs four). Run the A/B on the graded set (send-size toggle
+in the bake-off UI) before wiring the feature's client-side downscale.
 
 ## Round-1 bake-off findings (2026-08-08, hunt-verify mode)
 
