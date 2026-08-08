@@ -12,11 +12,12 @@
 //     (APP_TOKEN kept in localStorage under 'ffc_admin_token', same key as
 //     admin/api.ts) is re-sent as the x-app-token header.
 
+import { HUNT_PROMPT_TEMPLATE } from "./vision-compare-core.mjs";
+
 export function renderPage(apiBase, authMode = "bearer") {
-  return PAGE.replaceAll("__API_BASE__", apiBase).replaceAll(
-    "__AUTH_MODE__",
-    authMode,
-  );
+  return PAGE.replaceAll("__API_BASE__", apiBase)
+    .replaceAll("__AUTH_MODE__", authMode)
+    .replaceAll('"__HUNT_TEMPLATE_JSON__"', JSON.stringify(HUNT_PROMPT_TEMPLATE));
 }
 
 const PAGE = `<!doctype html>
@@ -61,6 +62,14 @@ const PAGE = `<!doctype html>
   }
   .thumb .nm { font-size: 11px; color: var(--muted); max-width: 96px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thumb .subj { width: 96px; margin-top: 4px; border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
+  .modes { display: flex; gap: 16px; margin-bottom: 10px; }
+  .verdict { font-weight: 600; }
+  .verdict.yes { color: #15803d; }
+  .verdict.no { color: var(--err); }
+  .flag { display: inline-block; background: #fef3c7; color: #92400e;
+    border-radius: 6px; padding: 0 6px; font-size: 12px; margin-left: 6px; }
   .provs { display: flex; flex-wrap: wrap; gap: 8px; }
   .prov {
     display: flex; align-items: center; gap: 8px; border: 1px solid var(--line);
@@ -124,7 +133,15 @@ const PAGE = `<!doctype html>
 
   <div class="panel">
     <h2>3 · Prompt</h2>
+    <div class="modes">
+      <label class="chk"><input type="radio" name="mode" id="modeDescribe" checked>
+        Describe (open description)</label>
+      <label class="chk"><input type="radio" name="mode" id="modeHunt">
+        Hunt verify (per-image subject, Haiku pre-scan)</label>
+    </div>
     <textarea id="prompt"></textarea>
+    <p class="meta" id="promptHint" hidden>__SUBJECT__ is replaced with each
+      image's subject (auto-filled by the pre-scan; edit under the thumbnails).</p>
   </div>
 
   <div class="panel runrow">
@@ -143,7 +160,13 @@ const PAGE = `<!doctype html>
 "use strict";
 var API_BASE = "__API_BASE__";
 var AUTH_MODE = "__AUTH_MODE__";
-var state = { providers: [], images: [], results: [], blindMap: null };
+var HUNT_TEMPLATE = "__HUNT_TEMPLATE_JSON__";
+var state = {
+  providers: [], images: [], results: [], blindMap: null,
+  describePrompt: "", huntPrompt: HUNT_TEMPLATE,
+};
+
+function huntMode() { return document.getElementById("modeHunt").checked; }
 var TOKEN = new URLSearchParams(location.search).get("token") || "";
 if (!TOKEN && AUTH_MODE === "admin") {
   // Same-origin with the Master Control SPA: reuse its stored APP_TOKEN
@@ -199,7 +222,8 @@ fetch(API_BASE + "/providers", { headers: apiHeaders() }).then(function (r) {
 }).then(function (d) {
   if (!d.providers) return;
   state.providers = d.providers;
-  document.getElementById("prompt").value = d.defaultPrompt;
+  state.describePrompt = d.defaultPrompt;
+  if (!huntMode()) document.getElementById("prompt").value = d.defaultPrompt;
   var box = document.getElementById("provs");
   d.providers.forEach(function (p) {
     var lab = el("label", "prov" + (p.configured ? "" : " off"));
@@ -239,14 +263,18 @@ function addFiles(files) {
     var reader = new FileReader();
     reader.onload = function () {
       var dataUrl = reader.result;
-      state.images.push({
+      var img = {
         name: f.name,
         mediaType: f.type,
         dataUrl: dataUrl,
         base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
-      });
+        subject: "",
+        scanning: false,
+      };
+      state.images.push(img);
       renderThumbs();
       updateRunButton();
+      if (huntMode()) prescan(img);
     };
     reader.readAsDataURL(f);
   });
@@ -268,8 +296,37 @@ function renderThumbs() {
     });
     t.appendChild(x);
     t.appendChild(el("div", "nm", img.name));
+    var subj = document.createElement("input");
+    subj.className = "subj";
+    subj.placeholder = img.scanning ? "scanning\\u2026" : "subject";
+    subj.value = img.subject;
+    subj.hidden = !huntMode();
+    subj.addEventListener("input", function () { img.subject = subj.value; });
+    t.appendChild(subj);
     box.appendChild(t);
   });
+}
+
+// Haiku pre-scan: name the likely hunt target and pre-fill the subject
+// field. Never overwrites something the user already typed.
+function prescan(img) {
+  img.scanning = true;
+  renderThumbs();
+  fetch(API_BASE + "/prescan", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ imageBase64: img.base64, mediaType: img.mediaType }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!img.subject && j.subject) img.subject = j.subject;
+      if (j.error && !img.subject) img.subject = "";
+    })
+    .catch(function () {})
+    .then(function () {
+      img.scanning = false;
+      renderThumbs();
+    });
 }
 
 function selectedProviders() {
@@ -286,12 +343,32 @@ function updateRunButton() {
 }
 document.getElementById("provs").addEventListener("change", updateRunButton);
 
+// --- mode toggle ---
+function onModeChange() {
+  var ta = document.getElementById("prompt");
+  if (huntMode()) {
+    state.describePrompt = ta.value || state.describePrompt;
+    ta.value = state.huntPrompt;
+    state.images.forEach(function (img) {
+      if (!img.subject && !img.scanning) prescan(img);
+    });
+  } else {
+    state.huntPrompt = ta.value || state.huntPrompt;
+    ta.value = state.describePrompt;
+  }
+  document.getElementById("promptHint").hidden = !huntMode();
+  renderThumbs();
+}
+document.getElementById("modeDescribe").addEventListener("change", onModeChange);
+document.getElementById("modeHunt").addEventListener("change", onModeChange);
+
 // --- run ---
 var blindLabels = "ABCDEFGHIJ";
 
 document.getElementById("run").addEventListener("click", function () {
   var provs = selectedProviders();
-  var prompt = document.getElementById("prompt").value;
+  var promptTemplate = document.getElementById("prompt").value;
+  var hunt = huntMode();
   var blind = document.getElementById("blind").checked;
   var runBtn = document.getElementById("run");
   runBtn.disabled = true;
@@ -321,11 +398,16 @@ document.getElementById("run").addEventListener("click", function () {
   status.textContent = pending + " calls in flight\\u2026";
 
   state.images.forEach(function (img, imgIdx) {
+    var prompt = hunt
+      ? promptTemplate.replace(/__SUBJECT__/g, img.subject || "the target item")
+      : promptTemplate;
+    var heading = blind ? "Image " + (imgIdx + 1) : img.name;
+    if (hunt) heading += " \\u2014 \\u201c" + (img.subject || "?") + "\\u201d";
     var sec = el("div", "imgsec");
     var im = document.createElement("img");
     im.src = img.dataUrl;
     sec.appendChild(im);
-    sec.appendChild(el("h3", null, blind ? "Image " + (imgIdx + 1) : img.name));
+    sec.appendChild(el("h3", null, heading));
     resultsBox.appendChild(sec);
     var grid = el("div", "grid");
     resultsBox.appendChild(grid);
@@ -367,7 +449,8 @@ document.getElementById("run").addEventListener("click", function () {
             txt.textContent = "ERROR: " + (r.j.error || "request failed");
             state.results.push({ provider: name, error: true });
           } else {
-            txt.textContent = r.j.text.trim();
+            if (hunt) renderVerdict(txt, r.j.text);
+            else txt.textContent = r.j.text.trim();
             var m = r.j.inputTokens + " in / " + r.j.outputTokens + " out \\u00b7 $" +
               (r.j.cost != null ? r.j.cost.toFixed(6) : "?") + " \\u00b7 " + r.j.ms + "ms";
             meta.textContent = blind ? "" : m;
@@ -398,6 +481,34 @@ document.getElementById("run").addEventListener("click", function () {
     });
   });
 });
+
+// Hunt mode: try to render the JSON verdict compactly. A provider that
+// wraps or mangles the JSON gets shown raw with a flag — that failure is
+// itself a comparison result (production needs machine-readable verdicts).
+function renderVerdict(node, raw) {
+  var text = raw.trim();
+  var m = text.match(/\\{[\\s\\S]*\\}/);
+  var v = null;
+  if (m) { try { v = JSON.parse(m[0]); } catch (e) {} }
+  if (!v || typeof v.present !== "boolean") {
+    node.textContent = text;
+    var bad = el("div", null, "");
+    bad.appendChild(el("span", "flag", "not valid JSON"));
+    node.appendChild(bad);
+    return;
+  }
+  node.textContent = "";
+  var line = el("div");
+  var pct = typeof v.confidence === "number"
+    ? " (" + Math.round(v.confidence * 100) + "%)" : "";
+  line.appendChild(el("span", "verdict " + (v.present ? "yes" : "no"),
+    (v.present ? "present" : "not present") + pct));
+  if (v.photo_of_photo) line.appendChild(el("span", "flag", "photo-of-photo"));
+  if (v.unsafe) line.appendChild(el("span", "flag", "unsafe"));
+  if (m[0].length !== text.length) line.appendChild(el("span", "flag", "extra text around JSON"));
+  node.appendChild(line);
+  if (v.reason) node.appendChild(el("div", "meta", String(v.reason)));
+}
 
 document.getElementById("reveal").addEventListener("click", function () {
   document.querySelectorAll(".cell b[data-provider]").forEach(function (b) {

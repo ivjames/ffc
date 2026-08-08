@@ -13,6 +13,36 @@ export const DEFAULT_PROMPT =
 
 export const MAX_OUTPUT_TOKENS = 400;
 
+// Hunt-verify mode: the per-image prompt, kept close to the production
+// wording in server/lib/vision.js so cheap-tier results transfer. __SUBJECT__
+// is replaced per image (pre-populated by the Haiku pre-scan below, editable
+// in the UI). Production uses schema-enforced structured output; here the
+// JSON shape is just asked for in the prompt — how reliably each provider
+// honors that is itself one of the things being compared.
+export const HUNT_PROMPT_TEMPLATE =
+  `You are the judge for a mini-golf scavenger hunt. A player submitted this ` +
+  `photo claiming it shows: "__SUBJECT__".\n\n` +
+  `Decide whether the target item is genuinely, clearly visible in the photo. ` +
+  `Be reasonably lenient about angle, lighting, and partial views, but do NOT ` +
+  `credit a find where the item is absent, ambiguous, or only implied.\n\n` +
+  `Also judge anti-cheat: photo_of_photo is true if this looks like a picture ` +
+  `of a screen, monitor, phone, or a printed photograph rather than a ` +
+  `real-world scene.\n\n` +
+  `Also moderate for a family entertainment venue: people posing or playing ` +
+  `are welcome and never unsafe by themselves; unsafe is true only for ` +
+  `genuinely inappropriate content.\n\n` +
+  `Reply with ONLY this JSON object, no other text:\n` +
+  `{"present": true|false, "confidence": 0.0-1.0, "reason": "one short ` +
+  `sentence", "photo_of_photo": true|false, "unsafe": true|false}`;
+
+// Pre-scan: one cheap Haiku call per image that names the likely hunt target
+// so the UI can pre-fill each image's subject field.
+export const PRESCAN_PROMPT =
+  "This photo was taken for a scavenger hunt at a family entertainment " +
+  "venue. Name the most likely target item it was meant to capture — a " +
+  'short noun phrase of 2-6 words, e.g. "a giant pumpkin" or "a windmill". ' +
+  "Reply with ONLY the phrase: no quotes, no punctuation, no explanation.";
+
 // Rates are $/MTok (input, output) — verified 2026-08-08, re-confirm at
 // build time. Model ids are config, not code: when a tier deprecates, update
 // the row and re-run.
@@ -203,4 +233,18 @@ export async function describeImage(provider, img, prompt = DEFAULT_PROMPT) {
     ms: Date.now() - started,
     cost: cost(provider, r.inputTokens, r.outputTokens),
   };
+}
+
+/**
+ * Name the likely hunt target in an image (Haiku pre-scan).
+ * Returns describeImage's shape plus `subject` (cleaned one-line phrase).
+ */
+export async function prescanSubject(img) {
+  const provider = PROVIDERS.find((p) => p.kind === "anthropic");
+  const r = await describeImage(provider, img, PRESCAN_PROMPT);
+  const subject = r.text
+    .trim()
+    .split("\n")[0]
+    .replace(/^["'\s]+|["'.\s]+$/g, "");
+  return { ...r, subject };
 }

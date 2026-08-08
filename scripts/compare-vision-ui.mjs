@@ -23,6 +23,7 @@ import {
   DEFAULT_PROMPT,
   isConfigured,
   describeImage,
+  prescanSubject,
 } from "./lib/vision-compare-core.mjs";
 import { renderPage } from "./lib/vision-compare-page.mjs";
 
@@ -109,6 +110,23 @@ const server = createServer(async (req, res) => {
         })),
       });
       return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/prescan") {
+      const body = JSON.parse(await readBody(req));
+      if (!ALLOWED_MEDIA_TYPES.has(body.mediaType))
+        return json(res, 400, { error: "unsupported media type" });
+      if (typeof body.imageBase64 !== "string" || !body.imageBase64)
+        return json(res, 400, { error: "missing image" });
+      try {
+        const result = await prescanSubject({
+          base64: body.imageBase64,
+          mediaType: body.mediaType,
+        });
+        return json(res, 200, result);
+      } catch (err) {
+        return json(res, 502, { error: String(err.message || err) });
+      }
     }
 
     if (req.method === "POST" && req.url === "/api/describe") {

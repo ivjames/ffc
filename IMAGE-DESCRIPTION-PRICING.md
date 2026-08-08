@@ -143,6 +143,16 @@ script to match the real workload prompt before judging quality.
 Judge on: accuracy on dense/cluttered scenes, hallucinated objects,
 usefulness of detail (not length), and tone fit for a family venue.
 
+**Hunt-verify mode** (in the web UI): switches the comparison to the
+production hunt workload — each image gets a subject ("a giant pumpkin"),
+auto-named by a cheap Haiku pre-scan and editable per thumbnail, and every
+provider is asked the `server/lib/vision.js`-style question: is the subject
+present, is it a photo-of-a-photo, is it unsafe — as JSON. Cells render the
+parsed verdict; a provider that can't return clean JSON gets flagged, which
+is itself a disqualifying result for this workload. Include negative photos
+(subject absent; a photo of a screen) — for a verifier, false positives and
+anti-cheat misses matter more than prose quality.
+
 ## Sources (rates verified 2026-08-08)
 
 - Gemini pricing & 2.0/2.5 shutdown dates: https://ai.google.dev/gemini-api/docs/pricing , https://ai.google.dev/gemini-api/docs/changelog

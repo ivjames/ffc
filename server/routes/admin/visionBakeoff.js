@@ -21,6 +21,7 @@ import {
   DEFAULT_PROMPT,
   isConfigured,
   describeImage,
+  prescanSubject,
 } from "../../../scripts/lib/vision-compare-core.mjs";
 import { renderPage } from "../../../scripts/lib/vision-compare-page.mjs";
 
@@ -65,8 +66,26 @@ router.get("/providers", (req, res) => {
   });
 });
 
+// Hunt-mode pre-scan: one Haiku call that names the likely hunt target so
+// the UI can pre-fill each image's subject field.
+router.post("/prescan", express.json({ limit: "16mb" }), async (req, res) => {
+  if (!ALLOWED_MEDIA_TYPES.has(req.body?.mediaType))
+    return res.status(400).json({ error: "unsupported media type" });
+  if (typeof req.body.imageBase64 !== "string" || !req.body.imageBase64)
+    return res.status(400).json({ error: "missing image" });
+  try {
+    const result = await prescanSubject({
+      base64: req.body.imageBase64,
+      mediaType: req.body.mediaType,
+    });
+    return res.json(result);
+  } catch (err) {
+    return res.status(502).json({ error: String(err.message || err) });
+  }
+});
+
 // Own parser: photos arrive as base64 JSON well past the app-wide 256kb cap
-// (app.js skips this path, same arrangement as /api/hunt/verify).
+// (app.js skips this router's paths, same arrangement as /api/hunt/verify).
 router.post("/describe", express.json({ limit: "16mb" }), async (req, res) => {
   const provider = PROVIDERS.find((p) => p.name === req.body?.provider);
   if (!provider) return res.status(400).json({ error: "unknown provider" });
