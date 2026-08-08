@@ -97,18 +97,19 @@ const PAGE = `<!doctype html>
   .runtablewrap { overflow-x: auto; margin-top: 18px; border: 1px solid var(--line);
     border-radius: 10px; background: var(--card); }
   .runtable { border-collapse: collapse; width: 100%; }
-  .runtable th, .runtable td { padding: 8px 10px; border-top: 1px solid var(--line);
-    border-left: 1px solid var(--line); vertical-align: top; font-size: 13px;
-    min-width: 130px; max-width: 220px; }
-  .runtable th { background: #f1f5f9; border-top: none; font-size: 12px;
-    text-transform: none; color: var(--ink); text-align: left; }
+  .runtable th, .runtable td { padding: 5px 7px; border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line); vertical-align: top; font-size: 12px;
+    min-width: 78px; max-width: 170px; }
+  .runtable th { background: #f1f5f9; border-top: none; font-size: 11px;
+    text-transform: none; color: var(--ink); text-align: left;
+    word-break: break-word; }
   .runtable th:first-child, .runtable td:first-child {
     border-left: none; position: sticky; left: 0; background: var(--card);
-    min-width: 96px; max-width: 120px; z-index: 1; }
+    min-width: 52px; max-width: 92px; z-index: 1; }
   .runtable th:first-child { background: #f1f5f9; }
-  .imgcell img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px;
-    border: 1px solid var(--line); display: block; margin-bottom: 4px; }
-  .imgcell .nm2 { font-size: 11px; color: var(--muted); word-break: break-word; }
+  .imgcell img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px;
+    border: 1px solid var(--line); display: block; margin-bottom: 3px; }
+  .imgcell .nm2 { font-size: 10px; color: var(--muted); word-break: break-word; }
   .cell { cursor: pointer; }
   .cell .meta { color: var(--muted); font-size: 11px; }
   .cell .clamp { display: -webkit-box; -webkit-line-clamp: 3;
@@ -965,9 +966,12 @@ document.getElementById("run").addEventListener("click", function () {
     var ic = el("td", "imgcell");
     var im = document.createElement("img");
     im.src = img.dataUrl;
+    im.title = img.name;
     ic.appendChild(im);
-    ic.appendChild(el("div", "nm2", blind ? "Image " + (imgIdx + 1) : img.name));
-    if (img.subject) ic.appendChild(el("div", "nm2", "\\u201c" + img.subject + "\\u201d"));
+    // Thumb + subject only — file names just eat column width (the thumb's
+    // hover title still carries the name for debugging).
+    if (img.subject) ic.appendChild(el("div", "nm2", img.subject));
+    else if (blind) ic.appendChild(el("div", "nm2", "#" + (imgIdx + 1)));
     tr.appendChild(ic);
     table.appendChild(tr);
 
