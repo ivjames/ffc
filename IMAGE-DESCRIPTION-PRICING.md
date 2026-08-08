@@ -114,6 +114,11 @@ export SILICONFLOW_API_KEY=...    # Qwen2.5-VL-7B
 export DEEPINFRA_API_KEY=...      # Llama 4 Scout
 
 node scripts/compare-vision-describe.mjs photos/*.jpg
+
+# Or judge in the browser (same providers/keys, side-by-side cards,
+# optional blind judging — provider names/cost hidden until reveal):
+node scripts/compare-vision-ui.mjs          # http://127.0.0.1:8787
+# From a droplet, tunnel it: ssh -L 8787:127.0.0.1:8787 user@droplet
 ```
 
 The script sends each image to every configured provider with the same
