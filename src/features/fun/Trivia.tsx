@@ -2,6 +2,10 @@ import { useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { TRIVIA, type TriviaQuestion } from '../../data/funContent';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
+import GameTicketAward from './GameTicketAward';
+
+// Tickets per correct answer, for venues with the gameRewards POS add-on.
+const TICKETS_PER_CORRECT = 5;
 
 // §12 Trivia — a short multiple-choice round. Questions and their choices are
 // shuffled per game; a tap locks in an answer, colors right/wrong, then advances
@@ -42,6 +46,8 @@ export default function Trivia() {
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const current = round[index];
 
@@ -75,6 +81,7 @@ export default function Trivia() {
     setPicked(null);
     setScore(0);
     setDone(false);
+    setSessionId(crypto.randomUUID());
   };
 
   if (done) {
@@ -93,6 +100,12 @@ export default function Trivia() {
             </div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round. */}
+          <GameTicketAward
+            game="trivia"
+            tickets={score * TICKETS_PER_CORRECT}
+            sessionId={sessionId}
+          />
           <div className="mt-8">
             <Button onClick={restart} sound="none">
               Play again

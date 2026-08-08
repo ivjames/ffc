@@ -15,6 +15,14 @@ export type GeneratedLocation = {
   sortOrder: number;
   menuUrl: string | null;
   orderingUrl: string | null;
+  // POS integration add-on (per-venue, set in Master Control). Structurally
+  // matches PosConfig in src/lib/pos/types.ts (capabilities decoupled — each
+  // names its own vendor); kept inline so this generated file stays
+  // import-free.
+  pos: {
+    ordering: { vendor: string; apiBase: string | null } | null;
+    loyalty: { vendor: string; apiBase: string | null; gameRewards: boolean } | null;
+  } | null;
   orgId: string | null;
 };
 
@@ -40,6 +48,7 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     sortOrder: 10,
     menuUrl: null,
     orderingUrl: null,
+    pos: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },
   {
@@ -53,6 +62,7 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     sortOrder: 20,
     menuUrl: null,
     orderingUrl: null,
+    pos: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },
   {
@@ -66,6 +76,7 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     sortOrder: 30,
     menuUrl: null,
     orderingUrl: null,
+    pos: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },
 ];

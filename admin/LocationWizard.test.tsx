@@ -28,6 +28,7 @@ const SAVED_LOCATION: Location = {
   tzLabel: null,
   menuUrl: null,
   orderingUrl: null,
+  pos: null,
   sortOrder: 0,
   orgId: null,
   archivedAt: null,

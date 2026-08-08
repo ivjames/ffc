@@ -80,8 +80,17 @@ export type Location = {
   sortOrder: number;
   menuUrl: string | null;
   orderingUrl: string | null;
+  pos: PosConfig | null;
   orgId: string | null;
   archivedAt: string | null;
+};
+
+// POS integration add-on config (mirrors server normalizePos). Capabilities
+// are decoupled — each names its own vendor. At least one block must be
+// configured, else save null.
+export type PosConfig = {
+  ordering: { vendor: string; apiBase: string | null } | null;
+  loyalty: { vendor: string; apiBase: string | null; gameRewards: boolean } | null;
 };
 
 export type Announcement = {

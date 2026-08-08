@@ -17,8 +17,13 @@ function isFiniteNum(n) {
 // list SELECT so both responses have the same shape.
 export const LOCATION_RETURN_COLS = `id, name, slug, lat, lng,
   geofence_km as "geofenceKm", tz, sort_order as "sortOrder",
-  menu_url as "menuUrl", ordering_url as "orderingUrl",
+  menu_url as "menuUrl", ordering_url as "orderingUrl", pos,
   org_id as "orgId", archived_at as "archivedAt"`;
+
+// POS vendors the platform has an adapter for. Onboarding a new vendor means
+// an entry here plus an adapter in the player app (src/lib/pos/) — the config
+// shape itself is vendor-neutral.
+export const POS_VENDORS = ["centeredge"];
 
 /**
  * Validate an optional http(s) URL field (food & drink links). Returns the
@@ -41,6 +46,68 @@ function normalizeHttpUrl(value, field) {
     return { error: `${field} must use http or https` };
   }
   return { value };
+}
+
+/**
+ * Validate the optional POS-integration add-on config. `null`/`undefined`/`{}`
+ * all mean "no integration" (stored NULL — the default for every venue).
+ *
+ * The two capabilities are DELIBERATELY decoupled — each names its own vendor,
+ * so a venue can run e.g. CenterEdge loyalty next to a different ordering
+ * system. Canonical stored shape (both keys always present):
+ *   { ordering: { vendor, apiBase } | null,
+ *     loyalty:  { vendor, apiBase, gameRewards } | null }
+ * Rules: at least one capability must be configured (otherwise clear the
+ * config instead); each block's vendor must be a known adapter; gameRewards
+ * rides inside loyalty because app-earned tickets have nowhere to land
+ * without a loyalty balance; apiBase is an optional per-venue http(s)
+ * override for that vendor's API endpoint. Credentials are deliberately not
+ * part of this shape — they never ship to the player app.
+ * @returns {{ value: object | null } | { error: string }}
+ */
+export function normalizePos(value) {
+  if (value === undefined || value === null) return { value: null };
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return { error: "pos must be an object or null" };
+  }
+  if (Object.keys(value).length === 0) return { value: null };
+
+  const block = (field, raw) => {
+    if (raw === undefined || raw === null) return { value: null };
+    if (typeof raw !== "object" || Array.isArray(raw)) {
+      return { error: `pos.${field} must be an object or null` };
+    }
+    if (!POS_VENDORS.includes(raw.vendor)) {
+      return { error: `pos.${field}.vendor must be one of: ${POS_VENDORS.join(", ")}` };
+    }
+    const apiBase = normalizeHttpUrl(raw.apiBase, `pos.${field}.apiBase`);
+    if (apiBase.error) return { error: apiBase.error };
+    return { value: { vendor: raw.vendor, apiBase: apiBase.value } };
+  };
+
+  const ordering = block("ordering", value.ordering);
+  if (ordering.error) return { error: ordering.error };
+  const loyalty = block("loyalty", value.loyalty);
+  if (loyalty.error) return { error: loyalty.error };
+
+  if (!ordering.value && !loyalty.value) {
+    return { error: "pos must configure at least one capability (ordering or loyalty) — send null to remove the integration" };
+  }
+
+  const gameRewards = value.loyalty?.gameRewards;
+  if (gameRewards !== undefined && typeof gameRewards !== "boolean") {
+    return { error: "pos.loyalty.gameRewards must be a boolean" };
+  }
+  if (gameRewards === true && !loyalty.value) {
+    return { error: "pos.loyalty.gameRewards requires a configured loyalty block (tickets need a loyalty balance to land in)" };
+  }
+
+  return {
+    value: {
+      ordering: ordering.value,
+      loyalty: loyalty.value ? { ...loyalty.value, gameRewards: gameRewards === true } : null,
+    },
+  };
 }
 
 /** Add the derived friendly tz label so admin/consumers don't recompute it. */
@@ -119,6 +186,10 @@ export function normalizeLocation(body) {
   const orderingUrl = normalizeHttpUrl(body.orderingUrl, "orderingUrl");
   if (orderingUrl.error) return { error: orderingUrl.error, status: 400 };
 
+  // POS integration add-on (see normalizePos above). Omitted/null clears it.
+  const pos = normalizePos(body.pos);
+  if (pos.error) return { error: pos.error, status: 400 };
+
   // Resolve the timezone. Explicit `tz` wins (validated); otherwise derive from
   // coordinates; otherwise leave null and let the leaderboard fall back to
   // VENUE_TZ. Onboarding normally sends just lat/lng and lets it derive.
@@ -152,6 +223,7 @@ export function normalizeLocation(body) {
       sortOrder,
       menuUrl: menuUrl.value,
       orderingUrl: orderingUrl.value,
+      pos: pos.value,
       orgId: orgId ?? null,
     },
   };

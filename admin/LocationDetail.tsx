@@ -138,6 +138,13 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
   const [geofence, setGeofence] = useState(location.geofenceKm?.toString() ?? '');
   const [menuUrl, setMenuUrl] = useState(location.menuUrl ?? '');
   const [orderingUrl, setOrderingUrl] = useState(location.orderingUrl ?? '');
+  // POS integration add-on — capabilities decoupled, each with its own
+  // vendor. Vendor '' = that capability off; both off saves pos as null.
+  const [ordVendor, setOrdVendor] = useState(location.pos?.ordering?.vendor ?? '');
+  const [ordApiBase, setOrdApiBase] = useState(location.pos?.ordering?.apiBase ?? '');
+  const [loyVendor, setLoyVendor] = useState(location.pos?.loyalty?.vendor ?? '');
+  const [loyApiBase, setLoyApiBase] = useState(location.pos?.loyalty?.apiBase ?? '');
+  const [gameRewards, setGameRewards] = useState(location.pos?.loyalty?.gameRewards ?? false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -161,6 +168,19 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
         geofenceKm: geofence.trim() ? Number(geofence) : null,
         menuUrl: menuUrl.trim() || null,
         orderingUrl: orderingUrl.trim() || null,
+        pos:
+          ordVendor === '' && loyVendor === ''
+            ? null
+            : {
+                ordering:
+                  ordVendor === ''
+                    ? null
+                    : { vendor: ordVendor, apiBase: ordApiBase.trim() || null },
+                loyalty:
+                  loyVendor === ''
+                    ? null
+                    : { vendor: loyVendor, apiBase: loyApiBase.trim() || null, gameRewards },
+              },
       });
       onSaved();
     } catch (e) {
@@ -199,6 +219,70 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
           <Input value={orderingUrl} onChange={(e) => setOrderingUrl(e.target.value)} placeholder="https://order.…" inputMode="url" />
         </Field>
       </div>
+
+      {/* POS integration add-ons — per-venue paid capabilities, each with its
+          own vendor (a venue can mix, e.g. CenterEdge loyalty next to another
+          ordering system). "None" keeps that surface off; ordering falls back
+          to the deep links above. */}
+      <div className="mt-3 border-t border-slate-200 pt-3">
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Food ordering POS" hint="Native in-app ordering. None = deep links only.">
+            <select
+              value={ordVendor}
+              onChange={(e) => setOrdVendor(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">None</option>
+              <option value="centeredge">CenterEdge</option>
+            </select>
+          </Field>
+          {ordVendor !== '' && (
+            <Field label="Ordering API base URL" hint="Optional per-venue endpoint override.">
+              <Input
+                value={ordApiBase}
+                onChange={(e) => setOrdApiBase(e.target.value)}
+                placeholder="https://pos.example.com"
+                inputMode="url"
+              />
+            </Field>
+          )}
+          <Field label="Loyalty / rewards POS" hint="Player card balances in the app. None = no rewards surface.">
+            <select
+              value={loyVendor}
+              onChange={(e) => {
+                setLoyVendor(e.target.value);
+                if (e.target.value === '') setGameRewards(false); // rides on loyalty
+              }}
+              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">None</option>
+              <option value="centeredge">CenterEdge</option>
+            </select>
+          </Field>
+          {loyVendor !== '' && (
+            <Field label="Loyalty API base URL" hint="Optional per-venue endpoint override.">
+              <Input
+                value={loyApiBase}
+                onChange={(e) => setLoyApiBase(e.target.value)}
+                placeholder="https://pos.example.com"
+                inputMode="url"
+              />
+            </Field>
+          )}
+        </div>
+        <div className="mt-2">
+          <label className={`flex items-center gap-1.5 text-sm text-slate-700 ${loyVendor !== '' ? '' : 'opacity-40'}`}>
+            <input
+              type="checkbox"
+              checked={gameRewards}
+              disabled={loyVendor === ''}
+              onChange={(e) => setGameRewards(e.target.checked)}
+            />
+            Game ticket rewards (app mini-games credit tickets to the loyalty card)
+          </label>
+        </div>
+      </div>
+
       <div className="mt-2">
         <Button onClick={save} disabled={busy}>
           {busy ? 'Saving…' : 'Save location'}

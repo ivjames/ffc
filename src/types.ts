@@ -1,5 +1,7 @@
 // Shared domain types.
 
+import type { PosConfig } from './lib/pos/types';
+
 export type SyncState = 'active' | 'pending' | 'synced';
 
 // Per-cell last-write-wins metadata for a shared round: who wrote the cell
@@ -66,6 +68,10 @@ export type LocationSeed = {
   // Control; the Food & Drink card hides itself when neither is set.
   menuUrl?: string;
   orderingUrl?: string;
+  // POS integration add-on — set per venue in Master Control. Gates the
+  // native food-ordering / rewards surfaces (src/lib/pos). Unset = no
+  // integration; the deep links above remain the fallback.
+  pos?: PosConfig;
 };
 
 // §4 Course seed (bundled JSON for v1).

@@ -119,6 +119,25 @@ npm run migrate           # create tables
 npm start                 # http://localhost:8060
 ```
 
+**POS integration add-ons** (native F&B ordering + rewards card + game ticket
+rewards): per-venue paid capabilities, switched on in Master Control
+(`location.pos`) — never client-specific code. Ordering and loyalty are
+decoupled: each capability names its own vendor, so a venue can run one
+system's loyalty next to another's ordering. The app talks to a
+vendor-neutral adapter layer (`src/lib/pos/`); CenterEdge is the first
+adapter, and onboarding another vendor is a new adapter file + a
+`POS_VENDORS` entry server-side. In dev the surfaces run against a local
+mock backend (we're pre-credential with CenterEdge; `DEV_MODE` enables all
+capabilities locally):
+
+```bash
+cd mock-centeredge && npm install && cd ..   # first time only
+npm run mock:centeredge   # http://localhost:8070 (see mock-centeredge/README.md)
+```
+
+The email template for requesting real credentials from CenterEdge is
+`mock-centeredge/API-ACCESS-REQUEST.md`.
+
 ## Build
 
 ```bash
