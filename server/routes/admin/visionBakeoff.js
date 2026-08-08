@@ -70,6 +70,7 @@ router.get("/providers", (req, res) => {
     defaultPrompt: DEFAULT_PROMPT,
     providers: PROVIDERS.map((p) => ({
       name: p.name,
+      label: p.label || p.name,
       model: p.model,
       keyEnv: p.keyEnv,
       configured: isConfigured(p),

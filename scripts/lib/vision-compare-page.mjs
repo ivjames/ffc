@@ -211,6 +211,14 @@ var state = {
 
 function huntMode() { return document.getElementById("modeHunt").checked; }
 
+// Slugs stay the stable identity in the run history; labels are for eyes.
+function lbl(name) {
+  var p = state.providers.find(function (x) { return x.name === name; });
+  if (p && p.label) return p.label;
+  if (name === "prescan (haiku-4.5)") return "Pre-scan (Haiku 4.5)";
+  return name;
+}
+
 // Session-wide burn ticker: every model call this page makes (pre-scans AND
 // comparison runs, all providers) rolls into one always-visible pill.
 // Aggregated across providers, so it leaks nothing in blind mode.
@@ -293,7 +301,7 @@ fetch(API_BASE + "/providers", { headers: apiHeaders() }).then(function (r) {
     cb.checked = p.configured;
     cb.disabled = !p.configured;
     lab.appendChild(cb);
-    var txt = el("span", null, p.name);
+    var txt = el("span", null, p.label || p.name);
     lab.appendChild(txt);
     var price = el("span", "price", p.configured
       ? "$" + p.priceIn + " / $" + p.priceOut + " per MTok"
@@ -499,9 +507,9 @@ function drawCharts(container, s) {
   var latRows = provs.filter(function (p) { return p.latAvg != null; })
     .map(function (p) {
       return {
-        label: p.name, value: p.latAvg, min: p.latMin, max: p.latMax,
+        label: lbl(p.name), value: p.latAvg, min: p.latMin, max: p.latMax,
         display: p.latAvg + "ms",
-        hover: p.name + ": " + p.latMin + " / " + p.latAvg + " / " + p.latMax + " ms (min/avg/max)",
+        hover: lbl(p.name) + ": " + p.latMin + " / " + p.latAvg + " / " + p.latMax + " ms (min/avg/max)",
       };
     });
   if (latRows.length) {
@@ -513,8 +521,8 @@ function drawCharts(container, s) {
     .map(function (p) {
       var avg = p.cost / (p.calls - p.errors);
       return {
-        label: p.name, value: avg, display: "$" + avg.toFixed(5),
-        hover: p.name + ": $" + avg.toFixed(6) + " avg per call, $" + p.cost.toFixed(4) + " total",
+        label: lbl(p.name), value: avg, display: "$" + avg.toFixed(5),
+        hover: lbl(p.name) + ": $" + avg.toFixed(6) + " avg per call, $" + p.cost.toFixed(4) + " total",
       };
     });
   if (costRows.length) {
@@ -525,8 +533,8 @@ function drawCharts(container, s) {
   var tokRows = provs.filter(function (p) { return p.avgInTok > 0; })
     .map(function (p) {
       return {
-        label: p.name, value: p.avgInTok, display: p.avgInTok.toLocaleString(),
-        hover: p.name + ": " + p.avgInTok.toLocaleString() + " avg billed input tokens per image",
+        label: lbl(p.name), value: p.avgInTok, display: p.avgInTok.toLocaleString(),
+        hover: lbl(p.name) + ": " + p.avgInTok.toLocaleString() + " avg billed input tokens per image",
       };
     });
   if (tokRows.length) {
@@ -537,8 +545,8 @@ function drawCharts(container, s) {
   var errRows = provs.map(function (p) {
     var rate = p.calls ? (p.errors / p.calls) * 100 : 0;
     return {
-      label: p.name, value: rate, display: p.errors + "/" + p.calls,
-      hover: p.name + ": " + p.errors + " errors in " + p.calls + " calls (" + Math.round(rate) + "%)",
+      label: lbl(p.name), value: rate, display: p.errors + "/" + p.calls,
+      hover: lbl(p.name) + ": " + p.errors + " errors in " + p.calls + " calls (" + Math.round(rate) + "%)",
     };
   });
   box.appendChild(chartCard("Error rate", errRows,
@@ -549,25 +557,25 @@ function drawCharts(container, s) {
     box.appendChild(chartCard("Valid JSON verdicts (hunt)", huntProvs.map(function (p) {
       var rate = (p.jsonOk / p.huntN) * 100;
       return {
-        label: p.name, value: rate, display: p.jsonOk + "/" + p.huntN,
-        hover: p.name + ": " + p.jsonOk + " of " + p.huntN + " hunt replies were valid JSON",
+        label: lbl(p.name), value: rate, display: p.jsonOk + "/" + p.huntN,
+        hover: lbl(p.name) + ": " + p.jsonOk + " of " + p.huntN + " hunt replies were valid JSON",
       };
     }), { color: VIZ.bar, max: 100, tick: pct }));
 
     box.appendChild(chartCard("\\u201cPresent\\u201d verdict rate (hunt)", huntProvs.map(function (p) {
       var rate = p.jsonOk ? (p.presentN / p.jsonOk) * 100 : 0;
       return {
-        label: p.name, value: rate, display: p.presentN + "/" + p.jsonOk,
-        hover: p.name + ": judged present in " + p.presentN + " of " + p.jsonOk + " valid verdicts",
+        label: lbl(p.name), value: rate, display: p.presentN + "/" + p.jsonOk,
+        hover: lbl(p.name) + ": judged present in " + p.presentN + " of " + p.jsonOk + " valid verdicts",
       };
     }), { color: VIZ.bar, max: 100, tick: pct }));
 
     var confRows = huntProvs.filter(function (p) { return p.confAvg != null; })
       .map(function (p) {
         return {
-          label: p.name, value: p.confAvg * 100,
+          label: lbl(p.name), value: p.confAvg * 100,
           display: Math.round(p.confAvg * 100) + "%",
-          hover: p.name + ": average self-reported confidence " + Math.round(p.confAvg * 100) + "%",
+          hover: lbl(p.name) + ": average self-reported confidence " + Math.round(p.confAvg * 100) + "%",
         };
       });
     if (confRows.length) {
@@ -608,7 +616,7 @@ function refreshAllTime() {
       table.appendChild(thead);
       s.providers.forEach(function (p) {
         var tr = el("tr");
-        tr.appendChild(el("td", null, p.name));
+        tr.appendChild(el("td", null, lbl(p.name)));
         tr.appendChild(el("td", "num", String(p.calls)));
         tr.appendChild(el("td", "num", p.avgInTok ? p.avgInTok.toLocaleString() : "\\u2014"));
         tr.appendChild(el("td", "num", "$" + p.cost.toFixed(4)));
@@ -950,7 +958,7 @@ document.getElementById("run").addEventListener("click", function () {
   var thead = el("tr");
   thead.appendChild(el("th", null, "Image"));
   ordered.forEach(function (name) {
-    var th = el("th", null, blind ? state.blindMap[name] : name);
+    var th = el("th", null, blind ? state.blindMap[name] : lbl(name));
     th.dataset.provider = name;
     thead.appendChild(th);
   });
@@ -1106,7 +1114,7 @@ function renderVerdict(node, raw) {
 
 document.getElementById("reveal").addEventListener("click", function () {
   document.querySelectorAll(".runtable th[data-provider]").forEach(function (th) {
-    th.textContent = th.dataset.provider;
+    th.textContent = lbl(th.dataset.provider);
   });
   document.querySelectorAll(".cell .meta").forEach(function (m) {
     if (m.dataset.full) m.textContent = m.dataset.full;
@@ -1138,7 +1146,7 @@ function renderSummary() {
     var a = agg[name];
     var ok = a.n - a.err;
     var tr = el("tr");
-    tr.appendChild(el("td", null, name));
+    tr.appendChild(el("td", null, lbl(name)));
     tr.appendChild(el("td", "num", ok ? Math.round(a.inTok / ok).toLocaleString() : "\\u2014"));
     tr.appendChild(el("td", "num", "$" + a.cost.toFixed(5)));
     tr.appendChild(el("td", "num", ok ? "$" + ((a.cost / ok) * 20).toFixed(4) : "\\u2014"));

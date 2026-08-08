@@ -78,6 +78,7 @@ export const PRESCAN_PROMPT =
 export const PROVIDERS = [
   {
     name: "haiku-4.5",
+    label: "Haiku 4.5",
     kind: "anthropic",
     model: "claude-haiku-4-5",
     keyEnv: "ANTHROPIC_API_KEY",
@@ -85,6 +86,7 @@ export const PROVIDERS = [
   },
   {
     name: "gemini-3.1-flash-lite",
+    label: "Gemini 3.1 Flash-Lite",
     kind: "gemini",
     model: "gemini-3.1-flash-lite",
     keyEnv: "GEMINI_API_KEY",
@@ -95,6 +97,7 @@ export const PROVIDERS = [
   // ABOVE Haiku 4.5 — it's here as a quality probe, not a candidate.
   {
     name: "gemini-3.5-flash-lite",
+    label: "Gemini 3.5 Flash-Lite",
     kind: "gemini",
     model: "gemini-3.5-flash-lite",
     keyEnv: "GEMINI_API_KEY",
@@ -102,6 +105,7 @@ export const PROVIDERS = [
   },
   {
     name: "gemini-3.6-flash",
+    label: "Gemini 3.6 Flash",
     kind: "gemini",
     model: "gemini-3.6-flash",
     keyEnv: "GEMINI_API_KEY",
@@ -114,6 +118,7 @@ export const PROVIDERS = [
     // chain of thought — production Haiku runs without thinking too) plus
     // extra headroom.
     name: "gpt-5-mini",
+    label: "GPT-5 Mini",
     kind: "openai",
     model: "gpt-5-mini",
     baseUrl: "https://api.openai.com/v1",
@@ -126,6 +131,7 @@ export const PROVIDERS = [
     // Qwen2.5-VL-7B ($0.05/$0.05) was delisted by SiliconFlow (API returns
     // 30003 "Model disabled") — this is its cheapest live VL successor.
     name: "qwen3-vl-8b (siliconflow)",
+    label: "Qwen3-VL 8B (SiliconFlow)",
     kind: "openai",
     model: "Qwen/Qwen3-VL-8B-Instruct",
     baseUrl: "https://api.siliconflow.com/v1",
@@ -134,6 +140,7 @@ export const PROVIDERS = [
   },
   {
     name: "llama-4-scout (deepinfra)",
+    label: "Llama 4 Scout (DeepInfra)",
     kind: "openai",
     model: "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     baseUrl: "https://api.deepinfra.com/v1/openai",
@@ -144,6 +151,7 @@ export const PROVIDERS = [
     // Vision is built into Small 4 (Pixtral retired) — currently the
     // cheapest major-provider vision tier on the board.
     name: "mistral-small-4",
+    label: "Mistral Small 4",
     kind: "openai",
     model: "mistral-small-latest",
     baseUrl: "https://api.mistral.ai/v1",
@@ -154,6 +162,7 @@ export const PROVIDERS = [
     // xAI's volume tier; verify the exact model id against console.x.ai if
     // the API rejects it.
     name: "grok-4.1-fast",
+    label: "Grok 4.1 Fast",
     kind: "openai",
     model: "grok-4-1-fast",
     baseUrl: "https://api.x.ai/v1",
