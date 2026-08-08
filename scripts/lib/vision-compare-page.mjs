@@ -94,19 +94,30 @@ const PAGE = `<!doctype html>
   .btn:disabled { opacity: .5; cursor: default; }
   .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
   label.chk { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-  .imgsec { margin: 26px 0 10px; display: flex; align-items: center; gap: 12px; }
-  .imgsec img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px;
-    border: 1px solid var(--line); }
-  .imgsec h3 { margin: 0; font-size: 16px; }
-  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
-  .cell { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-    padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-  .cell .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .cell .hd b { font-size: 14px; }
-  .cell .meta { color: var(--muted); font-size: 12px; }
-  .cell .txt { white-space: pre-wrap; }
-  .cell.err .txt { color: var(--err); }
-  .cell.pending .txt { color: var(--muted); font-style: italic; }
+  .runtablewrap { overflow-x: auto; margin-top: 18px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--card); }
+  .runtable { border-collapse: collapse; width: 100%; }
+  .runtable th, .runtable td { padding: 8px 10px; border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line); vertical-align: top; font-size: 13px;
+    min-width: 130px; max-width: 220px; }
+  .runtable th { background: #f1f5f9; border-top: none; font-size: 12px;
+    text-transform: none; color: var(--ink); text-align: left; }
+  .runtable th:first-child, .runtable td:first-child {
+    border-left: none; position: sticky; left: 0; background: var(--card);
+    min-width: 96px; max-width: 120px; z-index: 1; }
+  .runtable th:first-child { background: #f1f5f9; }
+  .imgcell img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px;
+    border: 1px solid var(--line); display: block; margin-bottom: 4px; }
+  .imgcell .nm2 { font-size: 11px; color: var(--muted); word-break: break-word; }
+  .cell { cursor: pointer; }
+  .cell .meta { color: var(--muted); font-size: 11px; }
+  .cell .clamp { display: -webkit-box; -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+  .cell.open .clamp { display: block; -webkit-line-clamp: unset; overflow: visible; }
+  .cell .detail { display: none; margin-top: 6px; white-space: pre-wrap; }
+  .cell.open .detail { display: block; }
+  .cell.err { color: var(--err); }
+  .cell.pending { color: var(--muted); font-style: italic; cursor: default; }
   table { border-collapse: collapse; width: 100%; background: var(--card);
     border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 8px 12px; border-top: 1px solid var(--line);
@@ -906,41 +917,50 @@ document.getElementById("run").addEventListener("click", function () {
   var status = document.getElementById("status");
   status.textContent = pending + " calls in flight\\u2026";
 
+  // One compact matrix per run: images as rows, providers as columns. Tap a
+  // cell for the reason/full text and the tokens-cost-latency line.
+  var ordered = provs.slice();
+  if (blind) ordered.sort(function (a, b) {
+    return state.blindMap[a] < state.blindMap[b] ? -1 : 1;
+  });
+
+  var wrap = el("div", "runtablewrap");
+  var table = el("table", "runtable");
+  var thead = el("tr");
+  thead.appendChild(el("th", null, "Image"));
+  ordered.forEach(function (name) {
+    var th = el("th", null, blind ? state.blindMap[name] : name);
+    th.dataset.provider = name;
+    thead.appendChild(th);
+  });
+  table.appendChild(thead);
+  wrap.appendChild(table);
+  resultsBox.appendChild(wrap);
+
   state.images.forEach(function (img, imgIdx) {
     var prompt = hunt
       ? promptTemplate.replace(/__SUBJECT__/g, img.subject || "the target item")
       : promptTemplate;
-    var heading = blind ? "Image " + (imgIdx + 1) : img.name;
-    if (hunt || img.subject) {
-      heading += " \\u2014 \\u201c" + (img.subject || "?") + "\\u201d";
-    }
-    var sec = el("div", "imgsec");
+    var tr = el("tr");
+    var ic = el("td", "imgcell");
     var im = document.createElement("img");
     im.src = img.dataUrl;
-    sec.appendChild(im);
-    sec.appendChild(el("h3", null, heading));
-    resultsBox.appendChild(sec);
-    var grid = el("div", "grid");
-    resultsBox.appendChild(grid);
-
-    // Stable display order in blind mode so column position leaks nothing.
-    var ordered = provs.slice();
-    if (blind) ordered.sort(function (a, b) {
-      return state.blindMap[a] < state.blindMap[b] ? -1 : 1;
-    });
+    ic.appendChild(im);
+    ic.appendChild(el("div", "nm2", blind ? "Image " + (imgIdx + 1) : img.name));
+    if (img.subject) ic.appendChild(el("div", "nm2", "\\u201c" + img.subject + "\\u201d"));
+    tr.appendChild(ic);
+    table.appendChild(tr);
 
     ordered.forEach(function (name) {
-      var cell = el("div", "cell pending");
-      var hd = el("div", "hd");
-      var title = el("b", null, blind ? state.blindMap[name] : name);
-      title.dataset.provider = name;
-      hd.appendChild(title);
-      var meta = el("span", "meta", "");
-      hd.appendChild(meta);
-      cell.appendChild(hd);
-      var txt = el("div", "txt", "waiting\\u2026");
-      cell.appendChild(txt);
-      grid.appendChild(cell);
+      var cell = el("td", "cell pending", "\\u2026");
+      tr.appendChild(cell);
+      cell.addEventListener("click", function () { cell.classList.toggle("open"); });
+
+      function fill(build) {
+        cell.classList.remove("pending");
+        cell.textContent = "";
+        build(cell);
+      }
 
       fetch(API_BASE + "/describe", {
         method: "POST",
@@ -954,15 +974,18 @@ document.getElementById("run").addEventListener("click", function () {
       })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (r) {
-          cell.classList.remove("pending");
           if (!r.ok || r.j.error) {
-            cell.classList.add("err");
-            txt.textContent = "ERROR: " + (r.j.error || "request failed");
+            var msg = r.j.error || "request failed";
+            fill(function (c) {
+              c.classList.add("err");
+              c.appendChild(el("div", null, "ERR \\u2013 tap"));
+              c.appendChild(el("div", "detail", msg));
+            });
             state.results.push({ provider: name, error: true });
             logRun({
               kind: hunt ? "hunt" : "describe", provider: name,
               image: img.name, subject: hunt ? img.subject : null,
-              error: r.j.error || "request failed",
+              error: msg,
             });
           } else {
             addBurn(r.j);
@@ -972,12 +995,18 @@ document.getElementById("run").addEventListener("click", function () {
               inputTokens: r.j.inputTokens, outputTokens: r.j.outputTokens,
               cost: r.j.cost, ms: r.j.ms, text: r.j.text,
             });
-            if (hunt) renderVerdict(txt, r.j.text);
-            else txt.textContent = r.j.text.trim();
             var m = r.j.inputTokens + " in / " + r.j.outputTokens + " out \\u00b7 $" +
               (r.j.cost != null ? r.j.cost.toFixed(6) : "?") + " \\u00b7 " + r.j.ms + "ms";
-            meta.textContent = blind ? "" : m;
-            meta.dataset.full = m;
+            fill(function (c) {
+              if (hunt) renderVerdict(c, r.j.text);
+              else {
+                c.appendChild(el("div", "clamp", r.j.text.trim()));
+              }
+              var meta = el("div", "meta detail", "");
+              meta.textContent = blind ? "" : m;
+              meta.dataset.full = m;
+              c.appendChild(meta);
+            });
             state.results.push({
               provider: name,
               inputTokens: r.j.inputTokens,
@@ -988,9 +1017,11 @@ document.getElementById("run").addEventListener("click", function () {
           }
         })
         .catch(function (e) {
-          cell.classList.remove("pending");
-          cell.classList.add("err");
-          txt.textContent = "ERROR: " + e;
+          fill(function (c) {
+            c.classList.add("err");
+            c.appendChild(el("div", null, "ERR \\u2013 tap"));
+            c.appendChild(el("div", "detail", String(e)));
+          });
           state.results.push({ provider: name, error: true });
         })
         .then(function () {
@@ -1015,28 +1046,29 @@ function renderVerdict(node, raw) {
   var v = null;
   if (m) { try { v = JSON.parse(m[0]); } catch (e) {} }
   if (!v || typeof v.present !== "boolean") {
-    node.textContent = text;
-    var bad = el("div", null, "");
+    var bad = el("div");
     bad.appendChild(el("span", "flag", "not valid JSON"));
     node.appendChild(bad);
+    node.appendChild(el("div", "detail", text));
     return;
   }
-  node.textContent = "";
   var line = el("div");
   var pct = typeof v.confidence === "number"
-    ? " (" + Math.round(v.confidence * 100) + "%)" : "";
+    ? " " + Math.round(v.confidence * 100) + "%" : "";
   line.appendChild(el("span", "verdict " + (v.present ? "yes" : "no"),
-    (v.present ? "present" : "not present") + pct));
-  if (v.photo_of_photo) line.appendChild(el("span", "flag", "photo-of-photo"));
-  if (v.unsafe) line.appendChild(el("span", "flag", "unsafe"));
-  if (m[0].length !== text.length) line.appendChild(el("span", "flag", "extra text around JSON"));
+    (v.present ? "\\u2713" : "\\u2717") + pct));
   node.appendChild(line);
-  if (v.reason) node.appendChild(el("div", "meta", String(v.reason)));
+  var flags = el("div");
+  if (v.photo_of_photo) flags.appendChild(el("span", "flag", "p-of-p"));
+  if (v.unsafe) flags.appendChild(el("span", "flag", "unsafe"));
+  if (m[0].length !== text.length) flags.appendChild(el("span", "flag", "+prose"));
+  if (flags.childNodes.length) node.appendChild(flags);
+  if (v.reason) node.appendChild(el("div", "detail", String(v.reason)));
 }
 
 document.getElementById("reveal").addEventListener("click", function () {
-  document.querySelectorAll(".cell b[data-provider]").forEach(function (b) {
-    b.textContent = b.dataset.provider;
+  document.querySelectorAll(".runtable th[data-provider]").forEach(function (th) {
+    th.textContent = th.dataset.provider;
   });
   document.querySelectorAll(".cell .meta").forEach(function (m) {
     if (m.dataset.full) m.textContent = m.dataset.full;
