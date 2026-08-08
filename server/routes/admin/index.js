@@ -20,6 +20,7 @@ import { router as photosRouter } from "./photos.js";
 import { router as announcementsRouter } from "./announcements.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as exportRouter } from "./export.js";
+import { router as visionBakeoffRouter } from "./visionBakeoff.js";
 
 export const router = Router();
 
@@ -38,3 +39,7 @@ router.use("/photos", photosRouter);
 router.use("/announcements", announcementsRouter);
 router.use("/rewards", rewardsRouter);
 router.use("/export", exportRouter);
+// TEMPORARY (super_admin only): vision-provider bake-off for the
+// image-description decision — remove once a provider is picked.
+// UI: log in to Master Control, then open /api/admin/vision-bakeoff/ui.
+router.use("/vision-bakeoff", visionBakeoffRouter);

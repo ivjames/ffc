@@ -37,7 +37,10 @@ app.use((req, res, next) => {
   // Normalize a trailing slash so /api/hunt/verify and /api/hunt/verify/ both
   // match — Express routes both to the upload handler, but a bare `===` check
   // would let the slash form fall through to the 256kb cap and 413 the upload.
-  if (req.path.replace(/\/+$/, "") === "/api/hunt/verify") return next();
+  const path = req.path.replace(/\/+$/, "");
+  if (path === "/api/hunt/verify") return next();
+  // Same deal for the (temporary) admin vision bake-off — base64 photos.
+  if (path === "/api/admin/vision-bakeoff/describe") return next();
   return parseJson(req, res, next);
 });
 

@@ -116,10 +116,18 @@ export DEEPINFRA_API_KEY=...      # Llama 4 Scout
 node scripts/compare-vision-describe.mjs photos/*.jpg
 
 # Or judge in the browser (same providers/keys, side-by-side cards,
-# optional blind judging — provider names/cost hidden until reveal):
+# optional blind judging — provider names/cost hidden until reveal).
+# Easiest from a phone/iPad: the page is TEMPORARILY mounted inside Master
+# Control (super_admin only) — put the provider keys in server/.env,
+# restart the API, log in to Master Control, then open:
+#   https://<admin-domain>/api/admin/vision-bakeoff/ui
+# (Remove server/routes/admin/visionBakeoff.js + its index.js mount once
+# a provider is picked.)
+
+# Standalone fallback (no admin deploy needed):
 node scripts/compare-vision-ui.mjs          # http://127.0.0.1:8787
-# From another device (phone/iPad) without an SSH tunnel, expose it with
-# a token (required — the /api routes proxy paid model calls):
+# From another device without the admin, expose it with a token
+# (required — the /api routes proxy paid model calls):
 HOST=0.0.0.0 BAKEOFF_TOKEN=$(openssl rand -hex 16) node scripts/compare-vision-ui.mjs
 # then open http://<droplet-ip>:8787/?token=<that token>  — and stop the
 # server when you're done judging.
