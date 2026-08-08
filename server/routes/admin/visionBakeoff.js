@@ -1,17 +1,20 @@
-// Admin: TEMPORARY vision-provider bake-off for the image-description
-// feature (IMAGE-DESCRIPTION-PRICING.md). Mounted at /api/admin/vision-bakeoff
-// so the comparison page rides Master Control's HTTPS + login instead of an
-// open port — log in to Master Control, then open
-// /api/admin/vision-bakeoff/ui in the same browser.
+// Admin: vision vetting bench, mounted at /api/admin/vision-bakeoff so it
+// rides Master Control's HTTPS + login — log in, then open
+// /api/admin/vision-bakeoff/ui.
 //
-// Remove this mount (index.js line + this file) once a provider is picked.
+// Born as the provider bake-off that produced the 2026-08-08 decision
+// (IMAGE-DESCRIPTION-PRICING.md); KEPT as the standing tool for vetting
+// sourced images for real zones: source people-screened photos, label
+// subjects with the descriptor (Gemini 3.1 Flash-Lite), and check verdicts
+// against the production hunt judge (Haiku) before items go live. The
+// lineup is trimmed to those two models — re-audition others by adding
+// rows in scripts/lib/vision-compare-core.mjs.
 //
-// super_admin only: every /describe call spends real money on whichever
-// provider keys are in the server's environment (same env names as the CLI:
-// ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, SILICONFLOW_API_KEY,
-// DEEPINFRA_API_KEY). The page and callers live in scripts/lib/ — shared
-// with scripts/compare-vision-{describe,ui}.mjs; deploys clone the whole
-// repo, so the cross-directory import resolves on the droplet.
+// super_admin only: every /describe and /prescan call spends real money on
+// the provider keys in the server's environment (ANTHROPIC_API_KEY,
+// GEMINI_API_KEY). The page and callers live in scripts/lib/ — shared with
+// scripts/compare-vision-{describe,ui}.mjs; deploys clone the whole repo,
+// so the cross-directory import resolves on the droplet.
 import { Router } from "express";
 import express from "express";
 import { isSuperAdmin } from "../../lib/adminAuth.js";

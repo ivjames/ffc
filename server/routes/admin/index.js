@@ -43,7 +43,7 @@ router.use("/photos", photosRouter);
 router.use("/announcements", announcementsRouter);
 router.use("/rewards", rewardsRouter);
 router.use("/export", exportRouter);
-// TEMPORARY (super_admin only): vision-provider bake-off for the
-// image-description decision — remove once a provider is picked.
+// Vision vetting bench (super_admin only) — sources/labels/verifies zone
+// images against the production judge and the selected describe model.
 // UI: log in to Master Control, then open /api/admin/vision-bakeoff/ui.
 router.use("/vision-bakeoff", visionBakeoffRouter);

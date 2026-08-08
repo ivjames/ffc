@@ -165,34 +165,29 @@ itself.
 
 ## Running the bake-off (handoff step 1)
 
+The tool is KEPT post-decision as the **vision vetting bench** for real
+zones: source people-screened photos, label subjects with the descriptor,
+and check verdicts against the production judge before items go live. The
+lineup is trimmed to the two operational models (Haiku 4.5 = production
+hunt judge, Gemini 3.1 Flash-Lite = selected descriptor); to re-audition a
+model, add a row in `scripts/lib/vision-compare-core.mjs` — retired rows
+and their per-model quirk fixes are in git history.
+
 ```sh
-# Keys: set whichever you have; providers without keys are skipped.
-export ANTHROPIC_API_KEY=...      # Haiku 4.5 (quality reference)
-export GEMINI_API_KEY=...         # Gemini 3.1 Flash-Lite
-export OPENAI_API_KEY=...         # GPT-5 mini
-export SILICONFLOW_API_KEY=...    # Qwen3-VL-8B
-export DEEPINFRA_API_KEY=...      # Llama 4 Scout
-export MISTRAL_API_KEY=...        # Mistral Small 4 (console.mistral.ai)
-export XAI_API_KEY=...            # Grok 4.1 Fast (console.x.ai)
+# Keys (server/.env on the droplet):
+#   ANTHROPIC_API_KEY   Haiku 4.5 — production judge
+#   GEMINI_API_KEY      Gemini 3.1 Flash-Lite — descriptor + selected model
 
-node scripts/compare-vision-describe.mjs photos/*.jpg
-
-# Or judge in the browser (same providers/keys, side-by-side cards,
-# optional blind judging — provider names/cost hidden until reveal).
-# Easiest from a phone/iPad: the page is TEMPORARILY mounted inside Master
-# Control (super_admin only) — put the provider keys in server/.env,
-# restart the API, log in to Master Control, then open:
+# In Master Control (super_admin): log in, then open
 #   https://<admin-domain>/api/admin/vision-bakeoff/ui
-# (Remove server/routes/admin/visionBakeoff.js + its index.js mount once
-# a provider is picked.)
 
 # Standalone fallback (no admin deploy needed):
 node scripts/compare-vision-ui.mjs          # http://127.0.0.1:8787
-# From another device without the admin, expose it with a token
-# (required — the /api routes proxy paid model calls):
 HOST=0.0.0.0 BAKEOFF_TOKEN=$(openssl rand -hex 16) node scripts/compare-vision-ui.mjs
-# then open http://<droplet-ip>:8787/?token=<that token>  — and stop the
-# server when you're done judging.
+# then open http://<droplet-ip>:8787/?token=<that token>
+
+# CLI (describe mode only):
+node scripts/compare-vision-describe.mjs photos/*.jpg
 ```
 
 The script sends each image to every configured provider with the same

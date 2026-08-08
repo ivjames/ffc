@@ -25,7 +25,7 @@ const PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vision bake-off</title>
+<title>Vision vetting bench</title>
 <style>
   :root {
     --bg: #f6f7f9; --card: #fff; --ink: #1a202c; --muted: #64748b;
@@ -149,9 +149,10 @@ const PAGE = `<!doctype html>
 </head>
 <body>
 <div class="wrap">
-  <h1>Vision provider bake-off</h1>
-  <p class="sub">Side-by-side descriptions with exact billed tokens and cost.
-    Decision rule: <code>IMAGE-DESCRIPTION-PRICING.md</code>.</p>
+  <h1>Vision vetting bench</h1>
+  <p class="sub">Vet zone images: source people-screened photos, label
+    subjects, and check hunt verdicts against the production judge — with
+    exact billed tokens and cost. History: <code>IMAGE-DESCRIPTION-PRICING.md</code>.</p>
 
   <div class="panel">
     <h2>1 · Images (~5 real workload photos)</h2>

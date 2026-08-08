@@ -101,6 +101,16 @@ export const PRESCAN_PROMPT =
 // Rates are $/MTok (input, output) — verified 2026-08-08, re-confirm at
 // build time. Model ids are config, not code: when a tier deprecates, update
 // the row and re-run.
+//
+// Lineup: trimmed to the two operational models after the 2026-08-08
+// provider decision (IMAGE-DESCRIPTION-PRICING.md) — Haiku is the
+// production hunt judge, Gemini 3.1 Flash-Lite is the selected describe/
+// descriptor model — since the tool's ongoing job is vetting sourced images
+// for real zones, not provider comparison. To re-audition a model, add a
+// row here ({name, label, kind, model, baseUrl?, keyEnv, price, extras});
+// the retired rows (GPT-5 Mini, Qwen3-VL, Llama 4 Scout, Mistral Small 4,
+// Grok 4.1 Fast, Gemini 3.5 Lite / 3.6 Flash) live in git history with
+// their per-model quirk fixes.
 export const PROVIDERS = [
   {
     name: "haiku-4.5",
@@ -117,89 +127,6 @@ export const PROVIDERS = [
     model: "gemini-3.1-flash-lite",
     keyEnv: "GEMINI_API_KEY",
     price: { in: 0.25, out: 1.5 },
-  },
-  // Two incremental Gemini rungs above 3.1 Flash-Lite, to see where extra
-  // spend buys quality (same key). Note 3.6 Flash's per-image cost lands
-  // ABOVE Haiku 4.5 — it's here as a quality probe, not a candidate.
-  {
-    name: "gemini-3.5-flash-lite",
-    label: "Gemini 3.5 Flash-Lite",
-    kind: "gemini",
-    model: "gemini-3.5-flash-lite",
-    keyEnv: "GEMINI_API_KEY",
-    price: { in: 0.3, out: 2.5 },
-  },
-  {
-    // Thinking model: thought tokens count against maxOutputTokens, which
-    // truncated its replies at the shared 400 cap — same disease as
-    // gpt-5-mini. Minimal thinking (a verdict needs no chain of thought)
-    // plus headroom.
-    name: "gemini-3.6-flash",
-    label: "Gemini 3.6 Flash",
-    kind: "gemini",
-    model: "gemini-3.6-flash",
-    keyEnv: "GEMINI_API_KEY",
-    price: { in: 1.5, out: 7.5 },
-    maxTokens: 1024,
-    geminiConfig: { thinkingConfig: { thinkingLevel: "minimal" } },
-  },
-  {
-    // Reasoning model: max_completion_tokens includes hidden reasoning
-    // tokens, which at the shared 400 cap swallowed the whole budget and
-    // returned empty replies. Minimal effort (a photo caption needs no
-    // chain of thought — production Haiku runs without thinking too) plus
-    // extra headroom.
-    name: "gpt-5-mini",
-    label: "GPT-5 Mini",
-    kind: "openai",
-    model: "gpt-5-mini",
-    baseUrl: "https://api.openai.com/v1",
-    keyEnv: "OPENAI_API_KEY",
-    price: { in: 0.25, out: 2.0 },
-    maxTokens: 1024,
-    extra: { reasoning_effort: "minimal" },
-  },
-  {
-    // Qwen2.5-VL-7B ($0.05/$0.05) was delisted by SiliconFlow (API returns
-    // 30003 "Model disabled") — this is its cheapest live VL successor.
-    name: "qwen3-vl-8b (siliconflow)",
-    label: "Qwen3-VL 8B (SiliconFlow)",
-    kind: "openai",
-    model: "Qwen/Qwen3-VL-8B-Instruct",
-    baseUrl: "https://api.siliconflow.com/v1",
-    keyEnv: "SILICONFLOW_API_KEY",
-    price: { in: 0.18, out: 0.68 },
-  },
-  {
-    name: "llama-4-scout (deepinfra)",
-    label: "Llama 4 Scout (DeepInfra)",
-    kind: "openai",
-    model: "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    baseUrl: "https://api.deepinfra.com/v1/openai",
-    keyEnv: "DEEPINFRA_API_KEY",
-    price: { in: 0.08, out: 0.3 },
-  },
-  {
-    // Vision is built into Small 4 (Pixtral retired) — currently the
-    // cheapest major-provider vision tier on the board.
-    name: "mistral-small-4",
-    label: "Mistral Small 4",
-    kind: "openai",
-    model: "mistral-small-latest",
-    baseUrl: "https://api.mistral.ai/v1",
-    keyEnv: "MISTRAL_API_KEY",
-    price: { in: 0.1, out: 0.3 },
-  },
-  {
-    // xAI's volume tier; verify the exact model id against console.x.ai if
-    // the API rejects it.
-    name: "grok-4.1-fast",
-    label: "Grok 4.1 Fast",
-    kind: "openai",
-    model: "grok-4-1-fast",
-    baseUrl: "https://api.x.ai/v1",
-    keyEnv: "XAI_API_KEY",
-    price: { in: 0.2, out: 0.5 },
   },
 ];
 
