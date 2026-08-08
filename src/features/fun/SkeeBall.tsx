@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
@@ -393,6 +394,8 @@ export default function SkeeBall() {
   const [ballNo, setBallNo] = useState(0);
   const [total, setTotal] = useState(0);
   const [lastPts, setLastPts] = useState<number | null>(null);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const playing = phase !== 'done';
 
@@ -591,6 +594,7 @@ export default function SkeeBall() {
     setBallNo(0);
     setTotal(0);
     setLastPts(null);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -606,6 +610,9 @@ export default function SkeeBall() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {BALLS} balls</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (1 ticket per 10 points). */}
+          <GameTicketAward game="skeeball" tickets={Math.round(total / 10)} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={restart} sound="none">
               Play again
