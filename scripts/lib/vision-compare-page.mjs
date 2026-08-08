@@ -1080,11 +1080,12 @@ document.getElementById("run").addEventListener("click", function () {
             var m = r.j.inputTokens + " in / " + r.j.outputTokens + " out \\u00b7 $" +
               (r.j.cost != null ? r.j.cost.toFixed(6) : "?") + " \\u00b7 " + r.j.ms + "ms";
             var verdict = null;
+            var replyText = (r.j.text || "").trim();
             fill(function (c) {
-              var replyText = (r.j.text || "").trim();
               if (!replyText) {
                 // An empty reply must never render as a blank cell — it's a
-                // finding (usually a reasoning model eating its token cap).
+                // failed call (usually a reasoning model eating its cap).
+                c.classList.add("err");
                 var bad = el("div");
                 bad.appendChild(el("span", "flag", "empty reply"));
                 c.appendChild(bad);
@@ -1100,8 +1101,13 @@ document.getElementById("run").addEventListener("click", function () {
               meta.dataset.full = m;
               c.appendChild(meta);
             });
+            // Billed but unusable: empty replies always, and in hunt mode any
+            // reply that didn't parse to a verdict. Counts in the error
+            // column while its tokens still count toward spend.
+            var unusable = !replyText || (hunt && !verdict);
             state.results.push({
               provider: name,
+              jsonError: unusable,
               inputTokens: r.j.inputTokens,
               outputTokens: r.j.outputTokens,
               cost: r.j.cost,
@@ -1151,6 +1157,9 @@ function renderVerdict(node, raw) {
   var v = null;
   if (m) { try { v = JSON.parse(m[0]); } catch (e) {} }
   if (!v || typeof v.present !== "boolean") {
+    // An unparseable verdict is a failed call for this workload — error
+    // treatment, not a cosmetic flag (production could not consume it).
+    node.classList.add("err");
     var bad = el("div");
     bad.appendChild(el("span", "flag", "not valid JSON"));
     node.appendChild(bad);
@@ -1190,6 +1199,9 @@ function renderSummary() {
       (agg[r.provider] = { n: 0, err: 0, inTok: 0, cost: 0, lat: [] });
     a.n += 1;
     if (r.error) { a.err += 1; return; }
+    // jsonError rows failed the workload but were still billed — they count
+    // as errors AND their tokens count toward spend.
+    if (r.jsonError) a.err += 1;
     a.inTok += r.inputTokens || 0;
     a.cost += r.cost || 0;
     if (r.ms) a.lat.push(r.ms);

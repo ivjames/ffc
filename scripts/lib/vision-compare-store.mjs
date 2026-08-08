@@ -184,6 +184,10 @@ export function runsSummary() {
           p.confSum += Math.max(0, Math.min(1, v.confidence));
           p.confN += 1;
         }
+      } else {
+        // Unparseable verdict = failed call for this workload; its tokens
+        // were still billed and stay in the totals above.
+        p.errors += 1;
       }
     }
   }
