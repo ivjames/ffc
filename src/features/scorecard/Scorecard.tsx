@@ -24,6 +24,27 @@ import { DEV_MODE } from '../../lib/flags';
 const AUTO_PLAY_MS = 500; // slow pace — half a second per tap
 const FAST_FORWARD_MS = 62.5; // fast pace — a sixteenth of a second per tap
 
+// The house mark — the app icon's ball-and-pennant, redrawn in currentColor —
+// ghosted into a score cell as a watermark wherever no score has been entered
+// yet. Reads as "blank scorecard paper" rather than data, so entered numbers
+// stay the only things that look like scores.
+function ScoreWatermark({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className={`h-5 w-5 ${className}`}
+      fill="currentColor"
+    >
+      {/* Flag pole (tucks behind the ball) and pennant. */}
+      <rect x="15.9" y="2.5" width="1.4" height="10" rx="0.7" />
+      <path d="M17.3 2.5 L23 5 L17.3 7.5 Z" />
+      {/* The ball. */}
+      <circle cx="11" cy="15.5" r="7" />
+    </svg>
+  );
+}
+
 // A plausible-but-random stroke count for a hole, biased toward its par and
 // kept inside the sane/cap range. Used only by the auto-play testing tool.
 function randomStrokes(par: number): number {
@@ -486,7 +507,15 @@ export default function Scorecard() {
                           active ? 'surface-sunk' : ''
                         }`}
                       >
-                        {active ? (
+                        {strokes == null ? (
+                          // No score yet — the watermarked house mark instead
+                          // of a dash, a shade brighter in the live column.
+                          <ScoreWatermark
+                            className={
+                              active ? 'text-fairway-50 opacity-30' : 'text-fairway-100 opacity-15'
+                            }
+                          />
+                        ) : active ? (
                           // Keyed on a per-player nonce that only changes on a
                           // real stroke edit, so the punch fires on +/− but not
                           // when the highlight moves between holes.
@@ -494,16 +523,10 @@ export default function Scorecard() {
                             key={pops[p] ?? 0}
                             className="animate-score-punch inline-block text-2xl font-black text-fairway-50"
                           >
-                            {strokes ?? '–'}
+                            {strokes}
                           </span>
                         ) : (
-                          <span
-                            className={`text-lg font-bold ${
-                              strokes == null ? 'text-fairway-100/30' : 'text-fairway-200'
-                            }`}
-                          >
-                            {strokes ?? '–'}
-                          </span>
+                          <span className="text-lg font-bold text-fairway-200">{strokes}</span>
                         )}
                       </div>
                     );
