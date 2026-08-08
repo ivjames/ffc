@@ -20,10 +20,15 @@ import { router as photosRouter } from "./photos.js";
 import { router as announcementsRouter } from "./announcements.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as exportRouter } from "./export.js";
+import {
+  router as visionBakeoffRouter,
+  publicRouter as visionBakeoffPublicRouter,
+} from "./visionBakeoff.js";
 
 export const router = Router();
 
 router.use(authPublicRouter); // POST /login — no auth required
+router.use(visionBakeoffPublicRouter); // GET /vision-bakeoff/ui — static page, no secrets; its API calls auth themselves
 
 router.use(requireAdminAuth); // everything below needs APP_TOKEN or a session
 
@@ -38,3 +43,7 @@ router.use("/photos", photosRouter);
 router.use("/announcements", announcementsRouter);
 router.use("/rewards", rewardsRouter);
 router.use("/export", exportRouter);
+// Vision vetting bench (super_admin only) — sources/labels/verifies zone
+// images against the production judge and the selected describe model.
+// UI: log in to Master Control, then open /api/admin/vision-bakeoff/ui.
+router.use("/vision-bakeoff", visionBakeoffRouter);

@@ -31,3 +31,7 @@ test-results/
 playwright-report/
 blob-report/
 coverage/
+
+# vision bake-off persistent test data (scripts/lib/vision-compare-store.mjs)
+bakeoff-data/
+server/bakeoff-data/

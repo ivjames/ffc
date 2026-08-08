@@ -1,0 +1,1522 @@
+// The bake-off page, shared by the standalone server
+// (scripts/compare-vision-ui.mjs) and the temporary Master Control mount
+// (server/routes/admin/visionBakeoff.js). One HTML string, no build step;
+// `renderPage(apiBase, authMode)` points its two API calls at whichever
+// backend serves it. Client JS deliberately avoids template literals so this
+// server-side template literal stays escape-free.
+//
+// authMode:
+//   "bearer" (standalone) — ?token= from the URL, sent as a Bearer header.
+//   "admin"  (Master Control) — reuses the SPA's login: the admin session
+//     cookie flows on same-origin fetches automatically, and a token login
+//     (APP_TOKEN kept in localStorage under 'ffc_admin_token', same key as
+//     admin/api.ts) is re-sent as the x-app-token header.
+
+import { HUNT_PROMPT_TEMPLATE } from "./vision-compare-core.mjs";
+
+export function renderPage(apiBase, authMode = "bearer") {
+  return PAGE.replaceAll("__API_BASE__", apiBase)
+    .replaceAll("__AUTH_MODE__", authMode)
+    .replaceAll('"__HUNT_TEMPLATE_JSON__"', JSON.stringify(HUNT_PROMPT_TEMPLATE));
+}
+
+const PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vision vetting bench</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #1a202c; --muted: #64748b;
+    --line: #e2e8f0; --accent: #2563eb; --err: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .panel {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin: 0 0 10px; }
+  .drop {
+    border: 2px dashed var(--line); border-radius: 10px; padding: 28px;
+    text-align: center; color: var(--muted); cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop.over { border-color: var(--accent); background: #eff6ff; }
+  .thumbs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .thumb { position: relative; }
+  .thumb img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px;
+    border: 1px solid var(--line); display: block; }
+  .thumb button {
+    position: absolute; top: -6px; right: -6px; width: 22px; height: 22px;
+    border-radius: 50%; border: none; background: var(--ink); color: #fff;
+    cursor: pointer; font-size: 12px; line-height: 1;
+  }
+  .thumb .nm { font-size: 11px; color: var(--muted); max-width: 96px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thumb .subj { width: 96px; margin-top: 4px; border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
+  .thumb .mismatch { font-size: 10px; color: var(--err); font-weight: 600; }
+  #srcCount { width: 58px; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px; font: inherit; }
+  .modes { display: flex; gap: 16px; margin-bottom: 10px; }
+  #storedWrap { margin-top: 12px; }
+  #storedList { margin: 8px 0; max-height: 240px; overflow-y: auto; }
+  .stored-item { display: flex; align-items: center; gap: 8px; padding: 3px 0;
+    font-size: 14px; cursor: pointer; }
+  .stored-item .meta { font-size: 12px; }
+  .verdict { font-weight: 600; }
+  .verdict.yes { color: #15803d; }
+  .verdict.no { color: var(--err); }
+  .flag { display: inline-block; background: #fef3c7; color: #92400e;
+    border-radius: 6px; padding: 0 6px; font-size: 12px; margin-left: 6px; }
+  .provs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .prov {
+    display: flex; align-items: center; gap: 8px; border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 12px; cursor: pointer; background: #fff;
+  }
+  .prov.off { opacity: .45; cursor: not-allowed; }
+  .prov .price { color: var(--muted); font-size: 12px; }
+  textarea {
+    width: 100%; min-height: 70px; border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px; font: inherit; resize: vertical;
+  }
+  .runrow { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 22px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  label.chk { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  #sendSize { border: 1px solid var(--line); border-radius: 6px; padding: 6px;
+    font: inherit; background: #fff; }
+  .runtablewrap { overflow-x: auto; margin-top: 18px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--card); }
+  .runtable { border-collapse: collapse; width: 100%; }
+  .runtable th, .runtable td { padding: 5px 7px; border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line); vertical-align: top; font-size: 12px;
+    min-width: 78px; max-width: 170px; }
+  .runtable th { background: #f1f5f9; border-top: none; font-size: 11px;
+    text-transform: none; color: var(--ink); text-align: left;
+    word-break: break-word; }
+  .runtable th:first-child, .runtable td:first-child {
+    border-left: none; position: sticky; left: 0; background: var(--card);
+    min-width: 52px; max-width: 92px; z-index: 1; }
+  .runtable th:first-child { background: #f1f5f9; }
+  .imgcell img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px;
+    border: 1px solid var(--line); display: block; margin-bottom: 3px; }
+  .imgcell .nm2 { font-size: 10px; color: var(--muted); word-break: break-word; }
+  .cell { cursor: pointer; }
+  .cell .meta { color: var(--muted); font-size: 11px; }
+  .cell .clamp { display: -webkit-box; -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+  .cell.open .clamp { display: block; -webkit-line-clamp: unset; overflow: visible; }
+  .cell .detail { display: none; margin-top: 6px; white-space: pre-wrap; }
+  .cell.open .detail { display: block; }
+  .cell.err { color: var(--err); }
+  .cell.pending { color: var(--muted); font-style: italic; cursor: default; }
+  table { border-collapse: collapse; width: 100%; background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; border-top: 1px solid var(--line);
+    font-size: 14px; }
+  th { background: #f1f5f9; border-top: none; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .charts { display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    margin: 10px 0 16px; }
+  .chartcard { background: #fcfcfb; border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; }
+  .chartcard h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600;
+    color: #52514e; text-transform: uppercase; letter-spacing: .04em; }
+  .chartcard svg { display: block; width: 100%; height: auto; }
+  #burn {
+    position: fixed; right: 14px; bottom: 14px; z-index: 10;
+    background: var(--ink); color: #fff; border-radius: 999px;
+    padding: 8px 16px; font-size: 13px; font-variant-numeric: tabular-nums;
+    box-shadow: 0 2px 10px rgba(0,0,0,.25);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Vision vetting bench</h1>
+  <p class="sub">Vet zone images: source people-screened photos, label
+    subjects, and check hunt verdicts against the production judge — with
+    exact billed tokens and cost. History: <code>IMAGE-DESCRIPTION-PRICING.md</code>.</p>
+
+  <div class="panel">
+    <h2>1 · Images (~5 real workload photos)</h2>
+    <div class="drop" id="drop">Drop images here or click to choose
+      (jpg / png / webp / gif)</div>
+    <input type="file" id="file" accept="image/jpeg,image/png,image/webp,image/gif"
+      multiple hidden>
+    <div id="storedWrap" hidden>
+      <button class="btn ghost" id="loadStored" type="button">Browse stored hunt
+        photos</button>
+      <span class="meta" id="storedStatus"></span>
+      <div id="storedList"></div>
+      <button class="btn" id="addStored" type="button" hidden>Add selected</button>
+    </div>
+    <div class="thumbs" id="thumbs"></div>
+    <p class="meta">
+      <input type="number" id="srcCount" value="10" min="1" max="24">
+      <button class="btn ghost" id="srcBtn" type="button">Source from web</button>
+      <button class="btn ghost" id="scrambleBtn" type="button">Scramble half
+        ✗</button>
+      <span id="srcStatus"></span>
+    </p>
+    <p class="meta">Sourced images are people-screened (rejects anything with
+      a person). Scramble resets all subjects to truth, then gives a random
+      half another image's subject — verdicts get graded against that
+      ground truth. The image set is saved on the server and reloads next
+      visit. <button class="btn ghost" id="clearDataset" type="button">Clear
+      image set</button></p>
+  </div>
+
+  <div class="panel">
+    <h2>2 · Providers</h2>
+    <div class="provs" id="provs"></div>
+  </div>
+
+  <div class="panel">
+    <h2>3 · Prompt</h2>
+    <div class="modes">
+      <label class="chk"><input type="radio" name="mode" id="modeDescribe" checked>
+        Describe (open description)</label>
+      <label class="chk"><input type="radio" name="mode" id="modeHunt">
+        Hunt verify (per-image subject, descriptor pre-scan)</label>
+    </div>
+    <textarea id="prompt"></textarea>
+    <p class="meta" id="promptHint" hidden>__SUBJECT__ is replaced with each
+      image's subject (auto-filled by the pre-scan; edit under the thumbnails).
+      __DISTRACTORS__ becomes a per-image "these other known items are not the
+      target" line built from the sourcing scan, or nothing when unknown.</p>
+  </div>
+
+  <div class="panel runrow">
+    <button class="btn" id="run" disabled>Run comparison</button>
+    <label class="chk">Send size
+      <select id="sendSize">
+        <option value="full">full (as stored)</option>
+        <option value="768">768px long edge</option>
+      </select></label>
+    <label class="chk"><input type="checkbox" id="blind">
+      Blind judging (hide who wrote what until reveal)</label>
+    <button class="btn ghost" id="reveal" hidden>Reveal providers</button>
+    <span class="meta" id="status"></span>
+  </div>
+
+  <div id="results"></div>
+  <div id="summary"></div>
+  <div id="alltime"></div>
+</div>
+<div id="burn" hidden></div>
+
+<script>
+"use strict";
+var API_BASE = "__API_BASE__";
+var AUTH_MODE = "__AUTH_MODE__";
+var HUNT_TEMPLATE = "__HUNT_TEMPLATE_JSON__";
+var state = {
+  providers: [], images: [], results: [], blindMap: null,
+  describePrompt: "", huntPrompt: HUNT_TEMPLATE,
+};
+
+function huntMode() { return document.getElementById("modeHunt").checked; }
+
+// Slugs stay the stable identity in the run history; labels are for eyes.
+function lbl(name) {
+  var p = state.providers.find(function (x) { return x.name === name; });
+  if (p && p.label) return p.label;
+  if (name.indexOf("prescan (") === 0 && name.charAt(name.length - 1) === ")") {
+    return "Pre-scan (" + lbl(name.slice(9, -1)) + ")";
+  }
+  return name;
+}
+
+// Session-wide burn ticker: every model call this page makes (pre-scans AND
+// comparison runs, all providers) rolls into one always-visible pill.
+// Aggregated across providers, so it leaks nothing in blind mode.
+var burn = { calls: 0, inTok: 0, outTok: 0, cost: 0 };
+function addBurn(j) {
+  if (!j || j.inputTokens == null) return;
+  burn.calls += 1;
+  burn.inTok += j.inputTokens || 0;
+  burn.outTok += j.outputTokens || 0;
+  burn.cost += j.cost || 0;
+  var elp = document.getElementById("burn");
+  elp.hidden = false;
+  elp.textContent = burn.calls + " calls \\u00b7 " +
+    burn.inTok.toLocaleString() + " in / " +
+    burn.outTok.toLocaleString() + " out \\u00b7 $" + burn.cost.toFixed(4);
+}
+var TOKEN = new URLSearchParams(location.search).get("token") || "";
+if (!TOKEN && AUTH_MODE === "admin") {
+  // Same-origin with the Master Control SPA: reuse its stored APP_TOKEN
+  // (token-mode login; admin/api.ts keeps it in sessionStorage — which is
+  // per-tab, so this only works when this page is opened in the tab that
+  // logged in; the 401 fallback below covers fresh tabs). Session-cookie
+  // logins need nothing — the cookie rides same-origin fetches on its own.
+  try {
+    TOKEN = sessionStorage.getItem("ffc_admin_token") ||
+      localStorage.getItem("ffc_admin_token") || "";
+  } catch (e) {}
+}
+
+function apiHeaders(extra) {
+  var h = extra || {};
+  if (TOKEN) {
+    if (AUTH_MODE === "admin") h["x-app-token"] = TOKEN;
+    else h["authorization"] = "Bearer " + TOKEN;
+  }
+  return h;
+}
+
+// Any action that comes back unauthorized (per-tab sessionStorage token
+// missing — new tab, Safari eviction) gets an immediate re-auth path
+// instead of a dead-end error message.
+function reauthOn401(j) {
+  var unauthorized = j && (j.error === "unauthorized" ||
+    (typeof j.error === "string" && j.error.indexOf("wrong token") !== -1));
+  if (!unauthorized) return false;
+  if (AUTH_MODE === "admin") {
+    var t = window.prompt(
+      "Not signed in on this tab. Paste the admin token (APP_TOKEN):");
+    if (t) {
+      try { sessionStorage.setItem("ffc_admin_token", t); } catch (e) {}
+      location.reload();
+    }
+  }
+  return true;
+}
+
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+fetch(API_BASE + "/providers", { headers: apiHeaders() }).then(function (r) {
+  if (r.status === 401) {
+    var sub = document.querySelector(".sub");
+    if (AUTH_MODE === "admin") {
+      sub.textContent = "401: open this page from the tab where Master " +
+        "Control is signed in, or enter the admin token: ";
+      var btn = el("button", "btn ghost", "Enter admin token");
+      btn.addEventListener("click", function () {
+        var t = window.prompt("APP_TOKEN (stored for this tab only):");
+        if (!t) return;
+        try { sessionStorage.setItem("ffc_admin_token", t); } catch (e) {}
+        location.reload();
+      });
+      sub.appendChild(btn);
+    } else {
+      sub.textContent = "401: open this page with ?token=<BAKEOFF_TOKEN> in the URL.";
+    }
+  }
+  if (r.status === 403) {
+    document.querySelector(".sub").textContent =
+      "403: this page is super_admin only (it spends real money on provider keys).";
+  }
+  return r.json();
+}).then(function (d) {
+  if (!d.providers) return;
+  state.providers = d.providers;
+  state.describePrompt = d.defaultPrompt;
+  if (!huntMode()) document.getElementById("prompt").value = d.defaultPrompt;
+  var box = document.getElementById("provs");
+  d.providers.forEach(function (p) {
+    var lab = el("label", "prov" + (p.configured ? "" : " off"));
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = p.name;
+    cb.checked = p.configured;
+    cb.disabled = !p.configured;
+    lab.appendChild(cb);
+    var txt = el("span", null, p.label || p.name);
+    lab.appendChild(txt);
+    var price = el("span", "price", p.configured
+      ? "$" + p.priceIn + " / $" + p.priceOut + " per MTok"
+      : p.keyEnv + " not set");
+    lab.appendChild(price);
+    box.appendChild(lab);
+  });
+  updateRunButton();
+});
+
+// --- persistent dataset + run history ------------------------------------
+// The server keeps the image set and every model call's result on disk;
+// the page loads both on open and clears either on demand.
+function persistImage(img) {
+  fetch(API_BASE + "/dataset", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({
+      name: img.name,
+      subject: img.subject,
+      mediaType: img.mediaType,
+      imageBase64: img.base64,
+    }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) { if (j.id) img.id = j.id; })
+    .catch(function () {});
+}
+
+function persistSubject(img) {
+  if (!img.id) return;
+  fetch(API_BASE + "/dataset/" + img.id + "/subject", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ subject: img.subject }),
+  }).catch(function () {});
+}
+
+function logRun(row) {
+  fetch(API_BASE + "/runs", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify(row),
+  }).catch(function () {});
+}
+
+function loadDataset() {
+  fetch(API_BASE + "/dataset", { headers: apiHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.images || !d.images.length) return;
+      d.images.forEach(function (metaRow) {
+        fetch(API_BASE + "/dataset/" + metaRow.id + "/image", { headers: apiHeaders() })
+          .then(function (r) { if (!r.ok) throw new Error(); return r.blob(); })
+          .then(function (blob) {
+            var reader = new FileReader();
+            reader.onload = function () {
+              var dataUrl = String(reader.result);
+              state.images.push({
+                id: metaRow.id,
+                name: metaRow.name,
+                subject: metaRow.subject || "",
+                truth: metaRow.truth || "",
+                alsoVisible: metaRow.alsoVisible || [],
+                expected: typeof metaRow.expected === "boolean" ? metaRow.expected : true,
+                mediaType: metaRow.mediaType,
+                dataUrl: dataUrl,
+                base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+                scanning: false,
+              });
+              renderThumbs();
+              updateRunButton();
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch(function () {});
+      });
+    })
+    .catch(function () {});
+}
+
+// --- charts (inline SVG, no libraries) ------------------------------------
+// Small multiples over the all-time per-provider stats: one measure per
+// chart, providers as rows in a fixed order shared by every chart. Single
+// hue per chart (magnitude lives in bar length; identity lives in the row
+// labels); the reserved status red marks the error chart. Exact values live
+// in the all-time table below — the charts are for comparison at a glance.
+var VIZ = {
+  bar: "#2a78d6",      // series blue
+  band: "#9ec5f4",     // blue step-200 for latency min-max range
+  err: "#d03b3b",      // status critical
+  grid: "#e1e0d9",
+  axis: "#c3c2b7",
+  ink: "#52514e",
+  muted: "#898781",
+};
+
+function svgNode(tag, attrs) {
+  var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (var k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+// Horizontal bar anchored at x0, rounded 4px on the data end only.
+function barPath(x0, y, w, h, rightRounded) {
+  var r = Math.min(4, w, h / 2);
+  if (!rightRounded || w <= r) return null;
+  return "M" + x0 + " " + y +
+    " h" + (w - r) + " a" + r + " " + r + " 0 0 1 " + r + " " + r +
+    " v" + (h - 2 * r) + " a" + r + " " + r + " 0 0 1 -" + r + " " + r +
+    " h-" + (w - r) + " z";
+}
+
+function svgText(x, y, str, fill, anchor, size) {
+  var t = svgNode("text", {
+    x: x, y: y, fill: fill, "text-anchor": anchor || "start",
+    "font-size": size || 11,
+    "font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
+  });
+  t.textContent = str;
+  return t;
+}
+
+// rows: [{label, value, display, hover, min?, max?}] — when min/max are set
+// the mark is a range band with an avg tick instead of a bar.
+function chartCard(title, rows, opts) {
+  var W = 330, LABEL = 108, VALW = 74, PAD = 6;
+  var ROWH = 24, TOP = 4, BOT = 16;
+  var plotW = W - LABEL - VALW - PAD * 2;
+  var H = TOP + rows.length * ROWH + BOT;
+  var max = opts.max;
+  if (max == null) {
+    max = 0;
+    rows.forEach(function (r) { max = Math.max(max, r.max != null ? r.max : r.value); });
+  }
+  if (max <= 0) max = 1;
+  var x = function (v) { return LABEL + PAD + (v / max) * plotW; };
+
+  var card = el("div", "chartcard");
+  card.appendChild(el("h3", null, title));
+  var svg = svgNode("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+
+  // hairline grid at 0 / half / max, with tick labels
+  [0, max / 2, max].forEach(function (v) {
+    svg.appendChild(svgNode("line", {
+      x1: x(v), y1: TOP, x2: x(v), y2: TOP + rows.length * ROWH,
+      stroke: v === 0 ? VIZ.axis : VIZ.grid, "stroke-width": 1,
+    }));
+    svg.appendChild(svgText(x(v), H - 4, opts.tick(v), VIZ.muted,
+      v === 0 ? "start" : v === max ? "end" : "middle", 9));
+  });
+
+  rows.forEach(function (r, i) {
+    var yMid = TOP + i * ROWH + ROWH / 2;
+    var g = svgNode("g", {});
+    var t = svgNode("title", {});
+    t.textContent = r.hover || (r.label + ": " + r.display);
+    g.appendChild(t);
+    g.appendChild(svgText(LABEL, yMid + 4,
+      r.label.length > 17 ? r.label.slice(0, 16) + "\\u2026" : r.label,
+      VIZ.ink, "end"));
+    if (r.min != null && r.max != null) {
+      // latency: range band min→max + avg tick
+      var bx = x(r.min), bw = Math.max(2, x(r.max) - x(r.min));
+      var band = svgNode("rect", {
+        x: bx, y: yMid - 3, width: bw, height: 6, rx: 3, fill: VIZ.band,
+      });
+      g.appendChild(band);
+      g.appendChild(svgNode("rect", {
+        x: Math.max(LABEL + PAD, x(r.value) - 1.5), y: yMid - 6,
+        width: 3, height: 12, rx: 1.5, fill: opts.color,
+      }));
+    } else {
+      var w = Math.max(0, x(r.value) - x(0));
+      var p = barPath(x(0), yMid - 5, w, 10, true);
+      if (p) g.appendChild(svgNode("path", { d: p, fill: opts.color }));
+      else g.appendChild(svgNode("rect", {
+        x: x(0), y: yMid - 5, width: Math.max(w, 1), height: 10, fill: opts.color,
+      }));
+    }
+    g.appendChild(svgText(W - 2, yMid + 4, r.display, VIZ.ink, "end"));
+    svg.appendChild(g);
+  });
+
+  card.appendChild(svg);
+  return card;
+}
+
+// Fixed row order across every chart: the provider lineup order, then
+// anything else (e.g. the prescan pseudo-provider) after it.
+function orderedProviders(list) {
+  var known = state.providers.map(function (p) { return p.name; });
+  return list.slice().sort(function (a, b) {
+    var ia = known.indexOf(a.name), ib = known.indexOf(b.name);
+    if (ia === -1) ia = 999;
+    if (ib === -1) ib = 999;
+    return ia - ib || (a.name < b.name ? -1 : 1);
+  });
+}
+
+function drawCharts(container, s) {
+  var provs = orderedProviders(s.providers);
+  var box = el("div", "charts");
+  var pct = function (v) { return Math.round(v) + "%"; };
+
+  var latRows = provs.filter(function (p) { return p.latAvg != null; })
+    .map(function (p) {
+      return {
+        label: lbl(p.name), value: p.latAvg, min: p.latMin, max: p.latMax,
+        display: p.latAvg + "ms",
+        hover: lbl(p.name) + ": " + p.latMin + " / " + p.latAvg + " / " + p.latMax + " ms (min/avg/max)",
+      };
+    });
+  if (latRows.length) {
+    box.appendChild(chartCard("Latency \\u2014 min\\u2013max band, avg tick", latRows,
+      { color: VIZ.bar, tick: function (v) { return Math.round(v) + "ms"; } }));
+  }
+
+  var costRows = provs.filter(function (p) { return p.calls - p.errors > 0; })
+    .map(function (p) {
+      var avg = p.cost / (p.calls - p.errors);
+      return {
+        label: lbl(p.name), value: avg, display: "$" + avg.toFixed(5),
+        hover: lbl(p.name) + ": $" + avg.toFixed(6) + " avg per call, $" + p.cost.toFixed(4) + " total",
+      };
+    });
+  if (costRows.length) {
+    box.appendChild(chartCard("Avg cost per call", costRows,
+      { color: VIZ.bar, tick: function (v) { return "$" + v.toFixed(4); } }));
+  }
+
+  var tokRows = provs.filter(function (p) { return p.avgInTok > 0; })
+    .map(function (p) {
+      return {
+        label: lbl(p.name), value: p.avgInTok, display: p.avgInTok.toLocaleString(),
+        hover: lbl(p.name) + ": " + p.avgInTok.toLocaleString() + " avg billed input tokens per image",
+      };
+    });
+  if (tokRows.length) {
+    box.appendChild(chartCard("Avg input tokens per image", tokRows,
+      { color: VIZ.bar, tick: function (v) { return Math.round(v).toLocaleString(); } }));
+  }
+
+  var errRows = provs.map(function (p) {
+    var rate = p.calls ? (p.errors / p.calls) * 100 : 0;
+    return {
+      label: lbl(p.name), value: rate, display: p.errors + "/" + p.calls,
+      hover: lbl(p.name) + ": " + p.errors + " errors in " + p.calls + " calls (" + Math.round(rate) + "%)",
+    };
+  });
+  box.appendChild(chartCard("Error rate", errRows,
+    { color: VIZ.err, max: 100, tick: pct }));
+
+  var huntProvs = provs.filter(function (p) { return p.huntN > 0; });
+  if (huntProvs.length) {
+    box.appendChild(chartCard("Valid JSON verdicts (hunt)", huntProvs.map(function (p) {
+      var rate = (p.jsonOk / p.huntN) * 100;
+      return {
+        label: lbl(p.name), value: rate, display: p.jsonOk + "/" + p.huntN,
+        hover: lbl(p.name) + ": " + p.jsonOk + " of " + p.huntN + " hunt replies were valid JSON",
+      };
+    }), { color: VIZ.bar, max: 100, tick: pct }));
+
+    var accProvs = huntProvs.filter(function (p) { return p.accN > 0; });
+    if (accProvs.length) {
+      box.appendChild(chartCard("Accuracy vs ground truth", accProvs.map(function (p) {
+        var rate = (p.accOk / p.accN) * 100;
+        return {
+          label: lbl(p.name), value: rate, display: p.accOk + "/" + p.accN,
+          hover: lbl(p.name) + ": " + p.accOk + " of " + p.accN +
+            " graded verdicts matched the planted truth",
+        };
+      }), { color: VIZ.bar, max: 100, tick: pct }));
+    }
+    var fcProvs = huntProvs.filter(function (p) { return p.expFalseN > 0; });
+    if (fcProvs.length) {
+      box.appendChild(chartCard("False credits (truth: absent)", fcProvs.map(function (p) {
+        var rate = (p.falseCredit / p.expFalseN) * 100;
+        return {
+          label: lbl(p.name), value: rate, display: p.falseCredit + "/" + p.expFalseN,
+          hover: lbl(p.name) + ": credited " + p.falseCredit + " of " + p.expFalseN +
+            " mismatched subjects as present \\u2014 the cheat-friendly failure",
+        };
+      }), { color: VIZ.err, max: 100, tick: pct }));
+    }
+    var frProvs = huntProvs.filter(function (p) { return p.expTrueN > 0; });
+    if (frProvs.length) {
+      box.appendChild(chartCard("False rejects (truth: present)", frProvs.map(function (p) {
+        var rate = (p.falseReject / p.expTrueN) * 100;
+        return {
+          label: lbl(p.name), value: rate, display: p.falseReject + "/" + p.expTrueN,
+          hover: lbl(p.name) + ": rejected " + p.falseReject + " of " + p.expTrueN +
+            " genuine subjects \\u2014 the player-frustrating failure",
+        };
+      }), { color: VIZ.err, max: 100, tick: pct }));
+    }
+
+    // Consensus outliers only accumulate on UNGRADED rows (no ground truth
+    // to grade against) — hidden entirely once truth-graded charts carry
+    // the signal, so a stale zero-chart doesn't imply "no disagreements".
+    var outlierTotal = 0;
+    huntProvs.forEach(function (p) { outlierTotal += p.outliers; });
+    if (outlierTotal > 0) box.appendChild(chartCard("Consensus outliers (ungraded rows)", huntProvs.map(function (p) {
+      var rate = (p.outliers / p.huntN) * 100;
+      return {
+        label: lbl(p.name), value: rate, display: p.outliers + "/" + p.huntN,
+        hover: lbl(p.name) + ": disagreed with the majority verdict on " +
+          p.outliers + " of " + p.huntN + " hunt calls",
+      };
+    }), { color: VIZ.err, max: 100, tick: pct }));
+
+    box.appendChild(chartCard("\\u201cPresent\\u201d verdict rate (hunt)", huntProvs.map(function (p) {
+      var rate = p.jsonOk ? (p.presentN / p.jsonOk) * 100 : 0;
+      return {
+        label: lbl(p.name), value: rate, display: p.presentN + "/" + p.jsonOk,
+        hover: lbl(p.name) + ": judged present in " + p.presentN + " of " + p.jsonOk + " valid verdicts",
+      };
+    }), { color: VIZ.bar, max: 100, tick: pct }));
+
+    var confRows = huntProvs.filter(function (p) { return p.confAvg != null; })
+      .map(function (p) {
+        return {
+          label: lbl(p.name), value: p.confAvg * 100,
+          display: Math.round(p.confAvg * 100) + "%",
+          hover: lbl(p.name) + ": average self-reported confidence " + Math.round(p.confAvg * 100) + "%",
+        };
+      });
+    if (confRows.length) {
+      box.appendChild(chartCard("Avg self-reported confidence (hunt)", confRows,
+        { color: VIZ.bar, max: 100, tick: pct }));
+    }
+  }
+
+  container.appendChild(box);
+}
+
+function refreshAllTime() {
+  fetch(API_BASE + "/runs/summary", { headers: apiHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (s) {
+      var box = document.getElementById("alltime");
+      box.textContent = "";
+      if (!s.providers || !s.providers.length) return;
+      var h = el("h2", null, "All-time (since last clear)");
+      box.appendChild(h);
+      var head = el("p", "meta",
+        s.totals.calls + " calls \\u00b7 " + s.totals.inTok.toLocaleString() +
+        " in / " + s.totals.outTok.toLocaleString() + " out \\u00b7 $" +
+        s.totals.cost.toFixed(4) + " ");
+      var clr = el("button", "btn ghost", "Clear results");
+      clr.addEventListener("click", function () {
+        if (!window.confirm("Clear ALL stored run results?")) return;
+        fetch(API_BASE + "/runs", { method: "DELETE", headers: apiHeaders() })
+          .then(function () { refreshAllTime(); });
+      });
+      head.appendChild(clr);
+      box.appendChild(head);
+      drawCharts(box, s);
+      var table = document.createElement("table");
+      var thead = el("tr");
+      ["Provider", "Calls", "Avg in-tok", "Total cost", "Latency min / avg / max", "Errors"]
+        .forEach(function (x, i) { thead.appendChild(el("th", i > 0 ? "num" : null, x)); });
+      table.appendChild(thead);
+      s.providers.forEach(function (p) {
+        var tr = el("tr");
+        tr.appendChild(el("td", null, lbl(p.name)));
+        tr.appendChild(el("td", "num", String(p.calls)));
+        tr.appendChild(el("td", "num", p.avgInTok ? p.avgInTok.toLocaleString() : "\\u2014"));
+        tr.appendChild(el("td", "num", "$" + p.cost.toFixed(4)));
+        tr.appendChild(el("td", "num", p.latMin != null
+          ? p.latMin + " / " + p.latAvg + " / " + p.latMax + " ms" : "\\u2014"));
+        tr.appendChild(el("td", "num", String(p.errors)));
+        table.appendChild(tr);
+      });
+      box.appendChild(table);
+    })
+    .catch(function () {});
+}
+
+function reloadDataset() {
+  state.images = [];
+  renderThumbs();
+  loadDataset();
+  updateRunButton();
+}
+
+document.getElementById("srcBtn").addEventListener("click", function () {
+  var n = document.getElementById("srcCount").value;
+  var s = document.getElementById("srcStatus");
+  s.textContent = "sourcing " + n + " people-free images (a descriptor scan each)\\u2026";
+  fetch(API_BASE + "/dataset/source", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ count: Number(n) }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (j.error || j.ok === false) {
+        if (reauthOn401(j)) return;
+        s.textContent = "failed: " + j.error;
+        return;
+      }
+      s.textContent = "added " + j.added.length + " \\u00b7 rejected " +
+        j.rejectedPeople + " with people \\u00b7 " + j.failures + " fetch/scan misses \\u00b7 " +
+        "scan cost $" + (j.usage && j.usage.cost ? j.usage.cost.toFixed(4) : "0");
+      if (j.usage && j.usage.calls) addBurn({
+        inputTokens: j.usage.inputTokens, outputTokens: j.usage.outputTokens,
+        cost: j.usage.cost,
+      });
+      reloadDataset();
+    })
+    .catch(function (e) { s.textContent = "failed: " + e; });
+});
+
+document.getElementById("scrambleBtn").addEventListener("click", function () {
+  if (!window.confirm("Reset all subjects to truth, then mismatch a random half?")) return;
+  fetch(API_BASE + "/dataset/scramble", { method: "POST", headers: apiHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (reauthOn401(j)) return;
+      document.getElementById("srcStatus").textContent =
+        j.mismatched + " of " + j.total + " images now carry a wrong subject" +
+        (j.skippedCollisions
+          ? " \\u00b7 " + j.skippedCollisions + " left truthful (every donor subject was actually visible in them)"
+          : "");
+      reloadDataset();
+    });
+});
+
+document.getElementById("clearDataset").addEventListener("click", function () {
+  if (!window.confirm("Clear the whole stored image set?")) return;
+  fetch(API_BASE + "/dataset", { method: "DELETE", headers: apiHeaders() })
+    .then(function () {
+      state.images = [];
+      renderThumbs();
+      updateRunButton();
+    });
+});
+
+loadDataset();
+refreshAllTime();
+
+// --- stored hunt photos (admin mount only) ------------------------------
+// GET /api/admin/photos already lists stored photos with the hunt item each
+// was submitted for; /:id/image serves the bytes. Selected photos join the
+// bake-off with subject pre-filled from that itemName — real production
+// pairings, no upload and no pre-scan needed. Note these are all verified
+// finds (ground truth present=true); for negative cases upload a photo or
+// edit a subject to something not in frame.
+var ADMIN_PHOTOS = API_BASE.replace(/\\/vision-bakeoff$/, "") + "/photos";
+if (AUTH_MODE === "admin") {
+  document.getElementById("storedWrap").hidden = false;
+}
+
+document.getElementById("loadStored").addEventListener("click", function () {
+  var status = document.getElementById("storedStatus");
+  status.textContent = "loading\\u2026";
+  fetch(ADMIN_PHOTOS + "?limit=50", { headers: apiHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (allRows) {
+      var list = document.getElementById("storedList");
+      list.textContent = "";
+      if (!Array.isArray(allRows)) {
+        status.textContent = (allRows && allRows.error) || "failed to list photos";
+        return;
+      }
+      // Test-data policy: no guests in bench images — these photos get sent
+      // to every enabled third-party provider. Only an EXPLICIT people-free
+      // verdict passes: legacy rows with a null people_present are unknown,
+      // and unknown is not screened.
+      var rows = allRows.filter(function (p) { return p.peoplePresent === false; });
+      var hidden = allRows.length - rows.length;
+      status.textContent = (rows.length
+        ? rows.length + " people-free photos (newest first)"
+        : "no explicitly people-free stored photos") +
+        (hidden ? " \\u00b7 " + hidden + " excluded (people present or unscreened)" : "");
+      rows.forEach(function (p) {
+        var lab = el("label", "stored-item");
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = p.id;
+        cb.dataset.item = p.itemName || "";
+        lab.appendChild(cb);
+        lab.appendChild(el("span", null, p.itemName || "(unknown item)"));
+        lab.appendChild(el("span", "meta",
+          (p.courseName || "") + " \\u00b7 " +
+          new Date(p.createdAt).toLocaleDateString()));
+        list.appendChild(lab);
+      });
+      document.getElementById("addStored").hidden = rows.length === 0;
+    })
+    .catch(function (e) { status.textContent = "failed: " + e; });
+});
+
+document.getElementById("addStored").addEventListener("click", function () {
+  var checks = document.querySelectorAll("#storedList input:checked");
+  var status = document.getElementById("storedStatus");
+  var remaining = checks.length;
+  if (!remaining) return;
+  status.textContent = "fetching " + remaining + " photos\\u2026";
+  Array.prototype.forEach.call(checks, function (cb) {
+    fetch(ADMIN_PHOTOS + "/" + cb.value + "/image", { headers: apiHeaders() })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.blob();
+      })
+      .then(function (blob) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(reader.result); };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        }).then(function (dataUrl) {
+          var img = {
+            name: cb.dataset.item || "stored photo",
+            mediaType: blob.type,
+            dataUrl: dataUrl,
+            base64: String(dataUrl).slice(String(dataUrl).indexOf(",") + 1),
+            subject: cb.dataset.item || "",
+            // Verified find: the item name IS ground truth, effective
+            // immediately (not only after a reload restores server fields).
+            truth: cb.dataset.item || "",
+            expected: true,
+            scanning: false,
+          };
+          state.images.push(img);
+          persistImage(img);
+          cb.checked = false;
+          renderThumbs();
+          updateRunButton();
+        });
+      })
+      .catch(function () {})
+      .then(function () {
+        remaining -= 1;
+        if (remaining === 0) status.textContent = "added";
+      });
+  });
+});
+
+// --- image intake ---
+var drop = document.getElementById("drop");
+var fileInput = document.getElementById("file");
+drop.addEventListener("click", function () { fileInput.click(); });
+drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+drop.addEventListener("drop", function (e) {
+  e.preventDefault();
+  drop.classList.remove("over");
+  addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener("change", function () { addFiles(fileInput.files); fileInput.value = ""; });
+
+function addFiles(files) {
+  Array.prototype.forEach.call(files, function (f) {
+    if (!/^image\\/(jpeg|png|webp|gif)$/.test(f.type)) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var dataUrl = reader.result;
+      var img = {
+        name: f.name,
+        mediaType: f.type,
+        dataUrl: dataUrl,
+        base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+        subject: "",
+        // Mirror the server entry so runs BEFORE a reload grade against
+        // ground truth instead of silently falling back to consensus.
+        truth: "",
+        expected: true,
+        scanning: false,
+      };
+      state.images.push(img);
+      renderThumbs();
+      updateRunButton();
+      persistImage(img);
+      // Label every upload up front (one cheap descriptor call) — the subject
+      // shows beside the file name in every mode, and hunt mode uses it.
+      prescan(img);
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+function renderThumbs() {
+  var box = document.getElementById("thumbs");
+  box.textContent = "";
+  state.images.forEach(function (img, i) {
+    var t = el("div", "thumb");
+    var im = document.createElement("img");
+    im.src = img.dataUrl;
+    t.appendChild(im);
+    var x = el("button", null, "\\u00d7");
+    x.addEventListener("click", function () {
+      if (img.id) {
+        fetch(API_BASE + "/dataset/" + img.id, {
+          method: "DELETE", headers: apiHeaders(),
+        }).catch(function () {});
+      }
+      state.images.splice(i, 1);
+      renderThumbs();
+      updateRunButton();
+    });
+    t.appendChild(x);
+    t.appendChild(el("div", "nm", img.name));
+    var subj = document.createElement("input");
+    subj.className = "subj";
+    subj.placeholder = img.scanning ? "scanning\\u2026" : "subject";
+    subj.value = img.subject;
+    subj.addEventListener("input", function () { img.subject = subj.value; });
+    subj.addEventListener("change", function () {
+      // Mirrors the server: an edit redefines truth and clears any mismatch.
+      img.truth = img.subject;
+      img.expected = true;
+      persistSubject(img);
+      renderThumbs();
+    });
+    t.appendChild(subj);
+    if (img.expected === false) {
+      var mm = el("div", "mismatch", "\\u2717 mismatched");
+      mm.title = "truth: " + (img.truth || "?");
+      t.appendChild(mm);
+    }
+    if (img.prescanCached) {
+      t.appendChild(el("div", "nm", "scan cached"));
+    } else if (img.prescanMs) {
+      t.appendChild(el("div", "nm", "scan " + img.prescanMs + "ms"));
+    }
+    box.appendChild(t);
+  });
+}
+
+// Descriptor pre-scan (Gemini 3.1 Flash-Lite; see core scanProvider()):
+// name the likely hunt target and pre-fill the subject
+// field. Never overwrites something the user already typed.
+function prescan(img) {
+  img.scanning = true;
+  renderThumbs();
+  fetch(API_BASE + "/prescan", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ imageBase64: img.base64, mediaType: img.mediaType }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      addBurn(j);
+      if (j.ms) img.prescanMs = j.ms;
+      img.prescanCached = Boolean(j.cached);
+      if (!img.subject && j.subject) {
+        img.subject = j.subject;
+        img.truth = j.subject; // matches updateSubject's server-side behavior
+        persistSubject(img);
+      }
+      // Cache hits cost nothing and would only pad the all-time stats.
+      if (!j.cached) logRun({
+        kind: "prescan", provider: "prescan (" + (j.provider || "?") + ")",
+        image: img.name,
+        error: j.error || null, inputTokens: j.inputTokens,
+        outputTokens: j.outputTokens, cost: j.cost, ms: j.ms,
+        text: j.subject || null,
+      });
+    })
+    .catch(function () {})
+    .then(function () {
+      img.scanning = false;
+      renderThumbs();
+    });
+}
+
+function selectedProviders() {
+  var out = [];
+  document.querySelectorAll("#provs input:checked").forEach(function (cb) {
+    out.push(cb.value);
+  });
+  return out;
+}
+
+function updateRunButton() {
+  var provs = selectedProviders();
+  document.getElementById("run").disabled =
+    state.images.length === 0 || provs.length === 0;
+  // Pre-flight estimate: calls and rough cost (assumes ~1,400 in / 300 out
+  // tokens per call — the ticker shows exact billed numbers as they land).
+  var status = document.getElementById("status");
+  if (state.images.length && provs.length) {
+    var est = 0;
+    provs.forEach(function (name) {
+      var p = state.providers.find(function (x) { return x.name === name; });
+      if (p) est += state.images.length * (1400 * p.priceIn + 300 * p.priceOut) / 1e6;
+    });
+    status.textContent = "next run: " + state.images.length + " \\u00d7 " +
+      provs.length + " = " + state.images.length * provs.length +
+      " calls, est ~$" + est.toFixed(4);
+  } else {
+    status.textContent = "";
+  }
+}
+document.getElementById("provs").addEventListener("change", updateRunButton);
+
+// --- mode toggle ---
+function onModeChange() {
+  var ta = document.getElementById("prompt");
+  if (huntMode()) {
+    state.describePrompt = ta.value || state.describePrompt;
+    ta.value = state.huntPrompt;
+    state.images.forEach(function (img) {
+      if (!img.subject && !img.scanning) prescan(img);
+    });
+  } else {
+    state.huntPrompt = ta.value || state.huntPrompt;
+    ta.value = state.describePrompt;
+  }
+  document.getElementById("promptHint").hidden = !huntMode();
+  document.getElementById("run").textContent = huntMode()
+    ? "Run hunt verify \\u2713\\u2717" : "Run describe";
+  try { localStorage.setItem("ffc_bakeoff_mode", huntMode() ? "hunt" : "describe"); } catch (e) {}
+  renderThumbs();
+}
+document.getElementById("modeDescribe").addEventListener("change", onModeChange);
+document.getElementById("modeHunt").addEventListener("change", onModeChange);
+
+// The mode must survive reloads — a silent reset to Describe once sent a
+// whole round out as prose when the operator expected pass/fail verdicts.
+try {
+  if (localStorage.getItem("ffc_bakeoff_mode") === "hunt") {
+    document.getElementById("modeHunt").checked = true;
+  }
+} catch (e) {}
+onModeChange();
+
+// Send size survives reloads too (same silent-reset lesson).
+try {
+  if (localStorage.getItem("ffc_bakeoff_size") === "768") {
+    document.getElementById("sendSize").value = "768";
+  }
+} catch (e) {}
+document.getElementById("sendSize").addEventListener("change", function () {
+  try { localStorage.setItem("ffc_bakeoff_size", this.value); } catch (e) {}
+});
+
+// Downscale to 768px long edge in-browser (canvas JPEG, quality .85) — the
+// same client-side technique production uses for uploads. Cached per image;
+// never upscales.
+function sendableImage(img) {
+  if (document.getElementById("sendSize").value !== "768") {
+    return Promise.resolve({ base64: img.base64, mediaType: img.mediaType });
+  }
+  if (img.small768) return Promise.resolve(img.small768);
+  return new Promise(function (resolve) {
+    var image = new Image();
+    image.onload = function () {
+      var long = Math.max(image.width, image.height);
+      if (long <= 768) {
+        img.small768 = { base64: img.base64, mediaType: img.mediaType };
+        return resolve(img.small768);
+      }
+      var scale = 768 / long;
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      var dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      img.small768 = {
+        base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+        mediaType: "image/jpeg",
+      };
+      resolve(img.small768);
+    };
+    image.onerror = function () {
+      resolve({ base64: img.base64, mediaType: img.mediaType });
+    };
+    image.src = img.dataUrl;
+  });
+}
+
+// --- run ---
+var blindLabels = "ABCDEFGHIJ";
+
+document.getElementById("run").addEventListener("click", function () {
+  var provs = selectedProviders();
+  var promptTemplate = document.getElementById("prompt").value;
+  var hunt = huntMode();
+  var blind = document.getElementById("blind").checked;
+  var runBtn = document.getElementById("run");
+  runBtn.disabled = true;
+
+  // Blind mode: shuffle a provider -> "Model X" mapping for this run.
+  state.blindMap = null;
+  if (blind) {
+    var shuffled = provs.slice();
+    for (var i = shuffled.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+    }
+    state.blindMap = {};
+    shuffled.forEach(function (name, idx) {
+      state.blindMap[name] = "Model " + blindLabels[idx];
+    });
+  }
+  document.getElementById("reveal").hidden = !blind;
+
+  state.results = [];
+  var resultsBox = document.getElementById("results");
+  resultsBox.textContent = "";
+  document.getElementById("summary").textContent = "";
+
+  var pending = state.images.length * provs.length;
+  var status = document.getElementById("status");
+  status.textContent = pending + " calls in flight\\u2026";
+
+  // Hunt mode: per-image consensus tracking. Once every provider has
+  // answered for an image, the minority side of a present/not-present split
+  // is flagged as an outlier (error styling + outlier:true in the history).
+  // Run rows are buffered until their image completes so the flag lands in
+  // the log. Errors and invalid JSON never vote.
+  var rowTrack = state.images.map(function () {
+    return { done: 0, entries: [] };
+  });
+
+  function rowComplete(imgIdx) {
+    var entries = rowTrack[imgIdx].entries;
+    var expected = state.images[imgIdx] ? state.images[imgIdx].expected : null;
+    // Ground truth beats consensus: on a scrambled/sourced dataset each
+    // verdict is graded directly against what the subject-vs-image pairing
+    // should yield.
+    if (typeof expected === "boolean") {
+      entries.forEach(function (e) {
+        if (e.present === null) return;
+        // On graded rows, chip color means CORRECTNESS (the glyph still
+        // shows the model's answer) — otherwise a wrong "present" glows
+        // green while every correct "absent" sits in red.
+        var chip = e.cell.querySelector(".verdict");
+        if (chip) {
+          chip.classList.remove("yes", "no");
+          chip.classList.add(e.present === expected ? "yes" : "no");
+        }
+        if (e.present !== expected) {
+          e.cell.classList.add("err");
+          var f = el("div");
+          var flag = el("span", "flag",
+            "wrong \\u2014 truth: " + (expected ? "present" : "absent"));
+          flag.title = "If most of a row is 'wrong', the planted truth is " +
+            "probably mislabeled \\u2014 edit the subject under the " +
+            "thumbnail to correct it (that resets truth).";
+          f.appendChild(flag);
+          e.cell.insertBefore(f, e.cell.firstChild);
+        }
+      });
+      entries.forEach(function (e) { if (e.logRow) logRun(e.logRow); });
+      return;
+    }
+    var yes = 0, no = 0;
+    entries.forEach(function (e) {
+      if (e.present === true) yes += 1;
+      if (e.present === false) no += 1;
+    });
+    if (yes > 0 && no > 0 && yes !== no) {
+      var minority = yes > no ? false : true;
+      var tally = (yes > no ? yes : no) + "\\u2013" + (yes > no ? no : yes);
+      entries.forEach(function (e) {
+        if (e.present === minority) {
+          e.cell.classList.add("err");
+          var f = el("div");
+          f.appendChild(el("span", "flag", "outlier vs " + tally));
+          e.cell.insertBefore(f, e.cell.firstChild);
+          if (e.logRow) e.logRow.outlier = true;
+        }
+      });
+    }
+    entries.forEach(function (e) { if (e.logRow) logRun(e.logRow); });
+  }
+
+  function trackResult(imgIdx, entry) {
+    var t = rowTrack[imgIdx];
+    t.entries.push(entry);
+    t.done += 1;
+    if (hunt && t.done === ordered.length) rowComplete(imgIdx);
+    else if (!hunt && entry.logRow) logRun(entry.logRow);
+  }
+
+  // One compact matrix per run: images as rows, providers as columns. Tap a
+  // cell for the reason/full text and the tokens-cost-latency line.
+  var ordered = provs.slice();
+  if (blind) ordered.sort(function (a, b) {
+    return state.blindMap[a] < state.blindMap[b] ? -1 : 1;
+  });
+
+  var send768 = document.getElementById("sendSize").value === "768";
+  resultsBox.appendChild(el("p", "meta", (hunt
+    ? "Hunt verify \\u2014 \\u2713/\\u2717 verdicts against each image's subject"
+    : "Describe \\u2014 open descriptions") +
+    " \\u00b7 " + state.images.length + " images \\u00d7 " + provs.length + " providers" +
+    (send768 ? " \\u00b7 sent at 768px" : "")));
+  var wrap = el("div", "runtablewrap");
+  var table = el("table", "runtable");
+  var thead = el("tr");
+  thead.appendChild(el("th", null, "Image"));
+  ordered.forEach(function (name) {
+    var th = el("th", null, blind ? state.blindMap[name] : lbl(name));
+    th.dataset.provider = name;
+    thead.appendChild(th);
+  });
+  table.appendChild(thead);
+  wrap.appendChild(table);
+  resultsBox.appendChild(wrap);
+
+  // Distractor context per image: other items KNOWN to be in/near the frame
+  // (the true subject when scrambled, plus the sourcing scan's also-visible
+  // list). Told to the judge as "not the target" — mirrors production, where
+  // a course's other hunt items constantly photobomb the claimed one. Items
+  // sharing a content word with the target are excluded so the list can
+  // never name the thing being judged.
+  function distractorText(img) {
+    var subWords = {};
+    String(img.subject || "").toLowerCase().split(/[^a-z]+/).forEach(function (w) {
+      if (w.length > 3 && w.charAt(w.length - 1) === "s") w = w.slice(0, -1);
+      if (w.length >= 3) subWords[w] = true;
+    });
+    var pool = [];
+    if (img.truth && img.truth !== img.subject) pool.push(img.truth);
+    (img.alsoVisible || []).forEach(function (x) { pool.push(x); });
+    var seen = {};
+    var safe = pool.filter(function (item) {
+      var k = String(item).toLowerCase();
+      if (!k || seen[k]) return false;
+      seen[k] = true;
+      return !k.split(/[^a-z]+/).some(function (w) {
+        if (w.length > 3 && w.charAt(w.length - 1) === "s") w = w.slice(0, -1);
+        return subWords[w];
+      });
+    }).slice(0, 8);
+    if (!safe.length) return "";
+    return "Known other items at this venue may appear in or near the frame: " +
+      safe.join(", ") + ". These are NOT the target \\u2014 their presence " +
+      "never counts toward the verdict; judge ONLY whether the quoted " +
+      "target itself is visible.\\n\\n";
+  }
+
+  state.images.forEach(function (img, imgIdx) {
+    var prompt = hunt
+      ? promptTemplate
+          .replace(/__SUBJECT__/g, img.subject || "the target item")
+          .replace(/__DISTRACTORS__/g, distractorText(img))
+      : promptTemplate;
+    var tr = el("tr");
+    var ic = el("td", "imgcell");
+    var im = document.createElement("img");
+    im.src = img.dataUrl;
+    im.title = img.name;
+    ic.appendChild(im);
+    // Thumb + subject only — file names just eat column width (the thumb's
+    // hover title still carries the name for debugging).
+    if (img.subject) ic.appendChild(el("div", "nm2", img.subject));
+    else if (blind) ic.appendChild(el("div", "nm2", "#" + (imgIdx + 1)));
+    tr.appendChild(ic);
+    table.appendChild(tr);
+
+    // Cells first (synchronous, keeps table layout stable), then the
+    // per-image send payload — possibly downscaled — then the fetches.
+    var cellFor = {};
+    ordered.forEach(function (name) {
+      var cell = el("td", "cell pending", "\\u2026");
+      tr.appendChild(cell);
+      cell.addEventListener("click", function () { cell.classList.toggle("open"); });
+      cellFor[name] = cell;
+    });
+
+    sendableImage(img).then(function (send) {
+    ordered.forEach(function (name) {
+      var cell = cellFor[name];
+
+      function fill(build) {
+        cell.classList.remove("pending");
+        cell.textContent = "";
+        build(cell);
+      }
+
+      fetch(API_BASE + "/describe", {
+        method: "POST",
+        headers: apiHeaders({ "content-type": "application/json" }),
+        body: JSON.stringify({
+          provider: name,
+          imageBase64: send.base64,
+          mediaType: send.mediaType,
+          prompt: prompt,
+          // Hunt runs engage each provider's native JSON mode on top of the
+          // hardened prompt (Anthropic schema / Gemini responseSchema /
+          // OpenAI-compatible response_format).
+          json: hunt,
+        }),
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (r) {
+          if (!r.ok || r.j.error) {
+            var msg = r.j.error || "request failed";
+            fill(function (c) {
+              c.classList.add("err");
+              c.appendChild(el("div", null, "ERR \\u2013 tap"));
+              c.appendChild(el("div", "detail", msg));
+            });
+            state.results.push({ provider: name, error: true });
+            trackResult(imgIdx, {
+              present: null, cell: cell,
+              logRow: {
+                kind: hunt ? "hunt" : "describe", provider: name,
+                image: img.name, subject: hunt ? img.subject : null,
+                expected: hunt && typeof img.expected === "boolean" ? img.expected : undefined,
+                sentPx: send768 ? 768 : undefined,
+                error: msg,
+              },
+            });
+          } else {
+            addBurn(r.j);
+            var m = r.j.inputTokens + " in / " + r.j.outputTokens + " out \\u00b7 $" +
+              (r.j.cost != null ? r.j.cost.toFixed(6) : "?") + " \\u00b7 " + r.j.ms + "ms";
+            var verdict = null;
+            var replyText = (r.j.text || "").trim();
+            fill(function (c) {
+              if (!replyText) {
+                // An empty reply must never render as a blank cell — it's a
+                // failed call (usually a reasoning model eating its cap).
+                c.classList.add("err");
+                var bad = el("div");
+                bad.appendChild(el("span", "flag", "empty reply"));
+                c.appendChild(bad);
+                c.appendChild(el("div", "detail",
+                  "Model returned no text \\u2014 output budget likely " +
+                  "consumed by hidden reasoning tokens."));
+              } else if (hunt) verdict = renderVerdict(c, replyText);
+              else {
+                c.appendChild(el("div", "clamp", replyText));
+              }
+              var meta = el("div", "meta detail", "");
+              meta.textContent = blind ? "" : m;
+              meta.dataset.full = m;
+              c.appendChild(meta);
+            });
+            // Billed but unusable: empty replies always, and in hunt mode any
+            // reply that didn't parse to a verdict. Counts in the error
+            // column while its tokens still count toward spend.
+            var unusable = !replyText || (hunt && !verdict);
+            state.results.push({
+              provider: name,
+              jsonError: unusable,
+              inputTokens: r.j.inputTokens,
+              outputTokens: r.j.outputTokens,
+              cost: r.j.cost,
+              ms: r.j.ms,
+            });
+            trackResult(imgIdx, {
+              present: verdict && typeof verdict.present === "boolean"
+                ? verdict.present : null,
+              cell: cell,
+              logRow: {
+                kind: hunt ? "hunt" : "describe", provider: name,
+                image: img.name, subject: hunt ? img.subject : null,
+                expected: hunt && typeof img.expected === "boolean" ? img.expected : undefined,
+                sentPx: send768 ? 768 : undefined,
+                inputTokens: r.j.inputTokens, outputTokens: r.j.outputTokens,
+                cost: r.j.cost, ms: r.j.ms, text: r.j.text,
+              },
+            });
+          }
+        })
+        .catch(function (e) {
+          fill(function (c) {
+            c.classList.add("err");
+            c.appendChild(el("div", null, "ERR \\u2013 tap"));
+            c.appendChild(el("div", "detail", String(e)));
+          });
+          state.results.push({ provider: name, error: true });
+          trackResult(imgIdx, { present: null, cell: cell, logRow: null });
+        })
+        .then(function () {
+          pending -= 1;
+          status.textContent = pending > 0 ? pending + " calls in flight\\u2026" : "done";
+          if (pending === 0) {
+            runBtn.disabled = false;
+            if (!blind) renderSummary();
+            refreshAllTime();
+          }
+        });
+    });
+    });
+  });
+});
+
+// Hunt mode: try to render the JSON verdict compactly. A provider that
+// wraps or mangles the JSON gets shown raw with a flag — that failure is
+// itself a comparison result (production needs machine-readable verdicts).
+function renderVerdict(node, raw) {
+  var text = raw.trim();
+  var m = text.match(/\\{[\\s\\S]*\\}/);
+  var v = null;
+  if (m) { try { v = JSON.parse(m[0]); } catch (e) {} }
+  if (!v || typeof v.present !== "boolean") {
+    // An unparseable verdict is a failed call for this workload — error
+    // treatment, not a cosmetic flag (production could not consume it).
+    node.classList.add("err");
+    var bad = el("div");
+    bad.appendChild(el("span", "flag", "not valid JSON"));
+    node.appendChild(bad);
+    node.appendChild(el("div", "detail", text));
+    return null;
+  }
+  var line = el("div");
+  var pct = typeof v.confidence === "number"
+    ? " " + Math.round(v.confidence * 100) + "%" : "";
+  line.appendChild(el("span", "verdict " + (v.present ? "yes" : "no"),
+    (v.present ? "\\u2713" : "\\u2717") + pct));
+  node.appendChild(line);
+  var flags = el("div");
+  if (v.photo_of_photo) flags.appendChild(el("span", "flag", "p-of-p"));
+  if (v.unsafe) flags.appendChild(el("span", "flag", "unsafe"));
+  if (m[0].length !== text.length) flags.appendChild(el("span", "flag", "+prose"));
+  if (flags.childNodes.length) node.appendChild(flags);
+  if (v.reason) node.appendChild(el("div", "detail", String(v.reason)));
+  return v;
+}
+
+document.getElementById("reveal").addEventListener("click", function () {
+  document.querySelectorAll(".runtable th[data-provider]").forEach(function (th) {
+    th.textContent = lbl(th.dataset.provider);
+  });
+  document.querySelectorAll(".cell .meta").forEach(function (m) {
+    if (m.dataset.full) m.textContent = m.dataset.full;
+  });
+  document.getElementById("reveal").hidden = true;
+  renderSummary();
+});
+
+function renderSummary() {
+  var agg = {};
+  state.results.forEach(function (r) {
+    var a = agg[r.provider] ||
+      (agg[r.provider] = { n: 0, err: 0, inTok: 0, cost: 0, lat: [] });
+    a.n += 1;
+    if (r.error) { a.err += 1; return; }
+    // jsonError rows failed the workload but were still billed — they count
+    // as errors AND their tokens count toward spend.
+    if (r.jsonError) a.err += 1;
+    a.inTok += r.inputTokens || 0;
+    a.cost += r.cost || 0;
+    if (r.ms) a.lat.push(r.ms);
+  });
+  var box = document.getElementById("summary");
+  box.textContent = "";
+  box.appendChild(el("h2", null, "Summary"));
+  var table = document.createElement("table");
+  var thead = el("tr");
+  ["Provider", "Avg in-tok/img", "Total cost", "Est / visit (20 img)", "Latency min / avg / max", "Errors"]
+    .forEach(function (h, i) { thead.appendChild(el("th", i > 0 ? "num" : null, h)); });
+  table.appendChild(thead);
+  Object.keys(agg).forEach(function (name) {
+    var a = agg[name];
+    var ok = a.n - a.err;
+    var tr = el("tr");
+    tr.appendChild(el("td", null, lbl(name)));
+    tr.appendChild(el("td", "num", ok ? Math.round(a.inTok / ok).toLocaleString() : "\\u2014"));
+    tr.appendChild(el("td", "num", "$" + a.cost.toFixed(5)));
+    tr.appendChild(el("td", "num", ok ? "$" + ((a.cost / ok) * 20).toFixed(4) : "\\u2014"));
+    var latCell = "\\u2014";
+    if (a.lat.length) {
+      var sum = 0, min = a.lat[0], max = a.lat[0];
+      a.lat.forEach(function (v) { sum += v; if (v < min) min = v; if (v > max) max = v; });
+      latCell = min + " / " + Math.round(sum / a.lat.length) + " / " + max + " ms";
+    }
+    tr.appendChild(el("td", "num", latCell));
+    tr.appendChild(el("td", "num", a.err ? String(a.err) : "0"));
+    table.appendChild(tr);
+  });
+  box.appendChild(table);
+}
+</script>
+</body>
+</html>`;
