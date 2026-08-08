@@ -881,10 +881,22 @@ function onModeChange() {
     ta.value = state.describePrompt;
   }
   document.getElementById("promptHint").hidden = !huntMode();
+  document.getElementById("run").textContent = huntMode()
+    ? "Run hunt verify \\u2713\\u2717" : "Run describe";
+  try { localStorage.setItem("ffc_bakeoff_mode", huntMode() ? "hunt" : "describe"); } catch (e) {}
   renderThumbs();
 }
 document.getElementById("modeDescribe").addEventListener("change", onModeChange);
 document.getElementById("modeHunt").addEventListener("change", onModeChange);
+
+// The mode must survive reloads — a silent reset to Describe once sent a
+// whole round out as prose when the operator expected pass/fail verdicts.
+try {
+  if (localStorage.getItem("ffc_bakeoff_mode") === "hunt") {
+    document.getElementById("modeHunt").checked = true;
+  }
+} catch (e) {}
+onModeChange();
 
 // --- run ---
 var blindLabels = "ABCDEFGHIJ";
@@ -928,6 +940,10 @@ document.getElementById("run").addEventListener("click", function () {
     return state.blindMap[a] < state.blindMap[b] ? -1 : 1;
   });
 
+  resultsBox.appendChild(el("p", "meta", (hunt
+    ? "Hunt verify \\u2014 \\u2713/\\u2717 verdicts against each image's subject"
+    : "Describe \\u2014 open descriptions") +
+    " \\u00b7 " + state.images.length + " images \\u00d7 " + provs.length + " providers"));
   var wrap = el("div", "runtablewrap");
   var table = el("table", "runtable");
   var thead = el("tr");
