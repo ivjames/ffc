@@ -39,9 +39,9 @@ export const HUNT_PROMPT_TEMPLATE =
 // so the UI can pre-fill each image's subject field.
 export const PRESCAN_PROMPT =
   "This photo was taken for a scavenger hunt at a family entertainment " +
-  "venue. Name the most likely target item it was meant to capture — a " +
-  'short noun phrase of 2-6 words, e.g. "a giant pumpkin" or "a windmill". ' +
-  "Reply with ONLY the phrase: no quotes, no punctuation, no explanation.";
+  "venue. Name the target item it was meant to capture in AT MOST three " +
+  "words — like: giant pumpkin, windmill, red door. Reply with ONLY those " +
+  "words: no article, no quotes, no punctuation, no explanation.";
 
 // Rates are $/MTok (input, output) — verified 2026-08-08, re-confirm at
 // build time. Model ids are config, not code: when a tier deprecates, update
