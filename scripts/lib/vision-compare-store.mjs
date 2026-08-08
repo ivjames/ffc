@@ -48,12 +48,54 @@ export function addDatasetImage({ name, subject, mediaType, base64 }) {
     id: randomUUID(),
     name: String(name || "image"),
     subject: String(subject || ""),
+    // Ground truth: `truth` is what the image actually shows; `expected` is
+    // whether the current subject matches it (false after scrambling).
+    truth: String(subject || ""),
+    expected: true,
     mediaType,
     createdAt: new Date().toISOString(),
   };
   writeFileSync(join(IMAGES, entry.id), Buffer.from(base64, "base64"));
   writeDataset([...readDataset(), entry]);
   return entry;
+}
+
+/**
+ * Reset every subject to its truth, then give a random half of the images a
+ * DIFFERENT image's subject (expected=false). Re-running re-randomizes from
+ * scratch, so repeated scrambles never compound.
+ */
+export function scrambleDataset() {
+  const rows = readDataset();
+  rows.forEach((r) => {
+    if (!r.truth) r.truth = r.subject; // entries predating ground truth
+    r.subject = r.truth;
+    r.expected = true;
+  });
+  const eligible = rows.filter((r) => r.truth);
+  const k = Math.floor(eligible.length / 2);
+  if (k >= 2) {
+    const picked = eligible
+      .map((r) => ({ r, sort: Math.random() }))
+      .sort((a, b) => a.sort - b.sort)
+      .slice(0, k)
+      .map((x) => x.r);
+    // Rotate the picked subjects by one — nobody keeps their own (unless two
+    // truths are identical text, which the neq check below patches).
+    const subjects = picked.map((r) => r.truth);
+    picked.forEach((r, i) => {
+      r.subject = subjects[(i + 1) % subjects.length];
+      r.expected = false;
+    });
+    // A rotation can hand an image an identical-text subject if two truths
+    // match; those entries stay honest (expected=true).
+    picked.forEach((r) => {
+      if (r.subject === r.truth) r.expected = true;
+    });
+  }
+  writeDataset(rows);
+  const mismatched = rows.filter((r) => r.expected === false).length;
+  return { total: rows.length, mismatched };
 }
 
 export function getDatasetImage(id) {
@@ -149,6 +191,7 @@ export function runsSummary() {
       (perProvider[r.provider] = {
         calls: 0, errors: 0, inTok: 0, outTok: 0, cost: 0, lat: [],
         huntN: 0, jsonOk: 0, presentN: 0, confSum: 0, confN: 0, outliers: 0,
+        accN: 0, accOk: 0, expFalseN: 0, falseCredit: 0, expTrueN: 0, falseReject: 0,
       });
     totals.calls += 1;
     p.calls += 1;
@@ -184,6 +227,18 @@ export function runsSummary() {
           p.confSum += Math.max(0, Math.min(1, v.confidence));
           p.confN += 1;
         }
+        // Ground-truth grading (rows from scrambled/sourced datasets).
+        if (typeof r.expected === "boolean") {
+          p.accN += 1;
+          if (v.present === r.expected) p.accOk += 1;
+          if (r.expected) {
+            p.expTrueN += 1;
+            if (!v.present) p.falseReject += 1;
+          } else {
+            p.expFalseN += 1;
+            if (v.present) p.falseCredit += 1;
+          }
+        }
       } else {
         // Unparseable verdict = failed call for this workload; its tokens
         // were still billed and stay in the totals above.
@@ -213,6 +268,12 @@ export function runsSummary() {
         presentN: p.presentN,
         confAvg: p.confN ? p.confSum / p.confN : null,
         outliers: p.outliers,
+        accN: p.accN,
+        accOk: p.accOk,
+        expFalseN: p.expFalseN,
+        falseCredit: p.falseCredit,
+        expTrueN: p.expTrueN,
+        falseReject: p.falseReject,
       };
     }),
   };

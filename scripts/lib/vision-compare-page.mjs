@@ -64,6 +64,9 @@ const PAGE = `<!doctype html>
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .thumb .subj { width: 96px; margin-top: 4px; border: 1px solid var(--line);
     border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
+  .thumb .mismatch { font-size: 10px; color: var(--err); font-weight: 600; }
+  #srcCount { width: 58px; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px; font: inherit; }
   .modes { display: flex; gap: 16px; margin-bottom: 10px; }
   #storedWrap { margin-top: 12px; }
   #storedList { margin: 8px 0; max-height: 240px; overflow-y: auto; }
@@ -162,7 +165,17 @@ const PAGE = `<!doctype html>
       <button class="btn" id="addStored" type="button" hidden>Add selected</button>
     </div>
     <div class="thumbs" id="thumbs"></div>
-    <p class="meta">The image set is saved on the server and reloads next
+    <p class="meta">
+      <input type="number" id="srcCount" value="10" min="1" max="24">
+      <button class="btn ghost" id="srcBtn" type="button">Source from web</button>
+      <button class="btn ghost" id="scrambleBtn" type="button">Scramble half
+        ✗</button>
+      <span id="srcStatus"></span>
+    </p>
+    <p class="meta">Sourced images are people-screened (rejects anything with
+      a person). Scramble resets all subjects to truth, then gives a random
+      half another image's subject — verdicts get graded against that
+      ground truth. The image set is saved on the server and reloads next
       visit. <button class="btn ghost" id="clearDataset" type="button">Clear
       image set</button></p>
   </div>
@@ -364,6 +377,8 @@ function loadDataset() {
                 id: metaRow.id,
                 name: metaRow.name,
                 subject: metaRow.subject || "",
+                truth: metaRow.truth || "",
+                expected: typeof metaRow.expected === "boolean" ? metaRow.expected : true,
                 mediaType: metaRow.mediaType,
                 dataUrl: dataUrl,
                 base64: dataUrl.slice(dataUrl.indexOf(",") + 1),
@@ -562,6 +577,29 @@ function drawCharts(container, s) {
       };
     }), { color: VIZ.bar, max: 100, tick: pct }));
 
+    var accProvs = huntProvs.filter(function (p) { return p.accN > 0; });
+    if (accProvs.length) {
+      box.appendChild(chartCard("Accuracy vs ground truth", accProvs.map(function (p) {
+        var rate = (p.accOk / p.accN) * 100;
+        return {
+          label: lbl(p.name), value: rate, display: p.accOk + "/" + p.accN,
+          hover: lbl(p.name) + ": " + p.accOk + " of " + p.accN +
+            " graded verdicts matched the planted truth",
+        };
+      }), { color: VIZ.bar, max: 100, tick: pct }));
+    }
+    var fcProvs = huntProvs.filter(function (p) { return p.expFalseN > 0; });
+    if (fcProvs.length) {
+      box.appendChild(chartCard("False credits (truth: absent)", fcProvs.map(function (p) {
+        var rate = (p.falseCredit / p.expFalseN) * 100;
+        return {
+          label: lbl(p.name), value: rate, display: p.falseCredit + "/" + p.expFalseN,
+          hover: lbl(p.name) + ": credited " + p.falseCredit + " of " + p.expFalseN +
+            " mismatched subjects as present \\u2014 the cheat-friendly failure",
+        };
+      }), { color: VIZ.err, max: 100, tick: pct }));
+    }
+
     box.appendChild(chartCard("Consensus outliers (hunt)", huntProvs.map(function (p) {
       var rate = (p.outliers / p.huntN) * 100;
       return {
@@ -638,6 +676,48 @@ function refreshAllTime() {
     })
     .catch(function () {});
 }
+
+function reloadDataset() {
+  state.images = [];
+  renderThumbs();
+  loadDataset();
+  updateRunButton();
+}
+
+document.getElementById("srcBtn").addEventListener("click", function () {
+  var n = document.getElementById("srcCount").value;
+  var s = document.getElementById("srcStatus");
+  s.textContent = "sourcing " + n + " people-free images (a Haiku scan each)\\u2026";
+  fetch(API_BASE + "/dataset/source", {
+    method: "POST",
+    headers: apiHeaders({ "content-type": "application/json" }),
+    body: JSON.stringify({ count: Number(n) }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (j.error) { s.textContent = "failed: " + j.error; return; }
+      s.textContent = "added " + j.added.length + " \\u00b7 rejected " +
+        j.rejectedPeople + " with people \\u00b7 " + j.failures + " fetch/scan misses \\u00b7 " +
+        "scan cost $" + (j.usage && j.usage.cost ? j.usage.cost.toFixed(4) : "0");
+      if (j.usage && j.usage.calls) addBurn({
+        inputTokens: j.usage.inputTokens, outputTokens: j.usage.outputTokens,
+        cost: j.usage.cost,
+      });
+      reloadDataset();
+    })
+    .catch(function (e) { s.textContent = "failed: " + e; });
+});
+
+document.getElementById("scrambleBtn").addEventListener("click", function () {
+  if (!window.confirm("Reset all subjects to truth, then mismatch a random half?")) return;
+  fetch(API_BASE + "/dataset/scramble", { method: "POST", headers: apiHeaders() })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      document.getElementById("srcStatus").textContent =
+        j.mismatched + " of " + j.total + " images now carry a wrong subject";
+      reloadDataset();
+    });
+});
 
 document.getElementById("clearDataset").addEventListener("click", function () {
   if (!window.confirm("Clear the whole stored image set?")) return;
@@ -812,6 +892,11 @@ function renderThumbs() {
     subj.addEventListener("input", function () { img.subject = subj.value; });
     subj.addEventListener("change", function () { persistSubject(img); });
     t.appendChild(subj);
+    if (img.expected === false) {
+      var mm = el("div", "mismatch", "\\u2717 mismatched");
+      mm.title = "truth: " + (img.truth || "?");
+      t.appendChild(mm);
+    }
     if (img.prescanCached) {
       t.appendChild(el("div", "nm", "scan cached"));
     } else if (img.prescanMs) {
@@ -962,6 +1047,23 @@ document.getElementById("run").addEventListener("click", function () {
 
   function rowComplete(imgIdx) {
     var entries = rowTrack[imgIdx].entries;
+    var expected = state.images[imgIdx] ? state.images[imgIdx].expected : null;
+    // Ground truth beats consensus: on a scrambled/sourced dataset each
+    // verdict is graded directly against what the subject-vs-image pairing
+    // should yield.
+    if (typeof expected === "boolean") {
+      entries.forEach(function (e) {
+        if (e.present !== null && e.present !== expected) {
+          e.cell.classList.add("err");
+          var f = el("div");
+          f.appendChild(el("span", "flag",
+            "wrong \\u2014 truth: " + (expected ? "present" : "absent")));
+          e.cell.insertBefore(f, e.cell.firstChild);
+        }
+      });
+      entries.forEach(function (e) { if (e.logRow) logRun(e.logRow); });
+      return;
+    }
     var yes = 0, no = 0;
     entries.forEach(function (e) {
       if (e.present === true) yes += 1;
@@ -1072,6 +1174,7 @@ document.getElementById("run").addEventListener("click", function () {
               logRow: {
                 kind: hunt ? "hunt" : "describe", provider: name,
                 image: img.name, subject: hunt ? img.subject : null,
+                expected: hunt && typeof img.expected === "boolean" ? img.expected : undefined,
                 error: msg,
               },
             });
@@ -1120,6 +1223,7 @@ document.getElementById("run").addEventListener("click", function () {
               logRow: {
                 kind: hunt ? "hunt" : "describe", provider: name,
                 image: img.name, subject: hunt ? img.subject : null,
+                expected: hunt && typeof img.expected === "boolean" ? img.expected : undefined,
                 inputTokens: r.j.inputTokens, outputTokens: r.j.outputTokens,
                 cost: r.j.cost, ms: r.j.ms, text: r.j.text,
               },

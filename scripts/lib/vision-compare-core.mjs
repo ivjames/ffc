@@ -64,6 +64,26 @@ const GEMINI_VERDICT_SCHEMA = {
   required: VERDICT_SCHEMA.required,
 };
 
+// Web-sourcing scan: one schema-enforced Haiku call that names the subject
+// AND screens for people — sourced internet images are rejected when anyone
+// is visible (test-data policy: no people in images sent to third parties).
+export const SOURCE_SCAN_PROMPT =
+  "Two tasks for this photo. 1) subject: name its single most prominent " +
+  "object or feature in AT MOST three words, like a scavenger-hunt item " +
+  "(giant pumpkin, windmill, red door) — no articles. 2) people_present: " +
+  "true if any person is visible, even partially or in the background; " +
+  "when unsure, err toward true.";
+
+export const SOURCE_SCAN_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    subject: { type: "string" },
+    people_present: { type: "boolean" },
+  },
+  required: ["subject", "people_present"],
+};
+
 // Pre-scan: one cheap Haiku call per image that names the likely hunt target
 // so the UI can pre-fill each image's subject field.
 export const PRESCAN_PROMPT =
@@ -219,7 +239,7 @@ async function callAnthropic(p, key, img, prompt, opts) {
       max_tokens: MAX_OUTPUT_TOKENS,
       // Same mechanism production vision.js uses — schema-guaranteed output.
       ...(opts?.json
-        ? { output_config: { format: { type: "json_schema", schema: VERDICT_SCHEMA } } }
+        ? { output_config: { format: { type: "json_schema", schema: opts.schema || VERDICT_SCHEMA } } }
         : {}),
       messages: [
         {
@@ -336,6 +356,24 @@ export async function describeImage(provider, img, prompt = DEFAULT_PROMPT, opts
  * Name the likely hunt target in an image (Haiku pre-scan).
  * Returns describeImage's shape plus `subject` (cleaned one-line phrase).
  */
+/**
+ * Scan a sourced web image: subject phrase + people screening, schema-forced.
+ * Returns { subject, peoplePresent, ...usage }.
+ */
+export async function sourceScan(img) {
+  const provider = PROVIDERS.find((p) => p.kind === "anthropic");
+  const r = await describeImage(provider, img, SOURCE_SCAN_PROMPT, {
+    json: true,
+    schema: SOURCE_SCAN_SCHEMA,
+  });
+  const parsed = JSON.parse(r.text);
+  return {
+    ...r,
+    subject: String(parsed.subject || "").trim(),
+    peoplePresent: Boolean(parsed.people_present),
+  };
+}
+
 export async function prescanSubject(img) {
   const provider = PROVIDERS.find((p) => p.kind === "anthropic");
   const r = await describeImage(provider, img, PRESCAN_PROMPT);

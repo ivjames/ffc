@@ -38,7 +38,9 @@ import {
   runsSummary,
   prescanCacheGet,
   prescanCachePut,
+  scrambleDataset,
 } from "./lib/vision-compare-store.mjs";
+import { sourceImagesFromWeb } from "./lib/vision-compare-source.mjs";
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || "127.0.0.1";
@@ -142,6 +144,17 @@ const server = createServer(async (req, res) => {
         mediaType: body.mediaType,
         base64: body.imageBase64,
       }));
+    }
+    if (req.method === "POST" && req.url === "/api/dataset/source") {
+      const body = JSON.parse(await readBody(req));
+      try {
+        return json(res, 200, await sourceImagesFromWeb(body.count));
+      } catch (err) {
+        return json(res, 502, { error: String(err.message || err) });
+      }
+    }
+    if (req.method === "POST" && req.url === "/api/dataset/scramble") {
+      return json(res, 200, scrambleDataset());
     }
     let m = req.url.match(/^\/api\/dataset\/([0-9a-f-]+)\/image$/);
     if (req.method === "GET" && m) {

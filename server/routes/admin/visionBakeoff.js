@@ -36,7 +36,9 @@ import {
   runsSummary,
   prescanCacheGet,
   prescanCachePut,
+  scrambleDataset,
 } from "../../../scripts/lib/vision-compare-store.mjs";
+import { sourceImagesFromWeb } from "../../../scripts/lib/vision-compare-source.mjs";
 
 export const router = Router();
 export const publicRouter = Router();
@@ -99,6 +101,20 @@ router.post("/dataset", express.json({ limit: "16mb" }), (req, res) => {
     base64: req.body.imageBase64,
   });
   return res.json(entry);
+});
+
+// Source people-free web images (Picsum + Haiku subject/people scan).
+router.post("/dataset/source", smallJson, async (req, res) => {
+  try {
+    return res.json(await sourceImagesFromWeb(req.body?.count));
+  } catch (err) {
+    return res.status(502).json({ error: String(err.message || err) });
+  }
+});
+
+// Reset subjects to truth, then mismatch a random half (expected=false).
+router.post("/dataset/scramble", (req, res) => {
+  return res.json(scrambleDataset());
 });
 
 router.get("/dataset/:id/image", (req, res) => {
