@@ -114,6 +114,14 @@ const PAGE = `<!doctype html>
   th { background: #f1f5f9; border-top: none; font-size: 12px;
     text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .charts { display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    margin: 10px 0 16px; }
+  .chartcard { background: #fcfcfb; border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; }
+  .chartcard h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600;
+    color: #52514e; text-transform: uppercase; letter-spacing: .04em; }
+  .chartcard svg { display: block; width: 100%; height: auto; }
   #burn {
     position: fixed; right: 14px; bottom: 14px; z-index: 10;
     background: var(--ink); color: #fff; border-radius: 999px;
@@ -352,6 +360,213 @@ function loadDataset() {
     .catch(function () {});
 }
 
+// --- charts (inline SVG, no libraries) ------------------------------------
+// Small multiples over the all-time per-provider stats: one measure per
+// chart, providers as rows in a fixed order shared by every chart. Single
+// hue per chart (magnitude lives in bar length; identity lives in the row
+// labels); the reserved status red marks the error chart. Exact values live
+// in the all-time table below — the charts are for comparison at a glance.
+var VIZ = {
+  bar: "#2a78d6",      // series blue
+  band: "#9ec5f4",     // blue step-200 for latency min-max range
+  err: "#d03b3b",      // status critical
+  grid: "#e1e0d9",
+  axis: "#c3c2b7",
+  ink: "#52514e",
+  muted: "#898781",
+};
+
+function svgNode(tag, attrs) {
+  var n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (var k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+// Horizontal bar anchored at x0, rounded 4px on the data end only.
+function barPath(x0, y, w, h, rightRounded) {
+  var r = Math.min(4, w, h / 2);
+  if (!rightRounded || w <= r) return null;
+  return "M" + x0 + " " + y +
+    " h" + (w - r) + " a" + r + " " + r + " 0 0 1 " + r + " " + r +
+    " v" + (h - 2 * r) + " a" + r + " " + r + " 0 0 1 -" + r + " " + r +
+    " h-" + (w - r) + " z";
+}
+
+function svgText(x, y, str, fill, anchor, size) {
+  var t = svgNode("text", {
+    x: x, y: y, fill: fill, "text-anchor": anchor || "start",
+    "font-size": size || 11,
+    "font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
+  });
+  t.textContent = str;
+  return t;
+}
+
+// rows: [{label, value, display, hover, min?, max?}] — when min/max are set
+// the mark is a range band with an avg tick instead of a bar.
+function chartCard(title, rows, opts) {
+  var W = 330, LABEL = 108, VALW = 74, PAD = 6;
+  var ROWH = 24, TOP = 4, BOT = 16;
+  var plotW = W - LABEL - VALW - PAD * 2;
+  var H = TOP + rows.length * ROWH + BOT;
+  var max = opts.max;
+  if (max == null) {
+    max = 0;
+    rows.forEach(function (r) { max = Math.max(max, r.max != null ? r.max : r.value); });
+  }
+  if (max <= 0) max = 1;
+  var x = function (v) { return LABEL + PAD + (v / max) * plotW; };
+
+  var card = el("div", "chartcard");
+  card.appendChild(el("h3", null, title));
+  var svg = svgNode("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+
+  // hairline grid at 0 / half / max, with tick labels
+  [0, max / 2, max].forEach(function (v) {
+    svg.appendChild(svgNode("line", {
+      x1: x(v), y1: TOP, x2: x(v), y2: TOP + rows.length * ROWH,
+      stroke: v === 0 ? VIZ.axis : VIZ.grid, "stroke-width": 1,
+    }));
+    svg.appendChild(svgText(x(v), H - 4, opts.tick(v), VIZ.muted,
+      v === 0 ? "start" : v === max ? "end" : "middle", 9));
+  });
+
+  rows.forEach(function (r, i) {
+    var yMid = TOP + i * ROWH + ROWH / 2;
+    var g = svgNode("g", {});
+    var t = svgNode("title", {});
+    t.textContent = r.hover || (r.label + ": " + r.display);
+    g.appendChild(t);
+    g.appendChild(svgText(LABEL, yMid + 4,
+      r.label.length > 17 ? r.label.slice(0, 16) + "\\u2026" : r.label,
+      VIZ.ink, "end"));
+    if (r.min != null && r.max != null) {
+      // latency: range band min→max + avg tick
+      var bx = x(r.min), bw = Math.max(2, x(r.max) - x(r.min));
+      var band = svgNode("rect", {
+        x: bx, y: yMid - 3, width: bw, height: 6, rx: 3, fill: VIZ.band,
+      });
+      g.appendChild(band);
+      g.appendChild(svgNode("rect", {
+        x: Math.max(LABEL + PAD, x(r.value) - 1.5), y: yMid - 6,
+        width: 3, height: 12, rx: 1.5, fill: opts.color,
+      }));
+    } else {
+      var w = Math.max(0, x(r.value) - x(0));
+      var p = barPath(x(0), yMid - 5, w, 10, true);
+      if (p) g.appendChild(svgNode("path", { d: p, fill: opts.color }));
+      else g.appendChild(svgNode("rect", {
+        x: x(0), y: yMid - 5, width: Math.max(w, 1), height: 10, fill: opts.color,
+      }));
+    }
+    g.appendChild(svgText(W - 2, yMid + 4, r.display, VIZ.ink, "end"));
+    svg.appendChild(g);
+  });
+
+  card.appendChild(svg);
+  return card;
+}
+
+// Fixed row order across every chart: the provider lineup order, then
+// anything else (e.g. the prescan pseudo-provider) after it.
+function orderedProviders(list) {
+  var known = state.providers.map(function (p) { return p.name; });
+  return list.slice().sort(function (a, b) {
+    var ia = known.indexOf(a.name), ib = known.indexOf(b.name);
+    if (ia === -1) ia = 999;
+    if (ib === -1) ib = 999;
+    return ia - ib || (a.name < b.name ? -1 : 1);
+  });
+}
+
+function drawCharts(container, s) {
+  var provs = orderedProviders(s.providers);
+  var box = el("div", "charts");
+  var pct = function (v) { return Math.round(v) + "%"; };
+
+  var latRows = provs.filter(function (p) { return p.latAvg != null; })
+    .map(function (p) {
+      return {
+        label: p.name, value: p.latAvg, min: p.latMin, max: p.latMax,
+        display: p.latAvg + "ms",
+        hover: p.name + ": " + p.latMin + " / " + p.latAvg + " / " + p.latMax + " ms (min/avg/max)",
+      };
+    });
+  if (latRows.length) {
+    box.appendChild(chartCard("Latency \\u2014 min\\u2013max band, avg tick", latRows,
+      { color: VIZ.bar, tick: function (v) { return Math.round(v) + "ms"; } }));
+  }
+
+  var costRows = provs.filter(function (p) { return p.calls - p.errors > 0; })
+    .map(function (p) {
+      var avg = p.cost / (p.calls - p.errors);
+      return {
+        label: p.name, value: avg, display: "$" + avg.toFixed(5),
+        hover: p.name + ": $" + avg.toFixed(6) + " avg per call, $" + p.cost.toFixed(4) + " total",
+      };
+    });
+  if (costRows.length) {
+    box.appendChild(chartCard("Avg cost per call", costRows,
+      { color: VIZ.bar, tick: function (v) { return "$" + v.toFixed(4); } }));
+  }
+
+  var tokRows = provs.filter(function (p) { return p.avgInTok > 0; })
+    .map(function (p) {
+      return {
+        label: p.name, value: p.avgInTok, display: p.avgInTok.toLocaleString(),
+        hover: p.name + ": " + p.avgInTok.toLocaleString() + " avg billed input tokens per image",
+      };
+    });
+  if (tokRows.length) {
+    box.appendChild(chartCard("Avg input tokens per image", tokRows,
+      { color: VIZ.bar, tick: function (v) { return Math.round(v).toLocaleString(); } }));
+  }
+
+  var errRows = provs.map(function (p) {
+    var rate = p.calls ? (p.errors / p.calls) * 100 : 0;
+    return {
+      label: p.name, value: rate, display: p.errors + "/" + p.calls,
+      hover: p.name + ": " + p.errors + " errors in " + p.calls + " calls (" + Math.round(rate) + "%)",
+    };
+  });
+  box.appendChild(chartCard("Error rate", errRows,
+    { color: VIZ.err, max: 100, tick: pct }));
+
+  var huntProvs = provs.filter(function (p) { return p.huntN > 0; });
+  if (huntProvs.length) {
+    box.appendChild(chartCard("Valid JSON verdicts (hunt)", huntProvs.map(function (p) {
+      var rate = (p.jsonOk / p.huntN) * 100;
+      return {
+        label: p.name, value: rate, display: p.jsonOk + "/" + p.huntN,
+        hover: p.name + ": " + p.jsonOk + " of " + p.huntN + " hunt replies were valid JSON",
+      };
+    }), { color: VIZ.bar, max: 100, tick: pct }));
+
+    box.appendChild(chartCard("\\u201cPresent\\u201d verdict rate (hunt)", huntProvs.map(function (p) {
+      var rate = p.jsonOk ? (p.presentN / p.jsonOk) * 100 : 0;
+      return {
+        label: p.name, value: rate, display: p.presentN + "/" + p.jsonOk,
+        hover: p.name + ": judged present in " + p.presentN + " of " + p.jsonOk + " valid verdicts",
+      };
+    }), { color: VIZ.bar, max: 100, tick: pct }));
+
+    var confRows = huntProvs.filter(function (p) { return p.confAvg != null; })
+      .map(function (p) {
+        return {
+          label: p.name, value: p.confAvg * 100,
+          display: Math.round(p.confAvg * 100) + "%",
+          hover: p.name + ": average self-reported confidence " + Math.round(p.confAvg * 100) + "%",
+        };
+      });
+    if (confRows.length) {
+      box.appendChild(chartCard("Avg self-reported confidence (hunt)", confRows,
+        { color: VIZ.bar, max: 100, tick: pct }));
+    }
+  }
+
+  container.appendChild(box);
+}
+
 function refreshAllTime() {
   fetch(API_BASE + "/runs/summary", { headers: apiHeaders() })
     .then(function (r) { return r.json(); })
@@ -373,6 +588,7 @@ function refreshAllTime() {
       });
       head.appendChild(clr);
       box.appendChild(head);
+      drawCharts(box, s);
       var table = document.createElement("table");
       var thead = el("tr");
       ["Provider", "Calls", "Avg in-tok", "Total cost", "Latency min / avg / max", "Errors"]

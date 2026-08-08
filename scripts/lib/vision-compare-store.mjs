@@ -117,7 +117,10 @@ export function runsSummary() {
       continue;
     }
     const p = perProvider[r.provider] ||
-      (perProvider[r.provider] = { calls: 0, errors: 0, inTok: 0, outTok: 0, cost: 0, lat: [] });
+      (perProvider[r.provider] = {
+        calls: 0, errors: 0, inTok: 0, outTok: 0, cost: 0, lat: [],
+        huntN: 0, jsonOk: 0, presentN: 0, confSum: 0, confN: 0,
+      });
     totals.calls += 1;
     p.calls += 1;
     if (r.error) {
@@ -131,6 +134,28 @@ export function runsSummary() {
     p.outTok += r.outputTokens || 0;
     p.cost += r.cost || 0;
     if (r.ms) p.lat.push(r.ms);
+    // Hunt rows carry the model's raw reply — parse the verdict here so the
+    // page can chart JSON-validity, present-rate, and confidence.
+    if (r.kind === "hunt" && typeof r.text === "string") {
+      p.huntN += 1;
+      const m = r.text.match(/\{[\s\S]*\}/);
+      let v = null;
+      if (m) {
+        try {
+          v = JSON.parse(m[0]);
+        } catch {
+          /* malformed → counts against jsonOk */
+        }
+      }
+      if (v && typeof v.present === "boolean") {
+        p.jsonOk += 1;
+        if (v.present) p.presentN += 1;
+        if (typeof v.confidence === "number") {
+          p.confSum += Math.max(0, Math.min(1, v.confidence));
+          p.confN += 1;
+        }
+      }
+    }
   }
   return {
     totals,
@@ -149,6 +174,10 @@ export function runsSummary() {
           ? Math.round(p.lat.reduce((a, b) => a + b) / p.lat.length)
           : null,
         latMax: p.lat.length ? Math.max(...p.lat) : null,
+        huntN: p.huntN,
+        jsonOk: p.jsonOk,
+        presentN: p.presentN,
+        confAvg: p.confN ? p.confSum / p.confN : null,
       };
     }),
   };
