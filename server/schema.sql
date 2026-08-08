@@ -395,18 +395,21 @@ update location
 -- ---------------------------------------------------------------------------
 
 -- A registered player. Email is the identity (verified by the sign-in code
--- flow itself — the first successful verify proves the inbox). Phone is
--- collected and format-checked only; nothing is ever sent to it today.
+-- flow itself — the first successful verify proves the inbox).
 create table if not exists app_user (
   id                uuid primary key default gen_random_uuid(),
   email             text not null unique,   -- stored lowercased
   email_verified_at timestamptz,            -- set on first successful verify
-  phone             text,                   -- E.164-normalized, format-checked only
   display_name      text,                   -- 1..40 chars
   default_tag       text,                   -- [A-Z0-9]{3}, roster prefill
   created_at        timestamptz not null default now(),
   archived_at       timestamptz             -- soft-delete, house style
 );
+
+-- Privacy: phone used to be collected here "for the venue's contact list" but
+-- no code path ever used it — data collected without a purpose is pure
+-- liability, so it's gone (drop covers databases created with the column).
+alter table app_user drop column if exists phone;
 
 -- Server-side player sessions (lib/userAuth.js) — the admin_session pattern:
 -- `id` is an opaque high-entropy token (the ffc_session cookie's value, looked
@@ -421,7 +424,7 @@ create index if not exists user_session_expires_idx on user_session (expires_at)
 
 -- One row per emailed sign-in attempt (lib/authCodes.js). Carries BOTH the
 -- 6-digit OTP and the magic-link token, hashed — a DB leak reveals nothing
--- typeable. `profile` stashes registration fields (phone/displayName/defaultTag)
+-- typeable. `profile` stashes registration fields (displayName/defaultTag)
 -- submitted with the request, applied to app_user on first successful verify.
 create table if not exists auth_code (
   id               uuid primary key default gen_random_uuid(),
@@ -436,9 +439,15 @@ create table if not exists auth_code (
 );
 create index if not exists auth_code_email_idx on auth_code (email, created_at);
 create index if not exists auth_code_magic_idx on auth_code (magic_token_hash);
+-- Privacy: scrub phone numbers stashed in pending sign-in profiles from before
+-- app_user.phone was dropped (see above). Idempotent no-op once clean.
+update auth_code set profile = profile - 'phone' where profile ? 'phone';
 
 -- Email-send metering — the hunt_scan/HUNT_SCAN_CAP precedent applied to
 -- outbound mail: one row per send, backing MAIL_DAILY_CAP (lib/mailer.js).
+-- Privacy: the cap only reads a rolling 24h window, so rows older than that
+-- are pruned on every send (lib/mailer.js) — this table is a rate-limit
+-- ledger, not a permanent registry of recipient addresses.
 create table if not exists mail_send (
   id         uuid primary key default gen_random_uuid(),
   recipient  text not null,
@@ -446,6 +455,9 @@ create table if not exists mail_send (
   created_at timestamptz not null default now()
 );
 create index if not exists mail_send_created_idx on mail_send (created_at);
+-- One-time catch-up for databases from before the on-send prune existed (the
+-- prune keeps it empty of old rows thereafter; harmless to re-run).
+delete from mail_send where created_at < now() - interval '24 hours';
 
 -- Persistent named teams — membership + convenience (roster prefill, grouped
 -- history), NOT a gameplay entity: scores stay positional per round/game.
@@ -620,7 +632,7 @@ create index if not exists reward_grant_redeemed_idx on reward_grant (redeemed_a
 -- full history. `moderation` on hunt_find:
 --   'approved'  auto-passed by the vision moderation — displayable
 --   'flagged'   auto-blocked at upload: the photo was NEVER written to disk
---   'rejected'  reserved for the future operator review surface
+--   'rejected'  removed by an operator (routes/admin/photos.js) — file deleted
 --   null        legacy pre-moderation rows
 alter table hunt_find add column if not exists moderation        text;
 alter table hunt_find add column if not exists moderation_reason text;

@@ -24,6 +24,13 @@ import { DEV_MODE } from '../../lib/flags';
 const AUTO_PLAY_MS = 500; // slow pace — half a second per tap
 const FAST_FORWARD_MS = 62.5; // fast pace — a sixteenth of a second per tap
 
+// Placeholder for a cell with no score yet: a large ghosted dot (a golf ball,
+// if you squint). Reads as "blank scorecard paper" rather than data, so
+// entered numbers stay the only things that look like scores.
+function ScoreWatermark({ className = '' }: { className?: string }) {
+  return <span aria-hidden className={`inline-block h-3 w-3 rounded-full bg-current ${className}`} />;
+}
+
 // A plausible-but-random stroke count for a hole, biased toward its par and
 // kept inside the sane/cap range. Used only by the auto-play testing tool.
 function randomStrokes(par: number): number {
@@ -31,9 +38,13 @@ function randomStrokes(par: number): number {
   return clampStrokes(1 + Math.floor(Math.random() * max));
 }
 
-// §5.1 step 3 — the play screen. One hole at a time; per-hole entry for all
-// players; par for the current hole; stroke cap; hole navigation and
-// edit; every edit persists to IndexedDB immediately (offline-first).
+// §5.1 step 3 — the play screen. Demo flow: instead of a page per hole, the
+// whole scorecard is one horizontally scrolling sheet — a hole-label row with
+// every player's scores aligned in columns beneath it, like a paper card. The
+// current hole's column is highlighted and kept centered; swipe (or tap a
+// label) to move around the course, and "Next" advances for you. The pinned
+// −/+ keys only ever edit the highlighted column; every edit persists to
+// IndexedDB immediately (offline-first).
 export default function Scorecard() {
   const { clientId = '' } = useParams();
   const navigate = useNavigate();
@@ -41,7 +52,6 @@ export default function Scorecard() {
   const [round, setRound] = useState<LocalRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [hole, setHole] = useState(0); // 0-based index
-  const [showJump, setShowJump] = useState(false);
   // Testing aid: auto-play walks the course, randomly scoring every player on
   // each hole and advancing to the end. Pause/stop halts it mid-course.
   // `fastForward` runs the same hole-by-hole walk with no delay between holes.
@@ -56,6 +66,15 @@ export default function Scorecard() {
   // mutations so neither clobbers the other).
   const [sharedStatus, setSharedStatus] = useState<SharedStatus>('offline');
   const sharedHandleRef = useRef<SharedHandle | null>(null);
+  // Horizontal hole strip: the scroller, one ref per hole cell, and the
+  // scroll-settle timer that turns a finished swipe into a selection.
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const cellRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const scrollIdleRef = useRef<number | undefined>(undefined);
+  // Swipe-to-select only arms on real user input on the strip. Programmatic
+  // moves (tapping a hole, "Next", auto-play) disarm it so the smooth scroll
+  // they trigger can't re-select an intermediate hole mid-flight.
+  const scrollSelectArmedRef = useRef(false);
 
   useEffect(() => {
     void getRound(clientId).then((r) => {
@@ -155,6 +174,25 @@ export default function Scorecard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoPlaying, fastForward, hole, round]);
 
+  // Keep the highlighted hole centered in the strip. Instant on first load
+  // (resuming mid-round shouldn't animate from hole 1), smooth afterwards.
+  const hasRound = !!round;
+  const centeredOnceRef = useRef(false);
+  useEffect(() => {
+    if (!hasRound) return;
+    const cell = cellRefs.current[hole];
+    // scrollIntoView is missing in jsdom; optional-call keeps tests happy.
+    cell?.scrollIntoView?.({
+      behavior: centeredOnceRef.current ? 'smooth' : 'auto',
+      inline: 'center',
+      block: 'nearest',
+    });
+    centeredOnceRef.current = true;
+  }, [hole, hasRound]);
+
+  // Clear any pending scroll-settle timer on unmount.
+  useEffect(() => () => window.clearTimeout(scrollIdleRef.current), []);
+
   if (notFound) {
     return (
       <Screen>
@@ -169,6 +207,9 @@ export default function Scorecard() {
 
   const par = course.pars[hole];
   const ink = accentInk(course.theme);
+  // The current hole's column wash — the course accent thinned way down, so
+  // the highlight reads as a marker stripe on the card, not a button.
+  const columnTint = `color-mix(in srgb, ${course.accent} 18%, transparent)`;
   const holeName = course.holeNames?.[hole];
   const complete = isRoundComplete(round.scores, round.playerTags.length);
   // Every player must have a score on the current hole before advancing, so a
@@ -227,7 +268,59 @@ export default function Scorecard() {
   // Advance to the next hole with the satisfying "into the cup" sound.
   function goNext() {
     playCup();
+    scrollSelectArmedRef.current = false; // programmatic move — see armed ref
     setHole((h) => Math.min(HOLE_COUNT - 1, h + 1));
+  }
+
+  // Tap a hole cell to jump straight to it.
+  function selectHole(h: number) {
+    if (h === hole) return;
+    playClick();
+    scrollSelectArmedRef.current = false; // programmatic move — see armed ref
+    setHole(h);
+  }
+
+  // The hole whose cell center sits closest to the strip's visible center.
+  function nearestHole(): number {
+    const strip = stripRef.current;
+    if (!strip) return hole;
+    const center = strip.scrollLeft + strip.clientWidth / 2;
+    let best = hole;
+    let bestDist = Infinity;
+    cellRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const dist = Math.abs(el.offsetLeft + el.offsetWidth / 2 - center);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  // A user swipe settles → the hole nearest center becomes the current hole
+  // (the centering effect then magnetically snaps it the rest of the way).
+  function onStripScroll() {
+    window.clearTimeout(scrollIdleRef.current);
+    scrollIdleRef.current = window.setTimeout(() => {
+      if (!scrollSelectArmedRef.current) return;
+      const h = nearestHole();
+      if (h !== hole) setHole(h);
+      else {
+        // Already on the nearest hole — still nudge it back to center so a
+        // small drag doesn't leave the strip resting between holes.
+        cellRefs.current[h]?.scrollIntoView?.({
+          behavior: 'smooth',
+          inline: 'center',
+          block: 'nearest',
+        });
+      }
+    }, 140);
+  }
+
+  // Real user input on the strip arms swipe-to-select.
+  function armScrollSelect() {
+    scrollSelectArmedRef.current = true;
   }
 
   return (
@@ -265,45 +358,9 @@ export default function Scorecard() {
             >
               🎡
             </button>
-            <button
-              onClick={() => {
-                playClick();
-                setShowJump((v) => !v);
-              }}
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-fairway-300 active:bg-fairway-800"
-            >
-              Holes
-            </button>
           </div>
         }
       />
-
-      {showJump && (
-        <div className="grid grid-cols-6 gap-2 border-b border-fairway-800 bg-fairway-900/50 p-3">
-          {Array.from({ length: HOLE_COUNT }, (_, h) => {
-            const done = round.playerTags.every((_t, p) => round.scores[p]?.[h] != null);
-            return (
-              <button
-                key={h}
-                onClick={() => {
-                  playClick();
-                  setHole(h);
-                  setShowJump(false);
-                }}
-                className={`rounded-xl py-2 text-sm font-bold transition-transform active:translate-y-px ${
-                  h === hole
-                    ? 'btn-accent text-fairway-50'
-                    : done
-                      ? 'surface-1 text-fairway-200'
-                      : 'border border-fairway-700 text-fairway-300'
-                }`}
-              >
-                {h + 1}
-              </button>
-            );
-          })}
-        </div>
-      )}
 
       <Content>
         {/* Hole header — hole label on the left, par medallion on the right. */}
@@ -340,67 +397,166 @@ export default function Scorecard() {
           </div>
         </div>
 
-        {/* Player rows — one inline row per player (tag · − · score well · +),
-            per the §6 wireframe. No per-row card; the raised keys and the carved
-            well carry the depth. Tags are a fixed three monospace chars, so the
-            steppers line up across rows on their own. */}
-        <div className="space-y-3">
-          {round.playerTags.map((tag, p) => {
-            const strokes = round.scores[p]?.[hole] ?? null;
-            return (
-              <div key={p} className="flex items-center gap-2.5">
-                <span className="shrink-0">
-                  <TagChip tag={tag} color={course.accent} />
-                </span>
-                <button
-                  onClick={() => bump(p, -1)}
-                  disabled={autoPlaying || strokes == null || strokes <= 1}
-                  className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
-                  aria-label={`Decrease strokes for ${tag}`}
-                >
-                  −
-                </button>
-                {/* The count sits in a carved well so it reads as a recessed
-                    readout between the two raised keys. */}
-                <div
-                  role="status"
-                  aria-label={`Strokes for ${tag}`}
-                  className="surface-sunk flex h-9 flex-1 items-center justify-center rounded-lg"
-                >
-                  {/* Keyed on a per-player nonce that only changes on a real
-                      stroke edit, so the punch fires on +/− but not when
-                      navigating between holes. */}
-                  <span
-                    key={pops[p] ?? 0}
-                    className="animate-score-punch inline-block text-3xl font-black text-fairway-50"
-                  >
-                    {strokes ?? '–'}
-                  </span>
-                </div>
-                <button
-                  onClick={() => bump(p, +1)}
-                  disabled={
-                    autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
-                  }
-                  className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
-                  aria-label={`Increase strokes for ${tag}`}
-                >
-                  +
-                </button>
+        {/* The scorecard sheet — hole labels sit directly above the scoring,
+            and every player's scores line up in columns beneath them, like a
+            paper scorecard. The sheet scrolls horizontally as one unit (labels
+            and score rows together); the current hole's column is highlighted
+            and kept centered. Swipe to browse, tap a hole label to jump — but
+            the pinned −/+ keys only ever edit the highlighted column. Tags
+            stay pinned on the left so you always know whose row is whose. */}
+        <div className="flex items-stretch gap-2">
+          {/* Pinned left rail: spacer over the label row, then player tags.
+              Rows are flush (no gaps) so they track the ruled grid rows. */}
+          <div className="flex shrink-0 flex-col">
+            <div className="h-9" aria-hidden />
+            {round.playerTags.map((tag, p) => (
+              <div key={p} className="flex h-12 items-center">
+                <TagChip tag={tag} color={course.accent} />
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          {/* Pinned − keys: always edit the current (highlighted) hole. */}
+          <div className="flex shrink-0 flex-col">
+            <div className="h-9" aria-hidden />
+            {round.playerTags.map((tag, p) => {
+              const strokes = round.scores[p]?.[hole] ?? null;
+              return (
+                <div key={p} className="flex h-12 items-center">
+                  <button
+                    onClick={() => bump(p, -1)}
+                    disabled={autoPlaying || strokes == null || strokes <= 1}
+                    className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                    aria-label={`Decrease strokes for ${tag}`}
+                  >
+                    −
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* The sheet itself — one scroll container so the label row and
+              every score row move together and columns stay aligned. */}
+          <div
+            ref={stripRef}
+            onScroll={onStripScroll}
+            onPointerDown={armScrollSelect}
+            onTouchStart={armScrollSelect}
+            onWheel={armScrollSelect}
+            className="relative flex-1 overflow-x-auto"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {/* Ruled like a paper card: thin lines between every row and
+                column (divide-*), cells flush with no chrome of their own.
+                The current hole is a tinted column running down the sheet
+                rather than a highlighted button. The inline padding leaves
+                half a viewport of lead-in/out (minus half a cell, 1.5rem) so
+                the first and last holes can reach dead center too — without
+                it, a tiny scroll on hole 1 would select hole 2 or 3, since
+                hole 1's cell could never be the one nearest center. The
+                percentage resolves against the scroller's visible width. */}
+            <div
+              className="w-max divide-y divide-fairway-700/40"
+              style={{ paddingInline: 'calc(50% - 1.5rem)' }}
+            >
+              {/* Hole label row. */}
+              <div role="tablist" aria-label="Holes" className="flex divide-x divide-fairway-700/40">
+                {Array.from({ length: HOLE_COUNT }, (_, h) => {
+                  const active = h === hole;
+                  return (
+                    <button
+                      key={h}
+                      ref={(el) => {
+                        cellRefs.current[h] = el;
+                      }}
+                      onClick={() => selectHole(h)}
+                      role="tab"
+                      aria-selected={active}
+                      aria-label={`Hole ${h + 1}`}
+                      className={`flex h-9 w-12 shrink-0 items-center justify-center text-base ${
+                        active ? 'font-black' : 'font-semibold text-fairway-300'
+                      }`}
+                      style={active ? { color: ink, backgroundColor: columnTint } : undefined}
+                    >
+                      {h + 1}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* One score row per player, columns aligned under the labels.
+                  Only the highlighted column is live (it carries the status
+                  role and the punch animation); the rest is the read-only
+                  rest of the scorecard. */}
+              {round.playerTags.map((tag, p) => (
+                <div key={p} className="flex divide-x divide-fairway-700/40">
+                  {Array.from({ length: HOLE_COUNT }, (_, h) => {
+                    const strokes = round.scores[p]?.[h] ?? null;
+                    const active = h === hole;
+                    return (
+                      <div
+                        key={h}
+                        role={active ? 'status' : undefined}
+                        aria-label={active ? `Strokes for ${tag}` : undefined}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center"
+                        style={active ? { backgroundColor: columnTint } : undefined}
+                      >
+                        {strokes == null ? (
+                          // No score yet — the ghosted dot, a shade brighter
+                          // in the live column.
+                          <ScoreWatermark
+                            className={
+                              active ? 'text-fairway-50 opacity-30' : 'text-fairway-100 opacity-15'
+                            }
+                          />
+                        ) : active ? (
+                          // Keyed on a per-player nonce that only changes on a
+                          // real stroke edit, so the punch fires on +/− but not
+                          // when the highlight moves between holes.
+                          <span
+                            key={pops[p] ?? 0}
+                            className="animate-score-punch inline-block text-2xl font-black text-fairway-50"
+                          >
+                            {strokes}
+                          </span>
+                        ) : (
+                          <span className="text-lg font-bold text-fairway-200">{strokes}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Pinned + keys: always edit the current (highlighted) hole. */}
+          <div className="flex shrink-0 flex-col">
+            <div className="h-9" aria-hidden />
+            {round.playerTags.map((tag, p) => {
+              const strokes = round.scores[p]?.[hole] ?? null;
+              return (
+                <div key={p} className="flex h-12 items-center">
+                  <button
+                    onClick={() => bump(p, +1)}
+                    disabled={
+                      autoPlaying || (STROKE_CAP_ENABLED && strokes != null && strokes >= STROKE_CAP)
+                    }
+                    className="key flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-2xl font-bold text-fairway-100 disabled:opacity-30 disabled:shadow-none"
+                    aria-label={`Increase strokes for ${tag}`}
+                  >
+                    +
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Hole navigation */}
+        {/* Hole navigation — going back (or skipping around) is a swipe on the
+            strip; the one button drives the forward flow. */}
         <div className="mt-6 flex gap-3">
-          <Button
-            variant="ghost"
-            onClick={() => setHole((h) => Math.max(0, h - 1))}
-            disabled={hole === 0 || autoPlaying}
-          >
-            ‹ Prev
-          </Button>
           {hole < HOLE_COUNT - 1 ? (
             <Button
               variant="ghost"

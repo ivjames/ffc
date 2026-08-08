@@ -11,7 +11,7 @@ import { parseCookies } from "./adminSession.js";
 export const USER_COOKIE_NAME = "ffc_session";
 export const USER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, sliding
 
-const USER_COLS = `u.id, u.email, u.phone, u.display_name as "displayName",
+const USER_COLS = `u.id, u.email, u.display_name as "displayName",
                    u.default_tag as "defaultTag", u.email_verified_at as "emailVerifiedAt"`;
 
 function cookieAttrs({ secure, maxAgeSeconds }) {
@@ -125,16 +125,15 @@ export function requireUser(req, res, next) {
  */
 export async function upsertVerifiedUser(email, profile) {
   const result = await pool.query(
-    `insert into app_user (email, email_verified_at, phone, display_name, default_tag)
-       values ($1, now(), $2, $3, $4)
+    `insert into app_user (email, email_verified_at, display_name, default_tag)
+       values ($1, now(), $2, $3)
      on conflict (email) do update
        set email_verified_at = coalesce(app_user.email_verified_at, now()),
-           phone        = coalesce(app_user.phone, excluded.phone),
            display_name = coalesce(app_user.display_name, excluded.display_name),
            default_tag  = coalesce(app_user.default_tag, excluded.default_tag)
-     returning id, email, phone, display_name as "displayName",
+     returning id, email, display_name as "displayName",
                default_tag as "defaultTag", email_verified_at as "emailVerifiedAt"`,
-    [email, profile?.phone ?? null, profile?.displayName ?? null, profile?.defaultTag ?? null]
+    [email, profile?.displayName ?? null, profile?.defaultTag ?? null]
   );
   return result.rows[0];
 }
