@@ -103,8 +103,9 @@ export default function App() {
         <Route path="/fun/watergun" element={<WaterGunRace />} />
         <Route path="/fun/pinball" element={<Pinball />} />
         <Route path="/fun/pusher" element={<CoinPusher />} />
-        {/* Native F&B ordering + rewards card — the CenterEdge integration
-            (mock-centeredge in dev; see src/lib/centeredgeApi.ts). */}
+        {/* Native F&B ordering + rewards card — POS-integration add-ons,
+            rendered only for venues with a paid config (src/lib/pos); each
+            screen redirects home when its capability is off. */}
         <Route path="/food" element={<Food />} />
         <Route path="/food/checkout" element={<Checkout />} />
         <Route path="/food/order/:orderId" element={<OrderStatusScreen />} />

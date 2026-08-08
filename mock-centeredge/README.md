@@ -12,8 +12,9 @@ frontend and state-management work now. The shapes are our best guess at the
 real contract, with deliberately boring field names so the eventual remap is a
 rename, not a rewrite. **CenterEdge's public GitHub does not include these
 schemas** (only TextPay/Yardarm utilities), so expect field-level adjustments
-when real docs arrive — the frontend should treat `src/lib/centeredgeApi.ts`
-as the single seam.
+when real docs arrive — the frontend's single seam is the CenterEdge adapter
+`src/lib/pos/centeredge.ts` (behind the vendor-neutral `src/lib/pos/` layer;
+features never import vendor code directly).
 
 ## Run
 
@@ -128,9 +129,14 @@ npm test   # node's built-in runner, boots the app on an ephemeral port
 
 ## Swapping in the real API later
 
-1. Set `VITE_CENTEREDGE_API_BASE` to the provisioned base URL.
-2. Replace the static-token default in `src/lib/centeredgeApi.ts` with the real
-   auth flow (`authenticate()` is the seam).
+1. Point the venue at the provisioned base URL — per venue via Master
+   Control's POS config (`pos.apiBase`), or `VITE_CENTEREDGE_API_BASE` as the
+   dev default.
+2. Replace the static-token default in `src/lib/pos/centeredge.ts` with the
+   real auth flow (`authenticate()` is the seam). Long-term, per-venue
+   credentials belong in a server-side proxy (the `server/lib/vision.js`
+   pattern), not the client bundle.
 3. Reconcile field names/paths against the real Advantage Web Services docs —
-   everything the app touches goes through `centeredgeApi.ts`, so drift shows
-   up as type errors there, not scattered across features.
+   the CenterEdge adapter is the entire blast radius; features only see the
+   vendor-neutral types in `src/lib/pos/types.ts`, so drift shows up as type
+   errors there, not scattered across features.

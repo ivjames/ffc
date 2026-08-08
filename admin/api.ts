@@ -80,8 +80,19 @@ export type Location = {
   sortOrder: number;
   menuUrl: string | null;
   orderingUrl: string | null;
+  pos: PosConfig | null;
   orgId: string | null;
   archivedAt: string | null;
+};
+
+// POS integration add-on config (mirrors server normalizePos). gameRewards
+// requires loyalty; at least one capability must be on, else save null.
+export type PosConfig = {
+  vendor: string;
+  ordering: boolean;
+  loyalty: boolean;
+  gameRewards: boolean;
+  apiBase: string | null;
 };
 
 export type Announcement = {

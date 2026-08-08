@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { CartLine } from './centeredgeApi';
+import type { CartLine } from './pos/types';
 
 // F&B cart — the client-side state behind /food. Same store idiom as
 // lib/location.ts: module-level value, localStorage persistence (best-effort),

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeLocation, withLabel } from "./validateLocation.js";
+import { normalizeLocation, normalizePos, withLabel } from "./validateLocation.js";
 
 function validBody(overrides = {}) {
   return { name: "Upland", slug: "upland", ...overrides };
@@ -82,4 +82,61 @@ test("normalizeLocation validates id and orgId as uuids when provided", () => {
 test("withLabel adds a derived tzLabel, null when tz is unset", () => {
   assert.equal(withLabel({ tz: "America/Los_Angeles" }).tzLabel, "Pacific Time (PT)");
   assert.equal(withLabel({ tz: null }).tzLabel, null);
+});
+
+test("normalizePos treats null/undefined/{} as no integration", () => {
+  assert.equal(normalizePos(undefined).value, null);
+  assert.equal(normalizePos(null).value, null);
+  assert.equal(normalizePos({}).value, null);
+});
+
+test("normalizePos canonicalizes a valid config with explicit capabilities", () => {
+  const { value } = normalizePos({ vendor: "centeredge", ordering: true });
+  assert.deepEqual(value, {
+    vendor: "centeredge",
+    ordering: true,
+    loyalty: false,
+    gameRewards: false,
+    apiBase: null,
+  });
+});
+
+test("normalizePos rejects unknown vendors and non-boolean capabilities", () => {
+  assert.match(normalizePos({ vendor: "square", ordering: true }).error, /pos\.vendor/);
+  assert.match(normalizePos({ vendor: "centeredge", ordering: "yes" }).error, /pos\.ordering/);
+});
+
+test("normalizePos requires at least one capability", () => {
+  assert.match(normalizePos({ vendor: "centeredge" }).error, /at least one capability/);
+});
+
+test("normalizePos requires loyalty under gameRewards", () => {
+  assert.match(
+    normalizePos({ vendor: "centeredge", ordering: true, gameRewards: true }).error,
+    /gameRewards requires/
+  );
+  const { value } = normalizePos({ vendor: "centeredge", loyalty: true, gameRewards: true });
+  assert.equal(value.gameRewards, true);
+});
+
+test("normalizePos validates apiBase as an http(s) URL", () => {
+  assert.match(
+    normalizePos({ vendor: "centeredge", ordering: true, apiBase: "ftp://x" }).error,
+    /pos\.apiBase/
+  );
+  const { value } = normalizePos({
+    vendor: "centeredge",
+    ordering: true,
+    apiBase: "https://pos.example.com",
+  });
+  assert.equal(value.apiBase, "https://pos.example.com");
+});
+
+test("normalizeLocation carries pos through (and rejects a bad one)", () => {
+  const ok = normalizeLocation(
+    validBody({ pos: { vendor: "centeredge", ordering: true, loyalty: true } })
+  );
+  assert.equal(ok.row.pos.ordering, true);
+  assert.equal(normalizeLocation(validBody()).row.pos, null);
+  assert.equal(normalizeLocation(validBody({ pos: { vendor: "nope" } })).status, 400);
 });

@@ -32,6 +32,7 @@ const ARCHIVED_LOCATION = {
   tzLabel: null,
   menuUrl: null,
   orderingUrl: null,
+  pos: null,
   sortOrder: 0,
   orgId: 'org-1',
   archivedAt: '2026-01-01T00:00:00Z',

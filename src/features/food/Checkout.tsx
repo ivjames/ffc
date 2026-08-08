@@ -1,12 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import {
-  formatCents,
-  orderTotals,
-  placeOrder,
-  type Menu,
-} from '../../lib/centeredgeApi';
+import { formatCents, orderTotals } from '../../lib/pos/pricing';
+import type { Menu } from '../../lib/pos/types';
+import { usePos } from '../../lib/pos';
 import { useCart, setLineQuantity, clearCart, type StoredCartLine } from '../../lib/foodCart';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
 import { DEV_MODE } from '../../lib/flags';
@@ -35,6 +32,7 @@ function lineLabel(menu: Menu, line: StoredCartLine): { name: string; mods: stri
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const { ordering } = usePos();
   const { menu, error: menuError, retry } = useMenu();
   const cart = useCart();
   const playerId = useLinkedPlayerId();
@@ -42,14 +40,15 @@ export default function Checkout() {
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [simulateDecline, setSimulateDecline] = useState(false);
+  if (!ordering) return <Navigate to="/" replace />;
 
   const totals = menu && cart.length > 0 ? orderTotals(menu, cart) : null;
 
   async function pay() {
-    if (!totals || placing) return;
+    if (!totals || placing || !ordering) return;
     setPlacing(true);
     setError(null);
-    const res = await placeOrder({
+    const res = await ordering.placeOrder({
       items: cart.map(({ key, ...line }) => line),
       paymentToken: simulateDecline ? 'tok_declined' : 'tok_visa_mock',
       amountCents: totals.totalCents,

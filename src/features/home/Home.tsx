@@ -15,6 +15,7 @@ import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
 import { playClick, playCup } from '../../lib/sound';
 import { fetchMe, type AppUser } from '../../lib/authApi';
+import { usePos } from '../../lib/pos';
 import type { LocalRound } from '../../types';
 
 // Food & drink deep links for the current venue. External links, so they open
@@ -82,6 +83,7 @@ export default function Home() {
   const location = locationById(locationId);
   const courses = coursesByLocation(locationId);
   const courseCount = courses.length;
+  const pos = usePos();
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
@@ -234,15 +236,20 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/fun')}>
             🎡 While You Wait
           </Button>
-          {/* Native in-app ordering + rewards (CenterEdge integration; the
-              FoodDrinkCard's external deep links above remain the venue
-              fallback until this ships). */}
-          <Button variant="ghost" onClick={() => navigate('/food')}>
-            🍕 Order food & drinks
-          </Button>
-          <Button variant="ghost" onClick={() => navigate('/rewards')}>
-            🎟️ Rewards card
-          </Button>
+          {/* Native in-app ordering + rewards — POS-integration add-ons,
+              shown only when this venue's Master Control config enables the
+              capability (src/lib/pos; DEV_MODE enables both against the local
+              mock). Un-integrated venues keep the FoodDrinkCard deep links. */}
+          {pos.ordering && (
+            <Button variant="ghost" onClick={() => navigate('/food')}>
+              🍕 Order food & drinks
+            </Button>
+          )}
+          {pos.loyalty && (
+            <Button variant="ghost" onClick={() => navigate('/rewards')}>
+              🎟️ Rewards card
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => navigate('/rules')}>
             Rules
           </Button>

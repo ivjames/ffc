@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../../ui/components';
-import { formatCents, type MenuItem } from '../../lib/centeredgeApi';
+import { formatCents } from '../../lib/pos/pricing';
+import type { MenuItem } from '../../lib/pos/types';
 import { addToCart } from '../../lib/foodCart';
 import { playClick } from '../../lib/sound';
 

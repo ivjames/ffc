@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { fetchOrder, formatCents, type Order, type OrderStatus } from '../../lib/centeredgeApi';
+import { formatCents } from '../../lib/pos/pricing';
+import type { Order, OrderStatus } from '../../lib/pos/types';
+import { usePos } from '../../lib/pos';
 
 // /food/order/:orderId — live kitchen progress. Polls until the order is
 // ready (the mock advances received → sent_to_kitchen → preparing → ready on
@@ -19,17 +21,18 @@ const POLL_MS = 4_000;
 
 export default function OrderStatusScreen() {
   const navigate = useNavigate();
+  const { ordering } = usePos();
   const { orderId } = useParams<{ orderId: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!orderId) return;
+    if (!orderId || !ordering) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     async function poll() {
-      const res = await fetchOrder(orderId!);
+      const res = await ordering!.fetchOrder(orderId!);
       if (cancelled) return;
       if ('error' in res) {
         setError(res.error);
@@ -45,8 +48,9 @@ export default function OrderStatusScreen() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [orderId]);
+  }, [orderId, ordering]);
 
+  if (!ordering) return <Navigate to="/" replace />;
   const stepIndex = order ? STEPS.findIndex((s) => s.status === order.status) : -1;
 
   return (

@@ -1,19 +1,24 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { formatCents, orderTotals, type MenuItem } from '../../lib/centeredgeApi';
+import { formatCents, orderTotals } from '../../lib/pos/pricing';
+import type { MenuItem } from '../../lib/pos/types';
+import { usePos } from '../../lib/pos';
 import { useCart, cartCount } from '../../lib/foodCart';
 import { useMenu } from './useMenu';
 import ItemSheet from './ItemSheet';
 
-// /food — browse the venue menu and build a cart. This is the native ordering
-// flow backed by the CenterEdge integration (mock-centeredge in dev); the
-// Home-screen FoodDrinkCard's external deep links remain the venue fallback
-// until this ships.
+// /food — browse the venue menu and build a cart. Native ordering is a
+// POS-integration add-on: only venues whose Master Control config enables the
+// `ordering` capability get this screen (everyone else keeps the Home-screen
+// FoodDrinkCard's external deep links), so no-integration visitors redirect
+// home.
 
 export default function Food() {
   const navigate = useNavigate();
+  const { ordering } = usePos();
   const { menu, error, retry } = useMenu();
+  if (!ordering) return <Navigate to="/" replace />;
   const cart = useCart();
   const [selected, setSelected] = useState<MenuItem | null>(null);
 

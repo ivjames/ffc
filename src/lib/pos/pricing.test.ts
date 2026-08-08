@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { orderTotals, formatCents, type Menu } from './centeredgeApi';
+import { orderTotals, formatCents } from './pricing';
+import type { Menu } from './types';
 
-// orderTotals must mirror the server's pricing exactly (mock-centeredge/app.js
+// orderTotals must mirror the POS's pricing exactly (mock-centeredge/app.js
 // priceLine + tax) — POST /orders rejects a mismatched amount, so this is the
 // contract keeping checkout's "Pay $X" honest.
 

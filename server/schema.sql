@@ -581,6 +581,15 @@ create index if not exists round_group_tag_idx on round (group_tag) where group_
 alter table location add column if not exists menu_url     text;
 alter table location add column if not exists ordering_url text;
 
+-- POS integration add-on. Which point-of-sale vendor this venue's app talks
+-- to and which paid capabilities are switched on — the per-venue config that
+-- gates native ordering / rewards in the player app. NULL = no integration
+-- (the default for every venue; the menu_url/ordering_url deep links above
+-- remain the un-integrated fallback). Shape is validated in
+-- lib/validateLocation.js: { vendor, ordering, loyalty, gameRewards, apiBase }.
+-- Vendor-specific credentials do NOT live here — they stay server-side.
+alter table location add column if not exists pos jsonb;
+
 -- Rewards with manual redemption (punchlist #8 tier 1). One row per earned
 -- achievement, granted server-side when a completed round syncs. The short
 -- `code` is what the player shows at the counter; staff look it up in Master

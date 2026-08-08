@@ -200,6 +200,16 @@ Request:
   absolute `http(s)` URLs only (max 500 chars; anything else — including
   `javascript:` — is rejected). Empty string clears a link. They ship to the
   player app's "Food & Drink" card via `GET /api/content` and the build export.
+- `pos` (optional): the POS-integration add-on config —
+  `{ "vendor": "centeredge", "ordering": true, "loyalty": true, "gameRewards": false, "apiBase": null }`.
+  Gates the player app's native ordering / rewards surfaces per venue (see
+  `src/lib/pos/`). `vendor` must be a known adapter (`POS_VENDORS` in
+  `lib/validateLocation.js`); at least one of `ordering`/`loyalty` must be on
+  (send `null`/omit to remove the integration); `gameRewards` requires
+  `loyalty`; `apiBase` is an optional per-venue `http(s)` endpoint override.
+  Stored canonically with every capability explicit. **Credentials are never
+  part of this shape** — vendor secrets stay server-side. Ships via
+  `GET /api/content` like the deep links.
 
 Responses:
 - `200 { "ok": true, "location": { …, "tz": "…", "tzLabel": "Eastern Time (ET)" } }`

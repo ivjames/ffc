@@ -46,6 +46,7 @@ function renderLocation(l) {
     sortOrder: ${lit(l.sortOrder ?? 0)},
     menuUrl: ${lit(l.menuUrl)},
     orderingUrl: ${lit(l.orderingUrl)},
+    pos: ${lit(l.pos)},
     orgId: ${lit(l.orgId)},
   },`;
 }
@@ -80,6 +81,16 @@ export type GeneratedLocation = {
   sortOrder: number;
   menuUrl: string | null;
   orderingUrl: string | null;
+  // POS integration add-on (per-venue, set in Master Control). Structurally
+  // matches PosConfig in src/lib/pos/types.ts; kept inline so this generated
+  // file stays import-free.
+  pos: {
+    vendor: string;
+    ordering: boolean;
+    loyalty: boolean;
+    gameRewards: boolean;
+    apiBase: string | null;
+  } | null;
   orgId: string | null;
 };
 

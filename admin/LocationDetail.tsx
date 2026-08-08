@@ -138,6 +138,12 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
   const [geofence, setGeofence] = useState(location.geofenceKm?.toString() ?? '');
   const [menuUrl, setMenuUrl] = useState(location.menuUrl ?? '');
   const [orderingUrl, setOrderingUrl] = useState(location.orderingUrl ?? '');
+  // POS integration add-on. Vendor '' = no integration (saved as null).
+  const [posVendor, setPosVendor] = useState(location.pos?.vendor ?? '');
+  const [posOrdering, setPosOrdering] = useState(location.pos?.ordering ?? false);
+  const [posLoyalty, setPosLoyalty] = useState(location.pos?.loyalty ?? false);
+  const [posGameRewards, setPosGameRewards] = useState(location.pos?.gameRewards ?? false);
+  const [posApiBase, setPosApiBase] = useState(location.pos?.apiBase ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -161,6 +167,16 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
         geofenceKm: geofence.trim() ? Number(geofence) : null,
         menuUrl: menuUrl.trim() || null,
         orderingUrl: orderingUrl.trim() || null,
+        pos:
+          posVendor === ''
+            ? null
+            : {
+                vendor: posVendor,
+                ordering: posOrdering,
+                loyalty: posLoyalty,
+                gameRewards: posGameRewards,
+                apiBase: posApiBase.trim() || null,
+              },
       });
       onSaved();
     } catch (e) {
@@ -199,6 +215,67 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
           <Input value={orderingUrl} onChange={(e) => setOrderingUrl(e.target.value)} placeholder="https://order.…" inputMode="url" />
         </Field>
       </div>
+
+      {/* POS integration add-on — per-venue paid capabilities. "None" keeps the
+          venue on the deep links above; the app's native ordering/rewards
+          screens render only for capabilities enabled here. */}
+      <div className="mt-3 border-t border-slate-200 pt-3">
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="POS integration" hint="Native in-app ordering / rewards. None = deep links only.">
+            <select
+              value={posVendor}
+              onChange={(e) => setPosVendor(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">None</option>
+              <option value="centeredge">CenterEdge</option>
+            </select>
+          </Field>
+          {posVendor !== '' && (
+            <Field label="API base URL" hint="Optional per-venue endpoint override.">
+              <Input
+                value={posApiBase}
+                onChange={(e) => setPosApiBase(e.target.value)}
+                placeholder="https://pos.example.com"
+                inputMode="url"
+              />
+            </Field>
+          )}
+        </div>
+        {posVendor !== '' && (
+          <div className="mt-2 flex flex-wrap gap-4 text-sm text-slate-700">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={posOrdering}
+                onChange={(e) => setPosOrdering(e.target.checked)}
+              />
+              Food ordering
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={posLoyalty}
+                onChange={(e) => {
+                  setPosLoyalty(e.target.checked);
+                  if (!e.target.checked) setPosGameRewards(false); // needs loyalty
+                }}
+              />
+              Rewards card (loyalty)
+            </label>
+            <label className={`flex items-center gap-1.5 ${posLoyalty ? '' : 'opacity-40'}`}>
+              <input
+                type="checkbox"
+                checked={posGameRewards}
+                disabled={!posLoyalty}
+                onChange={(e) => setPosGameRewards(e.target.checked)}
+              />
+              Game ticket rewards
+            </label>
+          </div>
+        )}
+      </div>
+
       <div className="mt-2">
         <Button onClick={save} disabled={busy}>
           {busy ? 'Saving…' : 'Save location'}

@@ -1,21 +1,19 @@
 import { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import {
-  fetchPlayer,
-  fetchPlayerTransactions,
-  rewardTickets,
-  formatCents,
-  type Player,
-  type PlayerTransaction,
-} from '../../lib/centeredgeApi';
+import { formatCents } from '../../lib/pos/pricing';
+import type { Player, PlayerTransaction } from '../../lib/pos/types';
+import { usePos } from '../../lib/pos';
 import { useLinkedPlayerId, setLinkedPlayerId } from '../../lib/rewardsCard';
 import { DEV_MODE } from '../../lib/flags';
 
-// /rewards — link a CenterEdge player card to this device, then show live
-// balances (cash / game-play credits / tickets) and history. Mini-games and
-// promos credit tickets through rewardTickets(); food checkout attaches the
-// linked card to orders. Linking is a lookup by card number (printed on the
-// physical card) or account id — the mock seeds PL-1001/2/3.
+// /rewards — link the venue's player card to this device, then show live
+// balances (cash / game-play credits / tickets) and history. A POS add-on:
+// only venues with the `loyalty` capability get this screen. Mini-games and
+// promos credit tickets through loyalty.rewardTickets() (gated separately by
+// the venue's `gameRewards` flag); food checkout attaches the linked card to
+// orders. Linking is a lookup by card number (printed on the physical card)
+// or account id — the CenterEdge mock seeds PL-1001/2/3.
 
 const inputClass =
   'surface-sunk w-full rounded-xl border border-fairway-800/60 px-4 py-2.5 text-base text-fairway-50 placeholder:text-fairway-100/40 focus:border-fairway-500 focus:outline-none';
@@ -35,6 +33,7 @@ function BalanceTile({ label, value, emoji }: { label: string; value: string; em
 }
 
 export default function Rewards() {
+  const { loyalty } = usePos();
   const playerId = useLinkedPlayerId();
   const [player, setPlayer] = useState<Player | null>(null);
   const [transactions, setTransactions] = useState<PlayerTransaction[]>([]);
@@ -47,30 +46,32 @@ export default function Rewards() {
     setPlayer(null);
     setTransactions([]);
     setError(null);
-    if (!playerId) return;
+    if (!playerId || !loyalty) return;
     let cancelled = false;
     void (async () => {
-      const res = await fetchPlayer(playerId);
+      const res = await loyalty.fetchPlayer(playerId);
       if (cancelled) return;
       if ('error' in res) {
         setError(res.error);
         return;
       }
       setPlayer(res.player);
-      const txs = await fetchPlayerTransactions(playerId);
+      const txs = await loyalty.fetchPlayerTransactions(playerId);
       if (!cancelled && !('error' in txs)) setTransactions(txs.transactions);
     })();
     return () => {
       cancelled = true;
     };
-  }, [playerId]);
+  }, [playerId, loyalty]);
+
+  if (!loyalty) return <Navigate to="/" replace />;
 
   async function link() {
     const query = cardInput.trim();
-    if (query === '' || busy) return;
+    if (query === '' || busy || !loyalty) return;
     setBusy(true);
     setError(null);
-    const res = await fetchPlayer(query);
+    const res = await loyalty.fetchPlayer(query);
     setBusy(false);
     if ('error' in res) {
       setError(res.status === 404 ? 'No card found with that number.' : res.error);
@@ -81,12 +82,12 @@ export default function Rewards() {
   }
 
   // DEV-only: exercise the secure ticket-injection path end to end. Real
-  // awards come from mini-games calling rewardTickets with the game session
-  // id as the idempotency key.
+  // awards come from mini-games calling loyalty.rewardTickets with the game
+  // session id as the idempotency key (venues gated by pos.gameRewards).
   async function awardTestTickets() {
-    if (!player || busy) return;
+    if (!player || busy || !loyalty) return;
     setBusy(true);
-    const res = await rewardTickets({
+    const res = await loyalty.rewardTickets({
       playerId: player.id,
       tickets: 50,
       source: 'dev:test-award',
@@ -98,7 +99,7 @@ export default function Rewards() {
       return;
     }
     setPlayer({ ...player, balances: { ...player.balances, tickets: res.newTicketBalance } });
-    const txs = await fetchPlayerTransactions(player.id);
+    const txs = await loyalty.fetchPlayerTransactions(player.id);
     if (!('error' in txs)) setTransactions(txs.transactions);
   }
 
