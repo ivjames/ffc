@@ -33,6 +33,11 @@ const VIEW_QUEUE_KEY = 'ffc_announcement_view_queue';
 // server's last_seen_at forward.
 const reportedThisSession = new Set<string>();
 let flushingViews = false;
+// Must stay <= the server's MAX_VIEW_IDS (routes/announcements.js). The beacon
+// silently processes only its first that-many ids, so we send no more than it
+// accepts and clear only what we sent — otherwise a queue that ever exceeds the
+// cap would drop its overflow on the first successful flush.
+const VIEW_BATCH = 50;
 
 function readViewQueue(): string[] {
   try {
@@ -53,29 +58,37 @@ function writeViewQueue(ids: string[]): void {
   }
 }
 
-/** Push any queued view ids to the beacon endpoint. Safe to call repeatedly;
- *  a no-op when offline, empty, or already in flight. Sent ids are cleared on
- *  success, so anything queued mid-flush survives to the next flush. */
+/** Push queued view ids to the beacon endpoint, one server-sized batch per
+ *  call. Safe to call repeatedly; a no-op when offline, empty, or already in
+ *  flight. Only the ids actually sent are cleared on success, so anything
+ *  queued mid-flush — or beyond this batch — survives to the next flush. */
 export async function flushAnnouncementViews(): Promise<void> {
   if (flushingViews || !navigator.onLine) return;
-  const ids = readViewQueue();
-  if (ids.length === 0) return;
   flushingViews = true;
+  let drained = false;
   try {
+    const batch = readViewQueue().slice(0, VIEW_BATCH);
+    if (batch.length === 0) return;
     const res = await fetch(apiUrl('/api/announcements/views'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       keepalive: true,
-      body: JSON.stringify({ deviceId: getDeviceId(), ids }),
+      body: JSON.stringify({ deviceId: getDeviceId(), ids: batch }),
     });
     if (res.ok) {
-      const sent = new Set(ids);
+      const sent = new Set(batch);
       writeViewQueue(readViewQueue().filter((id) => !sent.has(id)));
+      drained = true;
     }
   } catch {
     /* offline / server down — leave the queue for the next flush */
   } finally {
     flushingViews = false;
+  }
+  // More than one batch was queued (rare: >50 views banked offline). Keep
+  // draining now that this batch is cleared; the queue shrank, so this ends.
+  if (drained && navigator.onLine && readViewQueue().length > 0) {
+    void flushAnnouncementViews();
   }
 }
 
