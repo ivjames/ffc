@@ -201,6 +201,29 @@ test("the per-booth stored cap 429s further uploads until something is deleted",
   assert.equal((await upload(uploadBody(booth))).status, 200);
 });
 
+test("the global disk budget counts real stored bytes and 429s past it", async (t) => {
+  t.after(() => {
+    delete process.env.PHOTO_BOOTH_DISK_BUDGET_MB;
+  });
+  const booth = newBoothId("budget");
+
+  // Stored bytes are recorded per photo — the budget's raw material.
+  const saved = await (await upload(uploadBody(booth))).json();
+  const row = await testQuery(`select bytes from booth_photo where id = $1`, [saved.id]);
+  assert.equal(row.rows[0].bytes, Buffer.from("booth-test-image").length);
+
+  // 0 = kill switch: any upload exceeds a zero budget, whatever the booth id —
+  // rotating ids (the attack the budget exists for) doesn't help.
+  process.env.PHOTO_BOOTH_DISK_BUDGET_MB = "0";
+  const blocked = await upload(uploadBody(newBoothId("budget-rotated")));
+  assert.equal(blocked.status, 429);
+  assert.match((await blocked.json()).error, /full right now/);
+
+  // Room in the budget again -> uploads flow.
+  process.env.PHOTO_BOOTH_DISK_BUDGET_MB = "1024";
+  assert.equal((await upload(uploadBody(booth))).status, 200);
+});
+
 test("GET /api/photos/retention reports the live retention config", async (t) => {
   t.after(() => {
     delete process.env.PHOTO_BOOTH_RETENTION_DAYS;

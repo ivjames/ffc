@@ -20,10 +20,12 @@ import { fetchBoothRetentionDays } from '../photos/api';
 /** The retention sentence, always true for the venue's actual config:
  *  days > 0 (known)  -> "deleted after N days"
  *  days <= 0 (known) -> sweep disabled -> "kept until deleted on request"
- *  null (unknown)    -> no fetched config -> promise nothing specific. */
+ *  null (unknown)    -> no fetched config -> promise NOTHING, not even
+ *  automatic deletion: the venue may have the sweep disabled, and a promise
+ *  we can't verify is exactly what this page must never make. */
 function retentionSentence(days: number | null): string {
   if (days == null) {
-    return 'Stored photos are automatically deleted after this venue’s retention period (30 days unless the venue configures otherwise).';
+    return 'How long stored photos are kept depends on this venue’s settings — ask any staff member to delete yours at any time.';
   }
   if (days <= 0) {
     return 'This venue keeps stored photos until they are deleted — ask a staff member to remove yours at any time.';

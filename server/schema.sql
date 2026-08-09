@@ -686,7 +686,11 @@ create table if not exists booth_photo (
                                         -- surface (null = super_admin-only, hunt precedent)
   photo_path  text not null,            -- stored image path on the droplet disk
   media_type  text not null,            -- image/jpeg | png | webp | gif
+  bytes       int,                      -- stored file size; backs the global disk
+                                        -- budget (PHOTO_BOOTH_DISK_BUDGET_MB)
   created_at  timestamptz not null default now()
 );
+-- For databases created before `bytes` existed: add it idempotently.
+alter table booth_photo add column if not exists bytes int;
 create index if not exists booth_photo_booth_idx   on booth_photo (booth_id, created_at desc);
 create index if not exists booth_photo_created_idx on booth_photo (created_at);

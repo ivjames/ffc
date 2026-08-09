@@ -66,6 +66,27 @@ function resolvePhotoCap() {
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_PHOTO_CAP;
 }
 
+// --- Global disk budget ------------------------------------------------------
+// The per-booth cap alone bounds nothing: boothId is caller-chosen, so a
+// hostile client could rotate ids and fill the disk within the IP rate limit.
+// This budget counts ACTUAL stored bytes (booth_photo.bytes) across all
+// booths — a server-controlled hard ceiling on the feature's disk use, the
+// HUNT_SCAN_CAP philosophy applied to storage. Uploads 429 once the budget is
+// spent, until retention/deletes free room. Resolved per request; 0 is a kill
+// switch for new uploads.
+const DEFAULT_DISK_BUDGET_MB = 10 * 1024; // 10 GB
+function resolveDiskBudgetBytes() {
+  const raw = process.env.PHOTO_BOOTH_DISK_BUDGET_MB;
+  const mb =
+    raw === undefined || raw === ""
+      ? DEFAULT_DISK_BUDGET_MB
+      : (() => {
+          const n = Number.parseInt(raw, 10);
+          return Number.isFinite(n) && n >= 0 ? n : DEFAULT_DISK_BUDGET_MB;
+        })();
+  return mb * 1024 * 1024;
+}
+
 // Uploads are disk writes, not model calls — the cap bounds bytes-per-minute
 // per IP, same fixed-window scheme as everywhere else.
 const uploadRateLimit = makeRateLimit({
@@ -178,6 +199,20 @@ router.post(
     }
 
     try {
+      // Global disk budget first: actual bytes stored across ALL booths. This
+      // is the real bound — the per-booth cap below is fairness, not safety,
+      // since boothId is caller-chosen.
+      const budget = resolveDiskBudgetBytes();
+      const used = await pool.query(
+        `select coalesce(sum(bytes), 0)::bigint as n from booth_photo`
+      );
+      if (Number(used.rows[0].n) + imageBytes.length > budget) {
+        return res.status(429).json({
+          ok: false,
+          error: "the photo booth is full right now — try again later",
+        });
+      }
+
       // Per-booth stored cap: past it, the player deletes (or retention ages
       // photos out) before storing more. 429 so the client words it as a limit.
       const cap = resolvePhotoCap();
@@ -212,10 +247,10 @@ router.post(
       let ins;
       try {
         ins = await pool.query(
-          `insert into booth_photo (booth_id, location_id, photo_path, media_type)
-           values ($1, $2, $3, $4)
+          `insert into booth_photo (booth_id, location_id, photo_path, media_type, bytes)
+           values ($1, $2, $3, $4, $5)
            returning id, created_at as "createdAt"`,
-          [boothId, venueId, photoPath, mediaType]
+          [boothId, venueId, photoPath, mediaType, imageBytes.length]
         );
       } catch (err) {
         // Don't leave an orphan file behind a failed insert.
