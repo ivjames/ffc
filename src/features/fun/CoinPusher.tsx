@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
-import { playTick, playPinClack, playScore, playCup, playUndo, playFanfare } from '../../lib/sound';
+import { playTick, playPinClack, playScore, playCup, playUndo, playFanfare, playDing } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
 import {
   TWO_PI,
@@ -37,6 +37,7 @@ const R = 11; // coin radius
 
 const TOP_STRIP = 56; // tap-to-drop panel
 const TAP_MAX = 140; // taps above this y count as drops
+const HOLD_REPEAT_MS = 220; // press-and-hold auto-drop interval
 const BACK_Y = 94; // mirrored back wall's bottom edge (bar emerges beneath it)
 const P_MIN = 118; // pusher front face, retracted
 const P_MAX = 190; // pusher front face, extended
@@ -46,7 +47,8 @@ const WALL_L = 16; // inner faces of the side rails
 const WALL_R = W - 16;
 const GUT_Y0 = 250; // below this y the side walls open into loss gutters
 
-const TOTAL_COINS = 20;
+const STARTING_COINS = 20;
+const TOPUP_COINS = 10; // "+ more coins" batch size — free and unlimited for now
 const GOLD_ODDS = 1 / 6; // dropped coins only; pays ×5
 const FIXED = 1000 / 120; // physics substep (ms)
 const DT = FIXED / 1000;
@@ -54,8 +56,18 @@ const FR_PER_S = 0.12; // per-second velocity multiplier (tray friction)
 const OVER_MS = 340; // payout tip-over flip animation
 const LOST_MS = 260; // gutter drop-in animation
 const COMBO_MS = 1000; // payouts this close together escalate as one stroke
-const SETTLE_MS = 2500; // quiet time after the last coin before 'done'
 const CLINK_GAP_MS = 85; // min gap between clink sounds (no machine-gunning)
+
+// Real coin pushers are never freshly reset when you walk up — other players
+// already fed it. A cold random jam commonly takes 80-120+ real drops before
+// anything pays out (measured), so a fresh round "pre-plays" ~110 phantom
+// drops (this game's own measured median time-to-first-payout) through the
+// SAME physics before the player's first tap, landing them roughly where a
+// typical round already would be — a head start, not a guarantee. Runs
+// compressed (not in real time) in small chunks; see the priming effect.
+const PRIME_DROPS = 110;
+const PRIME_CADENCE_MS = 150; // internal phantom-drop spacing — not real-time pacing
+const PRIME_SUBSTEPS_PER_CHUNK = 400; // budget per animation frame while priming
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -85,19 +97,20 @@ function rollTipAt(): number {
   return EDGE + 2 + Math.random() * 8;
 }
 
-type Phase = 'ready' | 'play' | 'done';
+type Phase = 'ready' | 'priming' | 'play' | 'done';
 type GS = {
   phase: Phase;
   coins: Coin[];
   coinsLeft: number;
+  coinsDropped: number; // cumulative — the "buy more" batches can outrun a fixed budget
   score: number;
   simTime: number; // accumulated fixed-step time; freezes while hidden for free
   nextId: number;
   lastClinkSim: number;
   lastPayoutSim: number;
-  lastDropSim: number;
   comboCount: number; // payouts inside the current COMBO_MS window
   comboPay: number; // their summed value, for the "+4!!" popup
+  endRequested: boolean; // player tapped Cash Out — end once nothing's mid-animation
 };
 
 /** The randomized jam: never the same pile twice, and never a neat spaced
@@ -170,15 +183,16 @@ function freshGS(): GS {
   return {
     phase: 'ready',
     coins,
-    coinsLeft: TOTAL_COINS,
+    coinsLeft: STARTING_COINS,
+    coinsDropped: 0,
     score: 0,
     simTime: 0,
     nextId: coins.length,
     lastClinkSim: -9999,
     lastPayoutSim: 0,
-    lastDropSim: 0,
     comboCount: 0,
     comboPay: 0,
+    endRequested: false,
   };
 }
 
@@ -540,8 +554,10 @@ export default function CoinPusher() {
   const fxRef = useRef<FX>(freshFX());
 
   const [phase, setPhase] = useState<Phase>('ready');
-  const [coinsLeft, setCoinsLeft] = useState(TOTAL_COINS);
+  const [coinsLeft, setCoinsLeft] = useState(STARTING_COINS);
   const [score, setScore] = useState(0);
+  const [coinsDropped, setCoinsDropped] = useState(0); // for the done screen
+  const [ending, setEnding] = useState(false); // cash-out tapped, waiting to settle
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -662,12 +678,13 @@ export default function CoinPusher() {
         for (const l of ev.lost) spawnBurst(fx.particles, l.x, l.y, 6, 90, '#475569');
       }
 
-      // —— End: all coins spent and the tray has gone quiet ——
+      // —— End: player cashed out and nothing's still mid-animation ——
+      // Coins are free to top up now (no fixed budget), so there's no natural
+      // "ran out" ending anymore — the round only ends when the player says so.
       if (
         gs.phase === 'play' &&
-        gs.coinsLeft === 0 &&
-        !gs.coins.some((c) => c.state === 'drop' || c.state === 'over') &&
-        gs.simTime - Math.max(gs.lastDropSim, gs.lastPayoutSim) > SETTLE_MS
+        gs.endRequested &&
+        !gs.coins.some((c) => c.state === 'drop' || c.state === 'over')
       ) {
         gs.phase = 'done';
         setPhase('done');
@@ -693,45 +710,166 @@ export default function CoinPusher() {
     };
   }, []);
 
+  // Deep, dense, and lossy by design (see seedCoins above) — a real jam
+  // routinely takes 80-120+ drops before anything reaches the lip, win or
+  // lose on timing. Requiring that many individual taps is the tedious part,
+  // not the physics: press-and-hold auto-drops at HOLD_REPEAT_MS, tracking
+  // the pointer's x, so grinding through a jam takes a few seconds of holding
+  // instead of 100+ individual taps. A brief tap still drops just one coin
+  // (holdTimer never fires before release), so the original feel is unchanged.
+  const holdTimer = useRef<number | null>(null);
+  const holdX = useRef(0);
+
+  const dropAt = useCallback((x: number) => {
+    const gs = gsRef.current;
+    if (gs.phase !== 'play' || gs.coinsLeft <= 0 || gs.endRequested) return;
+    // Land just behind the pusher's CURRENT front — drop while it's retracted
+    // and the coin sits deep in the gap, riding the whole forward stroke.
+    const landY = pusherFront(gs.simTime) + R + 2;
+    gs.coins.push({
+      id: gs.nextId++,
+      x,
+      y: 30,
+      vx: 0,
+      vy: 120,
+      gold: Math.random() < GOLD_ODDS,
+      state: 'drop',
+      t: 0,
+      landY,
+      tipAt: rollTipAt(),
+    });
+    gs.coinsLeft -= 1;
+    gs.coinsDropped += 1;
+    setCoinsLeft(gs.coinsLeft);
+    setCoinsDropped(gs.coinsDropped);
+    playTick();
+  }, []);
+
+  const stopHold = useCallback(() => {
+    if (holdTimer.current != null) {
+      window.clearInterval(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }, []);
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       const gs = gsRef.current;
-      if (gs.phase !== 'play' || gs.coinsLeft <= 0) return;
+      if (gs.phase !== 'play' || gs.coinsLeft <= 0 || gs.endRequested) return;
       const p = toField(e);
       if (p.y > TAP_MAX) return;
       const x = clamp(p.x, WALL_L + R + 1, WALL_R - R - 1);
-      // Land just behind the pusher's CURRENT front — drop while it's retracted
-      // and the coin sits deep in the gap, riding the whole forward stroke.
-      const landY = pusherFront(gs.simTime) + R + 2;
-      gs.coins.push({
-        id: gs.nextId++,
-        x,
-        y: 30,
-        vx: 0,
-        vy: 120,
-        gold: Math.random() < GOLD_ODDS,
-        state: 'drop',
-        t: 0,
-        landY,
-        tipAt: rollTipAt(),
-      });
-      gs.coinsLeft -= 1;
-      gs.lastDropSim = gs.simTime;
-      setCoinsLeft(gs.coinsLeft);
-      playTick();
+      canvasRef.current?.setPointerCapture(e.pointerId);
+      holdX.current = x;
+      dropAt(x);
+      stopHold();
+      holdTimer.current = window.setInterval(() => dropAt(holdX.current), HOLD_REPEAT_MS);
+    },
+    [toField, dropAt, stopHold],
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (holdTimer.current == null) return; // only track while actively holding
+      const p = toField(e);
+      holdX.current = clamp(p.x, WALL_L + R + 1, WALL_R - R - 1);
     },
     [toField],
   );
 
-  const start = useCallback(() => {
-    const gs = freshGS();
-    gs.phase = 'play';
-    gsRef.current = gs;
-    fxRef.current = freshFX();
-    setPhase('play');
-    setCoinsLeft(TOTAL_COINS);
-    setScore(0);
+  // Stop the repeat on release, drag-off-canvas, or a lost pointer (app
+  // backgrounded mid-hold) — setPointerCapture below keeps move/up events
+  // targeting the canvas even if the finger wanders outside it.
+  useEffect(() => stopHold, [stopHold]);
+
+  /** Free top-up — unlimited for now (a ticket cost is a later addition). */
+  const buyMore = useCallback(() => {
+    const gs = gsRef.current;
+    if (gs.phase !== 'play' || gs.endRequested) return;
+    gs.coinsLeft += TOPUP_COINS;
+    setCoinsLeft(gs.coinsLeft);
+    playDing();
   }, []);
+
+  /** Ends the round once whatever's currently mid-flight settles. */
+  const cashOut = useCallback(() => {
+    const gs = gsRef.current;
+    if (gs.phase !== 'play' || gs.endRequested) return;
+    stopHold();
+    gs.endRequested = true;
+    setEnding(true);
+  }, [stopHold]);
+
+  const start = useCallback(() => {
+    // Priming (below) builds the actual starting board; this just clears the
+    // HUD and hands off to it. gsRef/fxRef are swapped in once priming
+    // finishes — whatever they currently hold (a finished previous round, or
+    // the untouched initial mount) just sits there, hidden behind the
+    // priming overlay, until the swap.
+    setPhase('priming');
+    setCoinsLeft(STARTING_COINS);
+    setScore(0);
+    setCoinsDropped(0);
+    setEnding(false);
+  }, []);
+
+  // Pre-play ~PRIME_DROPS phantom drops through the real physics before the
+  // player's round starts (see PRIME_DROPS above for why), entirely on a
+  // throwaway GS so the visible board never flickers mid-simulation — it
+  // jump-cuts once from whatever was there before straight to the finished,
+  // primed board. Runs in chunks across animation frames (not one blocking
+  // call) since a phone can take noticeably longer than a dev machine to
+  // grind through ~2000 physics substeps.
+  useEffect(() => {
+    if (phase !== 'priming') return;
+    const gs = freshGS();
+    let drops = 0;
+    let nextDropAt = 0;
+    let raf = 0;
+    let cancelled = false;
+
+    function chunk() {
+      if (cancelled) return;
+      for (let i = 0; i < PRIME_SUBSTEPS_PER_CHUNK && drops < PRIME_DROPS; i++) {
+        if (gs.simTime >= nextDropAt) {
+          const x = clamp(W / 2 + (Math.random() - 0.5) * 220, WALL_L + R + 1, WALL_R - R - 1);
+          gs.coins.push({
+            id: gs.nextId++,
+            x,
+            y: 30,
+            vx: 0,
+            vy: 120,
+            gold: Math.random() < GOLD_ODDS,
+            state: 'drop',
+            t: 0,
+            landY: pusherFront(gs.simTime) + R + 2,
+            tipAt: rollTipAt(),
+          });
+          drops += 1;
+          nextDropAt = gs.simTime + PRIME_CADENCE_MS;
+        }
+        step(gs, { clink: 0, landed: 0, payouts: [], lost: [] });
+      }
+      if (drops >= PRIME_DROPS) {
+        // Any phantom payout/loss along the way is uncredited — as far as
+        // the player's concerned, an earlier round already collected or
+        // missed it. Only what's still on the tray (or mid-fall) carries over.
+        gs.coins = gs.coins.filter((c) => c.state === 'tray' || c.state === 'drop');
+        gs.simTime = 0;
+        gs.phase = 'play';
+        gsRef.current = gs;
+        fxRef.current = freshFX();
+        setPhase('play');
+        return;
+      }
+      raf = requestAnimationFrame(chunk);
+    }
+    raf = requestAnimationFrame(chunk);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [phase]);
 
   if (phase === 'done') {
     const remark =
@@ -750,7 +888,7 @@ export default function CoinPusher() {
             <span className="text-6xl">🪙</span>
             <div className="text-5xl font-black text-fairway-50">{score}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
-            <p className="text-sm text-fairway-400">paid out from {TOTAL_COINS} coins</p>
+            <p className="text-sm text-fairway-400">paid out from {coinsDropped} coins</p>
           </div>
           <div className="mt-8">
             <Button onClick={start} sound="none">
@@ -765,9 +903,13 @@ export default function CoinPusher() {
   const hint =
     phase === 'ready'
       ? 'Time your drops against the pusher — shove the pile over the glowing edge.'
-      : coinsLeft > 0
-        ? 'Tap the top strip to drop a coin — best just as the pusher pulls back.'
-        : 'Out of coins — watching the last cascade…';
+      : phase === 'priming'
+        ? 'Setting up the tray…'
+        : ending
+          ? 'Cashing out — letting the last coin settle…'
+          : coinsLeft > 0
+            ? 'Tap to drop a coin, or hold to keep feeding the pile — best just as the pusher pulls back.'
+            : 'Out of coins — buy more, or cash out to see your payout.';
 
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
@@ -775,27 +917,46 @@ export default function CoinPusher() {
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
         <span className="font-bold text-fairway-50">
           Coins <span className="text-fairway-100">{coinsLeft}</span>
-          <span className="font-normal text-fairway-400"> / {TOTAL_COINS}</span>
         </span>
         <span className="text-fairway-300">
           Payout <span className="font-bold text-amber-300">{score}</span>
         </span>
       </div>
+      {phase === 'play' && (
+        <div className="flex shrink-0 gap-2 px-4 pb-2">
+          <Button variant="ghost" className="flex-1" disabled={ending} sound="none" onClick={buyMore}>
+            🪙 +{TOPUP_COINS} coins
+          </Button>
+          <Button variant="ghost" className="flex-1" disabled={ending} onClick={cashOut}>
+            Cash out
+          </Button>
+        </div>
+      )}
 
       <div className="grid min-h-0 flex-1 place-items-center px-4">
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={stopHold}
+          onPointerCancel={stopHold}
           className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
             <span className="text-5xl">🪙</span>
             <p className="text-sm text-fairway-100">
-              Tap the top strip to drop coins behind the pusher and shove the pile over the glowing edge. Gold pays ×5.{' '}
-              {TOTAL_COINS} coins — mind the side gutters.
+              Tap the top strip to drop coins behind the pusher — or hold to keep feeding them in — and shove the
+              pile over the glowing edge. Gold pays ×5. Start with {STARTING_COINS} — buy more anytime, there's no
+              limit. Mind the side gutters.
             </p>
             <Button onClick={start}>Start</Button>
+          </div>
+        )}
+        {phase === 'priming' && (
+          <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-3 rounded-2xl bg-black/70 px-6 py-5 text-center">
+            <span className="animate-pulse text-5xl">🪙</span>
+            <p className="text-sm text-fairway-100">Setting up the tray…</p>
           </div>
         )}
       </div>
