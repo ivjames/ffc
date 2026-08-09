@@ -162,6 +162,11 @@ function loadSvgImage(svgId: string): Promise<HTMLImageElement | null> {
   if (inflight) return inflight;
   const p = new Promise<HTMLImageElement | null>((resolve) => {
     const img = new Image();
+    // Request CORS so this element stays origin-clean when the API is a
+    // separate origin (VITE_API_BASE) — the API sends permissive CORS headers.
+    // Without it, drawing the SVG onto the export canvas taints it and toBlob
+    // throws. Harmless same-origin. Must be set before src.
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       svgImages.set(svgId, img);
       resolve(img);
@@ -228,10 +233,17 @@ async function flattenToJpeg(
       const svg = await loadSvgImage(st.svgId);
       if (svg) {
         const side = stickerSide(w, st.scale, 1);
-        const m = svgMeta.get(st.svgId) ?? { width: 100, height: 100 };
-        const fit = side / Math.max(m.width, m.height); // contain by larger side
-        const dw = m.width * fit;
-        const dh = m.height * fit;
+        // Aspect source, most-reliable first: the size persisted with the
+        // sticker, then live venue metadata, then the decoded image's own
+        // intrinsic size, then a 1:1 fallback.
+        const meta = svgMeta.get(st.svgId);
+        const iw = st.svgW ?? meta?.width ?? svg.naturalWidth ?? 0;
+        const ih = st.svgH ?? meta?.height ?? svg.naturalHeight ?? 0;
+        const aw = iw > 0 ? iw : 100;
+        const ah = ih > 0 ? ih : 100;
+        const fit = side / Math.max(aw, ah); // contain by larger side
+        const dw = aw * fit;
+        const dh = ah * fit;
         ctx.drawImage(svg, -dw / 2, -dh / 2, dw, dh);
       }
     }
@@ -414,7 +426,14 @@ export default function PhotoBooth() {
   function addSticker(kind: { emoji: string } | { svgId: string }) {
     const id = nextStickerId.current++;
     // Warm the export cache; the editor <img> renders the vector immediately.
-    if ('svgId' in kind) void loadSvgImage(kind.svgId);
+    // Capture the SVG's intrinsic size NOW so a reopened draft keeps its aspect
+    // regardless of whether venue metadata is loaded later.
+    let dims: { svgW?: number; svgH?: number } = {};
+    if ('svgId' in kind) {
+      void loadSvgImage(kind.svgId);
+      const m = svgMeta.get(kind.svgId);
+      if (m) dims = { svgW: m.width, svgH: m.height };
+    }
     // Drop new stickers near the middle, staggered a little so a quick series
     // doesn't stack into one invisible pile.
     const n = stickers.length;
@@ -423,6 +442,7 @@ export default function PhotoBooth() {
       {
         id,
         ...kind,
+        ...dims,
         x: 0.5 + ((n % 3) - 1) * 0.08,
         y: 0.5 + ((Math.floor(n / 3) % 3) - 1) * 0.08,
         scale: 1,

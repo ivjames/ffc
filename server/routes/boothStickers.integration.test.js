@@ -99,6 +99,17 @@ test("the sanitizer rejects dangerous SVG and accepts a plain one", () => {
     Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect fill="url(#g)"/></svg>')
   );
   assert.equal(fragFill.ok, true);
+
+  // An <?xml …?> declaration must not shadow the <svg> element when reading the
+  // intrinsic size (else non-square stickers export distorted).
+  const declared = validateSvgSticker(
+    Buffer.from(
+      '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80" viewBox="0 0 200 80"><rect width="200" height="80"/></svg>'
+    )
+  );
+  assert.equal(declared.ok, true);
+  assert.equal(declared.width, 200);
+  assert.equal(declared.height, 80);
 });
 
 test("upload validates, stores the file, and records intrinsic size + audit", async () => {

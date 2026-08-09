@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, type AdminVenueSticker, type Location } from './api';
 import { Button, Card, Banner, Spinner, fmtDateTime } from './ui';
 
@@ -66,6 +66,7 @@ export default function BoothStickers() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [label, setLabel] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -78,23 +79,37 @@ export default function BoothStickers() {
     );
   }, []);
 
-  const loadStickers = useCallback(async () => {
+  // Load the selected venue's stickers, ignoring a stale response if the
+  // operator switches venues while a slower request is still in flight — else
+  // an older list could overwrite the newer venue's (and a delete would target
+  // the wrong venue). The effect's cleanup marks the in-flight request stale.
+  useEffect(() => {
     if (!locationId) return;
+    let active = true;
+    setStickers(null);
     setLoading(true);
     setError(null);
-    try {
-      setStickers(await api.listBoothStickers(locationId));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [locationId]);
+    api.listBoothStickers(locationId).then(
+      (list) => {
+        if (!active) return;
+        setStickers(list);
+        setLoading(false);
+      },
+      (err) => {
+        if (!active) return;
+        setError((err as Error).message);
+        setLoading(false);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [locationId, reloadKey]);
 
-  useEffect(() => {
-    setStickers(null);
-    void loadStickers();
-  }, [loadStickers]);
+  // Bump to re-run the loader (after an upload/remove) without a venue change.
+  function reloadStickers() {
+    setReloadKey((k) => k + 1);
+  }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -110,7 +125,7 @@ export default function BoothStickers() {
       const svg = await file.text();
       await api.uploadBoothSticker({ locationId, label: label.trim() || undefined, svg });
       setLabel('');
-      await loadStickers();
+      reloadStickers();
     } catch (err) {
       // Server rejection (dangerous/malformed SVG) surfaces here verbatim.
       setError((err as Error).message);

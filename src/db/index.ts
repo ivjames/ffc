@@ -28,6 +28,11 @@ export interface BoothSticker {
   rot: number;
   emoji?: string;
   svgId?: string;
+  // Intrinsic size of an SVG sticker, captured when placed so a reopened draft
+  // exports at the right aspect even if the venue's sticker metadata isn't
+  // loaded (or the device has since switched venues).
+  svgW?: number;
+  svgH?: number;
 }
 
 // The editable source behind a saved booth photo, kept ONLY on the device that

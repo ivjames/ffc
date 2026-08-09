@@ -87,7 +87,12 @@ export function validateSvgSticker(bytes) {
 // the client can size the sticker with the right aspect ratio without parsing
 // the SVG itself. Falls back to a square when nothing usable is present.
 function intrinsicSize(text) {
-  const openTag = text.slice(0, text.indexOf(">") + 1);
+  // Start at the <svg> element — an optional <?xml …?> declaration ends in its
+  // own `>`, so slicing from the document start would read the declaration's
+  // attributes (version/encoding), not the SVG's width/height/viewBox.
+  const start = text.search(/<svg[\s>]/i);
+  const from = start >= 0 ? text.slice(start) : text;
+  const openTag = from.slice(0, from.indexOf(">") + 1);
   const num = (attr) => {
     const m = openTag.match(new RegExp(`\\b${attr}\\s*=\\s*(['"])\\s*([0-9.]+)`, "i"));
     return m ? Number.parseFloat(m[2]) : null;
