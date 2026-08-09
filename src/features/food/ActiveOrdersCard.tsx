@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { usePos } from '../../lib/pos';
+import { useCurrentLocationId } from '../../lib/location';
 import { usePlacedOrders, activeOrders } from '../../lib/foodOrders';
 
 // "Your order is in the kitchen" re-entry point — placed orders otherwise
@@ -11,9 +12,10 @@ import { usePlacedOrders, activeOrders } from '../../lib/foodOrders';
 export default function ActiveOrdersCard() {
   const navigate = useNavigate();
   const { ordering } = usePos();
+  const locationId = useCurrentLocationId();
   const placed = usePlacedOrders();
   if (!ordering) return null;
-  const active = activeOrders(placed);
+  const active = activeOrders(placed, locationId);
   if (active.length === 0) return null;
 
   return (

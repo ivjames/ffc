@@ -11,6 +11,9 @@ export type PlacedOrder = {
   id: string;
   orderNumber: number;
   totalCents: number;
+  /** The venue the order was placed at — order ids are only meaningful to
+   *  that venue's POS, so we never surface or query one against another. */
+  locationId: string;
   /** ISO timestamp from the order (server clock). */
   createdAt: string;
 };
@@ -26,10 +29,18 @@ export function withOrder(orders: PlacedOrder[], order: PlacedOrder): PlacedOrde
   return [order, ...orders.filter((o) => o.id !== order.id)].slice(0, MAX_REMEMBERED);
 }
 
-/** Orders recent enough to plausibly still be in the kitchen, newest first.
- *  An unparseable createdAt counts as expired rather than sticking forever. */
-export function activeOrders(orders: PlacedOrder[], now = Date.now()): PlacedOrder[] {
+/** Orders for `locationId` recent enough to plausibly still be in the kitchen,
+ *  newest first. Scoping to the venue matters: an order id only means anything
+ *  to the POS that issued it, so an order from another location must not show
+ *  up here (following it would query the wrong venue's adapter). An
+ *  unparseable createdAt counts as expired rather than sticking forever. */
+export function activeOrders(
+  orders: PlacedOrder[],
+  locationId: string,
+  now = Date.now(),
+): PlacedOrder[] {
   return orders.filter((o) => {
+    if (o.locationId !== locationId) return false;
     const placedAt = Date.parse(o.createdAt);
     return Number.isFinite(placedAt) && now - placedAt < ACTIVE_WINDOW_MS;
   });

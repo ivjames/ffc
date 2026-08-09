@@ -11,6 +11,7 @@ function order(overrides: Partial<PlacedOrder>): PlacedOrder {
     id: 'ord-1',
     orderNumber: 1001,
     totalCents: 2422,
+    locationId: 'loc-a',
     createdAt: new Date(NOW).toISOString(),
     ...overrides,
   };
@@ -44,10 +45,17 @@ describe('activeOrders', () => {
       id: 'stale',
       createdAt: new Date(NOW - ACTIVE_WINDOW_MS - 1).toISOString(),
     });
-    expect(activeOrders([fresh, stale], NOW)).toEqual([fresh]);
+    expect(activeOrders([fresh, stale], 'loc-a', NOW)).toEqual([fresh]);
+  });
+
+  it('only surfaces orders from the given venue', () => {
+    const here = order({ id: 'here', locationId: 'loc-a' });
+    const elsewhere = order({ id: 'elsewhere', locationId: 'loc-b' });
+    expect(activeOrders([here, elsewhere], 'loc-a', NOW)).toEqual([here]);
+    expect(activeOrders([here, elsewhere], 'loc-b', NOW)).toEqual([elsewhere]);
   });
 
   it('treats an unparseable createdAt as expired', () => {
-    expect(activeOrders([order({ createdAt: 'not-a-date' })], NOW)).toEqual([]);
+    expect(activeOrders([order({ createdAt: 'not-a-date' })], 'loc-a', NOW)).toEqual([]);
   });
 });
