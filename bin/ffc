@@ -55,7 +55,7 @@ KEEP="${FFC_KEEP:-5}"                           # released builds to retain
 # hard-fails if it lands on the API port.
 CE_MOCK_PORT="${FFC_CE_PORT:-$(
   grep -hE '^[[:space:]]*(export[[:space:]]+)?CE_MOCK_PORT=' \
-    "$APP_DIR/.env" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1
+    "$APP_DIR/.env" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1 || true
 )}"
 : "${CE_MOCK_PORT:=8070}"
 CE_MOCK_BASE="${FFC_CE_BASE:-/ce}"
@@ -104,7 +104,7 @@ build_release(){
   local ce_configured
   ce_configured="${VITE_CENTEREDGE_API_BASE:-$(
     grep -hE '^[[:space:]]*VITE_CENTEREDGE_API_BASE=.+' \
-      "$APP_DIR/.env.local" "$APP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2-
+      "$APP_DIR/.env.local" "$APP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- || true
   )}"
   if [ -n "$ce_configured" ]; then
     log "Using configured VITE_CENTEREDGE_API_BASE (not the /ce demo default)"
