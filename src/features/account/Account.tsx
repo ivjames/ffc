@@ -11,6 +11,7 @@ import {
   logout,
   type AppUser,
 } from '../../lib/authApi';
+import { track } from '../../lib/analytics';
 
 // Account — passwordless email sign-in (registration IS sign-in: verifying the
 // first code creates the account) plus profile editing once signed in. Email is
@@ -63,6 +64,8 @@ export default function Account() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    // Top of the sign-in funnel — the player committed an email.
+    track('signin_started', { newProfile: !user });
     const profile = {
       ...(displayName.trim() !== '' ? { displayName } : {}),
       ...(defaultTag !== '' ? { defaultTag } : {}),
@@ -79,9 +82,11 @@ export default function Account() {
       const verified = await verifyCode(normalized, res.bypassCode);
       setBusy(false);
       if (verified.user) {
+        track('signin_completed', { method: 'bypass' });
         applyUser(verified.user);
         return;
       }
+      track('signin_failed', { method: 'bypass' });
       setError(verified.error ?? 'Sign-in failed — try again.');
       return;
     }
@@ -98,9 +103,11 @@ export default function Account() {
     const res = await verifyCode(normalized, code);
     setBusy(false);
     if (!res.user) {
+      track('signin_failed', { method: 'code' });
       setError(res.error ?? 'That code didn’t work — check it and try again.');
       return;
     }
+    track('signin_completed', { method: 'code' });
     applyUser(res.user);
   }
 

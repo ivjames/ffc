@@ -21,6 +21,7 @@ import { attachUser } from "./lib/userAuth.js";
 import { router as announcementsRouter } from "./routes/announcements.js";
 import { router as rewardsRouter } from "./routes/rewards.js";
 import { router as gameRewardsRouter } from "./routes/gameRewards.js";
+import { router as eventsRouter } from "./routes/events.js";
 
 export const app = express();
 
@@ -95,6 +96,9 @@ app.use("/api/teams", teamsRouter);
 // per-device participant token; includes the SSE stream).
 app.use("/api/games", gamesRouter);
 app.use("/api/announcements", announcementsRouter);
+// First-party funnel analytics beacon (adoption + sign-in). Open write like
+// the announcement-view beacon; a signed-in app_user rides along via attachUser.
+app.use("/api/events", eventsRouter);
 app.use("/api/rewards", rewardsRouter);
 // Game ticket awards — the trusted proxy between mini-games and the venue's
 // ticket system (validates payouts, enforces caps, then credits the POS).

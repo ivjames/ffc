@@ -780,3 +780,31 @@ create table if not exists booth_sticker (
 );
 create index if not exists booth_sticker_location_idx
   on booth_sticker (location_id, sort_order) where active;
+
+-- First-party funnel analytics (adoption + sign-in). Aggregate product usage
+-- only — enough to measure "install prompt shown -> installed" and "sign-in
+-- started -> completed" and find where players drop off. Deliberately
+-- privacy-clean: identity is ONLY the anonymous device install id (same id the
+-- announcement-view beacon uses) — we intentionally do NOT store app_user_id,
+-- so a funnel event can never be linked back to a name or email (that's the
+-- promise on the Privacy page). No IP or other PII is stored either. `event`
+-- is constrained to a server-side allowlist in the route, so a bad client
+-- can't write junk names. `meta` carries small, non-identifying context.
+--
+-- `client_event_id` is a stable per-event id minted on the device. The beacon
+-- uses keepalive and a durable retry queue, so a request can commit while the
+-- page closes before the client sees the ack — the batch is then re-sent on the
+-- next launch. A unique constraint + ON CONFLICT DO NOTHING makes that retry a
+-- no-op instead of double-counting the funnel.
+create table if not exists funnel_event (
+  id              uuid primary key default gen_random_uuid(),
+  client_event_id uuid not null unique,                -- device-minted, dedups retries
+  event           text not null,                       -- allowlisted name (see routes/events.js)
+  device_id       uuid not null,                       -- anonymous per-install id
+  location_id     uuid references location(id) on delete set null,
+  platform        text,                                -- 'ios' | 'android' | 'desktop' | 'other'
+  meta            jsonb not null default '{}'::jsonb,  -- small non-identifying context
+  created_at      timestamptz not null default now()
+);
+create index if not exists funnel_event_name_time_idx on funnel_event (event, created_at);
+create index if not exists funnel_event_device_idx on funnel_event (device_id);

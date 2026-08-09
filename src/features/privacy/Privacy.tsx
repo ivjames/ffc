@@ -124,9 +124,19 @@ export default function Privacy() {
           </p>
         </Section>
 
+        <Section title="Understanding what's useful">
+          <p>
+            We keep simple, first-party counts of how the app is used — for example, how
+            many people install it to their home screen or sign in — so we can make it
+            better. These are tied only to an anonymous per-device marker, never to your
+            name or email, and they are aggregate numbers: no profile of you, no third-party
+            analytics service, no advertising trackers, and nothing sold or shared.
+          </p>
+        </Section>
+
         <Section title="What we don't do">
           <ul className="list-disc space-y-2 pl-5">
-            <li>No ads, no analytics, no tracking pixels, no third-party trackers.</li>
+            <li>No ads, no tracking pixels, and no third-party or advertising trackers.</li>
             <li>No selling or sharing your information with anyone.</li>
             <li>
               No location tracking — &quot;which venue am I at?&quot; is worked out on your phone

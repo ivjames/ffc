@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useInstallPrompt } from '../../lib/pwaInstall';
+import { track } from '../../lib/analytics';
 
 // §install — landing page for the "install to home screen" QR code. Detects the
 // platform and shows the closest thing each one allows:
@@ -13,9 +14,23 @@ export default function Install() {
   const { platform, installed, canPrompt, promptInstall } = useInstallPrompt();
   const [result, setResult] = useState<'accepted' | 'dismissed' | null>(null);
 
+  // The install page reached a not-yet-installed player — the top of the
+  // adoption funnel. Record it ONCE per visit: `canPrompt` flips as
+  // beforeinstallprompt arrives or a prompt is dismissed, and refiring on those
+  // transitions would inflate the funnel's denominator. The ref latches after
+  // the first not-installed render (an already-installed visitor never counts).
+  const shownRef = useRef(false);
+  useEffect(() => {
+    if (shownRef.current || installed) return;
+    shownRef.current = true;
+    track('install_prompt_shown', { platform, canPrompt });
+  }, [installed, platform, canPrompt]);
+
   async function onInstall() {
     const outcome = await promptInstall();
     setResult(outcome);
+    if (outcome === 'accepted') track('install_accepted', { platform });
+    else if (outcome === 'dismissed') track('install_dismissed', { platform });
   }
 
   return (
