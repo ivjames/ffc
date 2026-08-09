@@ -46,8 +46,18 @@ KEEP="${FFC_KEEP:-5}"                           # released builds to retain
 # Advantage Web Services, run under pm2 and reached same-origin via the nginx
 # /ce proxy so the food-ordering + rewards surfaces work in a deployed demo
 # before real credentials land. CE_MOCK_BASE is baked into the client build as
-# VITE_CENTEREDGE_API_BASE; the adapter appends /api/v1/… to it.
-CE_MOCK_PORT="${FFC_CE_PORT:-8070}"
+# VITE_CENTEREDGE_API_BASE (only when the operator hasn't configured one — see
+# build_release); the adapter appends /api/v1/… to it.
+#
+# Mock port: like API_PORT, read what's actually configured rather than assume a
+# port on the shared 8060+ droplet — FFC_CE_PORT wins, else CE_MOCK_PORT from the
+# app-root .env (where provision-site can reserve a free one), else 8070. mock_up
+# hard-fails if it lands on the API port.
+CE_MOCK_PORT="${FFC_CE_PORT:-$(
+  grep -hE '^[[:space:]]*(export[[:space:]]+)?CE_MOCK_PORT=' \
+    "$APP_DIR/.env" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1
+)}"
+: "${CE_MOCK_PORT:=8070}"
 CE_MOCK_BASE="${FFC_CE_BASE:-/ce}"
 
 # Master Control admin app: served on its own subdomain of the player FQDN,
@@ -85,9 +95,23 @@ build_release(){
   log "Building into $release"
   npm_install "$APP_DIR"
   # Point the client's CenterEdge adapter at the same-origin /ce proxy (see
-  # mock_up + the nginx /ce block). Respect an operator-set value if the build
-  # env already carries one (e.g. a real per-deploy Advantage Web Services URL).
-  ( cd "$APP_DIR" && VITE_CENTEREDGE_API_BASE="${VITE_CENTEREDGE_API_BASE:-$CE_MOCK_BASE}" npm run build )
+  # mock_up + the nginx /ce block) — but ONLY when the operator hasn't already
+  # configured a base. Vite gives a process env var precedence over its dotenv
+  # files, so exporting our /ce default unconditionally would silently clobber a
+  # real/sandbox VITE_CENTEREDGE_API_BASE set in .env / .env.local. So detect a
+  # configured value (shell env, else a non-empty dotenv line) and, when present,
+  # let Vite load it itself without an overriding process var.
+  local ce_configured
+  ce_configured="${VITE_CENTEREDGE_API_BASE:-$(
+    grep -hE '^[[:space:]]*VITE_CENTEREDGE_API_BASE=.+' \
+      "$APP_DIR/.env.local" "$APP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2-
+  )}"
+  if [ -n "$ce_configured" ]; then
+    log "Using configured VITE_CENTEREDGE_API_BASE (not the /ce demo default)"
+    ( cd "$APP_DIR" && npm run build )
+  else
+    ( cd "$APP_DIR" && VITE_CENTEREDGE_API_BASE="$CE_MOCK_BASE" npm run build )
+  fi
   cp -r "$APP_DIR/dist" "$release/dist"
   # Master Control admin SPA — separate bundle (no service worker). Built and
   # shipped in the same atomic release so current/dist-admin swaps together with
@@ -119,6 +143,8 @@ api_up(){
 # cleanly if the mock dir is ever absent.
 mock_up(){
   [ -d "$APP_DIR/mock-centeredge" ] || return 0
+  [ "$CE_MOCK_PORT" != "$API_PORT" ] \
+    || die "CE_MOCK_PORT ($CE_MOCK_PORT) collides with the API port — reserve a free port via CE_MOCK_PORT in $APP_DIR/.env (or FFC_CE_PORT)"
   npm_install "$APP_DIR/mock-centeredge" --omit=dev
   PORT="$CE_MOCK_PORT" pm2 restart ffc-centeredge-mock --update-env \
     || PORT="$CE_MOCK_PORT" pm2 start index.js --name ffc-centeredge-mock --cwd "$APP_DIR/mock-centeredge"
