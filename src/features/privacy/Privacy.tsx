@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Screen, TopBar, Content } from '../../ui/components';
 import { apiUrl } from '../../sync';
+import { fetchBoothRetentionDays } from '../photos/api';
 
 // Privacy notice — the plain-language player-facing disclosure of everything
 // the app records, in one place.
@@ -45,6 +46,9 @@ export default function Privacy() {
   // null = unknown (offline or fetch failed) — retentionSentence words that
   // case without promising a specific number.
   const [retentionDays, setRetentionDays] = useState<number | null>(null);
+  // Same live-read contract for the photo booth's window (the two pipelines
+  // are configured independently: PHOTO_BOOTH_RETENTION_DAYS).
+  const [boothRetentionDays, setBoothRetentionDays] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch(apiUrl('/api/hunt/photo-retention'))
@@ -53,6 +57,9 @@ export default function Privacy() {
         if (!cancelled && data && typeof data.days === 'number') setRetentionDays(data.days);
       })
       .catch(() => {});
+    void fetchBoothRetentionDays().then((days) => {
+      if (!cancelled) setBoothRetentionDays(days);
+    });
     return () => {
       cancelled = true;
     };
@@ -97,6 +104,21 @@ export default function Privacy() {
             private review tool; that&apos;s how they moderate content and how they delete a photo
             the moment you ask. If you&apos;d like a photo removed, ask any staff member and
             they&apos;ll do it on the spot.
+          </p>
+        </Section>
+
+        <Section title="Photo booth pictures">
+          <p>
+            Photo booth pictures are different from hunt photos: they are{' '}
+            <span className="font-semibold">never sent to any AI service</span> — stickers are
+            added right on your phone, and the finished picture is stored on the venue&apos;s own
+            server so your group can view, share, and delete it. Only your phone can open your
+            camera roll; there is no public gallery.
+          </p>
+          <p>
+            {retentionSentence(boothRetentionDays)} You can delete any booth photo yourself in the
+            app at any time. Venue staff can also view stored photos in a private review tool —
+            that&apos;s how they moderate content and how they delete a photo the moment you ask.
           </p>
         </Section>
 

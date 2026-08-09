@@ -18,6 +18,7 @@ import { router as overviewRouter } from "./overview.js";
 import { router as huntUsageRouter } from "./huntUsage.js";
 import { router as huntItemsRouter } from "./huntItems.js";
 import { router as photosRouter } from "./photos.js";
+import { router as boothPhotosRouter } from "./boothPhotos.js";
 import { router as announcementsRouter } from "./announcements.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as exportRouter } from "./export.js";
@@ -42,6 +43,8 @@ router.use("/overview", overviewRouter);
 router.use("/hunt-usage", huntUsageRouter);
 router.use("/hunt-items", huntItemsRouter);
 router.use("/photos", photosRouter);
+// Photo-booth review — the only moderation the AI-free booth pipeline has.
+router.use("/booth-photos", boothPhotosRouter);
 router.use("/announcements", announcementsRouter);
 router.use("/rewards", rewardsRouter);
 router.use("/export", exportRouter);

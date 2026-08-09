@@ -11,6 +11,7 @@ import Archived from './Archived';
 import Announcements from './Announcements';
 import Rewards from './Rewards';
 import Photos from './Photos';
+import BoothPhotos from './BoothPhotos';
 import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
 
@@ -153,6 +154,9 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <NavLink to="/photos" className={linkCls}>
               Photos
             </NavLink>
+            <NavLink to="/booth" className={linkCls}>
+              Booth
+            </NavLink>
             <NavLink to="/archived" className={linkCls}>
               Archived
             </NavLink>
@@ -186,6 +190,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
           <Route path="/hunt" element={<Hunt isSuperAdmin={isSuperAdmin} />} />
           <Route path="/hunt/items/:id" element={<HuntItemDetail />} />
           <Route path="/photos" element={<Photos />} />
+          <Route path="/booth" element={<BoothPhotos />} />
           <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
           <Route path="*" element={<Overview />} />
         </Routes>

@@ -5,6 +5,7 @@ import { app } from "./app.js";
 import { warnIfNoToken } from "./lib/adminAuth.js";
 import { warnIfConsoleMailer } from "./lib/mailer.js";
 import { startHuntPhotoRetention } from "./lib/photoRetention.js";
+import { startBoothPhotoRetention } from "./lib/boothPhotoRetention.js";
 
 const port = process.env.PORT || 8060;
 app.listen(port, () => {
@@ -14,4 +15,7 @@ app.listen(port, () => {
   // Privacy: stored hunt photos are deleted after HUNT_PHOTO_RETENTION_DAYS
   // (default 30) — sweep now and every few hours (lib/photoRetention.js).
   startHuntPhotoRetention();
+  // Same policy for photo-booth pictures (PHOTO_BOOTH_RETENTION_DAYS,
+  // default 30) — lib/boothPhotoRetention.js.
+  startBoothPhotoRetention();
 });

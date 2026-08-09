@@ -119,6 +119,14 @@ export type Reward = {
   locationName: string | null;
 };
 
+// A stored photo-booth picture (the AI-free pipeline — no moderation verdict
+// or people flags exist; staff review IS the moderation).
+export type AdminBoothPhoto = {
+  id: string;
+  locationName: string | null;
+  createdAt: string;
+};
+
 export type AdminPhoto = {
   id: string;
   playerTag: string;
@@ -309,6 +317,29 @@ export const api = {
     return req<AdminPhoto[]>('GET', `/photos${s ? `?${s}` : ''}`);
   },
   removePhoto: (id: string) => req<{ ok: true }>('POST', `/photos/${id}/remove`),
+
+  // Photo-booth review (routes/admin/boothPhotos.js) — the only moderation the
+  // AI-free booth pipeline has. Same keyset pagination contract as listPhotos.
+  listBoothPhotos: (opts: { before?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.before) q.set('before', opts.before);
+    if (opts.limit) q.set('limit', String(opts.limit));
+    const s = q.toString();
+    return req<AdminBoothPhoto[]>('GET', `/booth-photos${s ? `?${s}` : ''}`);
+  },
+  removeBoothPhoto: (id: string) => req<{ ok: true }>('POST', `/booth-photos/${id}/remove`),
+  fetchBoothPhotoImage: async (id: string) => {
+    const res = await fetch(`/api/admin/booth-photos/${id}/image`, {
+      credentials: 'same-origin',
+      headers: { 'x-app-token': getToken() },
+    });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
   // Like the CSV export, <img src> can't carry the auth header — fetch the
   // bytes and hand back a Blob for an object URL.
   fetchPhotoImage: async (id: string) => {
