@@ -236,6 +236,23 @@ export function playScore(): void {
   tone({ type: 'triangle', freq: 880, freqEnd: 1174.7, dur: 0.09, gain: 0.12 });
 }
 
+/** Food order advanced a step (sent to kitchen / preparing) — a soft, upbeat
+ *  "something moved" confirm, not a win. */
+export function playOrderUpdate(): void {
+  buzz('select');
+  tone({ type: 'triangle', freq: 620, freqEnd: 720, dur: 0.08, gain: 0.12 });
+}
+
+/** Food order is ready for pickup — the moment worth looking up for. A bright
+ *  ascending three-note bell over a soft pad. */
+export function playOrderReady(): void {
+  buzz('win');
+  tone({ type: 'triangle', freq: 783.99, dur: 0.1, gain: 0.16 });
+  tone({ type: 'triangle', freq: 1046.5, dur: 0.1, gain: 0.16, start: 0.1 });
+  tone({ type: 'triangle', freq: 1318.5, dur: 0.24, gain: 0.16, start: 0.2 });
+  tone({ type: 'sine', freq: 392, dur: 0.42, gain: 0.06, start: 0.2 });
+}
+
 /** Triumphant little fanfare for the final scorecard. */
 export function playFanfare(): void {
   buzz('win');
