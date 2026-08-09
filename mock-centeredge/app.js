@@ -32,6 +32,10 @@ export const STATUS_TIMELINE = [
   { untilMs: Infinity, status: 'ready' },
 ];
 
+// Loyalty earn rate on food orders placed with a linked player card:
+// 1 ticket per this many cents of the order total (i.e. per full dollar).
+export const EARN_CENTS_PER_TICKET = 100;
+
 export function orderStatus(createdAtMs, now = Date.now()) {
   const elapsed = now - createdAtMs;
   return STATUS_TIMELINE.find((s) => elapsed < s.untilMs).status;
@@ -216,12 +220,19 @@ export function createApp() {
       createdAtMs: Date.now(),
     };
     state.orders.set(order.id, order);
+    // Purchases on a linked card earn loyalty tickets (1 per full dollar) —
+    // the "earn on food orders" half of the loyalty story.
+    let loyalty = null;
     if (player) {
+      const earnedTickets = Math.floor(totalCents / EARN_CENTS_PER_TICKET);
+      player.balances.tickets += earnedTickets;
+      loyalty = { earnedTickets, newTicketBalance: player.balances.tickets };
       pushTransaction(state, player.id, {
         id: `tx-${randomUUID()}`,
         type: 'food_order',
         orderId: order.id,
         amountCents: totalCents,
+        earnedTickets,
         createdAt: order.createdAt,
       });
     }
@@ -230,6 +241,7 @@ export function createApp() {
       ok: true,
       order: publicOrder,
       kitchen: { printed: true, station: 'kitchen-1' },
+      loyalty,
     });
   });
 

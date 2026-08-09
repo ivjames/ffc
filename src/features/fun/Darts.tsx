@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playPinClack, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
@@ -472,6 +473,8 @@ export default function Darts() {
   const [dartNo, setDartNo] = useState(0);
   const [total, setTotal] = useState(0);
   const [lastHit, setLastHit] = useState<Hit | null>(null);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -677,6 +680,7 @@ export default function Darts() {
     setDartNo(0);
     setTotal(0);
     setLastHit(null);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -698,6 +702,9 @@ export default function Darts() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {DARTS} darts · 3 visits</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (1 ticket per 4 points, capped at 100). */}
+          <GameTicketAward game="darts" tickets={Math.min(100, Math.round(total / 4))} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

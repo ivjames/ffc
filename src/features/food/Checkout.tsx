@@ -5,6 +5,7 @@ import { formatCents, orderTotals } from '../../lib/pos/pricing';
 import type { Menu } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
 import { useCart, setLineQuantity, clearCart, type StoredCartLine } from '../../lib/foodCart';
+import { recordOrder } from '../../lib/foodOrders';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
 import { DEV_MODE } from '../../lib/flags';
 import { playClick } from '../../lib/sound';
@@ -65,7 +66,20 @@ export default function Checkout() {
       return;
     }
     clearCart();
-    navigate(`/food/order/${res.order.id}`, { replace: true });
+    // Remember the order on-device so Home and /food can link back to its
+    // status screen after the user navigates away.
+    recordOrder({
+      id: res.order.id,
+      orderNumber: res.order.orderNumber,
+      totalCents: res.order.totalCents,
+      createdAt: res.order.createdAt,
+    });
+    // Tickets the purchase earned ride along as nav state — the status screen
+    // shows them once; a refresh/poll doesn't need to re-derive them.
+    navigate(`/food/order/${res.order.id}`, {
+      replace: true,
+      state: { earnedTickets: res.loyalty?.earnedTickets ?? 0 },
+    });
   }
 
   return (

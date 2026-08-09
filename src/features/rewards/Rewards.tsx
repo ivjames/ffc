@@ -214,7 +214,7 @@ export default function Rewards() {
                     <span className="text-fairway-100/80">
                       {tx.type === 'ticket_reward'
                         ? `🎟️ Tickets · ${tx.source ?? ''}`
-                        : '🌭 Food order'}
+                        : `🌭 Food order${tx.earnedTickets ? ` · +${tx.earnedTickets} 🎟️` : ''}`}
                     </span>
                     <span className="font-bold text-fairway-50">
                       {tx.type === 'ticket_reward'

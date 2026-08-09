@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playDing, playUndo, playPinClack, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
@@ -657,6 +658,8 @@ export default function MilkBottle() {
   const [throwNo, setThrowNo] = useState(0);
   const [score, setScore] = useState(0);
   const [note, setNote] = useState('');
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -870,6 +873,7 @@ export default function MilkBottle() {
     setThrowNo(0);
     setScore(0);
     setNote('');
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -885,6 +889,9 @@ export default function MilkBottle() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {RACKS} racks</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (2 tickets per point — a bottle is 1, the clean-sweep bonus 5). */}
+          <GameTicketAward game="milkbottle" tickets={score * 2} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

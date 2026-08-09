@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
@@ -463,6 +464,8 @@ export default function AxeThrow() {
   const [throwNo, setThrowNo] = useState(0);
   const [total, setTotal] = useState(0);
   const [lastScore, setLastScore] = useState<number | null>(null);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -641,6 +644,7 @@ export default function AxeThrow() {
     setThrowNo(0);
     setTotal(0);
     setLastScore(null);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -656,6 +660,9 @@ export default function AxeThrow() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {THROWS} throws</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (2 tickets per point — a perfect 5 clutches pays 70). */}
+          <GameTicketAward game="axethrow" tickets={total * 2} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

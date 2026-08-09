@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
@@ -413,6 +414,8 @@ export default function BattingCages() {
   const [pitchNo, setPitchNo] = useState(0);
   const [total, setTotal] = useState(0);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const playing = phase !== 'done';
   useFitCanvas(canvasRef, W, H, playing);
@@ -584,6 +587,7 @@ export default function BattingCages() {
     setPitchNo(0);
     setTotal(0);
     setOutcome(null);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -599,6 +603,9 @@ export default function BattingCages() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {PITCHES} pitches</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (2 tickets per run — a home run pays 8). */}
+          <GameTicketAward game="battingcages" tickets={total * 2} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={restart} sound="none">
               Play again

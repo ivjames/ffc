@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playUndo, playFanfare, playPinClack } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
@@ -532,6 +533,8 @@ export default function RingToss() {
   const [lastPts, setLastPts] = useState<number | null>(null);
   const [lastOutcome, setLastOutcome] = useState<Outcome | null>(null);
   const [soClose, setSoClose] = useState(false);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -754,6 +757,7 @@ export default function RingToss() {
     setLastPts(null);
     setLastOutcome(null);
     setSoClose(false);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -769,6 +773,9 @@ export default function RingToss() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {RING_COUNT} rings</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (2 tickets per point — a green ringer pays 4, a red-neck 10). */}
+          <GameTicketAward game="ringtoss" tickets={total * 2} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playBump, playWaterBump, playScore, playTick, playFanfare } from '../../lib/sound';
 import type { Vec as FxVec, Floater } from './fx';
@@ -715,6 +716,8 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
   const [phase, setPhase] = useState<Phase>('ready');
   const [score, setScore] = useState(0);
   const [secs, setSecs] = useState(GAME_MS / 1000);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -851,6 +854,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
     setScore(0);
     setSecs(GAME_MS / 1000);
     setPhase('countdown');
+    setSessionId(crypto.randomUUID());
   }, [theme]);
 
   if (phase === 'done') {
@@ -864,6 +868,13 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
             <p className="text-lg font-semibold text-fairway-100">{theme.remark(score)}</p>
             <p className="text-sm text-fairway-400">bumps in 30 seconds</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (2 tickets per bump, capped at 100). */}
+          <GameTicketAward
+            game={theme.kind === 'car' ? 'bumpercars' : 'bumperboats'}
+            tickets={Math.min(score * 2, 100)}
+            sessionId={sessionId}
+          />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

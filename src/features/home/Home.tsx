@@ -16,6 +16,7 @@ import { themeEmoji } from '../../lib/theme';
 import { playClick, playCup } from '../../lib/sound';
 import { fetchMe, type AppUser } from '../../lib/authApi';
 import { usePos } from '../../lib/pos';
+import ActiveOrdersCard from '../food/ActiveOrdersCard';
 import type { LocalRound } from '../../types';
 
 // Food & drink deep links for the current venue. External links, so they open
@@ -218,6 +219,10 @@ export default function Home() {
             ))}
           </div>
         )}
+
+        {/* An order this device placed that's still in the kitchen — link
+            back to its status screen (self-gating, usually renders nothing). */}
+        <ActiveOrdersCard />
 
         {/* Food & drink (punchlist #7 tier 1) — deep links into the venue's
             menu / ordering system, set per location in Master Control. Hidden

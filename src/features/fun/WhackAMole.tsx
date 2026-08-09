@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playBump, playCup, playBuzz, playStroke, playTick, playFanfare } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
@@ -477,6 +478,8 @@ export default function WhackAMole() {
   const [score, setScore] = useState(0);
   const [hits, setHits] = useState(0);
   const [timeLeft, setTimeLeft] = useState(GAME_MS / 1000);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -681,6 +684,7 @@ export default function WhackAMole() {
     setScore(0);
     setHits(0);
     setTimeLeft(GAME_MS / 1000);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -704,6 +708,13 @@ export default function WhackAMole() {
               {hits} gopher{hits === 1 ? '' : 's'} bopped in {GAME_MS / 1000} seconds
             </p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (3 tickets per 2 points, clamped at 0 and capped at 100). */}
+          <GameTicketAward
+            game="whackamole"
+            tickets={Math.min(100, Math.max(0, Math.round(score * 1.5)))}
+            sessionId={sessionId}
+          />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
