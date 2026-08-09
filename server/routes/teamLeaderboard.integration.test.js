@@ -117,6 +117,22 @@ test("GET /api/leaderboard?by=team averages per player and keeps each team's bes
 
   const bad = await fetch(`${baseUrl}/api/leaderboard?by=nope`);
   assert.equal(bad.status, 400);
+
+  // Venue scoping applies to the team board too: this venue keeps its rows,
+  // a different (nonexistent) venue id filters them all out.
+  const scoped = await fetch(
+    `${baseUrl}/api/leaderboard?by=team&period=all&locationId=${locationId}`
+  );
+  assert.equal(scoped.status, 200);
+  const scopedRows = (await scoped.json()).filter((r) => r.courseId === courseId);
+  assert.equal(scopedRows.length, 2);
+
+  const elsewhere = await fetch(
+    `${baseUrl}/api/leaderboard?by=team&period=all&locationId=00000000-0000-4000-8000-000000000000`
+  );
+  assert.equal(elsewhere.status, 200);
+  const elsewhereRows = (await elsewhere.json()).filter((r) => r.courseId === courseId);
+  assert.equal(elsewhereRows.length, 0);
 });
 
 test("player board is unchanged by team rounds (regression)", async () => {

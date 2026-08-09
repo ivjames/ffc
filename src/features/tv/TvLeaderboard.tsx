@@ -50,7 +50,7 @@ export default function TvLeaderboard() {
     let alive = true;
     async function load() {
       try {
-        const data = await fetchLeaderboard(period, board);
+        const data = await fetchLeaderboard(period, board, locationId);
         if (alive) {
           setRows(data);
           setError(null);
@@ -69,7 +69,7 @@ export default function TvLeaderboard() {
       alive = false;
       clearInterval(id);
     };
-  }, [period, board]);
+  }, [period, board, locationId]);
 
   // Highlights carry player tags + totals, which only match rows on the
   // player board — the team board aggregates differently, so no pinning there.
