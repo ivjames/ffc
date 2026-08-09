@@ -5,6 +5,7 @@
 #   __FQDN__     e.g. minigolf.lab980.com   (or an apex like putt.example.com)
 #   __APP_DIR__  e.g. /var/www/ffc
 #   __API_PORT__ e.g. 8060  (the Node/Express API's local pm2 port)
+#   __CE_MOCK_PORT__ e.g. 8070  (the CenterEdge mock's local pm2 port)
 #
 # TLS is added by certbot (`certbot --nginx -d __FQDN__ --redirect`), which
 # rewrites this file to add the 443 server block + HTTP->HTTPS redirect.
@@ -29,6 +30,23 @@ server {
         client_max_body_size 16m;
 
         proxy_pass http://127.0.0.1:__API_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # CenterEdge mock → the dev-only pm2 mock on its local port. The player
+    # build points VITE_CENTEREDGE_API_BASE at /ce (same origin), and the POS
+    # adapter appends /api/v1/…, so /ce/api/v1/menu proxies to the mock's
+    # /api/v1/menu (the trailing slash on proxy_pass strips the /ce/ prefix).
+    # This is what makes the food-ordering + rewards surfaces work against the
+    # mock in a deployed demo, until real CenterEdge credentials land and a
+    # venue's pos.apiBase points at the real Advantage Web Services instead.
+    # Must precede the SPA fallback so it's never rewritten to index.html.
+    location /ce/ {
+        proxy_pass http://127.0.0.1:__CE_MOCK_PORT__/;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;

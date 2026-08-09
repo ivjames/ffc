@@ -42,6 +42,14 @@ API_PORT="${FFC_PORT:-$(
 BRANCH="${FFC_BRANCH:-main}"
 KEEP="${FFC_KEEP:-5}"                           # released builds to retain
 
+# CenterEdge POS mock (mock-centeredge/) — a dev-only, in-memory stand-in for
+# Advantage Web Services, run under pm2 and reached same-origin via the nginx
+# /ce proxy so the food-ordering + rewards surfaces work in a deployed demo
+# before real credentials land. CE_MOCK_BASE is baked into the client build as
+# VITE_CENTEREDGE_API_BASE; the adapter appends /api/v1/… to it.
+CE_MOCK_PORT="${FFC_CE_PORT:-8070}"
+CE_MOCK_BASE="${FFC_CE_BASE:-/ce}"
+
 # Master Control admin app: served on its own subdomain of the player FQDN,
 # under a wildcard cert issued via DNS-01 (doctl). ADMIN_FQDN overridable.
 ADMIN_FQDN="${FFC_ADMIN_FQDN:-admin.$FQDN}"     # e.g. admin.ffc.lab980.com
@@ -76,7 +84,10 @@ build_release(){
   mkdir -p "$release"
   log "Building into $release"
   npm_install "$APP_DIR"
-  ( cd "$APP_DIR" && npm run build )
+  # Point the client's CenterEdge adapter at the same-origin /ce proxy (see
+  # mock_up + the nginx /ce block). Respect an operator-set value if the build
+  # env already carries one (e.g. a real per-deploy Advantage Web Services URL).
+  ( cd "$APP_DIR" && VITE_CENTEREDGE_API_BASE="${VITE_CENTEREDGE_API_BASE:-$CE_MOCK_BASE}" npm run build )
   cp -r "$APP_DIR/dist" "$release/dist"
   # Master Control admin SPA — separate bundle (no service worker). Built and
   # shipped in the same atomic release so current/dist-admin swaps together with
@@ -102,11 +113,24 @@ api_up(){
   pm2 save
 }
 
+# Install deps + (re)start the CenterEdge mock under pm2, bound to loopback on
+# CE_MOCK_PORT (nginx's /ce proxy is the only entry). In-memory by design, so a
+# restart resets balances/orders to the seed — fine for a demo backend. Skips
+# cleanly if the mock dir is ever absent.
+mock_up(){
+  [ -d "$APP_DIR/mock-centeredge" ] || return 0
+  npm_install "$APP_DIR/mock-centeredge" --omit=dev
+  PORT="$CE_MOCK_PORT" pm2 restart ffc-centeredge-mock --update-env \
+    || PORT="$CE_MOCK_PORT" pm2 start index.js --name ffc-centeredge-mock --cwd "$APP_DIR/mock-centeredge"
+  pm2 save
+}
+
 cmd_vhost(){
   [ -f "$APP_DIR/deploy/nginx.conf.template" ] || die "missing deploy/nginx.conf.template"
   local conf="/etc/nginx/sites-available/$FQDN"
-  log "Writing static vhost $conf (root current/dist, /api -> :$API_PORT)"
+  log "Writing static vhost $conf (root current/dist, /api -> :$API_PORT, /ce -> :$CE_MOCK_PORT)"
   sed -e "s/__FQDN__/$FQDN/g" -e "s#__APP_DIR__#$APP_DIR#g" -e "s/__API_PORT__/$API_PORT/g" \
+    -e "s/__CE_MOCK_PORT__/$CE_MOCK_PORT/g" \
     "$APP_DIR/deploy/nginx.conf.template" > "$conf"
   ln -sf "$conf" "/etc/nginx/sites-enabled/$FQDN"
   nginx -t && systemctl reload nginx
@@ -187,6 +211,7 @@ cmd_deploy(){
   build_release
   cmd_migrate           # apply any new schema before the new code serves
   api_up
+  mock_up               # (re)start the CenterEdge mock behind the /ce proxy
   # Ensure the live vhost carries current nginx directives (e.g. the photo-upload
   # client_max_body_size). Re-rendering re-runs certbot, so only do it when the
   # directive is actually missing — otherwise just reload. Self-heals the "you
@@ -194,6 +219,9 @@ cmd_deploy(){
   local conf="/etc/nginx/sites-available/$FQDN"
   if [ -f "$conf" ] && ! grep -q 'client_max_body_size' "$conf"; then
     log "vhost missing client_max_body_size — re-rendering (runs certbot once)"
+    cmd_vhost
+  elif [ -f "$conf" ] && ! grep -q 'location /ce/' "$conf"; then
+    log "vhost missing /ce proxy — re-rendering (runs certbot once)"
     cmd_vhost
   else
     nginx -t && systemctl reload nginx
@@ -209,6 +237,7 @@ cmd_setup(){
     || die "create $APP_DIR/server/.env first (DATABASE_URL, PORT, APP_TOKEN) — see server/.env.example"
   cmd_migrate
   api_up
+  mock_up
   build_release
   cmd_vhost
   sleep 1   # let the API bind before seeding
