@@ -40,9 +40,11 @@ app.use((req, res, next) => {
   // would let the slash form fall through to the 256kb cap and 413 the upload.
   const path = req.path.replace(/\/+$/, "");
   if (path === "/api/hunt/verify") return next();
-  // Photo-booth uploads (POST /api/photos) carry base64 images too; the
-  // router installs its own 16mb parser.
+  // Photo-booth uploads (POST /api/photos) and in-place replaces
+  // (POST /api/photos/:id/replace) carry base64 images too; the router
+  // installs its own 16mb parser for both.
   if (path === "/api/photos") return next();
+  if (/^\/api\/photos\/[^/]+\/replace$/.test(path)) return next();
   // Same deal for the (temporary) admin vision bake-off — base64 photos on
   // both /describe and /prescan; the router carries its own 16mb parser.
   if (path.startsWith("/api/admin/vision-bakeoff/")) return next();

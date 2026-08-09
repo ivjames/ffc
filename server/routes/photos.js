@@ -266,6 +266,95 @@ router.post(
   }
 );
 
+// --- POST /api/photos/:id/replace?booth=<id> --------------------------------
+// Body (JSON): { imageBase64, mediaType }
+// Overwrite a photo's bytes IN PLACE — same row, same id, same created_at — so
+// re-editing a saved photo (features/photos: the on-device drafts) doesn't
+// reorder the gallery the way a delete + re-upload would. The booth key gates
+// it like every other route (one generic 404 for wrong-key/missing). Carries
+// its own 16mb parser (app.js skips the global cap for this path).
+router.post("/:id/replace", uploadRateLimit, express.json({ limit: "16mb" }), async (req, res) => {
+  const { id } = req.params;
+  const booth = req.query.booth;
+  const body = req.body ?? {};
+  const { imageBase64, mediaType } = body;
+
+  if (!UUID_RE.test(id)) {
+    return res.status(400).json({ ok: false, error: "bad photo id" });
+  }
+  if (!isValidBoothId(booth)) {
+    return res.status(400).json({ ok: false, error: "booth (id) is required" });
+  }
+  if (typeof mediaType !== "string" || !ALLOWED_MEDIA_TYPES.has(mediaType)) {
+    return res
+      .status(400)
+      .json({ ok: false, error: "mediaType must be a supported image type" });
+  }
+  if (typeof imageBase64 !== "string" || imageBase64.length === 0) {
+    return res.status(400).json({ ok: false, error: "imageBase64 is required" });
+  }
+  let imageBytes;
+  try {
+    imageBytes = Buffer.from(imageBase64, "base64");
+  } catch {
+    return res.status(400).json({ ok: false, error: "imageBase64 is not valid base64" });
+  }
+  if (imageBytes.length === 0 || imageBytes.length > MAX_IMAGE_BYTES) {
+    return res
+      .status(400)
+      .json({ ok: false, error: "image is empty or exceeds the size limit" });
+  }
+
+  try {
+    const existing = await pool.query(
+      `select photo_path as "photoPath" from booth_photo
+        where id = $1 and booth_id = $2`,
+      [id, booth]
+    );
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: "not found" });
+    }
+    const oldPath = existing.rows[0].photoPath;
+
+    // Disk budget on the DELTA: count every other photo's bytes, since this row
+    // is about to be rewritten. A same-or-smaller replace never trips it.
+    const budget = resolveDiskBudgetBytes();
+    const used = await pool.query(
+      `select coalesce(sum(bytes), 0)::bigint as n from booth_photo where id <> $1`,
+      [id]
+    );
+    if (Number(used.rows[0].n) + imageBytes.length > budget) {
+      return res.status(429).json({
+        ok: false,
+        error: "the photo booth is full right now — try again later",
+      });
+    }
+
+    // Write the new file first, then point the row at it, then remove the old
+    // file — so a crash never leaves the row referencing missing bytes.
+    await mkdir(UPLOAD_DIR, { recursive: true });
+    const ext = EXT_BY_MEDIA[mediaType] || "bin";
+    const newPath = join(UPLOAD_DIR, `${randomUUID()}.${ext}`);
+    await writeFile(newPath, imageBytes);
+    try {
+      await pool.query(
+        `update booth_photo set photo_path = $1, media_type = $2, bytes = $3
+          where id = $4 and booth_id = $5`,
+        [newPath, mediaType, imageBytes.length, id, booth]
+      );
+    } catch (err) {
+      await rm(newPath, { force: true }).catch(() => {});
+      throw err;
+    }
+    if (oldPath && oldPath !== newPath) await rm(oldPath, { force: true }).catch(() => {});
+
+    return res.json({ ok: true, id });
+  } catch (err) {
+    console.error("[photos] replace error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
 // --- POST /api/photos/:id/delete?booth=<id> ---------------------------------
 // The player removes their own photo — no staff involved, matching "your
 // gallery, your call". File first, then row (the retention sweep's rule): if

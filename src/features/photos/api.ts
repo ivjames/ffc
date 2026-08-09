@@ -64,6 +64,27 @@ export async function uploadBoothPhoto(args: {
   return body as BoothPhoto;
 }
 
+/**
+ * Overwrite a saved photo's bytes in place (same id, same position in the
+ * gallery) — used when re-saving an edited photo, so it doesn't jump to the
+ * front the way a delete + re-upload would.
+ */
+export async function replaceBoothPhoto(
+  id: string,
+  args: { imageBase64: string; mediaType: string },
+): Promise<void> {
+  const res = await fetch(
+    apiUrl(`/api/photos/${id}/replace?booth=${encodeURIComponent(getBoothId())}`),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    },
+  );
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Save failed: HTTP ${res.status}`);
+}
+
 export async function deleteBoothPhoto(id: string): Promise<void> {
   const res = await fetch(
     apiUrl(`/api/photos/${id}/delete?booth=${encodeURIComponent(getBoothId())}`),

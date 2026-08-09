@@ -130,6 +130,63 @@ test("upload -> list -> image -> delete round-trip, keyed by the booth id", asyn
   assert.equal(gone.rowCount, 0, "booth rows carry nothing worth keeping — deleted outright");
 });
 
+test("replace overwrites bytes in place: same id, same created_at, new bytes, old file gone", async () => {
+  const booth = newBoothId("replace");
+  const saved = await (await upload(uploadBody(booth))).json();
+  const before = await testQuery(
+    `select photo_path, created_at, bytes from booth_photo where id = $1`,
+    [saved.id]
+  );
+  const oldPath = before.rows[0].photo_path;
+
+  const res = await fetch(
+    `${baseUrl}/api/photos/${saved.id}/replace?booth=${encodeURIComponent(booth)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64: Buffer.from("edited-booth-image").toString("base64"),
+        mediaType: "image/jpeg",
+      }),
+    }
+  );
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).id, saved.id, "id is unchanged");
+
+  const after = await testQuery(
+    `select photo_path, created_at, bytes from booth_photo where id = $1`,
+    [saved.id]
+  );
+  assert.equal(
+    after.rows[0].created_at.getTime(),
+    before.rows[0].created_at.getTime(),
+    "created_at is unchanged, so the gallery order is preserved"
+  );
+  assert.notEqual(after.rows[0].photo_path, oldPath, "points at a fresh file");
+  assert.equal(after.rows[0].bytes, Buffer.from("edited-booth-image").length);
+  await assert.rejects(access(oldPath), "old file is removed");
+
+  // The new bytes serve.
+  const img = await fetch(
+    `${baseUrl}/api/photos/${saved.id}/image?booth=${encodeURIComponent(booth)}`
+  );
+  assert.equal(Buffer.from(await img.arrayBuffer()).toString(), "edited-booth-image");
+
+  // A wrong booth key can't replace: generic 404, and the photo is untouched.
+  const wrong = await fetch(
+    `${baseUrl}/api/photos/${saved.id}/replace?booth=${encodeURIComponent(newBoothId("nope"))}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        imageBase64: Buffer.from("hijack").toString("base64"),
+        mediaType: "image/jpeg",
+      }),
+    }
+  );
+  assert.equal(wrong.status, 404);
+});
+
 test("a wrong booth key sees nothing: empty list, generic 404s on image and delete", async () => {
   const booth = newBoothId("mine");
   const otherBooth = newBoothId("othergroup");

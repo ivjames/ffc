@@ -14,6 +14,7 @@ import {
 import {
   fetchBoothPhotos,
   uploadBoothPhoto,
+  replaceBoothPhoto,
   deleteBoothPhoto,
   shareBoothPhoto,
   shareEditedPhoto,
@@ -346,28 +347,27 @@ export default function PhotoBooth() {
       const blob = await flattenToJpeg(editor, stickers);
       const imageBase64 = await blobToBase64(blob);
 
-      // Re-saving an edit: remove the old copy first so the new one always has
-      // room under the per-booth cap / disk budget (a booth photo id changes on
-      // replace). If the upload then fails, the editor stays open for a retry —
-      // now as a fresh create, since editingId is cleared and the draft's base
-      // is still in memory.
+      // Re-saving an edit overwrites the same row in place (same id, same
+      // gallery position); a new capture creates a row. Either way the photo id
+      // that owns the draft is stable, so the draft key never has to migrate.
+      let photoId: string;
       if (editor.editingId) {
-        await deleteBoothPhoto(editor.editingId).catch(() => {});
-        await deleteBoothDraft(editor.editingId).catch(() => {});
-        setEditor((e) => (e ? { ...e, editingId: null } : e));
+        await replaceBoothPhoto(editor.editingId, { imageBase64, mediaType: 'image/jpeg' });
+        photoId = editor.editingId;
+      } else {
+        const saved = await uploadBoothPhoto({
+          imageBase64,
+          mediaType: 'image/jpeg',
+          locationId: locationId ?? undefined,
+        });
+        photoId = saved.id;
       }
-
-      const saved = await uploadBoothPhoto({
-        imageBase64,
-        mediaType: 'image/jpeg',
-        locationId: locationId ?? undefined,
-      });
 
       // Persist the editable draft locally (never uploaded) so this photo can
       // be re-opened and re-decorated. Best-effort: a save is still a save even
       // if idb is full/unavailable — the photo just won't be re-editable.
       await putBoothDraft({
-        id: saved.id,
+        id: photoId,
         base: editor.base,
         stickers,
         updatedAt: Date.now(),
