@@ -27,7 +27,9 @@ import {
   scheduleTicket,
   ticketStatus,
   bumpTicket,
+  pickUpTicket,
   completedAtMs,
+  makePickupCode,
 } from './kitchen.js';
 import { kdsPage } from './kds.js';
 
@@ -73,6 +75,24 @@ function publicOrder(order, now = Date.now()) {
     station: ticket.station,
     estimatedReadyAt: new Date(ticket.readyAtMs).toISOString(),
   };
+}
+
+/** A pickup code not currently in use by any OPEN (not-yet-collected) order,
+ *  so the KDS never shows two live tickets with the same code (staff match the
+ *  guest's code to a ticket, so collisions would misroute a hand-off). A
+ *  completed order's code is free to reuse — it's off the board. Retries a
+ *  bounded number of times, then accepts a code rather than looping forever
+ *  (there are 9000 codes; a demo never has that many open orders). */
+function uniquePickupCode(state, nowMs) {
+  const inUse = new Set();
+  for (const o of state.orders.values()) {
+    if (ticketStatus(o.ticket, nowMs) !== 'picked_up') inUse.add(o.pickupCode);
+  }
+  for (let i = 0; i < 50; i++) {
+    const code = makePickupCode();
+    if (!inUse.has(code)) return code;
+  }
+  return makePickupCode();
 }
 
 /** Recompute an order line's price from the menu (server is price authority).
@@ -242,6 +262,10 @@ export function createApp() {
       playerId: player?.id ?? null,
       guestName: typeof guestName === 'string' ? guestName.slice(0, 100) : null,
       notes: notes ?? null,
+      // Shown big on the guest's Ready screen and on the KDS ticket; matching
+      // the two is the pickup hand-off (either side can then complete it).
+      // Unique among open orders so staff never see two live tickets alike.
+      pickupCode: uniquePickupCode(state, nowMs),
       createdAt: new Date(nowMs).toISOString(),
       createdAtMs: nowMs,
       // Hand the ticket to the fake kitchen: reserves a station and fixes the
@@ -275,6 +299,20 @@ export function createApp() {
   app.get('/api/v1/orders/:id', (req, res) => {
     const order = state.orders.get(req.params.id);
     if (!order) return res.status(404).json({ ok: false, error: 'order not found' });
+    res.json({ ok: true, order: publicOrder(order) });
+  });
+
+  // Guest-side pickup — the app's "I've picked it up" button. Either side can
+  // complete the hand-off, so this mirrors the KDS bump's ready → picked_up
+  // step, but only once the food is ready: collecting an order that's still
+  // cooking is a 409, not a silent no-op. Idempotent once picked up.
+  app.post('/api/v1/orders/:id/pickup', (req, res) => {
+    const order = state.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ ok: false, error: 'order not found' });
+    const status = pickUpTicket(order.ticket, Date.now());
+    if (status !== 'picked_up') {
+      return res.status(409).json({ ok: false, error: 'order is not ready for pickup yet' });
+    }
     res.json({ ok: true, order: publicOrder(order) });
   });
 

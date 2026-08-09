@@ -78,6 +78,9 @@ export type Order = {
   /** Kitchen ETA (ISO) — once the order is ready/picked up, the time it was
    *  actually ready. Optional: a vendor may not expose one. */
   estimatedReadyAt?: string | null;
+  /** Short code the guest shows at the counter; staff match it on the KDS to
+   *  complete the hand-off. Optional: a vendor may not use pickup codes. */
+  pickupCode?: string | null;
 };
 
 // The card carries no cash balance — it's a loyalty card (game credits +
@@ -139,6 +142,10 @@ export type OrderingApi = {
     notes?: string;
   }): Promise<PlaceOrderResult>;
   fetchOrder(orderId: string): Promise<{ ok: true; order: Order } | Fail>;
+  /** Guest-side pickup — complete the hand-off from the app once the order is
+   *  ready (either side can complete it; staff can also do it from the KDS).
+   *  Fails if the order isn't ready yet. */
+  pickUpOrder(orderId: string): Promise<{ ok: true; order: Order } | Fail>;
 };
 
 /** Loyalty: player card lookup, balances, and crediting app-earned tickets. */

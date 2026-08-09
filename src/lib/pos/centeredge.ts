@@ -96,6 +96,11 @@ export function createCenterEdgeAdapter(config: PosCapabilityConfig): PosAdapter
 
       fetchOrder: (orderId) =>
         request<{ ok: true; order: Order }>(`/orders/${encodeURIComponent(orderId)}`),
+
+      pickUpOrder: (orderId) =>
+        request<{ ok: true; order: Order }>(`/orders/${encodeURIComponent(orderId)}/pickup`, {
+          method: 'POST',
+        }),
     },
 
     loyalty: {
