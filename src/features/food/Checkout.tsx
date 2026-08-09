@@ -5,7 +5,9 @@ import { formatCents, orderTotals } from '../../lib/pos/pricing';
 import type { Menu } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
 import { useCart, setLineQuantity, clearCart, type StoredCartLine } from '../../lib/foodCart';
+import { recordOrder } from '../../lib/foodOrders';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
+import { useCurrentLocationId } from '../../lib/location';
 import { DEV_MODE } from '../../lib/flags';
 import { playClick } from '../../lib/sound';
 import { useMenu } from './useMenu';
@@ -36,6 +38,7 @@ export default function Checkout() {
   const { menu, error: menuError, retry } = useMenu();
   const cart = useCart();
   const playerId = useLinkedPlayerId();
+  const locationId = useCurrentLocationId();
   const [guestName, setGuestName] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +68,15 @@ export default function Checkout() {
       return;
     }
     clearCart();
+    // Remember the order on-device so Home and /food can link back to its
+    // status screen after the user navigates away.
+    recordOrder({
+      id: res.order.id,
+      orderNumber: res.order.orderNumber,
+      totalCents: res.order.totalCents,
+      locationId,
+      createdAt: res.order.createdAt,
+    });
     navigate(`/food/order/${res.order.id}`, { replace: true });
   }
 
@@ -149,7 +161,7 @@ export default function Checkout() {
               <span className="flex items-center gap-2 text-sm">
                 <span aria-hidden="true">🎟️</span>
                 <span className="font-semibold text-fairway-50">
-                  {playerId ? `Earning on card ${playerId}` : 'Link a rewards card'}
+                  {playerId ? `On card ${playerId}` : 'Link a rewards card'}
                 </span>
               </span>
               <span className="text-sm font-semibold text-fairway-400">

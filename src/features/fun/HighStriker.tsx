@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playSoClose, playUndo, playDing, playLand, playFanfare } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
@@ -482,6 +483,8 @@ export default function HighStriker() {
   const [swingNo, setSwingNo] = useState(0);
   const [best, setBest] = useState(0);
   const [last, setLast] = useState<number | null>(null);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -686,6 +689,7 @@ export default function HighStriker() {
     setSwingNo(0);
     setBest(0);
     setLast(null);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -709,6 +713,13 @@ export default function HighStriker() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">best of {SWINGS} swings</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (half the best swing's 0–100 power, +10 for ringing the bell). */}
+          <GameTicketAward
+            game="highstriker"
+            tickets={Math.round(best / 2) + (best >= 100 ? 10 : 0)}
+            sessionId={sessionId}
+          />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

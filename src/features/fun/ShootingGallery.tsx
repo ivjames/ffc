@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import {
   playStroke,
@@ -498,6 +499,8 @@ export default function ShootingGallery() {
   const [shells, setShells] = useState(MAG);
   const [reloading, setReloading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(GAME_MS / 1000);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -743,6 +746,7 @@ export default function ShootingGallery() {
     setShells(MAG);
     setReloading(false);
     setTimeLeft(GAME_MS / 1000);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -766,6 +770,13 @@ export default function ShootingGallery() {
               {hits} duck{hits === 1 ? '' : 's'} in {GAME_MS / 1000} seconds
             </p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (1 ticket per 4 points, capped at 100). */}
+          <GameTicketAward
+            game="shootinggallery"
+            tickets={Math.min(100, Math.round(score / 4))}
+            sessionId={sessionId}
+          />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

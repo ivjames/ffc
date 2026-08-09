@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
@@ -741,6 +742,8 @@ export default function GoKarts() {
   const [lap, setLap] = useState(0);
   const [raceTime, setRaceTime] = useState(0);
   const [best, setBest] = useState<number>(Infinity);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const racing = phase === 'countdown' || phase === 'race';
   useFitCanvas(canvasRef, W, H, racing);
@@ -754,6 +757,7 @@ export default function GoKarts() {
     setLap(0);
     setRaceTime(0);
     setBest(gs.best);
+    setSessionId(crypto.randomUUID());
   }, []);
 
   useEffect(() => {
@@ -945,6 +949,11 @@ export default function GoKarts() {
   // —— Results —————————————————————————————————————————————————————————————
   if (phase === 'done') {
     const total = gsRef.current!.raceTime;
+    // Pace vs this track's flat-out ideal (the centerline lapped at MAX_SPEED,
+    // 120 substeps/s) — a solo time trial has no field to place against, so
+    // pace tiers stand in for the podium.
+    const idealMs = (track.total * LAPS * 1000) / (MAX_SPEED * 120);
+    const pace = total / idealMs;
     return (
       <Screen>
         <TopBar title="Go-Karts" back="/fun" right={<span className="pr-1 text-sm text-fairway-300">{track.name}</span>} />
@@ -959,6 +968,14 @@ export default function GoKarts() {
               {track.name} · {LAPS} laps
             </p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (pace-tiered: within 1.5× the flat-out ideal 40, 2× 25, 2.75× 15,
+              slower 8). */}
+          <GameTicketAward
+            game="gokarts"
+            tickets={pace <= 1.5 ? 40 : pace <= 2 ? 25 : pace <= 2.75 ? 15 : 8}
+            sessionId={sessionId}
+          />
           <div className="mt-8 flex flex-col gap-3">
             <Button onClick={() => startRace(track)} sound="none">
               Race again

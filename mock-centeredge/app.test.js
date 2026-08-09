@@ -75,6 +75,27 @@ test('order happy path: server-priced total, kitchen status, polling progression
   assert.equal(orderStatus(t0, t0 + 60_000), 'ready');
 });
 
+test('a linked-card order lands in history but does not earn tickets', async () => {
+  const before = (await (await fetch(`${base}/players/PL-1002`, { headers: AUTH })).json())
+    .player.balances.tickets;
+  const res = await post('/orders', {
+    items: CART,
+    payment: { token: 'tok_visa_4242', amountCents: CART_TOTAL },
+    playerId: 'PL-1002',
+  });
+  assert.equal(res.status, 201);
+  const body = await res.json();
+  assert.equal(body.loyalty, undefined); // no purchase-based earning
+
+  const after = (await (await fetch(`${base}/players/PL-1002`, { headers: AUTH })).json())
+    .player.balances.tickets;
+  assert.equal(after, before); // balance unchanged by the purchase
+  const txs = (await (await fetch(`${base}/players/PL-1002/transactions`, { headers: AUTH })).json())
+    .transactions;
+  assert.equal(txs[0].type, 'food_order'); // still recorded as a receipt
+  assert.equal(txs[0].earnedTickets, undefined);
+});
+
 test('order rejects a total mismatch with the expected breakdown', async () => {
   const res = await post('/orders', {
     items: CART,

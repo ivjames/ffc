@@ -76,7 +76,9 @@ rejects a mismatched `payment.amountCents` with
 `400 {expected: {subtotalCents, taxCents, totalCents}}` — so client cart math
 is exercised against an independent implementation. `playerId` is optional
 (guest checkout); when present it must exist and the order lands in that
-player's transaction history.
+player's transaction history as a receipt. Purchases do **not** earn tickets —
+whether/how CenterEdge awards points on F&B spend is an open question, so the
+mock deliberately doesn't invent a rate.
 
 → `201 {ok, order, kitchen: {printed: true, station: "kitchen-1"}}`.
 `order.status` starts at `received`.

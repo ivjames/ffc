@@ -7,6 +7,7 @@ import { usePos } from '../../lib/pos';
 import { useCart, cartCount } from '../../lib/foodCart';
 import { useMenu } from './useMenu';
 import ItemSheet from './ItemSheet';
+import ActiveOrdersCard from './ActiveOrdersCard';
 
 // /food — browse the venue menu and build a cart. Native ordering is a
 // POS-integration add-on: only venues whose Master Control config enables the
@@ -29,6 +30,9 @@ export default function Food() {
     <Screen>
       <TopBar title="Food & Drink" back="/" />
       <Content>
+        {/* An order still in the kitchen — link back to its status screen. */}
+        <ActiveOrdersCard />
+
         {!menu && !error && <p className="text-fairway-100/70">Loading the menu…</p>}
 
         {error && (

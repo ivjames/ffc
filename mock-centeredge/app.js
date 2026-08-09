@@ -216,6 +216,9 @@ export function createApp() {
       createdAtMs: Date.now(),
     };
     state.orders.set(order.id, order);
+    // A linked-card order lands in that player's history (a receipt trail) but
+    // does NOT earn tickets — whether/how CenterEdge awards points on F&B spend
+    // is an open question, so the mock deliberately doesn't invent a rate.
     if (player) {
       pushTransaction(state, player.id, {
         id: `tx-${randomUUID()}`,

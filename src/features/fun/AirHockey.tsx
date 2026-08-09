@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
@@ -397,6 +398,8 @@ export default function AirHockey() {
   const [phase, setPhase] = useState<Phase>('ready');
   const [you, setYou] = useState(0);
   const [cpu, setCpu] = useState(0);
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -552,6 +555,7 @@ export default function AirHockey() {
     setYou(0);
     setCpu(0);
     setPhase('serve');
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -567,6 +571,9 @@ export default function AirHockey() {
               {you} <span className="text-fairway-400">–</span> {cpu}
             </div>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (5 tickets per goal + 15 for the win). */}
+          <GameTicketAward game="airhockey" tickets={you * 5 + (won ? 15 : 0)} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

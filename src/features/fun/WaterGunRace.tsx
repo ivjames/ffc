@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playWaterBump, playTick, playScore, playBuzz, playFanfare } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
@@ -549,6 +550,8 @@ export default function WaterGunRace() {
   const [heatNo, setHeatNo] = useState(0);
   const [results, setResults] = useState<HeatResult[]>([]);
   const [lastWinner, setLastWinner] = useState('');
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -757,6 +760,7 @@ export default function WaterGunRace() {
     setHeatNo(0);
     setResults([]);
     setLastWinner('');
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -784,6 +788,9 @@ export default function WaterGunRace() {
             </div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (25 tickets per heat won). */}
+          <GameTicketAward game="watergunrace" tickets={youWins * 25} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

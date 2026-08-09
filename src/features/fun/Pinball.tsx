@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import {
   playStroke,
@@ -958,6 +959,8 @@ export default function Pinball() {
   const [score, setScore] = useState(0);
   const [ballNo, setBallNo] = useState(1);
   const [liveUI, setLiveUI] = useState(false); // mirrors gs.live for the hint line
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -1179,6 +1182,7 @@ export default function Pinball() {
     setScore(0);
     setBallNo(1);
     setPhase('play');
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -1200,6 +1204,9 @@ export default function Pinball() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {BALLS} balls</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (1 ticket per 200 points, capped at 100). */}
+          <GameTicketAward game="pinball" tickets={Math.min(100, Math.round(score / 200))} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

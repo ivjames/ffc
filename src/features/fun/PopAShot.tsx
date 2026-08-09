@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import {
   playStroke,
@@ -456,6 +457,8 @@ export default function PopAShot() {
   const [secondsLeft, setSecondsLeft] = useState(Math.ceil(CLOCK_MS / 1000));
   const [bonus, setBonus] = useState(false);
   const [lastMsg, setLastMsg] = useState('');
+  // One id per played round — the ticket award's idempotency key.
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -790,6 +793,7 @@ export default function PopAShot() {
     setSecondsLeft(Math.ceil(CLOCK_MS / 1000));
     setBonus(false);
     setLastMsg('');
+    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -811,6 +815,13 @@ export default function PopAShot() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">in {Math.round(CLOCK_MS / 1000)} seconds</p>
           </div>
+          {/* POS add-on: venues with gameRewards credit tickets for the round
+              (3 tickets per 2 points, capped at 100). */}
+          <GameTicketAward
+            game="popashot"
+            tickets={Math.min(100, Math.round(score * 1.5))}
+            sessionId={sessionId}
+          />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
