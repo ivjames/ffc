@@ -4,6 +4,7 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { formatCents } from '../../lib/pos/pricing';
 import type { Order, OrderStatus } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
+import { forgetOrder } from '../../lib/foodOrders';
 import { playClick } from '../../lib/sound';
 import {
   enableOrderNotifications,
@@ -61,6 +62,12 @@ export default function OrderStatusScreen() {
       const res = await ordering!.fetchOrder(orderId!);
       if (cancelled) return;
       if ('error' in res) {
+        // A genuine 404 means the order no longer exists server-side (e.g. the
+        // in-memory mock was redeployed and lost it). Forget it so the
+        // on-device "in the kitchen" flag clears instead of lingering for the
+        // full active window. A network error (no status) is transient — keep
+        // the order remembered and just stop polling.
+        if (res.status === 404) forgetOrder(orderId!);
         setError(res.error);
         return; // A vanished order won't reappear — stop polling.
       }
