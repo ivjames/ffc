@@ -29,6 +29,10 @@ export type FunnelEvent =
   | 'signin_failed';
 
 export type QueuedEvent = {
+  /** Stable per-event id minted on the device. Sent to the server, which dedups
+   *  on it — so a keepalive batch that commits but whose ack we never see (page
+   *  closed) is re-sent next launch WITHOUT double-counting the funnel. */
+  id: string;
   name: FunnelEvent;
   meta?: Record<string, unknown>;
   locationId?: string | null;
@@ -118,7 +122,9 @@ export async function flushEvents(): Promise<void> {
  *  and never throws, so a call site can drop it inline without a care. */
 export function track(name: FunnelEvent, meta?: Record<string, unknown>): void {
   const locationId = getCurrentLocationId() || null;
-  writeQueue(withEvent(readQueue(), { name, meta, locationId }));
+  // A stable id makes the durable-queue retry idempotent server-side.
+  const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
+  writeQueue(withEvent(readQueue(), { id, name, meta, locationId }));
   void flushEvents();
 }
 

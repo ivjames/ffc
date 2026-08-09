@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useInstallPrompt } from '../../lib/pwaInstall';
 import { track } from '../../lib/analytics';
@@ -15,9 +15,15 @@ export default function Install() {
   const [result, setResult] = useState<'accepted' | 'dismissed' | null>(null);
 
   // The install page reached a not-yet-installed player — the top of the
-  // adoption funnel, whether or not we can fire a native prompt.
+  // adoption funnel. Record it ONCE per visit: `canPrompt` flips as
+  // beforeinstallprompt arrives or a prompt is dismissed, and refiring on those
+  // transitions would inflate the funnel's denominator. The ref latches after
+  // the first not-installed render (an already-installed visitor never counts).
+  const shownRef = useRef(false);
   useEffect(() => {
-    if (!installed) track('install_prompt_shown', { platform, canPrompt });
+    if (shownRef.current || installed) return;
+    shownRef.current = true;
+    track('install_prompt_shown', { platform, canPrompt });
   }, [installed, platform, canPrompt]);
 
   async function onInstall() {

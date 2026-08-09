@@ -4,7 +4,8 @@ import { withEvent, nextBatch, QUEUE_CAP, type QueuedEvent } from './analytics';
 // Pure queue logic only — the localStorage-backed store and the network flush
 // are exercised through the app (node env here, no DOM), same as foodOrders.
 
-const ev = (name: QueuedEvent['name']): QueuedEvent => ({ name });
+let n = 0;
+const ev = (name: QueuedEvent['name']): QueuedEvent => ({ id: `id-${n++}`, name });
 
 describe('withEvent', () => {
   it('appends in order (oldest first, so a funnel reads chronologically)', () => {
@@ -14,7 +15,8 @@ describe('withEvent', () => {
 
   it('drops the oldest overflow past the cap', () => {
     let q: QueuedEvent[] = [];
-    for (let i = 0; i < QUEUE_CAP + 5; i++) q = withEvent(q, { name: 'app_launch_standalone', meta: { i } });
+    for (let i = 0; i < QUEUE_CAP + 5; i++)
+      q = withEvent(q, { id: `id-${i}`, name: 'app_launch_standalone', meta: { i } });
     expect(q.length).toBe(QUEUE_CAP);
     // The first 5 were dropped; the queue now starts at i=5.
     expect((q[0].meta as { i: number }).i).toBe(5);

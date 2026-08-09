@@ -6,15 +6,19 @@
 // off. It is deliberately privacy-clean and matches the announcement-view
 // beacon's shape:
 //
-//   { deviceId: <uuid>, platform?: <string>, events: [{ name, meta?, locationId? }, ...] }
+//   { deviceId: <uuid>, platform?: <string>,
+//     events: [{ id: <uuid>, name, meta?, locationId? }, ...] }
 //
-// - Identity is the anonymous device install id (always present). A signed-in
-//   app_user (if any) rides along via attachUser, so we can split funnels by
-//   signed-in vs anonymous WITHOUT storing anything that identifies a person.
-// - We store NO IP address and no other PII — see the Privacy page.
+// - Identity is ONLY the anonymous device install id. We deliberately do NOT
+//   store the signed-in app_user id: a funnel event must never be linkable to a
+//   name or email (the Privacy page promise). No IP or other PII is stored.
 // - `name` is checked against a fixed server-side allowlist; unknown names are
 //   dropped (not 500'd), so a stale or malicious client can't write junk or
 //   grow the event vocabulary on its own.
+// - Each event carries a device-minted `id` (uuid). The beacon uses keepalive +
+//   a durable retry queue, so a committed request whose ack the client never
+//   sees is re-sent next launch; a unique constraint + ON CONFLICT DO NOTHING
+//   makes that retry a no-op instead of double-counting the funnel.
 // - Best-effort and fire-and-forget: bad rows are skipped, the batch is capped,
 //   and the client re-sends anything still queued.
 import { Router } from "express";
@@ -69,31 +73,37 @@ router.post("/", async (req, res) => {
       : null;
 
   const rawEvents = Array.isArray(body.events) ? body.events : [];
-  // Keep only allowlisted events, capped. Each row carries its own optional
-  // location so a multi-venue session attributes correctly.
+  // Keep only allowlisted events with a valid device-minted id, capped, and
+  // de-duped by id within the batch (a client bug could repeat one). Each row
+  // carries its own optional location so a multi-venue session attributes right.
   const rows = [];
+  const seen = new Set();
   for (const e of rawEvents) {
     if (rows.length >= MAX_EVENTS) break;
     if (!e || typeof e !== "object") continue;
+    if (typeof e.id !== "string" || !UUID_RE.test(e.id) || seen.has(e.id)) continue;
     if (typeof e.name !== "string" || !ALLOWED_EVENTS.has(e.name)) continue;
+    seen.add(e.id);
     const locationId =
       typeof e.locationId === "string" && UUID_RE.test(e.locationId) ? e.locationId : null;
-    rows.push({ name: e.name, meta: sanitizeMeta(e.meta), locationId });
+    rows.push({ id: e.id, name: e.name, meta: sanitizeMeta(e.meta), locationId });
   }
   if (rows.length === 0) return res.json({ ok: true, recorded: 0 });
 
-  const appUserId = req.user?.id ?? null;
   try {
-    // One multi-row insert. unnest keeps it a single round-trip; a location id
-    // that doesn't exist is set null by the FK-safe left join rather than 23503.
+    // One multi-row insert. A location id that doesn't exist resolves to null
+    // (FK-safe subselect) rather than 23503. ON CONFLICT DO NOTHING absorbs a
+    // re-sent batch, so `recorded` counts only genuinely new events.
     const result = await pool.query(
-      `insert into funnel_event (event, device_id, app_user_id, location_id, platform, meta)
-         select e.name, $1::uuid, $2::uuid,
+      `insert into funnel_event (client_event_id, event, device_id, location_id, platform, meta)
+         select e.id, e.name, $1::uuid,
                 (select l.id from location l where l.id = e.location_id),
-                $3::text, e.meta
-           from jsonb_to_recordset($4::jsonb)
-             as e(name text, location_id uuid, meta jsonb)`,
-      [deviceId, appUserId, platform, JSON.stringify(rows.map((r) => ({
+                $2::text, e.meta
+           from jsonb_to_recordset($3::jsonb)
+             as e(id uuid, name text, location_id uuid, meta jsonb)
+       on conflict (client_event_id) do nothing`,
+      [deviceId, platform, JSON.stringify(rows.map((r) => ({
+        id: r.id,
         name: r.name,
         location_id: r.locationId,
         meta: r.meta,
