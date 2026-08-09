@@ -207,10 +207,15 @@ on conflict (id) do nothing;
 
 -- Scavenger-hunt lists are per course (hunt_item.course_id). Only the client's
 -- real, confirmed hunt content is seeded; courses without a list yet simply
--- show an empty hunt (the UI handles that gracefully). ON CONFLICT DO UPDATE
--- makes this seed authoritative for its content columns, so migrate can run
--- repeatedly without duplicating rows AND existing rows pick up edits here (e.g.
--- flipping the horseshoe to `countable`). `id` and `active` are left untouched.
+-- show an empty hunt (the UI handles that gracefully).
+--
+-- CREATE-ONLY (ON CONFLICT DO NOTHING): Master Control now owns hunt items
+-- (routes/admin/huntItems.js — the same handoff locations/courses/orgs made
+-- above), so a re-migrate (every `ffc deploy` runs `ffc migrate`) must NOT
+-- overwrite an operator's edits to name/hint/sort_order/countable back to
+-- these seed values. Seeds once on a fresh DB, then leaves the console in
+-- charge. Content changes for already-seeded items go through Master
+-- Control, not this file.
 insert into hunt_item (course_id, slug, name, hint, sort_order, countable) values
   -- Upland · Western — horseshoes are hidden all around the course; each one you
   -- photograph counts, so this item is `countable` (find as many as you can).
@@ -225,11 +230,7 @@ insert into hunt_item (course_id, slug, name, hint, sort_order, countable) value
   ('a3333333-3333-4333-8333-333333333333', 'cow',        'A cartoon cow',          'A big goofy cartoon cow with a lolling tongue — say cheese!', 50, false),
   ('a3333333-3333-4333-8333-333333333333', 'cabbage',    'A giant purple cabbage', 'An oversized purple cabbage, far too big for any garden — find it and snap it.', 60, false),
   ('a3333333-3333-4333-8333-333333333333', 'carrot',     'A giant carrot',         'Enormous orange carrots poke up out of the gravel, green tops and all — snap one.', 70, false)
-on conflict (course_id, slug) do update
-  set name       = excluded.name,
-      hint       = excluded.hint,
-      sort_order = excluded.sort_order,
-      countable  = excluded.countable;
+on conflict (course_id, slug) do nothing;
 
 -- Upland · Blue Course — California themed. Only Upland's Blue Course carries a
 -- themed hunt list for now; the other venues' Blue courses stay on the generic
@@ -244,11 +245,7 @@ insert into hunt_item (course_id, slug, name, hint, sort_order, countable) value
   ('a1111111-1111-4111-8111-111111111111', 'palm',        'A palm tree',          'A tall California palm — find one and snap the fronds against the sky.',           50, false),
   ('a1111111-1111-4111-8111-111111111111', 'bear-flag',   'The bear flag',        'The California grizzly-bear flag flying over the course — say cheese!',            60, false),
   ('a1111111-1111-4111-8111-111111111111', 'poppy',       'A golden poppy',       'The state flower blooms in bright orange clusters along the fairway edges — find as many as you can!', 70, true)
-on conflict (course_id, slug) do update
-  set name       = excluded.name,
-      hint       = excluded.hint,
-      sort_order = excluded.sort_order,
-      countable  = excluded.countable;
+on conflict (course_id, slug) do nothing;
 
 -- Upland · Green Course — classic mini-golf themed. Again Upland only; other
 -- venues' Green courses stay generic until confirmed (§11).
@@ -260,11 +257,7 @@ insert into hunt_item (course_id, slug, name, hint, sort_order, countable) value
   ('a2222222-2222-4222-8222-222222222222', 'castle',         'The castle',         'The classic mini-golf castle with battlements and a drawbridge over the cup.',  50, false),
   ('a2222222-2222-4222-8222-222222222222', 'covered-bridge', 'The covered bridge', 'A small wooden covered bridge the ball rolls straight through.',               60, false),
   ('a2222222-2222-4222-8222-222222222222', 'gnome',          'A garden gnome',     'A cheeky garden gnome tucked into the landscaping — find him and snap it.',     70, false)
-on conflict (course_id, slug) do update
-  set name       = excluded.name,
-      hint       = excluded.hint,
-      sort_order = excluded.sort_order,
-      countable  = excluded.countable;
+on conflict (course_id, slug) do nothing;
 
 -- Converge from an earlier iteration that seeded these California/classic lists
 -- onto ALL three venues' Blue/Green courses. Now that only Upland is themed, drop
@@ -641,3 +634,34 @@ alter table hunt_find add column if not exists minors_present    boolean;
 -- Reads of stored photos by moderation state (future review/sharing surfaces).
 create index if not exists hunt_find_moderation_idx
   on hunt_find (moderation) where photo_path is not null;
+
+-- ---------------------------------------------------------------------------
+-- Scavenger-hunt admin (Master Control → Hunt): per-item judge guidance and
+-- vetting image sets. See routes/admin/huntItems.js.
+-- ---------------------------------------------------------------------------
+
+-- Extra judge guidance per item, written by the operator and appended to the
+-- production vision prompt (lib/vision.js) alongside name + hint — e.g.
+-- "credit only the RED windmill, not the blue one by hole 4". Null = none.
+alter table hunt_item add column if not exists extra_prompt text;
+
+-- An item's vetting test set: admin-sourced sample photos of the real prop,
+-- run against the hunt judge (vision bench) to tune name/hint/extra_prompt
+-- before the item goes live. ADMIN-ONLY test data — never shown to players
+-- and never sent along with player verifications. Test-data policy
+-- (CLAUDE.md): these images go to third-party model providers, so uploads
+-- are people-screened at the API and rejected if anyone is visible.
+-- Files live on disk under HUNT_ITEM_IMAGE_DIR (image_path), like
+-- hunt_find.photo_path; rows cascade with their item, files are removed by
+-- the delete routes.
+create table if not exists hunt_item_image (
+  id          uuid primary key default gen_random_uuid(),
+  item_id     uuid not null references hunt_item(id) on delete cascade,
+  image_path  text not null,            -- stored image path on the droplet disk
+  media_type  text not null,            -- image/jpeg | png | webp | gif
+  subject     text,                     -- descriptor's label from the upload screen
+  note        text,                     -- operator's free-text note
+  sort_order  int  not null default 0,
+  created_at  timestamptz not null default now()
+);
+create index if not exists hunt_item_image_item_idx on hunt_item_image (item_id);

@@ -131,6 +131,53 @@ export type AdminPhoto = {
   minorsPresent: boolean | null;
 };
 
+// A scavenger-hunt item as the admin sees it (Master Control → Hunt):
+// content fields + course/venue context + its vetting image set's size.
+export type HuntItem = {
+  id: string;
+  courseId: string;
+  slug: string;
+  name: string;
+  hint: string | null;
+  /** Operator-written judging guidance appended to the vision verify prompt. */
+  extraPrompt: string | null;
+  sortOrder: number;
+  active: boolean;
+  countable: boolean;
+  courseName: string;
+  locationId: string | null;
+  locationName: string | null;
+  imageCount: number;
+  thumbImageId: string | null;
+};
+
+/** A live course as listed by the Hunt section (items grouped under these). */
+export type HuntCourseRef = {
+  id: string;
+  name: string;
+  locationId: string | null;
+  locationName: string | null;
+};
+
+export type HuntItemImage = {
+  id: string;
+  itemId: string;
+  mediaType: string;
+  /** The descriptor's label from the upload people-screen. */
+  subject: string | null;
+  note: string | null;
+  sortOrder: number;
+  createdAt: string;
+};
+
+/** Billed usage of one upload people-screen call (surfaced per CLAUDE.md). */
+export type ItemImageScan = {
+  provider: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cost: number | null;
+};
+
 export type SeriesBucket = {
   date: string; // YYYY-MM-DD in the admin timezone
   rounds: number;
@@ -266,6 +313,57 @@ export const api = {
   // bytes and hand back a Blob for an object URL.
   fetchPhotoImage: async (id: string) => {
     const res = await fetch(`/api/admin/photos/${id}/image`, {
+      credentials: 'same-origin',
+      headers: { 'x-app-token': getToken() },
+    });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
+
+  // Scavenger-hunt items + vetting image sets (Master Control → Hunt).
+  // `courses` includes item-less courses so the UI can offer "add the first
+  // item" everywhere; `items` arrive in venue → course → item display order.
+  listHuntItems: () => req<{ courses: HuntCourseRef[]; items: HuntItem[] }>('GET', '/hunt-items'),
+  getHuntItem: (id: string) =>
+    req<{ item: HuntItem; images: HuntItemImage[] }>('GET', `/hunt-items/${id}`),
+  createHuntItem: (item: Partial<HuntItem>) =>
+    req<{ ok: true; item: HuntItem }>('POST', '/hunt-items', item),
+  patchHuntItem: (id: string, fields: Partial<HuntItem>) =>
+    req<{ ok: true; item: HuntItem }>('PATCH', `/hunt-items/${id}`, fields),
+  deleteHuntItem: (id: string) => req<{ ok: true }>('DELETE', `/hunt-items/${id}`),
+  // Upload is people-screened server-side. A people-rejection (400 with
+  // peoplePresent) is returned, NOT thrown: the screen call was still billed,
+  // so the caller needs its `scan` usage for the burn tally either way.
+  uploadHuntItemImage: async (
+    id: string,
+    body: { imageBase64: string; mediaType: string; note?: string }
+  ): Promise<{ ok: boolean; image?: HuntItemImage; scan?: ItemImageScan; peoplePresent?: boolean; error?: string }> => {
+    const res = await fetch(`/api/admin/hunt-items/${id}/images`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json', 'x-app-token': getToken() },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError((data && data.error) || 'unauthorized');
+    }
+    if (!res.ok && !(res.status === 400 && data?.peoplePresent)) {
+      throw new ApiError((data && data.error) || `HTTP ${res.status}`);
+    }
+    return data;
+  },
+  deleteHuntItemImage: (imageId: string) =>
+    req<{ ok: true }>('DELETE', `/hunt-items/images/${imageId}`),
+  // Like fetchPhotoImage: <img src> can't carry the auth header, so fetch the
+  // bytes and hand back a Blob for an object URL.
+  fetchHuntItemImage: async (imageId: string) => {
+    const res = await fetch(`/api/admin/hunt-items/images/${imageId}/image`, {
       credentials: 'same-origin',
       headers: { 'x-app-token': getToken() },
     });

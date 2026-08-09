@@ -177,6 +177,31 @@ test("POST /api/hunt/verify 400s when itemId doesn't exist on this course", asyn
   assert.match(body.error, /does not exist on this course/);
 });
 
+test("verify passes the item's extra_prompt to the vision judge", async (t) => {
+  t.after(async () => {
+    await testQuery(`update hunt_item set extra_prompt = null where id = $1`, [itemId]);
+  });
+  await testQuery(
+    `update hunt_item set extra_prompt = 'Credit only the RED widget.' where id = $1`,
+    [itemId]
+  );
+  verifyItemInImageMock.mock.resetCalls();
+  verifyItemInImageMock.mock.mockImplementation(async () => ({
+    present: true,
+    confidence: 0.9,
+    reason: "ok",
+    photoOfPhoto: false,
+  }));
+
+  const res = await postVerify({ ...validBody(), playerTag: "T09" });
+  assert.equal(res.status, 200);
+  assert.equal(verifyItemInImageMock.mock.callCount(), 1);
+  const args = verifyItemInImageMock.mock.calls[0].arguments[0];
+  assert.equal(args.itemName, "A test widget");
+  assert.equal(args.itemHint, "look for it");
+  assert.equal(args.itemExtraPrompt, "Credit only the RED widget.");
+});
+
 test("verified find is persisted to disk + DB; a repeat submission dedupes without a second vision call", async () => {
   verifyItemInImageMock.mock.resetCalls();
   verifyItemInImageMock.mock.mockImplementation(async () => ({
