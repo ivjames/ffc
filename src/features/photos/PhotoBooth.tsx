@@ -51,6 +51,54 @@ const STICKER_BASE = 0.22;
 // Long-edge cap for the exported JPEG, matching the hunt's upload ceiling.
 const EXPORT_MAX_DIM = 1280;
 
+// --- Sticker rasterization ---------------------------------------------------
+// Each emoji is drawn ONCE to a square bitmap, and that same bitmap drives both
+// the on-screen preview and the flattened export — so a placed sticker lands in
+// exactly the same spot when saved. (The editor previously drew the emoji as
+// DOM text but the export drew it as canvas text; `translate(-50%,-50%)` on a
+// line box and canvas `textBaseline:'middle'` on the em box anchor an emoji
+// glyph slightly differently, so exported stickers sat a few percent off — most
+// visibly for the bigger ones. One shared bitmap removes that divergence.)
+const STICKER_BITMAP_PX = 320; // rasterization resolution (square, hi-dpi headroom)
+const STICKER_GLYPH_FRAC = 0.7; // glyph size within the bitmap; the rest is
+// padding so a tall/wide emoji isn't clipped. The visible glyph is this
+// fraction of the rendered square, so a square of side S shows a glyph of
+// STICKER_GLYPH_FRAC*S — the sizing math below inverts that to keep the glyph
+// the intended fraction of the photo.
+const stickerBitmaps = new Map<string, HTMLCanvasElement>();
+function stickerBitmap(emoji: string): HTMLCanvasElement {
+  let c = stickerBitmaps.get(emoji);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = c.height = STICKER_BITMAP_PX;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${Math.round(STICKER_BITMAP_PX * STICKER_GLYPH_FRAC)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.fillText(emoji, STICKER_BITMAP_PX / 2, STICKER_BITMAP_PX / 2);
+  }
+  stickerBitmaps.set(emoji, c);
+  return c;
+}
+
+const stickerUrls = new Map<string, string>();
+function stickerBitmapUrl(emoji: string): string {
+  let url = stickerUrls.get(emoji);
+  if (!url) {
+    url = stickerBitmap(emoji).toDataURL();
+    stickerUrls.set(emoji, url);
+  }
+  return url;
+}
+
+// The rendered square's side, given the target glyph size (a fraction of the
+// photo's width). Inverts STICKER_GLYPH_FRAC so the visible glyph ends up
+// STICKER_BASE*width*scale, matching the preview and the export.
+function stickerSide(imageWidth: number, scale: number): number {
+  return (STICKER_BASE * imageWidth * scale) / STICKER_GLYPH_FRAC;
+}
+
 type Editor = {
   /** Object URL of the picked photo, alive for the whole editing session. */
   url: string;
@@ -69,13 +117,13 @@ function flattenToJpeg(editor: Editor, stickers: Sticker[]): Promise<Blob> {
   if (!ctx) return Promise.reject(new Error('Canvas is unavailable'));
   ctx.drawImage(img, 0, 0, w, h);
   for (const st of stickers) {
+    // Same bitmap the editor previews, centered on the same fractional point —
+    // so the save matches the screen exactly.
+    const side = stickerSide(w, st.scale);
     ctx.save();
     ctx.translate(st.x * w, st.y * h);
     ctx.rotate((st.rot * Math.PI) / 180);
-    ctx.font = `${Math.round(STICKER_BASE * w * st.scale)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(st.emoji, 0, 0);
+    ctx.drawImage(stickerBitmap(st.emoji), -side / 2, -side / 2, side, side);
     ctx.restore();
   }
   return new Promise((resolve, reject) => {
@@ -320,29 +368,36 @@ export default function PhotoBooth() {
               draggable={false}
               className="absolute inset-0 h-full w-full object-cover"
             />
-            {stickers.map((st) => (
-              <span
-                key={st.id}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  onStickerPointerDown(e, st);
-                }}
-                onPointerMove={onStickerPointerMove}
-                onPointerUp={onStickerPointerUp}
-                className={`absolute cursor-grab leading-none ${
-                  st.id === selectedId ? 'rounded-lg ring-2 ring-fairway-300/90' : ''
-                }`}
-                style={{
-                  left: `${st.x * 100}%`,
-                  top: `${st.y * 100}%`,
-                  fontSize: `${STICKER_BASE * boxW * st.scale}px`,
-                  transform: `translate(-50%, -50%) rotate(${st.rot}deg)`,
-                  touchAction: 'none',
-                }}
-              >
-                {st.emoji}
-              </span>
-            ))}
+            {stickers.map((st) => {
+              // The rendered bitmap — identical pixels to what the export bakes,
+              // so the preview is truly WYSIWYG. Sized off the box's real width.
+              const side = stickerSide(boxW, st.scale);
+              return (
+                <img
+                  key={st.id}
+                  src={stickerBitmapUrl(st.emoji)}
+                  alt=""
+                  draggable={false}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    onStickerPointerDown(e, st);
+                  }}
+                  onPointerMove={onStickerPointerMove}
+                  onPointerUp={onStickerPointerUp}
+                  className={`absolute cursor-grab ${
+                    st.id === selectedId ? 'rounded-lg ring-2 ring-fairway-300/90' : ''
+                  }`}
+                  style={{
+                    left: `${st.x * 100}%`,
+                    top: `${st.y * 100}%`,
+                    width: `${side}px`,
+                    height: `${side}px`,
+                    transform: `translate(-50%, -50%) rotate(${st.rot}deg)`,
+                    touchAction: 'none',
+                  }}
+                />
+              );
+            })}
           </div>
 
           {/* Adjust the selected sticker — or the hint when none is. */}
