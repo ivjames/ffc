@@ -76,8 +76,9 @@ const EXPORT_MAX_DIM = 1280;
 // not a fixed square: a fixed square clipped wide or off-center glyphs (e.g. 🕶️
 // overflowed and showed a hard rectangular edge when scaled up). Measuring and
 // centering on the visual box guarantees no clip and a true center for any
-// emoji. `ratio` is the glyph's larger dimension as a fraction of the square,
-// so the caller can size the rendered sticker to a target glyph size.
+// emoji. `ratio` is the em (reference font size) as a fraction of the square,
+// so the caller sizes the rendered sticker to the prior em-based scale (see
+// stickerBitmap's return).
 type StickerBitmap = { canvas: HTMLCanvasElement; url: string; ratio: number };
 
 // Transparent halo around the glyph — room for anti-aliasing and the odd emoji
@@ -128,14 +129,20 @@ function stickerBitmap(emoji: string): StickerBitmap {
     ctx.textBaseline = 'middle';
     ctx.fillText(emoji, side / 2 - dxCenter, side / 2 - dyCenter);
   }
-  const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), ratio: maxDim / side };
+  // `ratio` is the em (reference font size) as a fraction of the bitmap, NOT the
+  // ink extent: the caller sizes so the EM lands at the target, which preserves
+  // the prior font-based scale exactly (a given `scale` renders an emoji at the
+  // same size as before this measured-bitmap change, so reopening a draft never
+  // resizes its stickers). Ink beyond the em — and the margin — scale along, and
+  // because the bitmap now contains all of it, nothing clips.
+  const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), ratio: REF / side };
   stickerCache.set(emoji, bitmap);
   return bitmap;
 }
 
-// The rendered square's side, so the glyph's larger dimension ends up
-// STICKER_BASE*width*scale regardless of the emoji's shape (the bitmap's
-// transparent margin is divided back out via `ratio`).
+// The rendered square's side, so the emoji's em ends up STICKER_BASE*width*scale
+// (matching the prior font-based sizing); the measured ink + margin around the
+// em scale along with it, via `ratio`.
 function stickerSide(imageWidth: number, scale: number, ratio: number): number {
   return (STICKER_BASE * imageWidth * scale) / ratio;
 }
