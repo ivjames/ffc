@@ -77,6 +77,24 @@ function publicOrder(order, now = Date.now()) {
   };
 }
 
+/** A pickup code not currently in use by any OPEN (not-yet-collected) order,
+ *  so the KDS never shows two live tickets with the same code (staff match the
+ *  guest's code to a ticket, so collisions would misroute a hand-off). A
+ *  completed order's code is free to reuse — it's off the board. Retries a
+ *  bounded number of times, then accepts a code rather than looping forever
+ *  (there are 9000 codes; a demo never has that many open orders). */
+function uniquePickupCode(state, nowMs) {
+  const inUse = new Set();
+  for (const o of state.orders.values()) {
+    if (ticketStatus(o.ticket, nowMs) !== 'picked_up') inUse.add(o.pickupCode);
+  }
+  for (let i = 0; i < 50; i++) {
+    const code = makePickupCode();
+    if (!inUse.has(code)) return code;
+  }
+  return makePickupCode();
+}
+
 /** Recompute an order line's price from the menu (server is price authority).
  *  Returns { priceCents } or { error }. */
 function priceLine(line) {
@@ -246,7 +264,8 @@ export function createApp() {
       notes: notes ?? null,
       // Shown big on the guest's Ready screen and on the KDS ticket; matching
       // the two is the pickup hand-off (either side can then complete it).
-      pickupCode: makePickupCode(),
+      // Unique among open orders so staff never see two live tickets alike.
+      pickupCode: uniquePickupCode(state, nowMs),
       createdAt: new Date(nowMs).toISOString(),
       createdAtMs: nowMs,
       // Hand the ticket to the fake kitchen: reserves a station and fixes the

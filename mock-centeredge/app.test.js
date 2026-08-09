@@ -202,6 +202,22 @@ test('guest-side pickup: too-early is 409, ready completes, and it is idempotent
   assert.equal((await post('/orders/ord-nope/pickup', {})).status, 404);
 });
 
+test('open orders get distinct pickup codes (no ambiguous hand-offs)', async () => {
+  const codes = [];
+  for (let i = 0; i < 12; i++) {
+    const placed = await (
+      await post('/orders', {
+        items: CART,
+        payment: { token: 'tok_visa_4242', amountCents: CART_TOTAL },
+        guestName: `Dup ${i}`,
+      })
+    ).json();
+    codes.push(placed.order.pickupCode);
+  }
+  // All still open (none picked up) → every code must be unique.
+  assert.equal(new Set(codes).size, codes.length);
+});
+
 test('kitchen board lists open tickets and bump services them end to end', async () => {
   const placed = await (
     await post('/orders', {
