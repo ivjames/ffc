@@ -9,7 +9,7 @@ import { getRound, putRound } from '../../db';
 import { syncPending, fetchRewards, type RewardRow } from '../../sync';
 import { completeGame } from '../../lib/gamesApi';
 import { applyCompleted } from '../../lib/sharedMerge';
-import { usePos } from '../../lib/pos';
+import { posFor } from '../../lib/pos';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
 import { awardGolfReward } from '../../lib/pos/golfRewards';
 import type { GameAwardOutcome } from '../../lib/pos/gameRewards';
@@ -254,7 +254,13 @@ export default function Summary() {
             (same lane as the games); otherwise they fall back to a counter
             code staff redeem in Master Control. */}
         {rewards.length > 0 && (
-          <RewardsCard rewards={rewards} accent={course.accent} clientId={clientId} />
+          <RewardsCard
+            rewards={rewards}
+            accent={course.accent}
+            clientId={clientId}
+            locationId={course.locationId}
+            deviceSlot={round.shared?.slot ?? 0}
+          />
         )}
 
         <div className="mt-4 space-y-2">
@@ -429,38 +435,48 @@ function RewardsCard({
   rewards,
   accent,
   clientId,
+  locationId,
+  deviceSlot,
 }: {
   rewards: RewardRow[];
   accent: string;
   clientId: string;
+  locationId: string;
+  deviceSlot: number;
 }) {
   const navigate = useNavigate();
-  const { gameRewards } = usePos();
+  // Gate on the ROUND'S venue, not the currently-selected one — a completed
+  // round belongs to the course it was played on.
+  const { gameRewards } = posFor(locationId);
   const playerId = useLinkedPlayerId();
   // Card lane: when the venue sells the loyalty add-on, this device's player
-  // (index 0 — the cardholder) banks tickets on the linked card, the same lane
-  // as the games. Other players in a shared round keep their own counter codes.
+  // banks tickets on the linked card, the same lane as the games. In a shared
+  // round that player is `deviceSlot` (the host is 0, joiners 1–3); everyone
+  // else in the round keeps their own counter code.
   const cardLane = gameRewards;
 
-  // Credit the cardholder's achievements once. The injection endpoint replays
+  // Credit this device's own achievements once. The injection endpoint replays
   // on a stable per-(round, player, achievement) key, so a re-mounted summary —
-  // or a card linked only after the summary is open — can't double-credit.
+  // or a card linked only after the summary is open — can't double-credit. A
+  // grant already redeemed at the counter is skipped so it can't pay twice.
   const [credited, setCredited] = useState<Record<string, GameAwardOutcome>>({});
   const attempted = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!cardLane || !playerId) return;
     for (const r of rewards) {
-      if (r.playerIndex !== 0) continue; // this device's player = the cardholder
+      if (r.playerIndex !== deviceSlot) continue; // this device's player
+      if (r.redeemedAt != null) continue; // already claimed at the counter
       const key = `${r.playerIndex}:${r.achievement}`;
       if (attempted.current.has(key)) continue;
       attempted.current.add(key);
       void awardGolfReward({
+        locationId,
         achievement: r.achievement,
         clientId,
         playerIndex: r.playerIndex,
       }).then((outcome) => setCredited((m) => ({ ...m, [key]: outcome })));
     }
-  }, [cardLane, playerId, rewards, clientId]);
+  }, [cardLane, playerId, rewards, clientId, locationId, deviceSlot]);
 
   const subtitle = cardLane
     ? playerId
@@ -490,9 +506,11 @@ function RewardsCard({
         {rewards.map((r) => {
           const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
           const key = `${r.playerIndex}:${r.achievement}`;
-          // This device's player rides the card lane when it's available;
-          // everyone else in the round keeps their counter code.
-          const onCard = cardLane && playerId != null && r.playerIndex === 0;
+          // This device's own player rides the card lane when it's available and
+          // the grant hasn't already been claimed at the counter; everyone else
+          // (and already-claimed grants) keep the code / "Claimed ✓".
+          const onCard =
+            cardLane && playerId != null && r.playerIndex === deviceSlot && r.redeemedAt == null;
           return (
             <div
               key={key}

@@ -1,4 +1,3 @@
-import { getCurrentLocationId } from '../location';
 import { getLinkedPlayerId } from '../rewardsCard';
 import { posFor } from './index';
 import type { GameAwardOutcome } from './gameRewards';
@@ -30,15 +29,18 @@ export function golfRewardKey(clientId: string, playerIndex: number, achievement
   return `golf:${clientId}:${playerIndex}:${achievement}`;
 }
 
-/** Credit one round achievement to the linked card, if this venue sells the
- *  gameRewards add-on and a card is linked. Mirrors awardGameTickets: same
- *  gating, same idempotent injection endpoint. */
+/** Credit one round achievement to the linked card, if the ROUND'S venue sells
+ *  the gameRewards add-on and a card is linked. Mirrors awardGameTickets: same
+ *  gating, same idempotent injection endpoint. Resolves the POS from the round's
+ *  own `locationId` (not the mutable current location), so switching venues
+ *  after a round doesn't route its reward through the wrong integration. */
 export async function awardGolfReward(opts: {
+  locationId: string;
   achievement: string;
   clientId: string;
   playerIndex: number;
 }): Promise<GameAwardOutcome> {
-  const capabilities = posFor(getCurrentLocationId());
+  const capabilities = posFor(opts.locationId);
   if (!capabilities.gameRewards) return { status: 'unavailable' };
   const playerId = getLinkedPlayerId();
   if (!playerId) return { status: 'no-card' };
