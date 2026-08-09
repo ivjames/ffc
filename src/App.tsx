@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import Home from './features/home/Home';
 import CoursePicker from './features/scorecard/CoursePicker';
@@ -54,12 +55,19 @@ import { UpdateModal } from './ui/UpdateModal';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
 import { DEV_MODE } from './lib/flags';
+import { hydrateContent } from './data/courses';
 
 // §7 Routes / screens.
 export default function App() {
   // The venue display wall is landscape by design (a TV pointed at the URL),
   // so it's exempt from the portrait nudge every phone screen gets.
   const isWall = useLocation().pathname.startsWith('/tv/wall');
+  // Pull the live catalog (venues, courses, POS config) once at boot so Master
+  // Control changes reach players without a redeploy. Best-effort; falls back to
+  // the cached/baked content offline. See src/data/courses.ts.
+  useEffect(() => {
+    void hydrateContent();
+  }, []);
   return (
     <>
       <Routes>

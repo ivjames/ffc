@@ -1,4 +1,4 @@
-import { locationById } from '../../data/courses';
+import { locationById, useContentRevision } from '../../data/courses';
 import { useCurrentLocationId } from '../location';
 import { DEV_MODE } from '../flags';
 import { createCenterEdgeAdapter } from './centeredge';
@@ -72,7 +72,10 @@ export function posFor(locationId: string): PosCapabilities {
   };
 }
 
-/** Reactive capabilities for the current venue — re-resolves on venue switch. */
+/** Reactive capabilities for the current venue — re-resolves on venue switch
+ *  AND when live content hydration swaps in updated POS config (so enabling a
+ *  capability in Master Control reaches players without a redeploy). */
 export function usePos(): PosCapabilities {
+  useContentRevision(); // re-render when the live catalog (POS config) updates
   return posFor(useCurrentLocationId());
 }
