@@ -124,7 +124,7 @@ router.get("/stickers", async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `select id, label, width, height from booth_sticker
+      `select id, label, width, height, kind, corner from booth_sticker
         where location_id = $1 and active = true
         order by sort_order asc, created_at asc`,
       [location]

@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, type AdminVenueSticker, type Location } from './api';
-import { Button, Card, Banner, Spinner, fmtDateTime } from './ui';
+import {
+  api,
+  type AdminVenueSticker,
+  type AdminStickerKind,
+  type AdminStickerCorner,
+  type Location,
+} from './api';
+import { Button, Card, Banner, Spinner, Pill, fmtDateTime } from './ui';
+
+const CORNER_LABEL: Record<AdminStickerCorner, string> = {
+  tl: 'top-left',
+  tr: 'top-right',
+  bl: 'bottom-left',
+  br: 'bottom-right',
+};
 
 // Venue sticker management — the operator side of the photo booth's SVG
 // stickers. Staff upload their own decorations per venue; players at that
@@ -29,7 +42,15 @@ function StickerCard({ sticker, onRemoved }: { sticker: AdminVenueSticker; onRem
         />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="font-medium">{sticker.label || <span className="text-slate-400">(no label)</span>}</div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium">
+            {sticker.label || <span className="text-slate-400">(no label)</span>}
+          </span>
+          <Pill tone={sticker.kind === 'sticker' ? 'slate' : 'amber'}>
+            {sticker.kind}
+            {sticker.kind === 'watermark' ? ` · ${CORNER_LABEL[sticker.corner]}` : ''}
+          </Pill>
+        </div>
         <div className="mt-1 text-xs text-slate-400">
           {sticker.width}×{sticker.height} · added {fmtDateTime(sticker.createdAt)}
         </div>
@@ -66,6 +87,8 @@ export default function BoothStickers() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [label, setLabel] = useState('');
+  const [kind, setKind] = useState<AdminStickerKind>('sticker');
+  const [corner, setCorner] = useState<AdminStickerCorner>('tr');
   const [reloadKey, setReloadKey] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -123,7 +146,13 @@ export default function BoothStickers() {
     setError(null);
     try {
       const svg = await file.text();
-      await api.uploadBoothSticker({ locationId, label: label.trim() || undefined, svg });
+      await api.uploadBoothSticker({
+        locationId,
+        label: label.trim() || undefined,
+        svg,
+        kind,
+        corner: kind === 'watermark' ? corner : undefined,
+      });
       setLabel('');
       reloadStickers();
     } catch (err) {
@@ -138,9 +167,11 @@ export default function BoothStickers() {
     <div className="space-y-4">
       <h1 className="text-lg font-semibold">Booth stickers</h1>
       <p className="text-sm text-slate-500">
-        Upload SVG decorations for a venue; players there get them in the photo booth alongside the
-        built-in emoji. SVGs are validated on upload (scripts, event handlers, external references,
-        and entity/XXE payloads are rejected) and always served and rendered as inert images.
+        Upload SVG art for a venue. <strong>Stickers</strong> are draggable decorations;{' '}
+        <strong>frames</strong> overlay the whole photo (proscenium/border); a{' '}
+        <strong>watermark</strong> is branding forced into a corner of every photo. SVGs are
+        validated on upload (scripts, event handlers, external references, and entity/XXE payloads
+        are rejected) and always served and rendered as inert images.
       </p>
 
       {error && <Banner kind="error">{error}</Banner>}
@@ -161,6 +192,33 @@ export default function BoothStickers() {
           </select>
         </label>
         <div className="flex flex-wrap items-end gap-2">
+          <label className="text-sm font-medium text-slate-600">
+            Role
+            <select
+              className="mt-1 block rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as AdminStickerKind)}
+            >
+              <option value="sticker">Sticker</option>
+              <option value="frame">Frame</option>
+              <option value="watermark">Watermark</option>
+            </select>
+          </label>
+          {kind === 'watermark' && (
+            <label className="text-sm font-medium text-slate-600">
+              Corner
+              <select
+                className="mt-1 block rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={corner}
+                onChange={(e) => setCorner(e.target.value as AdminStickerCorner)}
+              >
+                <option value="tr">Top-right</option>
+                <option value="tl">Top-left</option>
+                <option value="br">Bottom-right</option>
+                <option value="bl">Bottom-left</option>
+              </select>
+            </label>
+          )}
           <label className="flex-1 text-sm font-medium text-slate-600">
             Label (optional)
             <input

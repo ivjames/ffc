@@ -45,6 +45,10 @@ export interface BoothPhotoDraft {
   id: string; // the server booth_photo id
   base: Blob; // undecorated photo (normalized to the export long-edge cap)
   stickers: BoothSticker[];
+  // The selected full-photo frame (venue booth_sticker id), if any. The forced
+  // venue watermark is NOT stored — it's applied live from the venue's config,
+  // so branding always reflects the current setup.
+  frameId?: string | null;
   updatedAt: number;
 }
 

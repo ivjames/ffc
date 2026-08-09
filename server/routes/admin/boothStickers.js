@@ -30,6 +30,9 @@ export const router = Router();
 const STICKER_DIR =
   process.env.PHOTO_BOOTH_STICKER_DIR || join(process.cwd(), "data", "booth-stickers");
 
+const KINDS = new Set(["sticker", "frame", "watermark"]);
+const CORNERS = new Set(["tl", "tr", "bl", "br"]);
+
 // --- List (for one venue) ---------------------------------------------------
 router.get("/", async (req, res) => {
   const location = req.query.location;
@@ -39,8 +42,8 @@ router.get("/", async (req, res) => {
   try {
     const scope = orgScope(req);
     const result = await pool.query(
-      `select s.id, s.label, s.width, s.height, s.sort_order as "sortOrder",
-              s.active, s.created_at as "createdAt"
+      `select s.id, s.label, s.width, s.height, s.kind, s.corner,
+              s.sort_order as "sortOrder", s.active, s.created_at as "createdAt"
          from booth_sticker s
          join location l on l.id = s.location_id
         where s.location_id = $1
@@ -97,6 +100,14 @@ router.get("/:id/image", async (req, res) => {
 router.post("/", express.json({ limit: "2mb" }), async (req, res) => {
   const body = req.body ?? {};
   const { locationId, label, svg } = body;
+  const kind = body.kind ?? "sticker";
+  const corner = body.corner ?? "tr";
+  if (!KINDS.has(kind)) {
+    return res.status(400).json({ ok: false, error: "kind must be sticker, frame, or watermark" });
+  }
+  if (!CORNERS.has(corner)) {
+    return res.status(400).json({ ok: false, error: "corner must be tl, tr, bl, or br" });
+  }
 
   if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
     return res.status(400).json({ ok: false, error: "locationId (uuid) is required" });
@@ -136,11 +147,12 @@ router.post("/", express.json({ limit: "2mb" }), async (req, res) => {
     try {
       // Append after existing stickers for this venue.
       ins = await pool.query(
-        `insert into booth_sticker (location_id, svg_path, label, width, height, sort_order)
-         values ($1, $2, $3, $4, $5,
+        `insert into booth_sticker (location_id, svg_path, label, width, height, kind, corner, sort_order)
+         values ($1, $2, $3, $4, $5, $6, $7,
                  coalesce((select max(sort_order) + 1 from booth_sticker where location_id = $1), 0))
-         returning id, label, width, height, sort_order as "sortOrder", active, created_at as "createdAt"`,
-        [locationId, svgPath, label ?? null, check.width, check.height]
+         returning id, label, width, height, kind, corner,
+                   sort_order as "sortOrder", active, created_at as "createdAt"`,
+        [locationId, svgPath, label ?? null, check.width, check.height, kind, corner]
       );
     } catch (err) {
       await rm(svgPath, { force: true }).catch(() => {});

@@ -148,6 +148,36 @@ test("upload validates, stores the file, and records intrinsic size + audit", as
   assert.equal(img.headers.get("x-content-type-options"), "nosniff");
 });
 
+test("kind + corner: frames and watermarks upload, validate, and list", async () => {
+  const frame = await adminUpload({ locationId, label: 'Arch', svg: GOOD_SVG, kind: 'frame' });
+  assert.equal(frame.status, 200);
+  assert.equal((await frame.json()).kind, 'frame');
+
+  const wm = await adminUpload({ locationId, label: 'Brand', svg: GOOD_SVG, kind: 'watermark', corner: 'br' });
+  assert.equal(wm.status, 200);
+  const wmBody = await wm.json();
+  assert.equal(wmBody.kind, 'watermark');
+  assert.equal(wmBody.corner, 'br');
+
+  // Defaults when omitted.
+  const plain = await (await adminUpload({ locationId, svg: GOOD_SVG })).json();
+  assert.equal(plain.kind, 'sticker');
+  assert.equal(plain.corner, 'tr');
+
+  // Bad kind / corner rejected.
+  assert.equal((await adminUpload({ locationId, svg: GOOD_SVG, kind: 'nope' })).status, 400);
+  assert.equal(
+    (await adminUpload({ locationId, svg: GOOD_SVG, kind: 'watermark', corner: 'middle' })).status,
+    400
+  );
+
+  // The player list carries kind + corner too.
+  const list = await (await fetch(`${baseUrl}/api/photos/stickers?location=${locationId}`)).json();
+  const listedFrame = list.find((s) => s.id === wmBody.id);
+  assert.equal(listedFrame.corner, 'br');
+  assert.ok(list.some((s) => s.kind === 'frame'));
+});
+
 test("player endpoints: list a venue's stickers and serve the SVG inert", async () => {
   const up = await adminUpload({ locationId, label: "Star", svg: GOOD_SVG });
   const { id } = await up.json();
