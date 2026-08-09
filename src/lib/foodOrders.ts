@@ -29,6 +29,11 @@ export function withOrder(orders: PlacedOrder[], order: PlacedOrder): PlacedOrde
   return [order, ...orders.filter((o) => o.id !== order.id)].slice(0, MAX_REMEMBERED);
 }
 
+/** Drop the order with `id` (pure; exported for tests). */
+export function withoutOrder(orders: PlacedOrder[], id: string): PlacedOrder[] {
+  return orders.filter((o) => o.id !== id);
+}
+
 /** Orders for `locationId` recent enough to plausibly still be in the kitchen,
  *  newest first. Scoping to the venue matters: an order id only means anything
  *  to the POS that issued it, so an order from another location must not show
@@ -87,6 +92,14 @@ export function getPlacedOrders(): PlacedOrder[] {
 
 export function recordOrder(order: PlacedOrder): void {
   commit(withOrder(orders, order));
+}
+
+/** Forget a remembered order — call this when the server reports it's
+ *  genuinely gone (a 404), e.g. the in-memory mock backend was redeployed and
+ *  lost it. Without this the on-device "in the kitchen" flag would linger for
+ *  the full ACTIVE_WINDOW_MS pointing at an order the server can't find. */
+export function forgetOrder(id: string): void {
+  commit(withoutOrder(orders, id));
 }
 
 function subscribe(cb: () => void): () => void {

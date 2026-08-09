@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { withOrder, activeOrders, ACTIVE_WINDOW_MS, type PlacedOrder } from './foodOrders';
+import {
+  withOrder,
+  withoutOrder,
+  activeOrders,
+  ACTIVE_WINDOW_MS,
+  type PlacedOrder,
+} from './foodOrders';
 
 // Pure order-list logic only — the localStorage-backed store itself is
 // exercised through the UI (node env here, no DOM).
@@ -35,6 +41,18 @@ describe('withOrder', () => {
     expect(list).toHaveLength(5);
     expect(list[0].id).toBe('ord-6');
     expect(list.at(-1)?.id).toBe('ord-2');
+  });
+});
+
+describe('withoutOrder', () => {
+  it('drops the matching order and leaves the rest (self-heal after a 404)', () => {
+    const list = [order({ id: 'a' }), order({ id: 'b' })];
+    expect(withoutOrder(list, 'a').map((o) => o.id)).toEqual(['b']);
+  });
+
+  it('is a no-op when the id is absent', () => {
+    const list = [order({ id: 'a' })];
+    expect(withoutOrder(list, 'nope')).toHaveLength(1);
   });
 });
 
