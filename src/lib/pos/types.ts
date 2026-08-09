@@ -77,7 +77,10 @@ export type Order = {
   createdAt: string;
 };
 
-export type PlayerBalances = { cashCents: number; gamePlayCredits: number; tickets: number };
+// The card carries no cash balance — it's a loyalty card (game credits +
+// redemption tickets), not a stored-value/cash instrument, and food is paid by
+// the payment flow, never from the card.
+export type PlayerBalances = { gamePlayCredits: number; tickets: number };
 export type Player = {
   id: string;
   cardNumber: string;

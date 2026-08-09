@@ -169,7 +169,7 @@ export default function Rewards() {
               </div>
             </div>
 
-            <div className="mb-4 grid grid-cols-3 gap-2">
+            <div className="mb-4 grid grid-cols-2 gap-2">
               <BalanceTile
                 emoji="🎟️"
                 value={player.balances.tickets.toLocaleString()}
@@ -179,11 +179,6 @@ export default function Rewards() {
                 emoji="🕹️"
                 value={player.balances.gamePlayCredits.toLocaleString()}
                 label="Credits"
-              />
-              <BalanceTile
-                emoji="💵"
-                value={formatCents(player.balances.cashCents)}
-                label="Cash"
               />
             </div>
 

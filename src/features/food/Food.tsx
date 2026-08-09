@@ -19,9 +19,12 @@ export default function Food() {
   const navigate = useNavigate();
   const { ordering } = usePos();
   const { menu, error, retry } = useMenu();
-  if (!ordering) return <Navigate to="/" replace />;
   const cart = useCart();
   const [selected, setSelected] = useState<MenuItem | null>(null);
+  // All hooks must run before this conditional return — otherwise a venue
+  // switch that flips `ordering` (null ⇄ set) changes the hook count between
+  // renders and React tears the screen down mid-mount (Rules of Hooks).
+  if (!ordering) return <Navigate to="/" replace />;
 
   const count = cartCount(cart);
   const subtotal = menu && cart.length > 0 ? orderTotals(menu, cart).subtotalCents : 0;
