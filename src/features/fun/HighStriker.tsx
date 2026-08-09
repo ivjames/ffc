@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
-import { playStroke, playCup, playUndo, playDing, playLand, playFanfare } from '../../lib/sound';
+import { playStroke, playSoClose, playUndo, playDing, playLand, playFanfare } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
 import {
   TWO_PI,
@@ -555,12 +555,18 @@ export default function HighStriker() {
             fx.shake = Math.max(fx.shake, 2 + gs.power * 3);
           }
         } else if (!gs.settledAt) {
+          // Closed-form ballistic step (position uses the mid-step velocity) —
+          // exact for constant gravity at any frame rate. Plain Euler falls
+          // ~v·dt/2 short of the true apex, which at 60fps is more than the
+          // perfect swing's headroom above the bell.
+          gs.puckY += (gs.vy - 0.5 * GRAV * dt) * dt;
           gs.vy -= GRAV * dt;
-          gs.puckY += gs.vy * dt;
           pushTrail(fx.trail, W / 2, REST_Y - gs.puckY, 12);
 
           // Bell contact — only a perfect 100 gets launch energy to reach it.
-          if (!gs.bellHit && gs.puckY >= RISE_MAX) {
+          // The score-100 apex fallback keeps the launch code's guarantee even
+          // if the sampled positions straddle the bell line mid-frame.
+          if (!gs.bellHit && (gs.puckY >= RISE_MAX || (gs.score >= 100 && gs.vy <= 0))) {
             gs.puckY = RISE_MAX;
             gs.vy = Math.min(-0.22, -Math.abs(gs.vy)); // knocked back down
             gs.bellHit = true;
@@ -594,7 +600,7 @@ export default function HighStriker() {
             if (gs.score >= 90) {
               spawnFloater(fx.floaters, W / 2, ay + 16, 'SO CLOSE!', '#fbbf24', { size: 16, life: 1000 });
               fx.shake = Math.max(fx.shake, 4);
-              playCup();
+              playSoClose();
             } else if (gs.score >= 50) {
               spawnFloater(fx.floaters, W / 2, ay + 16, z.label, z.color, { size: 14, life: 900 });
               playDing();
