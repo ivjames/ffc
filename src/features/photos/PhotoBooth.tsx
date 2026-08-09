@@ -203,10 +203,62 @@ type Editor = {
 // sticker draws at the right aspect. Missing entry -> a 1:1 fallback.
 type SvgMeta = Map<string, { width: number; height: number }>;
 
+// Watermark placement: its larger dimension is this fraction of the photo
+// width, inset this fraction from the chosen corner.
+const WM_FRAC = 0.18;
+const WM_MARGIN = 0.04;
+
+// Thrown by the export when a FORCED watermark can't be composited (its image
+// failed to load) — so a photo never goes out missing the venue's branding.
+const BRANDING_UNAVAILABLE = 'BRANDING_UNAVAILABLE';
+const BRANDING_PENDING_MSG =
+  "Can't confirm this venue's branding yet — check your connection and try again.";
+const BRANDING_FAIL_MSG =
+  "Couldn't apply the venue's branding — reconnect and try again.";
+
+// Durable cache of a venue's asset config, so the forced-watermark requirement
+// is known even offline / before the network resolves — treating an unreachable
+// list as "no watermark" would silently drop branding.
+const VENUE_CACHE_PREFIX = 'ffc:venueStickers:';
+function readVenueCache(locId: string): VenueSticker[] | null {
+  try {
+    const raw = localStorage.getItem(VENUE_CACHE_PREFIX + locId);
+    return raw ? (JSON.parse(raw) as VenueSticker[]) : null;
+  } catch {
+    return null;
+  }
+}
+function writeVenueCache(locId: string, list: VenueSticker[]): void {
+  try {
+    localStorage.setItem(VENUE_CACHE_PREFIX + locId, JSON.stringify(list));
+  } catch {
+    // Storage full / unavailable — the network path still gates export.
+  }
+}
+
+// Full-photo frame + forced corner watermark(s) composited on top of stickers.
+type Overlays = {
+  frameId: string | null;
+  watermarks: VenueSticker[];
+};
+
+// A watermark occupies a WM_FRAC-of-width SQUARE slot inset WM_MARGIN from the
+// chosen corner; the SVG is contained + centered within that slot. Preview and
+// export both use this, so what's shown is what bakes. Returns the slot's
+// top-left in photo pixels.
+function watermarkSlot(corner: string, w: number, h: number) {
+  const slot = WM_FRAC * w;
+  const m = WM_MARGIN * w;
+  const x = corner[1] === 'l' ? m : w - m - slot;
+  const y = corner[0] === 't' ? m : h - m - slot;
+  return { x, y, slot };
+}
+
 async function flattenToJpeg(
   editor: Editor,
   stickers: Sticker[],
   svgMeta: SvgMeta,
+  overlays: Overlays,
 ): Promise<Blob> {
   const { img } = editor;
   const s = Math.min(1, EXPORT_MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
@@ -249,6 +301,31 @@ async function flattenToJpeg(
     }
     ctx.restore();
   }
+
+  // Frame: a full-bleed overlay stretched edge-to-edge, ON TOP of the stickers.
+  if (overlays.frameId) {
+    const frame = await loadSvgImage(overlays.frameId);
+    if (frame) ctx.drawImage(frame, 0, 0, w, h);
+  }
+
+  // Watermark(s): forced venue branding, each pinned to its corner at a fixed
+  // size — drawn last so nothing covers the brand.
+  for (const wm of overlays.watermarks) {
+    const img = await loadSvgImage(wm.id);
+    // A forced watermark that won't load must NOT be silently dropped — abort
+    // the export so the photo never goes out missing the venue's branding.
+    if (!img) throw new Error(BRANDING_UNAVAILABLE);
+    const { x, y, slot } = watermarkSlot(wm.corner, w, h);
+    const aw = wm.width > 0 ? wm.width : 100;
+    const ah = wm.height > 0 ? wm.height : 100;
+    const fit = slot / Math.max(aw, ah); // contain within the square slot
+    const dw = aw * fit;
+    const dh = ah * fit;
+    // Center the contained mark within the slot (matches the preview's
+    // object-contain), so preview and export line up.
+    ctx.drawImage(img, x + (slot - dw) / 2, y + (slot - dh) / 2, dw, dh);
+  }
+
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('Could not save the photo'))),
@@ -283,14 +360,24 @@ export default function PhotoBooth() {
   const [editorError, setEditorError] = useState<string | null>(null);
   const nextStickerId = useRef(1);
 
-  // Venue SVG stickers for the current location. In the editor they render as
-  // crisp vector <img>s directly; only the export rasterizes them (at export
-  // resolution), so no pre-raster/tick bookkeeping is needed here.
+  // Venue SVG assets for the current location, split by kind. In the editor
+  // they render as crisp vector <img>s directly; only the export rasterizes
+  // them (at export resolution), so no pre-raster bookkeeping is needed here.
   const [venueStickers, setVenueStickers] = useState<VenueSticker[]>([]);
+  const stickerSheet = useMemo(() => venueStickers.filter((s) => s.kind === 'sticker'), [venueStickers]);
+  const frames = useMemo(() => venueStickers.filter((s) => s.kind === 'frame'), [venueStickers]);
+  const watermarks = useMemo(() => venueStickers.filter((s) => s.kind === 'watermark'), [venueStickers]);
   const svgMeta = useMemo<SvgMeta>(
     () => new Map(venueStickers.map((s) => [s.id, { width: s.width, height: s.height }])),
     [venueStickers],
   );
+  // The selected full-photo frame (null = none). The forced watermark isn't
+  // state — it's always the venue's, applied automatically.
+  const [frameId, setFrameId] = useState<string | null>(null);
+  // Whether the venue's asset config is KNOWN (from network or durable cache).
+  // Export is gated on this so a forced watermark is never silently skipped
+  // because the list hadn't loaded. No venue (locationId null) counts as known.
+  const [venueReady, setVenueReady] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   // The photo box's rendered width, for sizing sticker previews in px.
@@ -329,20 +416,37 @@ export default function PhotoBooth() {
     void refreshGallery();
   }, []);
 
-  // The venue's sticker sheet for the current location — refreshed when the
-  // player switches venues. Best-effort: the built-in emoji always work.
+  // The venue's asset config for the current location. Seed from the durable
+  // cache immediately (so the forced-watermark requirement is known even
+  // offline), then refresh from the network. `venueReady` is true once we have
+  // a config from either source; only a first-ever visit that can't reach the
+  // server stays not-ready, which blocks export rather than dropping branding.
   useEffect(() => {
     if (!locationId) {
       setVenueStickers([]);
+      setVenueReady(true); // no venue -> nothing is forced
       return;
     }
     let cancelled = false;
+    const cached = readVenueCache(locationId);
+    if (cached) {
+      setVenueStickers(cached);
+      setVenueReady(true);
+    } else {
+      setVenueStickers([]);
+      setVenueReady(false);
+    }
     void fetchVenueStickers(locationId).then(
       (list) => {
-        if (!cancelled) setVenueStickers(list);
+        if (cancelled) return;
+        setVenueStickers(list);
+        writeVenueCache(locationId, list);
+        setVenueReady(true);
       },
       () => {
-        if (!cancelled) setVenueStickers([]);
+        // Keep the cached config if we had one; otherwise we still don't know
+        // this venue's requirements, so leave venueReady false (export blocked).
+        if (!cancelled && !cached) setVenueReady(false);
       },
     );
     return () => {
@@ -350,14 +454,17 @@ export default function PhotoBooth() {
     };
   }, [locationId]);
 
-  // Warm the export cache: decode each placed SVG's HTMLImageElement now (also
-  // covers reopening a draft), so a Save/Share right after placing doesn't wait
-  // on a load. The editor <img>s render regardless; this is just a head start.
+  // Warm the export cache: decode the HTMLImageElement for each placed SVG
+  // sticker, the selected frame, and the forced watermark(s) now (also covers
+  // reopening a draft), so a Save/Share right after doesn't wait on a load. The
+  // editor <img>s render regardless; this is just a head start.
   useEffect(() => {
     for (const st of stickers) {
       if (st.svgId) void loadSvgImage(st.svgId);
     }
-  }, [stickers]);
+    if (frameId) void loadSvgImage(frameId);
+    for (const wm of watermarks) void loadSvgImage(wm.id);
+  }, [stickers, frameId, watermarks]);
 
   // Track the photo box's width (rotation, window resize) while editing.
   useEffect(() => {
@@ -390,6 +497,7 @@ export default function PhotoBooth() {
       const img = await loadImage(base);
       nextStickerId.current = 1;
       setStickers([]);
+      setFrameId(null);
       setSelectedId(null);
       setEditorError(null);
       setEditor({ url: URL.createObjectURL(base), img, base, editingId: null });
@@ -410,6 +518,7 @@ export default function PhotoBooth() {
         draft.stickers.reduce((m, s) => Math.max(m, s.id), 0) + 1;
       setViewing(null);
       setStickers(draft.stickers);
+      setFrameId(draft.frameId ?? null);
       setSelectedId(null);
       setEditorError(null);
       setEditor({
@@ -496,16 +605,26 @@ export default function PhotoBooth() {
   function closeEditor() {
     setEditor(null);
     setStickers([]);
+    setFrameId(null);
     setSelectedId(null);
     setEditorError(null);
   }
 
+  // The overlays applied at export: the chosen frame + the venue's forced
+  // watermark(s). Reused by Save and Share so both bake the same result.
+  const overlays: Overlays = { frameId, watermarks };
+
   async function onSave() {
     if (!editor || saving) return;
+    // Don't save until the venue's forced-branding config is known.
+    if (!venueReady) {
+      setEditorError(BRANDING_PENDING_MSG);
+      return;
+    }
     setSaving(true);
     setEditorError(null);
     try {
-      const blob = await flattenToJpeg(editor, stickers, svgMeta);
+      const blob = await flattenToJpeg(editor, stickers, svgMeta, overlays);
       const imageBase64 = await blobToBase64(blob);
 
       // Re-saving an edit overwrites the same row in place (same id, same
@@ -534,13 +653,19 @@ export default function PhotoBooth() {
         id: photoId,
         base: editor.base,
         stickers,
+        frameId,
         updatedAt: Date.now(),
       }).catch(() => {});
 
       closeEditor();
       void refreshGallery();
     } catch (err) {
-      setEditorError(err instanceof Error ? err.message : 'Save failed — try again.');
+      const msg = err instanceof Error && err.message === BRANDING_UNAVAILABLE
+        ? BRANDING_FAIL_MSG
+        : err instanceof Error
+          ? err.message
+          : 'Save failed — try again.';
+      setEditorError(msg);
     } finally {
       setSaving(false);
     }
@@ -548,12 +673,20 @@ export default function PhotoBooth() {
 
   async function onShareFromEditor() {
     if (!editor || saving) return;
+    if (!venueReady) {
+      setEditorError(BRANDING_PENDING_MSG);
+      return;
+    }
     setSaving(true);
     setEditorError(null);
     try {
-      await shareEditedPhoto(await flattenToJpeg(editor, stickers, svgMeta));
-    } catch {
-      setEditorError("Couldn't share that — try saving it instead.");
+      await shareEditedPhoto(await flattenToJpeg(editor, stickers, svgMeta, overlays));
+    } catch (err) {
+      setEditorError(
+        err instanceof Error && err.message === BRANDING_UNAVAILABLE
+          ? BRANDING_FAIL_MSG
+          : "Couldn't share that — try saving it instead.",
+      );
     } finally {
       setSaving(false);
     }
@@ -695,6 +828,36 @@ export default function PhotoBooth() {
                 </div>
               );
             })}
+
+            {/* Full-photo frame overlay — above stickers, non-interactive.
+                object-fill stretches it edge-to-edge, matching the export. */}
+            {frameId && (
+              <img
+                src={venueStickerUrl(frameId)}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute inset-0 h-full w-full object-fill"
+              />
+            )}
+
+            {/* Forced venue watermark(s), pinned to their corner — topmost,
+                non-interactive. Sized/inset off the box WIDTH (px), exactly as
+                the export sizes off the photo width, so preview == save. */}
+            {watermarks.map((wm) => (
+              <img
+                key={wm.id}
+                src={venueStickerUrl(wm.id)}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute object-contain"
+                style={{
+                  width: `${WM_FRAC * boxW}px`,
+                  height: `${WM_FRAC * boxW}px`,
+                  [wm.corner[0] === 't' ? 'top' : 'bottom']: `${WM_MARGIN * boxW}px`,
+                  [wm.corner[1] === 'l' ? 'left' : 'right']: `${WM_MARGIN * boxW}px`,
+                }}
+              />
+            ))}
           </div>
 
           {/* Adjust the selected sticker — or the hint when none is. */}
@@ -714,10 +877,47 @@ export default function PhotoBooth() {
             )}
           </div>
 
-          {/* The sticker sheet — this venue's SVG stickers first (when any),
-              then the built-in emoji. */}
+          {/* Frames — full-photo overlays, pick one (tap again to clear). */}
+          {frames.length > 0 && (
+            <>
+              <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-fairway-400">
+                Frames
+              </div>
+              <div className="surface-sunk mt-1 flex gap-1 overflow-x-auto rounded-2xl p-2">
+                <button
+                  onClick={() => setFrameId(null)}
+                  className={`flex h-11 shrink-0 items-center justify-center rounded-xl px-3 text-xs font-semibold ${
+                    frameId === null ? 'btn-accent text-fairway-50' : 'key text-fairway-100'
+                  }`}
+                >
+                  None
+                </button>
+                {frames.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFrameId((cur) => (cur === f.id ? null : f.id))}
+                    aria-label={`Frame ${f.label ?? ''}`}
+                    title={f.label ?? undefined}
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl p-1 ${
+                      frameId === f.id ? 'ring-2 ring-fairway-300/90' : ''
+                    }`}
+                  >
+                    <img
+                      src={venueStickerUrl(f.id)}
+                      alt=""
+                      draggable={false}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* The sticker sheet — this venue's draggable stickers first (when
+              any), then the built-in emoji. */}
           <div className="surface-sunk mt-2 flex gap-1 overflow-x-auto rounded-2xl p-2">
-            {venueStickers.map((s) => (
+            {stickerSheet.map((s) => (
               <button
                 key={s.id}
                 onClick={() => addSticker({ svgId: s.id })}
@@ -746,6 +946,12 @@ export default function PhotoBooth() {
             ))}
           </div>
 
+          {watermarks.length > 0 && (
+            <p className="mt-2 text-center text-[11px] text-fairway-100/50">
+              This venue adds its branding to saved photos.
+            </p>
+          )}
+
           {editorError && (
             <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
               {editorError}
@@ -753,16 +959,25 @@ export default function PhotoBooth() {
           )}
 
           <div className="mt-4 space-y-2">
-            <Button onClick={() => void onSave()} disabled={saving} sound="cup">
+            <Button onClick={() => void onSave()} disabled={saving || !venueReady} sound="cup">
               {saving
                 ? 'Saving…'
                 : editor.editingId
                   ? '✅ Save changes'
                   : '✅ Save to camera roll'}
             </Button>
-            <Button variant="ghost" onClick={() => void onShareFromEditor()} disabled={saving}>
+            <Button
+              variant="ghost"
+              onClick={() => void onShareFromEditor()}
+              disabled={saving || !venueReady}
+            >
               📤 Share
             </Button>
+            {!venueReady && (
+              <p className="text-center text-[11px] text-fairway-100/50">
+                Connecting to this venue to apply its branding…
+              </p>
+            )}
             <Button variant="ghost" onClick={closeEditor} disabled={saving}>
               {editor.editingId ? '✕ Cancel' : '✕ Discard'}
             </Button>

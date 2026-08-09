@@ -175,13 +175,17 @@ export type AdminBoothPhoto = {
   createdAt: string;
 };
 
-// A venue-uploaded SVG sticker for the photo booth (Master Control → Booth
-// stickers). width/height are the SVG's intrinsic box (aspect source).
+// A venue-uploaded SVG asset for the photo booth (Master Control → Booth
+// stickers). `kind` sets how it's applied; `corner` places a watermark.
+export type AdminStickerKind = 'sticker' | 'frame' | 'watermark';
+export type AdminStickerCorner = 'tl' | 'tr' | 'bl' | 'br';
 export type AdminVenueSticker = {
   id: string;
   label: string | null;
   width: number;
   height: number;
+  kind: AdminStickerKind;
+  corner: AdminStickerCorner;
   sortOrder: number;
   active: boolean;
   createdAt: string;
@@ -394,8 +398,13 @@ export const api = {
   // are public branded assets, so no auth header is needed for the thumbnail.
   listBoothStickers: (locationId: string) =>
     req<AdminVenueSticker[]>('GET', `/booth-stickers?location=${encodeURIComponent(locationId)}`),
-  uploadBoothSticker: (body: { locationId: string; label?: string; svg: string }) =>
-    req<AdminVenueSticker>('POST', '/booth-stickers', body),
+  uploadBoothSticker: (body: {
+    locationId: string;
+    label?: string;
+    svg: string;
+    kind?: AdminStickerKind;
+    corner?: AdminStickerCorner;
+  }) => req<AdminVenueSticker>('POST', '/booth-stickers', body),
   removeBoothSticker: (id: string) => req<{ ok: true }>('POST', `/booth-stickers/${id}/remove`),
 
   fetchBoothPhotoImage: async (id: string) => {

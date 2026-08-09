@@ -774,10 +774,20 @@ create table if not exists booth_sticker (
   label       text,                     -- optional admin label / alt text
   width       int  not null default 100, -- intrinsic px box (aspect ratio source)
   height      int  not null default 100,
+  -- What the asset is, which drives how the booth applies it:
+  --   'sticker'   a draggable decoration (default)
+  --   'frame'     a full-photo overlay (proscenium/border), one at a time
+  --   'watermark' venue branding forced into a corner of every photo
+  kind        text not null default 'sticker',
+  -- Corner for a watermark: 'tl' | 'tr' | 'bl' | 'br' (ignored for other kinds).
+  corner      text not null default 'tr',
   sort_order  int  not null default 0,
   active      boolean not null default true,
   created_at  timestamptz not null default now()
 );
+-- For databases created before kinds existed: add them idempotently.
+alter table booth_sticker add column if not exists kind   text not null default 'sticker';
+alter table booth_sticker add column if not exists corner text not null default 'tr';
 create index if not exists booth_sticker_location_idx
   on booth_sticker (location_id, sort_order) where active;
 

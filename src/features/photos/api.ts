@@ -30,13 +30,20 @@ export type BoothPhoto = {
   createdAt: string;
 };
 
-// A venue-uploaded SVG sticker offered in the booth's sticker sheet at that
-// location. width/height are the SVG's intrinsic box, for aspect sizing.
+// A venue-uploaded SVG asset for the booth. `kind` decides how it's applied:
+//  - 'sticker'   a draggable decoration (the sticker sheet)
+//  - 'frame'     a full-photo overlay, one at a time
+//  - 'watermark' venue branding forced into `corner` of every photo
+// width/height are the SVG's intrinsic box, for aspect sizing.
+export type StickerKind = 'sticker' | 'frame' | 'watermark';
+export type StickerCorner = 'tl' | 'tr' | 'bl' | 'br';
 export type VenueSticker = {
   id: string;
   label: string | null;
   width: number;
   height: number;
+  kind: StickerKind;
+  corner: StickerCorner;
 };
 
 /** The current venue's sticker sheet. Public (branded decorations, not user
