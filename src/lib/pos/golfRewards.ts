@@ -1,14 +1,18 @@
 import { getLinkedPlayerId } from '../rewardsCard';
 import { posFor } from './index';
-import type { GameAwardOutcome } from './gameRewards';
-import type { RewardResult } from './types';
+import { submitAward, type GameAwardOutcome } from './gameRewards';
 
-// Golf round achievements credit the linked card as loyalty tickets — the same
-// lane as mini-game rewards (loyalty.rewardTickets), instead of a counter code.
-// This is the client side of the "one lane, on the card" model: the server
-// still computes achievements (server/lib/rewards.js) and its codes remain the
-// fallback for venues without the loyalty add-on, but where the card exists the
-// app credits it directly. Achievement keys mirror server/lib/rewards.js.
+// Golf round achievements credit the linked card as tickets — the same lane as
+// mini-game rewards, and through the same server award proxy (the browser never
+// credits the POS directly): the server caps the payout, records the issuance,
+// and holds the vendor credentials. The server still computes achievements
+// (server/lib/rewards.js) and its counter codes remain the fallback for venues
+// without the loyalty add-on. Achievement keys mirror server/lib/rewards.js.
+
+// Every golf achievement reports under one server reward source (registered in
+// server/lib/gameRewards.js OTHER_REWARD_SOURCES); per-achievement idempotency
+// comes from the session id (golfRewardKey).
+const GOLF_SOURCE = 'golf';
 
 // Tickets per achievement, on the same payout scale as the games. Tunable.
 export const GOLF_ACHIEVEMENT_TICKETS: Record<string, number> = {
@@ -44,10 +48,9 @@ export function golfRewardKey(clientId: string, playerIndex: number, achievement
 }
 
 /** Credit one round achievement to the linked card, if the ROUND'S venue sells
- *  the gameRewards add-on and a card is linked. Mirrors awardGameTickets: same
- *  gating, same idempotent injection endpoint. Resolves the POS from the round's
- *  own `locationId` (not the mutable current location), so switching venues
- *  after a round doesn't route its reward through the wrong integration. */
+ *  the gameRewards add-on and a card is linked. Gates on the round's own
+ *  `locationId` (not the mutable current location) and submits through the
+ *  server award proxy, which caps + records + credits the vendor. */
 export async function awardGolfReward(opts: {
   locationId: string;
   achievement: string;
@@ -60,17 +63,11 @@ export async function awardGolfReward(opts: {
   if (!playerId) return { status: 'no-card' };
   const tickets = golfTicketsFor(opts.achievement);
   if (!Number.isInteger(tickets) || tickets < 1) return { status: 'unavailable' };
-  // gameRewards implies loyalty is resolvable (posFor guarantees it).
-  const res: RewardResult = await capabilities.loyalty!.rewardTickets({
+  return submitAward({
+    locationId: opts.locationId,
     playerId,
+    game: GOLF_SOURCE,
     tickets,
-    source: `golf:${opts.achievement}`,
-    idempotencyKey: golfRewardKey(opts.clientId, opts.playerIndex, opts.achievement),
+    sessionId: golfRewardKey(opts.clientId, opts.playerIndex, opts.achievement),
   });
-  if ('error' in res) return { status: 'error', error: res.error };
-  return {
-    status: 'awarded',
-    tickets: res.ticketsAwarded,
-    newTicketBalance: res.newTicketBalance,
-  };
 }

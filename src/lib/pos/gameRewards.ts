@@ -60,29 +60,23 @@ export type GameAwardOutcome =
   | { status: 'daily-cap'; dailyCap: number }
   | { status: 'error'; error: string };
 
-/** Credit a finished game's tickets to the linked card, if this venue sells
- *  that. `sessionId` must be stable for one played round (new id per
- *  restart) — it is the idempotency key. */
-export async function awardGameTickets(opts: {
+/** POST an award to OUR server proxy — the trust boundary that validates the
+ *  payout against the per-game/per-card caps, records it in the issuance
+ *  rollup, and credits the vendor with server-held credentials. Shared by the
+ *  game and mini-golf award paths; render the returned count, not the request.
+ *  `sessionId` is the idempotency key (stable per award event). */
+export async function submitAward(body: {
+  locationId: string;
+  playerId: string;
   game: string;
   tickets: number;
   sessionId: string;
 }): Promise<GameAwardOutcome> {
-  const locationId = getCurrentLocationId();
-  const capabilities = posFor(locationId);
-  const plan = resolveGameAward({
-    capabilities,
-    playerId: getLinkedPlayerId(),
-    ...opts,
-  });
-  if ('skip' in plan) {
-    return plan.skip === 'no-card' ? { status: 'no-card' } : { status: 'unavailable' };
-  }
   try {
     const res = await fetch(apiUrl('/api/game-rewards/award'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ locationId, ...plan.request }),
+      body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok !== true) {
@@ -101,4 +95,25 @@ export async function awardGameTickets(opts: {
   } catch {
     return { status: 'error', error: 'network error' };
   }
+}
+
+/** Credit a finished game's tickets to the linked card, if this venue sells
+ *  that. `sessionId` must be stable for one played round (new id per
+ *  restart) — it is the idempotency key. */
+export async function awardGameTickets(opts: {
+  game: string;
+  tickets: number;
+  sessionId: string;
+}): Promise<GameAwardOutcome> {
+  const locationId = getCurrentLocationId();
+  const capabilities = posFor(locationId);
+  const plan = resolveGameAward({
+    capabilities,
+    playerId: getLinkedPlayerId(),
+    ...opts,
+  });
+  if ('skip' in plan) {
+    return plan.skip === 'no-card' ? { status: 'no-card' } : { status: 'unavailable' };
+  }
+  return submitAward({ locationId, ...plan.request });
 }
