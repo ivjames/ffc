@@ -91,15 +91,21 @@ export function getPlacedOrders(): PlacedOrder[] {
 }
 
 export function recordOrder(order: PlacedOrder): void {
-  commit(withOrder(orders, order));
+  // Re-read the persisted list first: another tab may have added/removed an
+  // order since this tab loaded its snapshot, and commit overwrites the whole
+  // localStorage array — so mutating the stale in-memory copy would clobber a
+  // sibling tab's write.
+  commit(withOrder(readStored(), order));
 }
 
 /** Forget a remembered order — call this when the server reports it's
  *  genuinely gone (a 404), e.g. the in-memory mock backend was redeployed and
  *  lost it. Without this the on-device "in the kitchen" flag would linger for
- *  the full ACTIVE_WINDOW_MS pointing at an order the server can't find. */
+ *  the full ACTIVE_WINDOW_MS pointing at an order the server can't find.
+ *  Re-reads storage first (see recordOrder) so this only drops THIS id and
+ *  never wipes an order another tab recorded after this tab loaded. */
 export function forgetOrder(id: string): void {
-  commit(withoutOrder(orders, id));
+  commit(withoutOrder(readStored(), id));
 }
 
 function subscribe(cb: () => void): () => void {
