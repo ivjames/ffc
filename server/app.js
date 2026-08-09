@@ -12,6 +12,7 @@ import { router as seedRouter } from "./routes/seed.js";
 import { router as locationsRouter } from "./routes/locations.js";
 import { router as contentRouter } from "./routes/content.js";
 import { router as huntRouter } from "./routes/hunt.js";
+import { router as photosRouter } from "./routes/photos.js";
 import { router as adminRouter } from "./routes/admin/index.js";
 import { router as authRouter } from "./routes/auth.js";
 import { router as teamsRouter } from "./routes/teams.js";
@@ -39,6 +40,9 @@ app.use((req, res, next) => {
   // would let the slash form fall through to the 256kb cap and 413 the upload.
   const path = req.path.replace(/\/+$/, "");
   if (path === "/api/hunt/verify") return next();
+  // Photo-booth uploads (POST /api/photos) carry base64 images too; the
+  // router installs its own 16mb parser.
+  if (path === "/api/photos") return next();
   // Same deal for the (temporary) admin vision bake-off — base64 photos on
   // both /describe and /prescan; the router carries its own 16mb parser.
   if (path.startsWith("/api/admin/vision-bakeoff/")) return next();
@@ -91,6 +95,9 @@ app.use("/api/admin", adminRouter);
 // The hunt's /verify endpoint installs its own larger body parser for base64
 // images; the rest of the app keeps the 256kb global cap above.
 app.use("/api/hunt", huntRouter);
+// Photo booth — player photo sharing + stickers, no AI anywhere in the
+// pipeline. Its upload endpoint also carries its own 16mb parser (see above).
+app.use("/api/photos", photosRouter);
 
 // 404 fallback for unknown /api routes.
 app.use((req, res) => {

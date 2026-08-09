@@ -665,3 +665,32 @@ create table if not exists hunt_item_image (
   created_at  timestamptz not null default now()
 );
 create index if not exists hunt_item_image_item_idx on hunt_item_image (item_id);
+
+-- ---------------------------------------------------------------------------
+-- Photo booth (player photo sharing + stickers). See routes/photos.js.
+-- A deliberately AI-free pipeline: unlike hunt photos, booth photos are never
+-- sent to any model provider — decorating happens on the phone (stickers are
+-- flattened into the JPEG before upload) and the server only stores bytes.
+-- Access control is hunt-style capability keys: booth_id is an unguessable
+-- per-device id minted by the client; whoever holds it (the group's phone)
+-- sees that gallery, and nobody else can browse or enumerate. With no AI
+-- moderation pass, the operator review surface (routes/admin/boothPhotos.js)
+-- and the retention sweep (lib/boothPhotoRetention.js,
+-- PHOTO_BOOTH_RETENTION_DAYS) carry the whole safety/privacy load.
+-- ---------------------------------------------------------------------------
+create table if not exists booth_photo (
+  id          uuid primary key default gen_random_uuid(),
+  booth_id    text not null,            -- unguessable per-device booth key (the capability)
+  location_id uuid references location(id) on delete set null,
+                                        -- venue at upload time; scopes the admin review
+                                        -- surface (null = super_admin-only, hunt precedent)
+  photo_path  text not null,            -- stored image path on the droplet disk
+  media_type  text not null,            -- image/jpeg | png | webp | gif
+  bytes       int,                      -- stored file size; backs the global disk
+                                        -- budget (PHOTO_BOOTH_DISK_BUDGET_MB)
+  created_at  timestamptz not null default now()
+);
+-- For databases created before `bytes` existed: add it idempotently.
+alter table booth_photo add column if not exists bytes int;
+create index if not exists booth_photo_booth_idx   on booth_photo (booth_id, created_at desc);
+create index if not exists booth_photo_created_idx on booth_photo (created_at);

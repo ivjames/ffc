@@ -23,8 +23,15 @@ function PhotoThumb({ id, alt }: { id: string; alt: string }) {
     let cancelled = false;
     api.fetchPhotoImage(id).then(
       (blob) => {
-        objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) setUrl(objectUrl);
+        // Resolved after unmount: cleanup already ran, so revoke right here —
+        // assigning objectUrl instead would leak the blob for the SPA's life.
+        const u = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(u);
+          return;
+        }
+        objectUrl = u;
+        setUrl(u);
       },
       () => {
         if (!cancelled) setFailed(true);

@@ -12,6 +12,7 @@ import Privacy from './features/privacy/Privacy';
 import TvLeaderboard from './features/tv/TvLeaderboard';
 import TvWall from './features/tv/TvWall';
 import Hunt from './features/hunt/Hunt';
+import PhotoBooth from './features/photos/PhotoBooth';
 import PuttGolf from './features/putt/PuttGolf';
 import FunZone from './features/fun/FunZone';
 import FunFacts from './features/fun/FunFacts';
@@ -80,6 +81,8 @@ export default function App() {
         <Route path="/tv/wall" element={<TvWall />} />
         {/* P3 — AI scavenger hunt. */}
         <Route path="/hunt" element={<Hunt />} />
+        {/* Photo booth — photo sharing + stickers, no AI in the pipeline. */}
+        <Route path="/photos" element={<PhotoBooth />} />
         {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
         <Route path="/putt" element={<PuttGolf />} />
         {/* §12 "While You Wait" content — fun facts, trivia, challenge spinner. */}

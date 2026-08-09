@@ -236,6 +236,9 @@ export default function Home() {
           <Button variant="ghost" onClick={() => navigate('/fun')}>
             🎡 While You Wait
           </Button>
+          <Button variant="ghost" onClick={() => navigate('/photos')}>
+            📸 Photo Booth
+          </Button>
           {/* Native in-app ordering + rewards — POS-integration add-ons,
               shown only when this venue's Master Control config enables the
               capability (src/lib/pos; DEV_MODE enables both against the local
