@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
-import { playTick, playPinClack, playScore, playCup, playUndo, playFanfare } from '../../lib/sound';
+import { playTick, playPinClack, playScore, playCup, playUndo, playFanfare, playDing } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
 import {
   TWO_PI,
@@ -46,7 +46,8 @@ const WALL_L = 16; // inner faces of the side rails
 const WALL_R = W - 16;
 const GUT_Y0 = 250; // below this y the side walls open into loss gutters
 
-const TOTAL_COINS = 20;
+const STARTING_COINS = 20;
+const TOPUP_COINS = 10; // "+ more coins" batch size — free and unlimited for now
 const GOLD_ODDS = 1 / 6; // dropped coins only; pays ×5
 const FIXED = 1000 / 120; // physics substep (ms)
 const DT = FIXED / 1000;
@@ -54,7 +55,6 @@ const FR_PER_S = 0.12; // per-second velocity multiplier (tray friction)
 const OVER_MS = 340; // payout tip-over flip animation
 const LOST_MS = 260; // gutter drop-in animation
 const COMBO_MS = 1000; // payouts this close together escalate as one stroke
-const SETTLE_MS = 2500; // quiet time after the last coin before 'done'
 const CLINK_GAP_MS = 85; // min gap between clink sounds (no machine-gunning)
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
@@ -90,14 +90,15 @@ type GS = {
   phase: Phase;
   coins: Coin[];
   coinsLeft: number;
+  coinsDropped: number; // cumulative — the "buy more" batches can outrun a fixed budget
   score: number;
   simTime: number; // accumulated fixed-step time; freezes while hidden for free
   nextId: number;
   lastClinkSim: number;
   lastPayoutSim: number;
-  lastDropSim: number;
   comboCount: number; // payouts inside the current COMBO_MS window
   comboPay: number; // their summed value, for the "+4!!" popup
+  endRequested: boolean; // player tapped Cash Out — end once nothing's mid-animation
 };
 
 /** The randomized jam: never the same pile twice, and never a neat spaced
@@ -170,15 +171,16 @@ function freshGS(): GS {
   return {
     phase: 'ready',
     coins,
-    coinsLeft: TOTAL_COINS,
+    coinsLeft: STARTING_COINS,
+    coinsDropped: 0,
     score: 0,
     simTime: 0,
     nextId: coins.length,
     lastClinkSim: -9999,
     lastPayoutSim: 0,
-    lastDropSim: 0,
     comboCount: 0,
     comboPay: 0,
+    endRequested: false,
   };
 }
 
@@ -540,8 +542,10 @@ export default function CoinPusher() {
   const fxRef = useRef<FX>(freshFX());
 
   const [phase, setPhase] = useState<Phase>('ready');
-  const [coinsLeft, setCoinsLeft] = useState(TOTAL_COINS);
+  const [coinsLeft, setCoinsLeft] = useState(STARTING_COINS);
   const [score, setScore] = useState(0);
+  const [coinsDropped, setCoinsDropped] = useState(0); // for the done screen
+  const [ending, setEnding] = useState(false); // cash-out tapped, waiting to settle
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -662,12 +666,13 @@ export default function CoinPusher() {
         for (const l of ev.lost) spawnBurst(fx.particles, l.x, l.y, 6, 90, '#475569');
       }
 
-      // —— End: all coins spent and the tray has gone quiet ——
+      // —— End: player cashed out and nothing's still mid-animation ——
+      // Coins are free to top up now (no fixed budget), so there's no natural
+      // "ran out" ending anymore — the round only ends when the player says so.
       if (
         gs.phase === 'play' &&
-        gs.coinsLeft === 0 &&
-        !gs.coins.some((c) => c.state === 'drop' || c.state === 'over') &&
-        gs.simTime - Math.max(gs.lastDropSim, gs.lastPayoutSim) > SETTLE_MS
+        gs.endRequested &&
+        !gs.coins.some((c) => c.state === 'drop' || c.state === 'over')
       ) {
         gs.phase = 'done';
         setPhase('done');
@@ -696,7 +701,7 @@ export default function CoinPusher() {
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       const gs = gsRef.current;
-      if (gs.phase !== 'play' || gs.coinsLeft <= 0) return;
+      if (gs.phase !== 'play' || gs.coinsLeft <= 0 || gs.endRequested) return;
       const p = toField(e);
       if (p.y > TAP_MAX) return;
       const x = clamp(p.x, WALL_L + R + 1, WALL_R - R - 1);
@@ -716,12 +721,30 @@ export default function CoinPusher() {
         tipAt: rollTipAt(),
       });
       gs.coinsLeft -= 1;
-      gs.lastDropSim = gs.simTime;
+      gs.coinsDropped += 1;
       setCoinsLeft(gs.coinsLeft);
+      setCoinsDropped(gs.coinsDropped);
       playTick();
     },
     [toField],
   );
+
+  /** Free top-up — unlimited for now (a ticket cost is a later addition). */
+  const buyMore = useCallback(() => {
+    const gs = gsRef.current;
+    if (gs.phase !== 'play' || gs.endRequested) return;
+    gs.coinsLeft += TOPUP_COINS;
+    setCoinsLeft(gs.coinsLeft);
+    playDing();
+  }, []);
+
+  /** Ends the round once whatever's currently mid-flight settles. */
+  const cashOut = useCallback(() => {
+    const gs = gsRef.current;
+    if (gs.phase !== 'play' || gs.endRequested) return;
+    gs.endRequested = true;
+    setEnding(true);
+  }, []);
 
   const start = useCallback(() => {
     const gs = freshGS();
@@ -729,8 +752,10 @@ export default function CoinPusher() {
     gsRef.current = gs;
     fxRef.current = freshFX();
     setPhase('play');
-    setCoinsLeft(TOTAL_COINS);
+    setCoinsLeft(STARTING_COINS);
     setScore(0);
+    setCoinsDropped(0);
+    setEnding(false);
   }, []);
 
   if (phase === 'done') {
@@ -750,7 +775,7 @@ export default function CoinPusher() {
             <span className="text-6xl">🪙</span>
             <div className="text-5xl font-black text-fairway-50">{score}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
-            <p className="text-sm text-fairway-400">paid out from {TOTAL_COINS} coins</p>
+            <p className="text-sm text-fairway-400">paid out from {coinsDropped} coins</p>
           </div>
           <div className="mt-8">
             <Button onClick={start} sound="none">
@@ -765,9 +790,11 @@ export default function CoinPusher() {
   const hint =
     phase === 'ready'
       ? 'Time your drops against the pusher — shove the pile over the glowing edge.'
-      : coinsLeft > 0
-        ? 'Tap the top strip to drop a coin — best just as the pusher pulls back.'
-        : 'Out of coins — watching the last cascade…';
+      : ending
+        ? 'Cashing out — letting the last coin settle…'
+        : coinsLeft > 0
+          ? 'Tap the top strip to drop a coin — best just as the pusher pulls back.'
+          : 'Out of coins — buy more, or cash out to see your payout.';
 
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
@@ -775,12 +802,21 @@ export default function CoinPusher() {
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
         <span className="font-bold text-fairway-50">
           Coins <span className="text-fairway-100">{coinsLeft}</span>
-          <span className="font-normal text-fairway-400"> / {TOTAL_COINS}</span>
         </span>
         <span className="text-fairway-300">
           Payout <span className="font-bold text-amber-300">{score}</span>
         </span>
       </div>
+      {phase === 'play' && (
+        <div className="flex shrink-0 gap-2 px-4 pb-2">
+          <Button variant="ghost" className="flex-1" disabled={ending} sound="none" onClick={buyMore}>
+            🪙 +{TOPUP_COINS} coins
+          </Button>
+          <Button variant="ghost" className="flex-1" disabled={ending} onClick={cashOut}>
+            Cash out
+          </Button>
+        </div>
+      )}
 
       <div className="grid min-h-0 flex-1 place-items-center px-4">
         <canvas
@@ -792,8 +828,8 @@ export default function CoinPusher() {
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
             <span className="text-5xl">🪙</span>
             <p className="text-sm text-fairway-100">
-              Tap the top strip to drop coins behind the pusher and shove the pile over the glowing edge. Gold pays ×5.{' '}
-              {TOTAL_COINS} coins — mind the side gutters.
+              Tap the top strip to drop coins behind the pusher and shove the pile over the glowing edge. Gold pays
+              ×5. Start with {STARTING_COINS} — buy more anytime, there's no limit. Mind the side gutters.
             </p>
             <Button onClick={start}>Start</Button>
           </div>
