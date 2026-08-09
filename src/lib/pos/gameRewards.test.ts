@@ -12,14 +12,14 @@ const base = {
 };
 
 describe('resolveGameAward', () => {
-  it('plans an idempotent award when everything is in place', () => {
+  it('plans an award request when everything is in place', () => {
     const plan = resolveGameAward(base);
     expect(plan).toEqual({
       request: {
         playerId: 'PL-1001',
         tickets: 25,
-        source: 'game:trivia',
-        idempotencyKey: 'game:trivia:abc-123',
+        game: 'trivia',
+        sessionId: 'abc-123',
       },
     });
   });

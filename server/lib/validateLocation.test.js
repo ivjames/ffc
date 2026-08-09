@@ -136,6 +136,47 @@ test("normalizePos keeps gameRewards inside loyalty", () => {
   assert.equal(value.loyalty.gameRewards, false);
 });
 
+test("normalizePos canonicalizes game reward caps", () => {
+  const { value } = normalizePos({
+    loyalty: {
+      vendor: "centeredge",
+      gameRewards: true,
+      gameRewardCaps: { dailyPerCard: 200, perGame: { skeeball: 25, trivia: 40 } },
+    },
+  });
+  assert.deepEqual(value.loyalty.gameRewardCaps, {
+    dailyPerCard: 200,
+    perGame: { skeeball: 25, trivia: 40 },
+  });
+});
+
+test("normalizePos drops all-default caps entirely", () => {
+  const { value } = normalizePos({
+    loyalty: {
+      vendor: "centeredge",
+      gameRewards: true,
+      gameRewardCaps: { dailyPerCard: null, perGame: {} },
+    },
+  });
+  assert.equal(value.loyalty.gameRewardCaps, undefined);
+});
+
+test("normalizePos rejects caps that loosen or misname", () => {
+  const withCaps = (gameRewardCaps, gameRewards = true) =>
+    normalizePos({ loyalty: { vendor: "centeredge", gameRewards, gameRewardCaps } });
+  // caps ride on gameRewards being on
+  assert.match(withCaps({ dailyPerCard: 100 }, false).error, /requires gameRewards/);
+  // per-game caps can only tighten the hard per-round max
+  assert.match(withCaps({ perGame: { skeeball: 101 } }).error, /perGame\.skeeball/);
+  assert.match(withCaps({ perGame: { skeeball: 0 } }).error, /perGame\.skeeball/);
+  // unknown game keys fail loudly instead of silently never applying
+  assert.match(withCaps({ perGame: { clawmachine: 10 } }).error, /unknown game "clawmachine"/);
+  // daily cap bounds
+  assert.match(withCaps({ dailyPerCard: 0 }).error, /dailyPerCard/);
+  assert.match(withCaps({ dailyPerCard: 10_001 }).error, /dailyPerCard/);
+  assert.match(withCaps({ dailyPerCard: 2.5 }).error, /dailyPerCard/);
+});
+
 test("normalizePos validates apiBase as an http(s) URL", () => {
   assert.match(
     normalizePos({ ordering: { vendor: "centeredge", apiBase: "ftp://x" } }).error,

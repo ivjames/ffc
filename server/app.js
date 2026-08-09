@@ -20,6 +20,7 @@ import { router as gamesRouter } from "./routes/games.js";
 import { attachUser } from "./lib/userAuth.js";
 import { router as announcementsRouter } from "./routes/announcements.js";
 import { router as rewardsRouter } from "./routes/rewards.js";
+import { router as gameRewardsRouter } from "./routes/gameRewards.js";
 
 export const app = express();
 
@@ -92,6 +93,9 @@ app.use("/api/teams", teamsRouter);
 app.use("/api/games", gamesRouter);
 app.use("/api/announcements", announcementsRouter);
 app.use("/api/rewards", rewardsRouter);
+// Game ticket awards — the trusted proxy between mini-games and the venue's
+// ticket system (validates payouts, enforces caps, then credits the POS).
+app.use("/api/game-rewards", gameRewardsRouter);
 // Master Control admin surface (token-guarded inside the router).
 app.use("/api/admin", adminRouter);
 // The hunt's /verify endpoint installs its own larger body parser for base64

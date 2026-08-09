@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { api, type Course, type Location } from './api';
+import { api, type Course, type GameRewardsMeta, type Location } from './api';
 import { Button, Card, Field, Input, Banner, Spinner, Pill, useAsync, fmtDateTime } from './ui';
 
 function ParsGrid({ pars, onChange }: { pars: number[]; onChange: (p: number[]) => void }) {
@@ -130,7 +130,73 @@ function AddCourse({ locationId, onAdded }: { locationId: string; onAdded: () =>
   );
 }
 
-function LocationForm({ location, onSaved }: { location: Location; onSaved: () => void }) {
+// Per-game per-round ceilings + the per-card daily cap — the venue's ticket
+// economy guardrails. Values are edited as strings ('' = platform default);
+// only explicit overrides are saved, and the server clamps/validates against
+// the platform hard limits either way.
+function GameCapsEditor({
+  meta,
+  dailyCap,
+  onDailyCap,
+  perGame,
+  onPerGame,
+}: {
+  meta: GameRewardsMeta;
+  dailyCap: string;
+  onDailyCap: (v: string) => void;
+  perGame: Record<string, string>;
+  onPerGame: (v: Record<string, string>) => void;
+}) {
+  return (
+    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+      <div className="mb-1 text-xs font-semibold text-slate-600">Ticket economy caps</div>
+      <p className="mb-2 text-xs text-slate-500">
+        App-earned tickets are free to players, so these caps are what keeps them a perk instead
+        of an economy leak. Blank = platform default. Caps can only tighten the platform limits
+        (max {meta.hardMaxPerRound} tickets per round, daily default{' '}
+        {meta.defaultDailyPerCard.toLocaleString()}).
+      </p>
+      <div className="mb-2 w-56">
+        <Field
+          label="Daily cap per card"
+          hint={`Total app tickets one card can earn per day (1..${meta.maxDailyPerCard.toLocaleString()}).`}
+        >
+          <Input
+            value={dailyCap}
+            onChange={(e) => onDailyCap(e.target.value)}
+            placeholder={String(meta.defaultDailyPerCard)}
+            inputMode="numeric"
+          />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3">
+        {meta.games.map((g) => (
+          <label key={g.key} className="flex items-center justify-between gap-2 text-xs text-slate-600">
+            <span>{g.label}</span>
+            <input
+              value={perGame[g.key] ?? ''}
+              onChange={(e) => onPerGame({ ...perGame, [g.key]: e.target.value })}
+              placeholder={String(meta.hardMaxPerRound)}
+              inputMode="numeric"
+              className="w-14 rounded border border-slate-300 px-1 py-0.5 text-right text-xs"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-1 text-right text-[10px] text-slate-400">max tickets per round, per game</div>
+    </div>
+  );
+}
+
+function LocationForm({
+  location,
+  gameRewardsMeta,
+  onSaved,
+}: {
+  location: Location;
+  gameRewardsMeta: GameRewardsMeta | null;
+  onSaved: () => void;
+}) {
   const [name, setName] = useState(location.name);
   const [slug, setSlug] = useState(location.slug);
   const [lat, setLat] = useState(location.lat?.toString() ?? '');
@@ -145,8 +211,26 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
   const [loyVendor, setLoyVendor] = useState(location.pos?.loyalty?.vendor ?? '');
   const [loyApiBase, setLoyApiBase] = useState(location.pos?.loyalty?.apiBase ?? '');
   const [gameRewards, setGameRewards] = useState(location.pos?.loyalty?.gameRewards ?? false);
+  // Economy caps, edited as strings ('' = platform default / no override).
+  const storedCaps = location.pos?.loyalty?.gameRewardCaps ?? null;
+  const [dailyCap, setDailyCap] = useState(storedCaps?.dailyPerCard?.toString() ?? '');
+  const [perGameCaps, setPerGameCaps] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(storedCaps?.perGame ?? {}).map(([k, v]) => [k, String(v)]))
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Only explicit overrides ship; all-blank collapses to "no caps object".
+  function buildCaps() {
+    if (!gameRewards) return undefined;
+    const daily = dailyCap.trim() === '' ? null : Number(dailyCap);
+    const perGame: Record<string, number> = {};
+    for (const [key, raw] of Object.entries(perGameCaps)) {
+      if (raw.trim() !== '') perGame[key] = Number(raw);
+    }
+    if (daily === null && Object.keys(perGame).length === 0) return undefined;
+    return { dailyPerCard: daily, perGame };
+  }
 
   async function save() {
     setErr(null);
@@ -179,7 +263,12 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
                 loyalty:
                   loyVendor === ''
                     ? null
-                    : { vendor: loyVendor, apiBase: loyApiBase.trim() || null, gameRewards },
+                    : {
+                        vendor: loyVendor,
+                        apiBase: loyApiBase.trim() || null,
+                        gameRewards,
+                        gameRewardCaps: buildCaps(),
+                      },
               },
       });
       onSaved();
@@ -280,6 +369,15 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
             />
             Game ticket rewards (app mini-games credit tickets to the loyalty card)
           </label>
+          {gameRewards && loyVendor !== '' && gameRewardsMeta && (
+            <GameCapsEditor
+              meta={gameRewardsMeta}
+              dailyCap={dailyCap}
+              onDailyCap={setDailyCap}
+              perGame={perGameCaps}
+              onPerGame={setPerGameCaps}
+            />
+          )}
         </div>
       </div>
 
@@ -295,21 +393,24 @@ function LocationForm({ location, onSaved }: { location: Location; onSaved: () =
 export default function LocationDetail() {
   const { id = '' } = useParams();
   const { data, error, loading, reload } = useAsync(async () => {
-    const [detail, allCourses] = await Promise.all([
+    const [detail, allCourses, gameRewardsMeta] = await Promise.all([
       api.getLocation(id),
       api.listLocationCourses(id, true),
+      // The caps editor's registry — non-fatal if unavailable (editor hides).
+      api.gameRewardsMeta().catch(() => null),
     ]);
     return {
       location: detail.location,
       courses: detail.courses,
       archivedCourses: allCourses.filter((c) => c.archivedAt),
+      gameRewardsMeta,
     };
   }, [id]);
 
   if (loading) return <Spinner />;
   if (error) return <Banner kind="error">{error.message}</Banner>;
   if (!data) return null;
-  const { location, courses, archivedCourses } = data;
+  const { location, courses, archivedCourses, gameRewardsMeta } = data;
 
   async function toggleArchive() {
     await api.archiveLocation(id, !location.archivedAt);
@@ -329,7 +430,7 @@ export default function LocationDetail() {
         </div>
       </div>
 
-      <LocationForm location={location} onSaved={reload} />
+      <LocationForm location={location} gameRewardsMeta={gameRewardsMeta} onSaved={reload} />
 
       <h2 className="pt-2 text-sm font-semibold text-slate-700">Courses ({courses.length})</h2>
       <div className="space-y-3">

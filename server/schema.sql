@@ -694,3 +694,35 @@ create table if not exists booth_photo (
 alter table booth_photo add column if not exists bytes int;
 create index if not exists booth_photo_booth_idx   on booth_photo (booth_id, created_at desc);
 create index if not exists booth_photo_created_idx on booth_photo (created_at);
+
+-- ---------------------------------------------------------------------------
+-- Game ticket awards — the server-side ledger behind POST /api/game-rewards/
+-- award (the trusted proxy mini-games credit tickets through; see
+-- routes/gameRewards.js and lib/gameRewards.js). One row per game round that
+-- reached the award endpoint, whether or not it paid: the unique
+-- (game, session_id) is the idempotency key (a re-mounted end screen or
+-- retried request replays instead of double-crediting), tickets_awarded is
+-- what actually landed after cap clamping, and the rows back both the daily
+-- per-card cap (sum over the venue-local day) and Master Control's issuance
+-- rollup (routes/admin/gameRewards.js). status:
+--   'pending'    reserved (caps checked, row committed) but the POS credit
+--                hasn't confirmed — a replay retries the POS call
+--   'awarded'    credited vendor-side (pos_transaction_id set)
+--   'daily_cap'  the card was already at its daily cap; nothing credited
+create table if not exists game_ticket_award (
+  id                 uuid primary key default gen_random_uuid(),
+  location_id        uuid not null references location(id) on delete cascade,
+  player_id          text not null,     -- vendor player/card id (opaque here)
+  game               text not null,     -- registry key, e.g. 'skeeball'
+  session_id         text not null,     -- client round id (idempotency)
+  tickets_requested  int  not null,     -- what the client asked for
+  tickets_awarded    int  not null,     -- after per-round + daily clamping
+  status             text not null,     -- pending | awarded | daily_cap
+  pos_transaction_id text,              -- vendor tx id once credited
+  created_at         timestamptz not null default now(),
+  unique (game, session_id)
+);
+create index if not exists game_ticket_award_player_day_idx
+  on game_ticket_award (location_id, player_id, created_at);
+create index if not exists game_ticket_award_created_idx
+  on game_ticket_award (location_id, created_at);

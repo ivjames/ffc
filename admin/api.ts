@@ -90,7 +90,46 @@ export type Location = {
 // configured, else save null.
 export type PosConfig = {
   ordering: { vendor: string; apiBase: string | null } | null;
-  loyalty: { vendor: string; apiBase: string | null; gameRewards: boolean } | null;
+  loyalty: {
+    vendor: string;
+    apiBase: string | null;
+    gameRewards: boolean;
+    gameRewardCaps?: GameRewardCaps | null;
+  } | null;
+};
+
+/** Venue economy guardrails for app-earned tickets — enforced by the server's
+ *  award proxy; both knobs only tighten the platform hard limits. */
+export type GameRewardCaps = {
+  dailyPerCard: number | null; // null = platform default
+  perGame: Record<string, number>; // per-round ceiling overrides by game key
+};
+
+/** The game registry + platform limits the caps editor renders from. */
+export type GameRewardsMeta = {
+  games: { key: string; label: string }[];
+  hardMaxPerRound: number;
+  defaultDailyPerCard: number;
+  maxDailyPerCard: number;
+};
+
+export type GameTicketUsageRow = {
+  day: string;
+  locationId: string;
+  locationName: string;
+  game: string;
+  rounds: number;
+  cappedRounds: number;
+  tickets: number;
+  cards: number;
+};
+
+export type GameTicketTopCard = {
+  locationId: string;
+  locationName: string;
+  playerId: string;
+  rounds: number;
+  tickets: number;
 };
 
 export type Announcement = {
@@ -407,6 +446,14 @@ export const api = {
   },
 
   // Rewards (punchlist #8 tier 1).
+  // Game ticket economy — caps metadata + the app-issued ticket rollup.
+  gameRewardsMeta: () => req<GameRewardsMeta>('GET', '/game-rewards/meta'),
+  gameRewardsUsage: (days = 30) =>
+    req<{ days: number; rows: GameTicketUsageRow[]; topCards: GameTicketTopCard[] }>(
+      'GET',
+      `/game-rewards/usage?days=${days}`
+    ),
+
   lookupReward: (code: string) => req<Reward[]>('GET', `/rewards?code=${encodeURIComponent(code)}`),
   listRewards: (redeemed = false) => req<Reward[]>('GET', `/rewards${redeemed ? '?redeemed=1' : ''}`),
   redeemReward: (id: string, redeemed: boolean) =>

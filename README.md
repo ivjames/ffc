@@ -126,9 +126,15 @@ decoupled: each capability names its own vendor, so a venue can run one
 system's loyalty next to another's ordering. The app talks to a
 vendor-neutral adapter layer (`src/lib/pos/`); CenterEdge is the first
 adapter, and onboarding another vendor is a new adapter file + a
-`POS_VENDORS` entry server-side. In dev the surfaces run against a local
-mock backend (we're pre-credential with CenterEdge; `DEV_MODE` enables all
-capabilities locally):
+`POS_VENDORS` entry server-side. Game ticket awards do NOT go browser →
+vendor: mini-games call `POST /api/game-rewards/award`, the server-side
+proxy that validates payouts against the game registry, enforces per-game
+ceilings and each card's daily cap (venue-tunable in Master Control →
+Location → "Ticket economy caps"), records every award, and only then
+credits the vendor with server-held credentials — plus an issuance rollup
+in Master Control → Rewards (see `server/README.md`). In dev the surfaces
+run against a local mock backend (we're pre-credential with CenterEdge;
+`DEV_MODE` enables all capabilities locally):
 
 ```bash
 cd mock-centeredge && npm install && cd ..   # first time only

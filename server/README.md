@@ -214,6 +214,33 @@ Request:
   canonically with both keys explicit. **Credentials are never part of this
   shape** — vendor secrets stay server-side. Ships via `GET /api/content`
   like the deep links.
+  With `gameRewards` on, `loyalty` may also carry `gameRewardCaps` — the
+  venue's ticket-economy guardrails, enforced by the award proxy below:
+  `{ "dailyPerCard": 200 | null, "perGame": { "skeeball": 25, … } }`.
+  Both knobs only ever **tighten** the platform hard limits
+  (`lib/gameRewards.js`: 100 tickets/round hard max, 500/card/day default);
+  per-game keys must be in the server registry, all-default caps normalize
+  away. Edited in Master Control → Location → "Ticket economy caps".
+
+### `POST /api/game-rewards/award`
+The trusted proxy between the app's mini-games and the venue's ticket
+system — the browser's ticket math is a display convenience, and **this
+endpoint decides what actually pays**. Body:
+`{ locationId, playerId, game, tickets, sessionId }`. The game must be in
+the server registry (chance games are deliberately absent — skill-only
+earning), the payout is clamped to the per-game per-round ceiling, the
+card's venue-local daily cap clamps what's left, and every decision lands in
+`game_ticket_award` (the ledger backing the caps, idempotency, and the admin
+rollup). Only then does `lib/posLoyalty.js` credit the vendor server-side
+(`CENTEREDGE_API_BASE`/`CENTEREDGE_API_TOKEN`, defaulting to the loopback
+mock) with idempotency key `game:<game>:<sessionId>` — retried/replayed
+sessions settle from the ledger without re-crediting. Responses:
+`{ok, status: "awarded", ticketsAwarded, newTicketBalance, capped, duplicate}`,
+`{ok, status: "daily-cap", ticketsAwarded: 0, dailyCap}`, or
+`400/403/404/502`. Admin surface: `GET /api/admin/game-rewards/meta` (the
+registry + limits the caps editor renders from) and
+`GET /api/admin/game-rewards/usage?days=` (org-scoped issuance rollup per
+day/venue/game plus top-earning cards — Master Control → Rewards).
 
 Responses:
 - `200 { "ok": true, "location": { …, "tz": "…", "tzLabel": "Eastern Time (ET)" } }`

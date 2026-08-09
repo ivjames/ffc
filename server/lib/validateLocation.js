@@ -2,6 +2,11 @@
 // routes/locations.js so both the public POST /api/locations and the admin
 // router (POST /api/admin/locations) validate identically.
 import { tzFromCoords, isValidTz, friendlyTzLabel } from "./timezone.js";
+import {
+  isKnownGame,
+  HARD_MAX_PER_ROUND,
+  MAX_DAILY_PER_CARD,
+} from "./gameRewards.js";
 
 export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,10 +107,67 @@ export function normalizePos(value) {
     return { error: "pos.loyalty.gameRewards requires a configured loyalty block (tickets need a loyalty balance to land in)" };
   }
 
+  // Game-reward caps — the venue's economy guardrails, enforced by the award
+  // proxy (routes/gameRewards.js). Both knobs only ever TIGHTEN the platform
+  // hard limits in lib/gameRewards.js. Canonical stored shape when present:
+  //   { dailyPerCard: int | null, perGame: { <gameKey>: int, ... } }
+  // dailyPerCard null/absent = the platform default; perGame holds only the
+  // games the venue overrides (absent games use the hard per-round max).
+  const rawCaps = value.loyalty?.gameRewardCaps;
+  let gameRewardCaps = null;
+  if (rawCaps !== undefined && rawCaps !== null) {
+    if (typeof rawCaps !== "object" || Array.isArray(rawCaps)) {
+      return { error: "pos.loyalty.gameRewardCaps must be an object or null" };
+    }
+    if (!loyalty.value || gameRewards !== true) {
+      return { error: "pos.loyalty.gameRewardCaps requires gameRewards to be enabled" };
+    }
+    let dailyPerCard = null;
+    if (rawCaps.dailyPerCard !== undefined && rawCaps.dailyPerCard !== null) {
+      if (
+        !Number.isInteger(rawCaps.dailyPerCard) ||
+        rawCaps.dailyPerCard < 1 ||
+        rawCaps.dailyPerCard > MAX_DAILY_PER_CARD
+      ) {
+        return {
+          error: `pos.loyalty.gameRewardCaps.dailyPerCard must be an integer 1..${MAX_DAILY_PER_CARD} (or null for the default)`,
+        };
+      }
+      dailyPerCard = rawCaps.dailyPerCard;
+    }
+    const perGame = {};
+    if (rawCaps.perGame !== undefined && rawCaps.perGame !== null) {
+      if (typeof rawCaps.perGame !== "object" || Array.isArray(rawCaps.perGame)) {
+        return { error: "pos.loyalty.gameRewardCaps.perGame must be an object" };
+      }
+      for (const [key, cap] of Object.entries(rawCaps.perGame)) {
+        if (!isKnownGame(key)) {
+          return { error: `pos.loyalty.gameRewardCaps.perGame: unknown game ${JSON.stringify(key)}` };
+        }
+        if (!Number.isInteger(cap) || cap < 1 || cap > HARD_MAX_PER_ROUND) {
+          return {
+            error: `pos.loyalty.gameRewardCaps.perGame.${key} must be an integer 1..${HARD_MAX_PER_ROUND}`,
+          };
+        }
+        perGame[key] = cap;
+      }
+    }
+    // All-default caps normalize away entirely (stored as no caps at all).
+    if (dailyPerCard !== null || Object.keys(perGame).length > 0) {
+      gameRewardCaps = { dailyPerCard, perGame };
+    }
+  }
+
   return {
     value: {
       ordering: ordering.value,
-      loyalty: loyalty.value ? { ...loyalty.value, gameRewards: gameRewards === true } : null,
+      loyalty: loyalty.value
+        ? {
+            ...loyalty.value,
+            gameRewards: gameRewards === true,
+            ...(gameRewardCaps ? { gameRewardCaps } : {}),
+          }
+        : null,
     },
   };
 }
