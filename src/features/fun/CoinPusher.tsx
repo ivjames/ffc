@@ -22,11 +22,13 @@ import {
 
 // §12 Coin Pusher — the arcade coin-shelf machine as a Fun Zone mini-game.
 // Looking down the tray: the pusher bar sweeps forward/back on a steady cycle,
-// the tray is packed with coins, and the glowing payout edge at the bottom is
-// where they tip over and score. Tap along the top strip to drop one of your 20
-// coins at that x — timing drops against the pusher stroke (deep behind a
-// retracted bar = a long shove) is the whole skill. Side gutters eat strays.
-// Simple 2D disc physics on a fixed timestep, all client-side, offline.
+// the tray opens on a RANDOM jammed pile — like the real machine, never a neat
+// spaced grid: every coin held up by its neighbors, a few teetering half over
+// the lip — and the glowing payout edge at the bottom is where they tip over
+// and score. Tap along the top strip to drop one of your 20 coins at that x —
+// timing drops against the pusher stroke (deep behind a retracted bar = a long
+// shove) is the whole skill. Side gutters eat strays. Simple 2D disc physics
+// on a fixed timestep, all client-side, offline.
 
 // —— Machine geometry (logical units; the canvas scales to fit) ———————————————
 const W = 340;
@@ -73,7 +75,15 @@ type Coin = {
   state: CoinState;
   t: number; // ms in current animation state ('over' / 'lost')
   landY: number; // where a 'drop' coin touches down
+  tipAt: number; // this coin's personal tipping line past EDGE: the pack holds
+  //               a few px of overhang, so lip coins teeter instead of marching
+  //               off the moment their center crosses a fixed line
 };
+
+/** A coin's personal tipping line: 2..10px of overhang the pack can hold. */
+function rollTipAt(): number {
+  return EDGE + 2 + Math.random() * 8;
+}
 
 type Phase = 'ready' | 'play' | 'done';
 type GS = {
@@ -90,25 +100,66 @@ type GS = {
   comboPay: number; // their summed value, for the "+4!!" popup
 };
 
-/** ~27 coins packed near the front edge in a fixed staggered grid, so early
- *  drops can cascade. Seeded coins are all silver (gold only comes from drops). */
-// A stocked table: brick-staggered rows from just ahead of the pusher's full
-// extension down to just shy of the lip. Anything sparser leaves a dead zone
-// the 20 droppable coins can never bridge — the pusher would shove them into
-// empty tray while the pile at the edge never felt a thing, and the game
-// could not pay out at all.
+/** The randomized jam: never the same pile twice, and never a neat spaced
+ *  grid. Jittered, gappy, clumpy rows are seeded slightly overlapping from
+ *  just ahead of the pusher's full extension down to the lip, then relaxed by
+ *  the sim's own separation rule — so the game opens on a settled mass where
+ *  every coin is held up by its neighbors, including a teasing few hanging
+ *  part-way over the edge (held below their personal tipAt, so nothing falls
+ *  for free). The pile still starts clear of the bar's sweep — dropped coins
+ *  are what bridge the shove into it, same as ever — and it must still reach
+ *  the lip: a sparser pile leaves a dead zone the 20 droppable coins could
+ *  never bridge, and the game couldn't pay out at all. Seeded coins are all
+ *  silver (gold only comes from drops). */
 function seedCoins(): Coin[] {
   const coins: Coin[] = [];
   let id = 0;
-  const PITCH = 22.4; // row spacing — one coin diameter plus breathing room
-  const Y0 = P_MAX + R + 11; // first row clears the fully-extended pusher face
-  const rows = Math.floor((EDGE - 18 - Y0) / PITCH) + 1; // front row ends up ~20px shy of the lip
-  for (let i = 0; i < rows; i++) {
-    const y = Y0 + i * PITCH;
-    const n = i % 2 === 0 ? 11 : 10; // brick stagger packs the pile like a real tray
+  const Y0 = P_MAX + R + 2; // just clear of the fully-extended pusher face
+  let y = Y0 + Math.random() * 8;
+  while (y < EDGE + 2) {
+    const n = 9 + Math.floor(Math.random() * 3); // 9..11 per row
+    const rowShift = (Math.random() - 0.5) * 18;
     for (let k = 0; k < n; k++) {
-      const x = W / 2 + (k - (n - 1) / 2) * 24.5;
-      coins.push({ id: id++, x, y, vx: 0, vy: 0, gold: false, state: 'tray', t: 0, landY: 0 });
+      if (Math.random() < 0.12) continue; // gaps — the pile is clumpy, not full
+      const x = W / 2 + rowShift + (k - (n - 1) / 2) * 27 + (Math.random() - 0.5) * 10;
+      coins.push({
+        id: id++,
+        x: clamp(x, WALL_L + R, WALL_R - R),
+        y: y + (Math.random() - 0.5) * 6,
+        vx: 0,
+        vy: 0,
+        gold: false,
+        state: 'tray',
+        t: 0,
+        landY: 0,
+        tipAt: rollTipAt(),
+      });
+    }
+    y += 17 + Math.random() * 4; // under one diameter, so rows land in contact
+  }
+  // Relax the seeded overlaps out (positions only, walls and lip clamped) so
+  // the pile opens settled and mutually supporting — the "all held up" start.
+  for (let iter = 0; iter < 90; iter++) {
+    for (let i = 0; i < coins.length; i++) {
+      const a = coins[i];
+      for (let j = i + 1; j < coins.length; j++) {
+        const b = coins[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= 4 * R * R || d2 === 0) continue;
+        const d = Math.sqrt(d2);
+        const half = (2 * R - d) / 2;
+        a.x -= (dx / d) * half;
+        a.y -= (dy / d) * half;
+        b.x += (dx / d) * half;
+        b.y += (dy / d) * half;
+      }
+    }
+    for (const c of coins) {
+      c.x = clamp(c.x, WALL_L + R, WALL_R - R);
+      // Held at the lip, not over it: the pack supports overhang up to tipAt.
+      c.y = clamp(c.y, Y0, c.tipAt - 0.5);
     }
   }
   return coins;
@@ -235,7 +286,7 @@ function step(gs: GS, ev: Events): void {
 
   for (const c of cs) {
     if (c.state !== 'tray') continue;
-    if (c.y > EDGE + 3) {
+    if (c.y > c.tipAt) {
       c.state = 'over';
       c.t = 0;
       ev.payouts.push({ x: c.x, gold: c.gold });
@@ -298,6 +349,17 @@ function drawCoin(ctx: CanvasRenderingContext2D, c: Coin, simTime: number) {
     ctx.translate(c.x, c.y);
     const s = 1 - p * 0.6;
     ctx.scale(s, s);
+    drawCoinFace(ctx, 0, 0, c.gold);
+    ctx.restore();
+    return;
+  }
+  // Overhanging the lip: lean forward and rock a little — held up, for now.
+  if (c.state === 'tray' && c.y > EDGE - 2) {
+    const p = clamp((c.y - (EDGE - 2)) / (c.tipAt - EDGE + 2), 0, 1);
+    const wobble = Math.sin(simTime * 0.008 + c.id * 2.1) * p * 1.4;
+    ctx.save();
+    ctx.translate(c.x, c.y + p * 3 + wobble);
+    ctx.scale(1, 1 - p * 0.22);
     drawCoinFace(ctx, 0, 0, c.gold);
     ctx.restore();
     return;
@@ -651,6 +713,7 @@ export default function CoinPusher() {
         state: 'drop',
         t: 0,
         landY,
+        tipAt: rollTipAt(),
       });
       gs.coinsLeft -= 1;
       gs.lastDropSim = gs.simTime;
