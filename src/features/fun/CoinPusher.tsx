@@ -37,6 +37,7 @@ const R = 11; // coin radius
 
 const TOP_STRIP = 56; // tap-to-drop panel
 const TAP_MAX = 140; // taps above this y count as drops
+const HOLD_REPEAT_MS = 220; // press-and-hold auto-drop interval
 const BACK_Y = 94; // mirrored back wall's bottom edge (bar emerges beneath it)
 const P_MIN = 118; // pusher front face, retracted
 const P_MAX = 190; // pusher front face, extended
@@ -698,6 +699,48 @@ export default function CoinPusher() {
     };
   }, []);
 
+  // Deep, dense, and lossy by design (see seedCoins above) — a real jam
+  // routinely takes 80-120+ drops before anything reaches the lip, win or
+  // lose on timing. Requiring that many individual taps is the tedious part,
+  // not the physics: press-and-hold auto-drops at HOLD_REPEAT_MS, tracking
+  // the pointer's x, so grinding through a jam takes a few seconds of holding
+  // instead of 100+ individual taps. A brief tap still drops just one coin
+  // (holdTimer never fires before release), so the original feel is unchanged.
+  const holdTimer = useRef<number | null>(null);
+  const holdX = useRef(0);
+
+  const dropAt = useCallback((x: number) => {
+    const gs = gsRef.current;
+    if (gs.phase !== 'play' || gs.coinsLeft <= 0 || gs.endRequested) return;
+    // Land just behind the pusher's CURRENT front — drop while it's retracted
+    // and the coin sits deep in the gap, riding the whole forward stroke.
+    const landY = pusherFront(gs.simTime) + R + 2;
+    gs.coins.push({
+      id: gs.nextId++,
+      x,
+      y: 30,
+      vx: 0,
+      vy: 120,
+      gold: Math.random() < GOLD_ODDS,
+      state: 'drop',
+      t: 0,
+      landY,
+      tipAt: rollTipAt(),
+    });
+    gs.coinsLeft -= 1;
+    gs.coinsDropped += 1;
+    setCoinsLeft(gs.coinsLeft);
+    setCoinsDropped(gs.coinsDropped);
+    playTick();
+  }, []);
+
+  const stopHold = useCallback(() => {
+    if (holdTimer.current != null) {
+      window.clearInterval(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }, []);
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       const gs = gsRef.current;
@@ -705,29 +748,28 @@ export default function CoinPusher() {
       const p = toField(e);
       if (p.y > TAP_MAX) return;
       const x = clamp(p.x, WALL_L + R + 1, WALL_R - R - 1);
-      // Land just behind the pusher's CURRENT front — drop while it's retracted
-      // and the coin sits deep in the gap, riding the whole forward stroke.
-      const landY = pusherFront(gs.simTime) + R + 2;
-      gs.coins.push({
-        id: gs.nextId++,
-        x,
-        y: 30,
-        vx: 0,
-        vy: 120,
-        gold: Math.random() < GOLD_ODDS,
-        state: 'drop',
-        t: 0,
-        landY,
-        tipAt: rollTipAt(),
-      });
-      gs.coinsLeft -= 1;
-      gs.coinsDropped += 1;
-      setCoinsLeft(gs.coinsLeft);
-      setCoinsDropped(gs.coinsDropped);
-      playTick();
+      canvasRef.current?.setPointerCapture(e.pointerId);
+      holdX.current = x;
+      dropAt(x);
+      stopHold();
+      holdTimer.current = window.setInterval(() => dropAt(holdX.current), HOLD_REPEAT_MS);
+    },
+    [toField, dropAt, stopHold],
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (holdTimer.current == null) return; // only track while actively holding
+      const p = toField(e);
+      holdX.current = clamp(p.x, WALL_L + R + 1, WALL_R - R - 1);
     },
     [toField],
   );
+
+  // Stop the repeat on release, drag-off-canvas, or a lost pointer (app
+  // backgrounded mid-hold) — setPointerCapture below keeps move/up events
+  // targeting the canvas even if the finger wanders outside it.
+  useEffect(() => stopHold, [stopHold]);
 
   /** Free top-up — unlimited for now (a ticket cost is a later addition). */
   const buyMore = useCallback(() => {
@@ -742,9 +784,10 @@ export default function CoinPusher() {
   const cashOut = useCallback(() => {
     const gs = gsRef.current;
     if (gs.phase !== 'play' || gs.endRequested) return;
+    stopHold();
     gs.endRequested = true;
     setEnding(true);
-  }, []);
+  }, [stopHold]);
 
   const start = useCallback(() => {
     const gs = freshGS();
@@ -793,7 +836,7 @@ export default function CoinPusher() {
       : ending
         ? 'Cashing out — letting the last coin settle…'
         : coinsLeft > 0
-          ? 'Tap the top strip to drop a coin — best just as the pusher pulls back.'
+          ? 'Tap to drop a coin, or hold to keep feeding the pile — best just as the pusher pulls back.'
           : 'Out of coins — buy more, or cash out to see your payout.';
 
   return (
@@ -822,14 +865,18 @@ export default function CoinPusher() {
         <canvas
           ref={canvasRef}
           onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={stopHold}
+          onPointerCancel={stopHold}
           className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
             <span className="text-5xl">🪙</span>
             <p className="text-sm text-fairway-100">
-              Tap the top strip to drop coins behind the pusher and shove the pile over the glowing edge. Gold pays
-              ×5. Start with {STARTING_COINS} — buy more anytime, there's no limit. Mind the side gutters.
+              Tap the top strip to drop coins behind the pusher — or hold to keep feeding them in — and shove the
+              pile over the glowing edge. Gold pays ×5. Start with {STARTING_COINS} — buy more anytime, there's no
+              limit. Mind the side gutters.
             </p>
             <Button onClick={start}>Start</Button>
           </div>
