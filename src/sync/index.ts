@@ -98,8 +98,11 @@ export type LeaderboardRow = {
 export async function fetchLeaderboard(
   period: 'day' | 'week' | 'month' | 'all',
   by: 'player' | 'team' = 'player',
+  locationId?: string,
 ): Promise<LeaderboardRow[]> {
-  const res = await fetch(apiUrl(`/api/leaderboard?period=${period}&by=${by}`));
+  const q = new URLSearchParams({ period, by });
+  if (locationId) q.set('locationId', locationId);
+  const res = await fetch(apiUrl(`/api/leaderboard?${q}`));
   if (!res.ok) throw new Error(`Leaderboard failed: HTTP ${res.status}`);
   return res.json();
 }

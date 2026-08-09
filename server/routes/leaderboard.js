@@ -1,8 +1,12 @@
-// GET /api/leaderboard?period=day|week|month|all&by=player|team
+// GET /api/leaderboard?period=day|week|month|all&by=player|team&locationId=
 //
 // Arcade high-score style: for each player TAG we compute the total strokes for
 // each completed round on each course, then keep that player's BEST (lowest)
 // total. Results are grouped by player_tag and sorted ascending by total.
+//
+// locationId (optional uuid) scopes the board to one venue's courses — the
+// player app always sends its current site so an Upland board never shows
+// Tukwila scores. Omitted = all venues (legacy behavior).
 //
 // by=team (punchlist #4 tier 1) aggregates the SAME score rows by the round's
 // optional group_tag instead: a team round's score is its average strokes per
@@ -44,6 +48,12 @@ router.get("/", async (req, res) => {
   if (by !== "player" && by !== "team") {
     return res.status(400).json({ ok: false, error: "by must be player|team" });
   }
+  const locationId = typeof req.query.locationId === "string" && req.query.locationId !== ""
+    ? req.query.locationId
+    : null;
+  if (locationId !== null && !UUID_RE.test(locationId)) {
+    return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
+  }
   const unit = PERIOD_UNITS[period];
 
   // Calendar window in each venue's local time. Per round we resolve the zone as
@@ -60,6 +70,14 @@ router.get("/", async (req, res) => {
     params.push(VENUE_TZ, unit); // $1 = fallback zone, $2 = unit (referenced below)
     const zone = `coalesce(loc.tz, $1)`;
     timeFilter = `and r.completed_at >= timezone(${zone}, date_trunc($2, timezone(${zone}, now())))`;
+  }
+
+  // Optional venue scope. Placeholder index is dynamic because the time filter
+  // above may or may not have claimed $1/$2.
+  let locationFilter = "";
+  if (locationId !== null) {
+    params.push(locationId);
+    locationFilter = `and c.location_id = $${params.length}`;
   }
 
   // Query walkthrough:
@@ -90,6 +108,7 @@ router.get("/", async (req, res) => {
       where r.completed_at is not null
         and r.group_tag is not null
         ${timeFilter}
+        ${locationFilter}
       group by r.id, r.group_tag, r.course_id, c.name, r.completed_at
     ),
     best_per_team_course as (
@@ -125,6 +144,7 @@ router.get("/", async (req, res) => {
        and s.player_index = pt.ord - 1
       where r.completed_at is not null
         ${timeFilter}
+        ${locationFilter}
       group by pt.tag, r.course_id, c.name, r.completed_at, r.id
     ),
     best_per_tag_course as (

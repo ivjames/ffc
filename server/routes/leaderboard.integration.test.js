@@ -18,8 +18,10 @@ const { app } = await import("../app.js");
 let baseUrl;
 let close;
 let locationId;
+let otherLocationId;
 let courseAId;
 let courseBId;
+let otherCourseId;
 const roundIds = [];
 
 async function insertRound({ courseId, tag, total, completedAt }) {
@@ -59,6 +61,18 @@ before(async () => {
   );
   courseBId = courseB.rows[0].id;
 
+  // A second venue with its own course, to prove ?locationId= scopes the board.
+  const otherLoc = await testQuery(
+    `insert into location (name, slug, tz) values ($1, $2, 'America/Los_Angeles') returning id`,
+    [`Leaderboard Other Venue ${stamp}`, `lb-other-${stamp}`]
+  );
+  otherLocationId = otherLoc.rows[0].id;
+  const otherCourse = await testQuery(
+    `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+    ["LB Other Course", "test", Array(18).fill(3), otherLocationId]
+  );
+  otherCourseId = otherCourse.rows[0].id;
+
   const OLD = new Date("2020-01-01T00:00:00Z");
   const NOW = new Date();
 
@@ -73,13 +87,15 @@ before(async () => {
   await insertRound({ courseId: courseAId, tag: "TOLD", total: 15, completedAt: OLD });
   // An in-progress round (completedAt null) must never appear, in any period.
   await insertRound({ courseId: courseAId, tag: "TWIP", total: 1, completedAt: null });
+  // Tag TOTH at the OTHER venue: must only show when that venue is selected.
+  await insertRound({ courseId: otherCourseId, tag: "TOTH", total: 25, completedAt: NOW });
 });
 
 after(async () => {
   if (close) await close();
   await testQuery(`delete from round where id = any($1::uuid[])`, [roundIds]); // cascades score
-  await testQuery(`delete from course where id in ($1, $2)`, [courseAId, courseBId]);
-  await testQuery(`delete from location where id = $1`, [locationId]);
+  await testQuery(`delete from course where id in ($1, $2, $3)`, [courseAId, courseBId, otherCourseId]);
+  await testQuery(`delete from location where id in ($1, $2)`, [locationId, otherLocationId]);
   const { pool } = await import("../db.js");
   await pool.end();
 });
@@ -118,6 +134,34 @@ test("GET /api/leaderboard?period=day excludes a round completed long ago", asyn
   const rows = await res.json();
   assert.ok(rows.some((r) => r.tag === "TAA" && r.courseId === courseAId), "recent round present");
   assert.ok(!rows.some((r) => r.tag === "TOLD"), "old round excluded from period=day");
+});
+
+test("GET /api/leaderboard rejects a malformed locationId", async () => {
+  const res = await fetch(`${baseUrl}/api/leaderboard?locationId=not-a-uuid`);
+  assert.equal(res.status, 400);
+});
+
+test("GET /api/leaderboard?locationId= scopes the board to that venue's courses", async () => {
+  const res = await fetch(`${baseUrl}/api/leaderboard?period=all&locationId=${locationId}`);
+  assert.equal(res.status, 200);
+  const rows = await res.json();
+  assert.ok(rows.some((r) => r.tag === "TAA" && r.courseId === courseAId), "main venue rows present");
+  assert.ok(!rows.some((r) => r.tag === "TOTH"), "other venue's round excluded");
+
+  const other = await fetch(`${baseUrl}/api/leaderboard?period=all&locationId=${otherLocationId}`);
+  assert.equal(other.status, 200);
+  const otherRows = await other.json();
+  assert.ok(otherRows.some((r) => r.tag === "TOTH" && r.courseId === otherCourseId));
+  assert.ok(!otherRows.some((r) => r.tag === "TAA"), "main venue rows excluded");
+});
+
+test("GET /api/leaderboard?period=day&locationId= combines the time and venue filters", async () => {
+  const res = await fetch(`${baseUrl}/api/leaderboard?period=day&locationId=${locationId}`);
+  assert.equal(res.status, 200);
+  const rows = await res.json();
+  assert.ok(rows.some((r) => r.tag === "TAA" && r.courseId === courseAId), "recent round present");
+  assert.ok(!rows.some((r) => r.tag === "TOLD"), "old round excluded");
+  assert.ok(!rows.some((r) => r.tag === "TOTH"), "other venue excluded");
 });
 
 test("GET /api/leaderboard?period=month excludes a round completed in 2020", async () => {
