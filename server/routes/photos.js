@@ -336,15 +336,25 @@ router.post("/:id/replace", uploadRateLimit, express.json({ limit: "16mb" }), as
     const ext = EXT_BY_MEDIA[mediaType] || "bin";
     const newPath = join(UPLOAD_DIR, `${randomUUID()}.${ext}`);
     await writeFile(newPath, imageBytes);
+
+    // Condition the swap on the path we just read. If two replaces for the same
+    // photo overlap (or a delete lands in between), only the request whose
+    // oldPath still matches wins and removes the old file; the loser matches no
+    // row, so it removes its OWN new file — no orphan is ever left uncounted.
+    let upd;
     try {
-      await pool.query(
+      upd = await pool.query(
         `update booth_photo set photo_path = $1, media_type = $2, bytes = $3
-          where id = $4 and booth_id = $5`,
-        [newPath, mediaType, imageBytes.length, id, booth]
+          where id = $4 and booth_id = $5 and photo_path = $6`,
+        [newPath, mediaType, imageBytes.length, id, booth, oldPath]
       );
     } catch (err) {
       await rm(newPath, { force: true }).catch(() => {});
       throw err;
+    }
+    if (upd.rowCount === 0) {
+      await rm(newPath, { force: true }).catch(() => {});
+      return res.status(409).json({ ok: false, error: "photo changed — try again" });
     }
     if (oldPath && oldPath !== newPath) await rm(oldPath, { force: true }).catch(() => {});
 

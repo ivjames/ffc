@@ -162,6 +162,9 @@ export default function PhotoBooth() {
   const [galleryError, setGalleryError] = useState<string | null>(null);
   // Ids of saved photos that have a local editable draft (this device only).
   const [editableIds, setEditableIds] = useState<Set<string>>(new Set());
+  // Cache-bust tokens per photo id, bumped after an in-place replace so the
+  // gallery/viewer/share fetch the new bytes instead of the cached originals.
+  const [versions, setVersions] = useState<Record<string, number>>({});
   // Viewer overlay: which stored photo is open, and share/delete state.
   const [viewing, setViewing] = useState<BoothPhoto | null>(null);
   const [viewerBusy, setViewerBusy] = useState(false);
@@ -359,6 +362,9 @@ export default function PhotoBooth() {
       if (editor.editingId) {
         await replaceBoothPhoto(editor.editingId, { imageBase64, mediaType: 'image/jpeg' });
         photoId = editor.editingId;
+        // Same URL, new bytes — bump the cache-bust token so the grid, viewer,
+        // and any share re-fetch the edited photo, not the cached original.
+        setVersions((v) => ({ ...v, [photoId]: Date.now() }));
       } else {
         const saved = await uploadBoothPhoto({
           imageBase64,
@@ -404,7 +410,7 @@ export default function PhotoBooth() {
     if (viewerBusy) return;
     setViewerBusy(true);
     try {
-      await shareBoothPhoto(photo.id);
+      await shareBoothPhoto(photo.id, versions[photo.id]);
     } catch {
       // Best-effort sugar — offline or already gone; the viewer stays up.
     } finally {
@@ -646,7 +652,7 @@ export default function PhotoBooth() {
                 style={{ '--i': i } as CSSProperties}
               >
                 <img
-                  src={boothPhotoUrl(p.id)}
+                  src={boothPhotoUrl(p.id, versions[p.id])}
                   alt="Saved photo"
                   loading="lazy"
                   className="h-full w-full object-cover"
@@ -675,7 +681,7 @@ export default function PhotoBooth() {
           }}
         >
           <img
-            src={boothPhotoUrl(viewing.id)}
+            src={boothPhotoUrl(viewing.id, versions[viewing.id])}
             alt="Saved photo"
             className="min-h-0 flex-1 object-contain"
           />

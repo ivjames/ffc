@@ -37,9 +37,12 @@ export async function fetchBoothPhotos(): Promise<BoothPhoto[]> {
 }
 
 /** Direct <img src> URL for a stored photo — the booth key rides in the query,
- *  so no header juggling is needed. */
-export function boothPhotoUrl(id: string): string {
-  return apiUrl(`/api/photos/${id}/image?booth=${encodeURIComponent(getBoothId())}`);
+ *  so no header juggling is needed. `version` busts the browser cache after an
+ *  in-place replace (same id, but the bytes changed and the image response is
+ *  cached max-age=300, so without this the pre-edit photo can linger). */
+export function boothPhotoUrl(id: string, version?: number): string {
+  const v = version ? `&v=${version}` : '';
+  return apiUrl(`/api/photos/${id}/image?booth=${encodeURIComponent(getBoothId())}${v}`);
 }
 
 /**
@@ -93,9 +96,14 @@ export async function deleteBoothPhoto(id: string): Promise<void> {
   if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
 }
 
-/** Share a stored photo via the Web Share API (download fallback). */
-export async function shareBoothPhoto(id: string): Promise<'shared' | 'downloaded'> {
-  const res = await fetch(boothPhotoUrl(id));
+/** Share a stored photo via the Web Share API (download fallback). Pass the
+ *  `version` bumped after an edit so an immediate share never grabs the cached
+ *  pre-edit bytes. */
+export async function shareBoothPhoto(
+  id: string,
+  version?: number,
+): Promise<'shared' | 'downloaded'> {
+  const res = await fetch(boothPhotoUrl(id, version));
   if (!res.ok) throw new Error(`Photo unavailable: HTTP ${res.status}`);
   const blob = await res.blob();
   const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
