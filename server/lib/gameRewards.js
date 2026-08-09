@@ -34,7 +34,13 @@ export const GAME_REWARD_GAMES = [
   { key: "whackamole", label: "Whack-a-Mole" },
 ];
 
-const GAME_KEYS = new Set(GAME_REWARD_GAMES.map((g) => g.key));
+// Non-mini-game reward sources that issue app tickets through this same capped,
+// audited path — currently mini-golf round achievements (features/scorecard,
+// via src/lib/pos/golfRewards.ts). All golf achievements report under one
+// `golf` source; the per-achievement idempotency lives in the session id.
+export const OTHER_REWARD_SOURCES = [{ key: "golf", label: "Mini-Golf Achievements" }];
+
+const GAME_KEYS = new Set([...GAME_REWARD_GAMES, ...OTHER_REWARD_SOURCES].map((g) => g.key));
 
 // Hard per-round ceiling, any game. The richest client formula tops out at
 // 100 (most clamp there explicitly), so anything above this is a forged

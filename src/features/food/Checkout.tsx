@@ -6,7 +6,6 @@ import type { Menu } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
 import { useCart, setLineQuantity, clearCart, type StoredCartLine } from '../../lib/foodCart';
 import { recordOrder } from '../../lib/foodOrders';
-import { useLinkedPlayerId } from '../../lib/rewardsCard';
 import { useCurrentLocationId } from '../../lib/location';
 import { DEV_MODE } from '../../lib/flags';
 import { playClick } from '../../lib/sound';
@@ -37,7 +36,6 @@ export default function Checkout() {
   const { ordering } = usePos();
   const { menu, error: menuError, retry } = useMenu();
   const cart = useCart();
-  const playerId = useLinkedPlayerId();
   const locationId = useCurrentLocationId();
   const [guestName, setGuestName] = useState('');
   const [placing, setPlacing] = useState(false);
@@ -55,7 +53,6 @@ export default function Checkout() {
       items: cart.map(({ key, ...line }) => line),
       paymentToken: simulateDecline ? 'tok_declined' : 'tok_visa_mock',
       amountCents: totals.totalCents,
-      playerId: playerId ?? undefined,
       guestName: guestName.trim() || undefined,
     });
     setPlacing(false);
@@ -152,22 +149,6 @@ export default function Checkout() {
                 );
               })}
             </div>
-
-            {/* Rewards attach — orders on a linked card land in its history. */}
-            <button
-              onClick={() => navigate('/rewards')}
-              className="surface-1 mb-4 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-2.5 text-left transition-transform active:translate-y-px"
-            >
-              <span className="flex items-center gap-2 text-sm">
-                <span aria-hidden="true">🎟️</span>
-                <span className="font-semibold text-fairway-50">
-                  {playerId ? `On card ${playerId}` : 'Link a rewards card'}
-                </span>
-              </span>
-              <span className="text-sm font-semibold text-fairway-400">
-                {playerId ? 'Change' : 'Link'}
-              </span>
-            </button>
 
             <label className="mb-1.5 block text-sm font-semibold text-fairway-100/80">
               Name for the order (optional)

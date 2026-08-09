@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { golfTicketsFor, golfRewardKey, GOLF_ACHIEVEMENT_TICKETS } from './golfRewards';
+import {
+  golfTicketsFor,
+  golfRewardKey,
+  deviceOwnsSlot,
+  GOLF_ACHIEVEMENT_TICKETS,
+} from './golfRewards';
 
 describe('golfTicketsFor', () => {
   it('prices the known achievements', () => {
@@ -17,6 +22,20 @@ describe('golfTicketsFor', () => {
     for (const key of ['hole_in_one', 'under_par', 'hunt_master']) {
       expect(GOLF_ACHIEVEMENT_TICKETS[key]).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('deviceOwnsSlot', () => {
+  it('credits every player in a single-device (non-shared) round', () => {
+    for (const playerIndex of [0, 1, 2, 3]) {
+      expect(deviceOwnsSlot({ deviceSlot: 0, isShared: false, playerIndex })).toBe(true);
+    }
+  });
+
+  it('credits only this device’s own slot in a shared round', () => {
+    expect(deviceOwnsSlot({ deviceSlot: 2, isShared: true, playerIndex: 2 })).toBe(true);
+    expect(deviceOwnsSlot({ deviceSlot: 2, isShared: true, playerIndex: 0 })).toBe(false);
+    expect(deviceOwnsSlot({ deviceSlot: 2, isShared: true, playerIndex: 3 })).toBe(false);
   });
 });
 

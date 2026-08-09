@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { formatCents } from '../../lib/pos/pricing';
 import type { Player, PlayerTransaction } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
 import { useLinkedPlayerId, setLinkedPlayerId } from '../../lib/rewardsCard';
@@ -103,6 +102,12 @@ export default function Rewards() {
     if (!('error' in txs)) setTransactions(txs.transactions);
   }
 
+  // The card shows loyalty activity only — ticket rewards. Food orders are a
+  // separate lane (not paid from the card, not attached to it); a linked-card
+  // order from before that split may still sit in the vendor's history, so
+  // filter rather than assume it's gone.
+  const ticketActivity = transactions.filter((tx) => tx.type === 'ticket_reward');
+
   return (
     <Screen>
       <TopBar title="Rewards card" back="/" />
@@ -195,27 +200,19 @@ export default function Rewards() {
             <h2 className="mb-2 text-sm font-black uppercase tracking-wide text-fairway-400">
               Activity
             </h2>
-            {transactions.length === 0 ? (
+            {ticketActivity.length === 0 ? (
               <p className="text-sm text-fairway-100/70">
-                Nothing yet — food orders and game tickets will show up here.
+                Nothing yet — game tickets will show up here.
               </p>
             ) : (
               <div className="space-y-1.5">
-                {transactions.map((tx) => (
+                {ticketActivity.map((tx) => (
                   <div
                     key={tx.id}
                     className="surface-sunk flex items-center justify-between rounded-xl border border-fairway-800/60 px-3.5 py-2.5 text-sm"
                   >
-                    <span className="text-fairway-100/80">
-                      {tx.type === 'ticket_reward'
-                        ? `🎟️ Tickets · ${tx.source ?? ''}`
-                        : '🌭 Food order'}
-                    </span>
-                    <span className="font-bold text-fairway-50">
-                      {tx.type === 'ticket_reward'
-                        ? `+${tx.tickets}`
-                        : formatCents(tx.amountCents ?? 0)}
-                    </span>
+                    <span className="text-fairway-100/80">🎟️ Tickets · {tx.source ?? ''}</span>
+                    <span className="font-bold text-fairway-50">+{tx.tickets}</span>
                   </div>
                 ))}
               </div>
