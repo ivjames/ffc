@@ -423,7 +423,8 @@ export default function PhotoBooth() {
         {/* The pipeline's player-facing disclosure — stored on the venue
             server, never sent to any AI (see /privacy). */}
         <p className="mb-4 text-xs text-fairway-100/50">
-          Saved photos stay private to this phone and are never AI-checked.{' '}
+          Saved photos are only visible to this phone and never AI-checked — until you
+          choose to share one.{' '}
           <Link to="/privacy" className="underline">
             How photos are handled
           </Link>
