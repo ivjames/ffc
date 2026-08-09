@@ -198,8 +198,13 @@ function displaySize(
     return { dw: b.w * f, dh: b.h * f };
   }
   const meta = st.svgId ? svgMeta.get(st.svgId) : undefined;
-  const aw = st.svgW ?? meta?.width ?? 100;
-  const ah = st.svgH ?? meta?.height ?? 100;
+  // `??` only fills nullish, so a stored/served 0 (an SVG whose intrinsic
+  // dimension rounded to zero) would slip through and yield a zero-sized
+  // sticker or NaN — normalize each to a positive fallback.
+  const rawW = st.svgW ?? meta?.width ?? 100;
+  const rawH = st.svgH ?? meta?.height ?? 100;
+  const aw = rawW > 0 ? rawW : 100;
+  const ah = rawH > 0 ? rawH : 100;
   const f = target / Math.max(aw, ah);
   return { dw: aw * f, dh: ah * f };
 }
