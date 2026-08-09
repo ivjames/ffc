@@ -572,6 +572,27 @@ create table if not exists announcement (
 );
 create index if not exists announcement_active_idx on announcement (archived_at) where archived_at is null;
 
+-- Announcement view memory — who's seen which announcement, and when. One row
+-- per (announcement, device); the public beacon (POST /api/announcements/views)
+-- upserts it, bumping last_seen_at + seen_count on repeat app sessions.
+-- device_id is a client-minted install UUID (localStorage ffc_device_id): the
+-- app is walk-up/anonymous, so the device is the identity that always exists.
+-- app_user_id is captured opportunistically from the player-session cookie when
+-- the viewer happens to be signed in (null otherwise), so the admin rollup can
+-- separate "devices" from "signed-in accounts". Cascade so archiving is still a
+-- soft delete but a hard delete of the parent takes its view rows with it.
+create table if not exists announcement_view (
+  announcement_id uuid not null references announcement(id) on delete cascade,
+  device_id       uuid not null,
+  app_user_id     uuid references app_user(id) on delete set null,
+  first_seen_at   timestamptz not null default now(),
+  last_seen_at    timestamptz not null default now(),
+  seen_count      int not null default 1,
+  primary key (announcement_id, device_id)
+);
+create index if not exists announcement_view_by_announcement_idx
+  on announcement_view (announcement_id);
+
 -- Team tag (punchlist #4 tier 1) — the additive change the original plan
 -- reserved. An optional 3-char team tag on the whole round; the team
 -- leaderboard is a second aggregation over the same score rows. Same

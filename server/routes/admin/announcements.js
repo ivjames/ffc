@@ -116,10 +116,28 @@ router.get("/", async (req, res) => {
     // org_admin: own org's location-pinned announcements + the global ones
     // (their venues show those too, so hiding them would misrepresent what
     // players actually see).
+    // View memory rollup (announcement_view): devices that have seen the row,
+    // distinct signed-in accounts among them, total impressions, and the most
+    // recent sighting — the "who's seen what, and when" surfaced per row. Each
+    // announcement_view row is already one distinct device (PK), so count(*) is
+    // the device count.
     const result = await pool.query(
-      `select ${ANNOUNCEMENT_COLS}, l.name as "locationName"
+      `select ${ANNOUNCEMENT_COLS}, l.name as "locationName",
+              coalesce(v.device_count, 0)  as "viewDeviceCount",
+              coalesce(v.user_count, 0)    as "viewUserCount",
+              coalesce(v.impressions, 0)   as "viewImpressions",
+              v.last_seen_at               as "viewLastSeenAt"
          from announcement a
          left join location l on l.id = a.location_id
+         left join (
+           select announcement_id,
+                  count(*)::int                    as device_count,
+                  count(distinct app_user_id)::int as user_count,
+                  sum(seen_count)::int             as impressions,
+                  max(last_seen_at)                as last_seen_at
+             from announcement_view
+            group by announcement_id
+         ) v on v.announcement_id = a.id
         where ($1::bool or a.archived_at is null)
           and ($2::uuid is null or a.location_id is null or l.org_id = $2)
         order by a.sort_order, a.created_at`,

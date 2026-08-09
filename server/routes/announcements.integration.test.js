@@ -173,6 +173,62 @@ test("public feed filters by window, location, and archive state", async () => {
   assert.equal(bad.status, 400);
 });
 
+function beacon(payload) {
+  return fetch(`${baseUrl}/api/announcements/views`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+const DEVICE_A = "11111111-1111-4111-8111-111111111111";
+const DEVICE_B = "22222222-2222-4222-8222-222222222222";
+
+test("view beacon validates the device id", async () => {
+  const noDevice = await beacon({ ids: [] });
+  assert.equal(noDevice.status, 400);
+  const badDevice = await beacon({ deviceId: "nope", ids: [] });
+  assert.equal(badDevice.status, 400);
+});
+
+test("view beacon records impressions and the admin rollup reflects them", async () => {
+  const { json } = await createAnnouncement({ title: "Seen me", locationId });
+  const id = json.announcement.id;
+
+  // Empty / all-garbage id sets record nothing but still 200.
+  const empty = await beacon({ deviceId: DEVICE_A, ids: [] });
+  assert.equal(empty.status, 200);
+  assert.equal((await empty.json()).recorded, 0);
+
+  // An unknown announcement id is silently skipped (no FK error), not counted.
+  const ghost = await beacon({
+    deviceId: DEVICE_A,
+    ids: ["00000000-0000-4000-8000-000000000000"],
+  });
+  assert.equal((await ghost.json()).recorded, 0);
+
+  // First real view from device A.
+  const first = await beacon({ deviceId: DEVICE_A, ids: [id] });
+  assert.equal((await first.json()).recorded, 1);
+
+  let rows = await (await admin("/api/admin/announcements")).json();
+  let row = rows.find((r) => r.id === id);
+  assert.equal(row.viewDeviceCount, 1, "one device has seen it");
+  assert.equal(row.viewImpressions, 1, "one impression so far");
+  assert.equal(row.viewUserCount, 0, "anonymous view — no signed-in account");
+  assert.ok(row.viewLastSeenAt, "last-seen timestamp present");
+
+  // A repeat view from the SAME device bumps impressions, not the device count.
+  await beacon({ deviceId: DEVICE_A, ids: [id] });
+  // A DIFFERENT device is a new distinct viewer.
+  await beacon({ deviceId: DEVICE_B, ids: [id] });
+
+  rows = await (await admin("/api/admin/announcements")).json();
+  row = rows.find((r) => r.id === id);
+  assert.equal(row.viewDeviceCount, 2, "two distinct devices");
+  assert.equal(row.viewImpressions, 3, "three total impressions (A twice, B once)");
+});
+
 test("admin surface requires auth", async () => {
   const res = await fetch(`${baseUrl}/api/admin/announcements`);
   assert.equal(res.status, 401);
