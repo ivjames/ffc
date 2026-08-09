@@ -637,6 +637,16 @@ create table if not exists reward_grant (
 create index if not exists reward_grant_round_idx    on reward_grant (round_id);
 create index if not exists reward_grant_redeemed_idx on reward_grant (redeemed_at) where redeemed_at is null;
 
+-- A grant is claimed exactly once, through ONE lane: the loyalty card (app,
+-- server-credited) OR the counter (staff, in Master Control). Both set
+-- redeemed_at, so they're mutually exclusive; redeemed_via records which.
+-- Card claims also record the value paid and the vendor tx so a re-opened
+-- summary settles from the row instead of crediting again.
+alter table reward_grant add column if not exists redeemed_via      text;  -- 'card' | 'counter' (null = legacy counter)
+alter table reward_grant add column if not exists tickets_awarded   int;   -- tickets paid on a card claim
+alter table reward_grant add column if not exists card_player_id    text;  -- the loyalty card credited
+alter table reward_grant add column if not exists pos_transaction_id text; -- vendor tx id (null until credited)
+
 -- Photo auto-moderation (unblocks people-in-photos + the social photo share).
 -- Every hunt photo is classified in the SAME vision call that verifies the
 -- find: content safety for a family venue, plus whether people / apparent

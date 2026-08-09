@@ -8,6 +8,8 @@
 // so a code only ever pays out once.
 import { Router } from "express";
 import { pool } from "../db.js";
+import { achievementTickets } from "../lib/rewards.js";
+import { rewardTickets } from "../lib/posLoyalty.js";
 
 export const router = Router();
 
@@ -30,5 +32,126 @@ router.get("/", async (req, res) => {
   } catch (err) {
     console.error("[rewards] error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// POST /api/rewards/claim — redeem an earned achievement to a loyalty card as
+// tickets (the app's grant-backed alternative to the counter code). Unlike the
+// game-rewards proxy, golf is NOT client-scored: the server looks up the stored
+// `reward_grant`, derives the payout from its achievement, and refuses if no
+// grant exists — so a request can't mint tickets without an achievement or
+// over-pay one. `reward_grant.redeemed_at` is the single consume point, so a
+// card claim and a counter redemption are mutually exclusive, and a re-opened
+// summary settles from the row instead of crediting twice. Auth model matches
+// GET above: the round's unguessable clientId is the capability.
+router.post("/claim", async (req, res) => {
+  const { clientId, playerIndex, achievement, playerId } = req.body ?? {};
+  if (typeof clientId !== "string" || clientId.length < 1 || clientId.length > 200) {
+    return res.status(400).json({ ok: false, error: "clientId is required" });
+  }
+  if (!Number.isInteger(playerIndex) || playerIndex < 0 || playerIndex > 3) {
+    return res.status(400).json({ ok: false, error: "playerIndex must be an integer 0..3" });
+  }
+  if (typeof achievement !== "string" || achievement.length < 1 || achievement.length > 64) {
+    return res.status(400).json({ ok: false, error: "achievement is required" });
+  }
+  if (typeof playerId !== "string" || playerId.length < 1 || playerId.length > 100) {
+    return res.status(400).json({ ok: false, error: "playerId (card) is required" });
+  }
+  const tickets = achievementTickets(achievement);
+  if (tickets < 1) return res.status(400).json({ ok: false, error: "unknown achievement" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    // Lock this grant so concurrent claims serialize on the same row.
+    const gres = await client.query(
+      `select g.id, g.redeemed_at, g.redeemed_via, g.tickets_awarded, g.pos_transaction_id,
+              g.card_player_id, l.pos as pos
+         from reward_grant g
+         join round r on r.id = g.round_id
+         join course c on c.id = r.course_id
+         left join location l on l.id = c.location_id
+        where r.client_id = $1 and g.player_index = $2 and g.achievement = $3
+        for update of g`,
+      [clientId, playerIndex, achievement]
+    );
+    const grant = gres.rows[0];
+    if (!grant) {
+      await client.query("rollback");
+      return res.status(404).json({ ok: false, error: "no such achievement grant" });
+    }
+    const loyalty = grant.pos?.loyalty ?? null;
+    if (!loyalty?.gameRewards) {
+      await client.query("rollback");
+      return res.status(403).json({ ok: false, error: "card rewards not enabled for this venue" });
+    }
+
+    if (grant.redeemed_at) {
+      if (grant.redeemed_via !== "card") {
+        // Consumed at the counter — the other lane won it.
+        await client.query("rollback");
+        return res.status(409).json({ ok: false, error: "already redeemed at the counter" });
+      }
+      if (grant.pos_transaction_id) {
+        // Already credited to a card; answer from the row (re-opened summary).
+        await client.query("commit");
+        return res.json({
+          ok: true,
+          status: "awarded",
+          ticketsAwarded: grant.tickets_awarded,
+          newTicketBalance: null,
+          duplicate: true,
+        });
+      }
+      // Card-claimed but the vendor credit never settled (a crash between the
+      // two) — keep the claim and retry the credit below under the same key.
+      await client.query("commit");
+    } else {
+      await client.query(
+        `update reward_grant
+            set redeemed_at = now(), redeemed_via = 'card',
+                tickets_awarded = $2, card_player_id = $3
+          where id = $1`,
+        [grant.id, tickets, playerId]
+      );
+      await client.query("commit");
+    }
+
+    const payTickets = grant.tickets_awarded ?? tickets;
+    // Always credit the card THIS claim reserved — on a retry that's the stored
+    // card_player_id, not the current request's (the linked card may have
+    // changed between attempts, but the reward belongs to the reserved card).
+    const creditCard = grant.card_player_id || playerId;
+    // The pre-proxy client wrote this exact vendor key directly; reuse it so a
+    // summary credited before this deploy de-dupes vendor-side, not double-pays.
+    const pos = await rewardTickets(loyalty, {
+      playerId: creditCard,
+      tickets: payTickets,
+      source: `golf:${achievement}`,
+      idempotencyKey: `golf:${clientId}:${playerIndex}:${achievement}`,
+    });
+    if (pos.ok !== true) {
+      // The claim (consume) holds this reward for the card; a retry replays the
+      // credit under the same idempotency key (the vendor de-dupes).
+      console.error("[rewards/claim] POS credit failed (claim held):", pos.error);
+      return res.status(502).json({ ok: false, error: pos.error });
+    }
+    await pool.query(`update reward_grant set pos_transaction_id = $2 where id = $1`, [
+      grant.id,
+      pos.transactionId ?? "credited",
+    ]);
+    return res.json({
+      ok: true,
+      status: "awarded",
+      ticketsAwarded: payTickets,
+      newTicketBalance: pos.newTicketBalance ?? null,
+    });
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    console.error("[rewards/claim] error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  } finally {
+    client.release();
   }
 });

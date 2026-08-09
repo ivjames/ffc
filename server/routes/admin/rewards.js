@@ -18,6 +18,7 @@ export const router = Router();
 const REWARD_COLS = `g.id, g.code, g.player_index as "playerIndex",
   g.player_tag as "playerTag", g.achievement,
   g.created_at as "createdAt", g.redeemed_at as "redeemedAt", g.redeemed_by as "redeemedBy",
+  g.redeemed_via as "redeemedVia", g.tickets_awarded as "ticketsAwarded",
   c.name as "courseName", l.name as "locationName"`;
 
 const REWARD_FROM = `from reward_grant g
@@ -69,21 +70,47 @@ async function setRedeemed(req, res, redeemed) {
   try {
     // Scope check first (a 403 must not flip the row).
     const existing = await pool.query(
-      `select l.org_id as "orgId" ${REWARD_FROM} where g.id = $1`,
+      `select l.org_id as "orgId", g.redeemed_at as "redeemedAt", g.redeemed_via as "redeemedVia"
+         ${REWARD_FROM} where g.id = $1`,
       [id]
     );
     if (existing.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
     if (scope && existing.rows[0].orgId !== scope) {
       return res.status(403).json({ ok: false, error: "forbidden: not your org" });
     }
-    const db = await pool.query(
-      `update reward_grant g0
-          set redeemed_at = ${redeemed ? "now()" : "null"},
-              redeemed_by = ${redeemed ? "$2" : "null"}
-        where g0.id = $1
-        returning g0.id`,
-      redeemed ? [id, actorLabel(req)] : [id]
-    );
+    // A card claim is a completed, credited payout — it is NOT undoable at the
+    // counter (undoing it and then handing out the counter prize would double).
+    if (!redeemed && existing.rows[0].redeemedVia === "card") {
+      return res.status(409).json({ ok: false, error: "a card claim can't be undone" });
+    }
+    let db;
+    if (redeemed) {
+      // Counter-redeem ONLY an open grant, atomically — so a card claim that
+      // commits between the read above and here can't be overwritten to
+      // 'counter' after its tickets were already credited (both lanes paying).
+      db = await pool.query(
+        `update reward_grant g0
+            set redeemed_at = now(), redeemed_by = $2, redeemed_via = 'counter'
+          where g0.id = $1 and g0.redeemed_at is null
+          returning g0.id`,
+        [id, actorLabel(req)]
+      );
+      if (db.rowCount === 0) {
+        // Lost the race (or already redeemed) — surface which lane won.
+        const now = await pool.query(`select redeemed_via as v from reward_grant where id = $1`, [id]);
+        return res.status(409).json({
+          ok: false,
+          error: now.rows[0]?.v === "card" ? "already claimed to a rewards card" : "already redeemed",
+        });
+      }
+    } else {
+      db = await pool.query(
+        `update reward_grant g0 set redeemed_at = null, redeemed_by = null, redeemed_via = null
+          where g0.id = $1
+          returning g0.id`,
+        [id]
+      );
+    }
     if (db.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
     const full = await pool.query(`select ${REWARD_COLS} ${REWARD_FROM} where g.id = $1`, [id]);
     await audit({

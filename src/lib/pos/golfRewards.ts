@@ -1,37 +1,23 @@
 import { getLinkedPlayerId } from '../rewardsCard';
 import { posFor } from './index';
-import { submitAward, type GameAwardOutcome } from './gameRewards';
+import { apiUrl } from '../../sync';
+import type { GameAwardOutcome } from './gameRewards';
 
-// Golf round achievements credit the linked card as tickets — the same lane as
-// mini-game rewards, and through the same server award proxy (the browser never
-// credits the POS directly): the server caps the payout, records the issuance,
-// and holds the vendor credentials. The server still computes achievements
-// (server/lib/rewards.js) and its counter codes remain the fallback for venues
-// without the loyalty add-on. Achievement keys mirror server/lib/rewards.js.
+// Golf round achievements redeem to the linked card as tickets through the
+// server's grant-backed claim endpoint (POST /api/rewards/claim). Golf is NOT a
+// client-scored game: the server looks up the recorded `reward_grant`, derives
+// the payout from its achievement, and marks the grant redeemed — so a card
+// claim and the counter code are mutually exclusive, and the client can't set
+// the amount. The counter code stays the fallback for venues without the
+// loyalty add-on. The app side just identifies (round, player, achievement) and
+// renders the tickets the server says it paid.
 
-// Every golf achievement reports under one server reward source (registered in
-// server/lib/gameRewards.js OTHER_REWARD_SOURCES); per-achievement idempotency
-// comes from the session id (golfRewardKey).
-const GOLF_SOURCE = 'golf';
-
-// Tickets per achievement, on the same payout scale as the games. Tunable.
-export const GOLF_ACHIEVEMENT_TICKETS: Record<string, number> = {
-  hole_in_one: 100,
-  under_par: 50,
-  hunt_master: 75,
-};
-
-/** Ticket value for a golf achievement (0 for an unknown/unpriced one). */
-export function golfTicketsFor(achievement: string): number {
-  return GOLF_ACHIEVEMENT_TICKETS[achievement] ?? 0;
-}
-
-/** Which players' achievements this device credits to its linked card. A
+/** Which players' achievements this device redeems to its linked card. A
  *  single-device (pass-and-play) round shares one device and one card, so it
- *  credits every player — no counter codes. A shared multi-device round credits
- *  only this device's own slot; every other player is on their own phone and
- *  card, and every phone fetches the same grant list (clientId `shared:<id>`),
- *  so crediting all of them would pay each reward onto every card. */
+ *  claims every player. A shared multi-device round claims only this device's
+ *  own slot; every other player is on their own phone and card, and every phone
+ *  fetches the same grant list (clientId `shared:<id>`), so claiming all of
+ *  them would pay each reward onto every card. */
 export function deviceOwnsSlot(opts: {
   deviceSlot: number;
   isShared: boolean;
@@ -40,34 +26,42 @@ export function deviceOwnsSlot(opts: {
   return !opts.isShared || opts.playerIndex === opts.deviceSlot;
 }
 
-/** Stable idempotency key per (round, player, achievement) — a re-viewed
- *  summary or a card linked after the fact replays instead of double-crediting.
- */
-export function golfRewardKey(clientId: string, playerIndex: number, achievement: string): string {
-  return `golf:${clientId}:${playerIndex}:${achievement}`;
-}
-
-/** Credit one round achievement to the linked card, if the ROUND'S venue sells
- *  the gameRewards add-on and a card is linked. Gates on the round's own
- *  `locationId` (not the mutable current location) and submits through the
- *  server award proxy, which caps + records + credits the vendor. */
+/** Redeem one achievement to the linked card, if the ROUND'S venue sells the
+ *  gameRewards add-on and a card is linked. The server validates the grant and
+ *  computes the payout; the outcome's ticket count is what actually landed. */
 export async function awardGolfReward(opts: {
   locationId: string;
   achievement: string;
   clientId: string;
   playerIndex: number;
 }): Promise<GameAwardOutcome> {
-  const capabilities = posFor(opts.locationId);
-  if (!capabilities.gameRewards) return { status: 'unavailable' };
+  // Gate on the round's own venue (not the mutable current location).
+  if (!posFor(opts.locationId).gameRewards) return { status: 'unavailable' };
   const playerId = getLinkedPlayerId();
   if (!playerId) return { status: 'no-card' };
-  const tickets = golfTicketsFor(opts.achievement);
-  if (!Number.isInteger(tickets) || tickets < 1) return { status: 'unavailable' };
-  return submitAward({
-    locationId: opts.locationId,
-    playerId,
-    game: GOLF_SOURCE,
-    tickets,
-    sessionId: golfRewardKey(opts.clientId, opts.playerIndex, opts.achievement),
-  });
+  try {
+    const res = await fetch(apiUrl('/api/rewards/claim'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: opts.clientId,
+        playerIndex: opts.playerIndex,
+        achievement: opts.achievement,
+        playerId,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok !== true) {
+      // Venue config changed under us — mirror the pre-flight gating.
+      if (res.status === 403) return { status: 'unavailable' };
+      return { status: 'error', error: data.error ?? `HTTP ${res.status}` };
+    }
+    return {
+      status: 'awarded',
+      tickets: data.ticketsAwarded,
+      newTicketBalance: data.newTicketBalance ?? null,
+    };
+  } catch {
+    return { status: 'error', error: 'network error' };
+  }
 }

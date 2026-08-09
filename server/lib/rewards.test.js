@@ -2,12 +2,30 @@
 // achievement logic and the redemption-code shape.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scoreAchievements, newRewardCode, CODE_LENGTH } from "./rewards.js";
+import {
+  scoreAchievements,
+  newRewardCode,
+  CODE_LENGTH,
+  achievementTickets,
+  ACHIEVEMENTS,
+} from "./rewards.js";
 
 const PARS = Array(18).fill(3); // course par 54
 
 const fullCard = (strokes, playerIndex = 0) =>
   Array.from({ length: 18 }, (_, i) => ({ playerIndex, hole: i + 1, strokes }));
+
+test("achievementTickets prices every catalog achievement, 0 for unknown", () => {
+  // Every achievement a round can grant must have a payout, or a card claim for
+  // it would silently pay nothing.
+  for (const key of Object.keys(ACHIEVEMENTS)) {
+    assert.ok(achievementTickets(key) > 0, `${key} must have a payout`);
+  }
+  assert.equal(achievementTickets("hole_in_one"), 100);
+  assert.equal(achievementTickets("under_par"), 50);
+  assert.equal(achievementTickets("hunt_master"), 75);
+  assert.equal(achievementTickets("nope"), 0);
+});
 
 test("a full card at par earns nothing", () => {
   assert.deepEqual(scoreAchievements(fullCard(3), 1, PARS), []);
