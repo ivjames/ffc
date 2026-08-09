@@ -8,6 +8,32 @@ import { HOLE_COUNT } from '../lib/scoring';
 // pushes them to the API. v2 adds the shared-game outbox: cell writes queued
 // while offline/mid-flight, drained to POST /api/games/:id/scores.
 
+// A placed sticker in a photo-booth draft. Mirrors the editor's own sticker
+// shape (features/photos/PhotoBooth.tsx imports this as its Sticker type) so
+// there's a single definition. Coordinates are fractions of the photo (0..1),
+// so a draft re-opens identically at any display size.
+export interface BoothSticker {
+  id: number;
+  emoji: string;
+  x: number;
+  y: number;
+  scale: number;
+  rot: number;
+}
+
+// The editable source behind a saved booth photo, kept ONLY on the device that
+// made it (never uploaded — the server keeps just the flattened JPEG). Lets the
+// player re-open a saved photo, move/add/remove stickers, and re-flatten.
+// Keyed by the server photo id it corresponds to. `base` is the undecorated
+// photo (already downscaled to the export cap); re-flattening base + stickers
+// reproduces the picture. Naturally per-device and ephemeral, like the booth.
+export interface BoothPhotoDraft {
+  id: string; // the server booth_photo id
+  base: Blob; // undecorated photo (normalized to the export long-edge cap)
+  stickers: BoothSticker[];
+  updatedAt: number;
+}
+
 interface FfcDB extends DBSchema {
   rounds: {
     key: string; // clientId
@@ -19,10 +45,14 @@ interface FfcDB extends DBSchema {
     value: OutboxEntry;
     indexes: { 'by-game': string };
   };
+  boothDrafts: {
+    key: string; // the server booth_photo id
+    value: BoothPhotoDraft;
+  };
 }
 
 const DB_NAME = 'ffc';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<FfcDB>> | null = null;
 
@@ -37,6 +67,10 @@ function getDB(): Promise<IDBPDatabase<FfcDB>> {
         if (oldVersion < 2) {
           const outbox = db.createObjectStore('outbox', { autoIncrement: true });
           outbox.createIndex('by-game', 'gameId');
+        }
+        if (oldVersion < 3) {
+          // Photo-booth editable drafts, keyed by the server photo id.
+          db.createObjectStore('boothDrafts', { keyPath: 'id' });
         }
       },
     });
@@ -134,5 +168,47 @@ export async function clearOutbox(keys: number[]): Promise<void> {
   const db = await getDB();
   const tx = db.transaction('outbox', 'readwrite');
   await Promise.all(keys.map((k) => tx.store.delete(k)));
+  await tx.done;
+}
+
+// --- Photo-booth drafts ------------------------------------------------------
+
+export async function putBoothDraft(draft: BoothPhotoDraft): Promise<void> {
+  const db = await getDB();
+  await db.put('boothDrafts', draft);
+}
+
+export async function getBoothDraft(id: string): Promise<BoothPhotoDraft | undefined> {
+  const db = await getDB();
+  return db.get('boothDrafts', id);
+}
+
+export async function deleteBoothDraft(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('boothDrafts', id);
+}
+
+/** Ids of every saved photo that has a local editable draft — for the gallery
+ *  to mark which photos can be re-opened in the editor. */
+export async function getBoothDraftIds(): Promise<string[]> {
+  const db = await getDB();
+  return db.getAllKeys('boothDrafts');
+}
+
+/** Drop drafts whose photo the server no longer has (deleted by the player on
+ *  another device, by staff, or by the retention sweep). Pass the ids the
+ *  server currently reports; call ONLY after a successful, complete fetch so a
+ *  transient empty list never wipes live drafts. */
+export async function pruneBoothDrafts(liveIds: Iterable<string>): Promise<void> {
+  const keep = new Set(liveIds);
+  const db = await getDB();
+  const tx = db.transaction('boothDrafts', 'readwrite');
+  for (
+    let cursor = await tx.store.openCursor();
+    cursor;
+    cursor = await cursor.continue()
+  ) {
+    if (!keep.has(cursor.key)) await cursor.delete();
+  }
   await tx.done;
 }

@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { loadImage, blobToBase64 } from '../../lib/image';
+import { loadImage, encodeJpeg, blobToBase64 } from '../../lib/image';
 import { useCurrentLocationId } from '../../lib/location';
+import {
+  putBoothDraft,
+  getBoothDraft,
+  deleteBoothDraft,
+  getBoothDraftIds,
+  pruneBoothDrafts,
+  type BoothSticker,
+} from '../../db';
 import {
   fetchBoothPhotos,
   uploadBoothPhoto,
@@ -23,6 +31,14 @@ import {
 //
 // The gallery is keyed by an unguessable per-device booth id (api.ts), not a
 // round or an account — the booth works before, during, and after a game.
+//
+// Editable drafts: the server only ever holds the flattened JPEG, but this
+// device also keeps the editable source (base photo + sticker placements) in
+// IndexedDB (db.ts, boothDrafts), so a saved photo can be re-opened and its
+// stickers moved/added/removed, then re-flattened. Drafts live only on the
+// device that made the photo (never uploaded — no extra data on the server, no
+// change to the privacy story) and are pruned when their photo disappears.
+// Re-saving an edit replaces the server copy (delete + re-upload).
 
 // The sticker sheet. Emoji, not image assets: nothing to precache into the PWA
 // bundle, free color rendering on canvas, and endless variety is one edit away.
@@ -36,14 +52,9 @@ const STICKER_SHEET = [
 // A placed sticker. x/y are the sticker's CENTER as fractions of the photo box
 // (0..1), so placement survives both screen rotation and the export upscale;
 // scale multiplies the base size (22% of the photo's width); rot is degrees.
-type Sticker = {
-  id: number;
-  emoji: string;
-  x: number;
-  y: number;
-  scale: number;
-  rot: number;
-};
+// Defined once in db/index.ts (BoothSticker) so a saved draft round-trips
+// through the exact same shape.
+type Sticker = BoothSticker;
 
 // Base sticker size as a fraction of the photo's width — same constant drives
 // the on-screen preview and the canvas export, so what you see is what bakes.
@@ -100,9 +111,16 @@ function stickerSide(imageWidth: number, scale: number): number {
 }
 
 type Editor = {
-  /** Object URL of the picked photo, alive for the whole editing session. */
+  /** Object URL of the base photo, alive for the whole editing session. */
   url: string;
   img: HTMLImageElement;
+  /** The undecorated, normalized base photo — persisted with the draft so a
+   *  re-edit starts from the exact same pixels (no generational recompression).
+   *  img is loaded from this blob, so the two are pixel-identical. */
+  base: Blob;
+  /** The server photo id when re-editing an existing save; null for a new
+   *  capture. Drives whether Save creates or replaces. */
+  editingId: string | null;
 };
 
 function flattenToJpeg(editor: Editor, stickers: Sticker[]): Promise<Blob> {
@@ -141,6 +159,8 @@ export default function PhotoBooth() {
   // Gallery
   const [photos, setPhotos] = useState<BoothPhoto[] | null>(null);
   const [galleryError, setGalleryError] = useState<string | null>(null);
+  // Ids of saved photos that have a local editable draft (this device only).
+  const [editableIds, setEditableIds] = useState<Set<string>>(new Set());
   // Viewer overlay: which stored photo is open, and share/delete state.
   const [viewing, setViewing] = useState<BoothPhoto | null>(null);
   const [viewerBusy, setViewerBusy] = useState(false);
@@ -160,15 +180,31 @@ export default function PhotoBooth() {
   const boxRef = useRef<HTMLDivElement>(null);
   const [boxW, setBoxW] = useState(0);
 
+  async function refreshEditable() {
+    try {
+      setEditableIds(new Set(await getBoothDraftIds()));
+    } catch {
+      // idb unavailable (private mode / quota) — drafts just won't show.
+    }
+  }
+
   async function refreshGallery() {
     try {
-      setPhotos(await fetchBoothPhotos());
+      const list = await fetchBoothPhotos();
+      setPhotos(list);
       setGalleryError(null);
+      // The fetch is complete (booth cap < the 200-row limit), so any draft
+      // whose photo isn't here was deleted elsewhere (staff/retention/another
+      // device) — prune it. Guarded on success so an offline blip never wipes
+      // live drafts.
+      await pruneBoothDrafts(list.map((p) => p.id)).catch(() => {});
+      await refreshEditable();
     } catch {
       // Offline (or server down): the booth's editor + direct share still
       // work, so keep the page useful and say the gallery part is off.
       setGalleryError("Couldn't load your saved photos — check your connection.");
       setPhotos((cur) => cur ?? []);
+      await refreshEditable();
     }
   }
 
@@ -199,13 +235,44 @@ export default function PhotoBooth() {
     e.target.value = ''; // allow re-picking the same file
     if (!file) return;
     try {
-      const img = await loadImage(file);
+      // Normalize once to a downscaled JPEG base, then work off THAT image, so
+      // the editing pixels, the stored draft, and the export all match — and
+      // the draft stays small. Fall back to the raw file if canvas is out.
+      const picked = await loadImage(file);
+      const base = (await encodeJpeg(picked, EXPORT_MAX_DIM, 0.85)) ?? file;
+      const img = await loadImage(base);
+      nextStickerId.current = 1;
       setStickers([]);
       setSelectedId(null);
       setEditorError(null);
-      setEditor({ url: URL.createObjectURL(file), img });
+      setEditor({ url: URL.createObjectURL(base), img, base, editingId: null });
     } catch {
       setGalleryError("Couldn't read that photo — try another one.");
+    }
+  }
+
+  // Re-open a saved photo from its local draft: reconstruct the editor from the
+  // stored base + sticker placements. Only offered for photos this device has a
+  // draft for (editableIds).
+  async function onEditPhoto(photo: BoothPhoto) {
+    try {
+      const draft = await getBoothDraft(photo.id);
+      if (!draft) return; // pruned/gone — the button shouldn't have shown
+      const img = await loadImage(draft.base);
+      nextStickerId.current =
+        draft.stickers.reduce((m, s) => Math.max(m, s.id), 0) + 1;
+      setViewing(null);
+      setStickers(draft.stickers);
+      setSelectedId(null);
+      setEditorError(null);
+      setEditor({
+        url: URL.createObjectURL(draft.base),
+        img,
+        base: draft.base,
+        editingId: photo.id,
+      });
+    } catch {
+      setGalleryError("Couldn't open that photo for editing.");
     }
   }
 
@@ -277,11 +344,35 @@ export default function PhotoBooth() {
     setEditorError(null);
     try {
       const blob = await flattenToJpeg(editor, stickers);
-      await uploadBoothPhoto({
-        imageBase64: await blobToBase64(blob),
+      const imageBase64 = await blobToBase64(blob);
+
+      // Re-saving an edit: remove the old copy first so the new one always has
+      // room under the per-booth cap / disk budget (a booth photo id changes on
+      // replace). If the upload then fails, the editor stays open for a retry —
+      // now as a fresh create, since editingId is cleared and the draft's base
+      // is still in memory.
+      if (editor.editingId) {
+        await deleteBoothPhoto(editor.editingId).catch(() => {});
+        await deleteBoothDraft(editor.editingId).catch(() => {});
+        setEditor((e) => (e ? { ...e, editingId: null } : e));
+      }
+
+      const saved = await uploadBoothPhoto({
+        imageBase64,
         mediaType: 'image/jpeg',
         locationId: locationId ?? undefined,
       });
+
+      // Persist the editable draft locally (never uploaded) so this photo can
+      // be re-opened and re-decorated. Best-effort: a save is still a save even
+      // if idb is full/unavailable — the photo just won't be re-editable.
+      await putBoothDraft({
+        id: saved.id,
+        base: editor.base,
+        stickers,
+        updatedAt: Date.now(),
+      }).catch(() => {});
+
       closeEditor();
       void refreshGallery();
     } catch (err) {
@@ -325,9 +416,16 @@ export default function PhotoBooth() {
     setViewerBusy(true);
     try {
       await deleteBoothPhoto(photo.id);
+      await deleteBoothDraft(photo.id).catch(() => {});
       setViewing(null);
       setDeleteArmed(false);
       setPhotos((cur) => cur?.filter((p) => p.id !== photo.id) ?? null);
+      setEditableIds((cur) => {
+        if (!cur.has(photo.id)) return cur;
+        const next = new Set(cur);
+        next.delete(photo.id);
+        return next;
+      });
     } catch {
       setGalleryError("Couldn't delete that photo — check your connection.");
     } finally {
@@ -353,7 +451,7 @@ export default function PhotoBooth() {
     const ratio = editor.img.naturalWidth / editor.img.naturalHeight;
     return (
       <Screen>
-        <TopBar title="Decorate" />
+        <TopBar title={editor.editingId ? 'Edit photo' : 'Decorate'} />
         <Content>
           <div
             ref={boxRef}
@@ -442,13 +540,17 @@ export default function PhotoBooth() {
 
           <div className="mt-4 space-y-2">
             <Button onClick={() => void onSave()} disabled={saving} sound="cup">
-              {saving ? 'Saving…' : '✅ Save to camera roll'}
+              {saving
+                ? 'Saving…'
+                : editor.editingId
+                  ? '✅ Save changes'
+                  : '✅ Save to camera roll'}
             </Button>
             <Button variant="ghost" onClick={() => void onShareFromEditor()} disabled={saving}>
               📤 Share
             </Button>
             <Button variant="ghost" onClick={closeEditor} disabled={saving}>
-              ✕ Discard
+              {editor.editingId ? '✕ Cancel' : '✕ Discard'}
             </Button>
           </div>
         </Content>
@@ -513,7 +615,7 @@ export default function PhotoBooth() {
                   setViewing(p);
                   setDeleteArmed(false);
                 }}
-                className="tile animate-pop-in aspect-square overflow-hidden rounded-2xl"
+                className="tile animate-pop-in relative aspect-square overflow-hidden rounded-2xl"
                 style={{ '--i': i } as CSSProperties}
               >
                 <img
@@ -522,6 +624,15 @@ export default function PhotoBooth() {
                   loading="lazy"
                   className="h-full w-full object-cover"
                 />
+                {/* This device has the editable draft — mark it re-openable. */}
+                {editableIds.has(p.id) && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute bottom-1 right-1 rounded-full bg-black/55 px-1.5 py-0.5 text-xs leading-none"
+                  >
+                    ✏️
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -545,6 +656,16 @@ export default function PhotoBooth() {
             <Button onClick={() => void onShareStored(viewing)} disabled={viewerBusy}>
               {viewerBusy ? '…' : '📤 Share'}
             </Button>
+            {/* Re-open in the editor — only when this device holds the draft. */}
+            {editableIds.has(viewing.id) && (
+              <Button
+                variant="ghost"
+                onClick={() => void onEditPhoto(viewing)}
+                disabled={viewerBusy}
+              >
+                ✏️ Edit stickers
+              </Button>
+            )}
             <Button
               variant="danger"
               onClick={() => void onDeleteStored(viewing)}
