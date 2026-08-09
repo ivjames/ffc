@@ -19,6 +19,7 @@ import { router as huntUsageRouter } from "./huntUsage.js";
 import { router as huntItemsRouter } from "./huntItems.js";
 import { router as photosRouter } from "./photos.js";
 import { router as boothPhotosRouter } from "./boothPhotos.js";
+import { router as boothStickersRouter } from "./boothStickers.js";
 import { router as announcementsRouter } from "./announcements.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as gameRewardsAdminRouter } from "./gameRewards.js";
@@ -46,6 +47,8 @@ router.use("/hunt-items", huntItemsRouter);
 router.use("/photos", photosRouter);
 // Photo-booth review — the only moderation the AI-free booth pipeline has.
 router.use("/booth-photos", boothPhotosRouter);
+// Per-venue SVG sticker management for the photo booth.
+router.use("/booth-stickers", boothStickersRouter);
 router.use("/announcements", announcementsRouter);
 router.use("/rewards", rewardsRouter);
 // Game ticket economy — caps metadata + app-issued ticket rollup.

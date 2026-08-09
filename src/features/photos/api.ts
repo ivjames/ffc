@@ -30,6 +30,29 @@ export type BoothPhoto = {
   createdAt: string;
 };
 
+// A venue-uploaded SVG sticker offered in the booth's sticker sheet at that
+// location. width/height are the SVG's intrinsic box, for aspect sizing.
+export type VenueSticker = {
+  id: string;
+  label: string | null;
+  width: number;
+  height: number;
+};
+
+/** The current venue's sticker sheet. Public (branded decorations, not user
+ *  content); empty array when the venue has none or is unknown. */
+export async function fetchVenueStickers(locationId: string): Promise<VenueSticker[]> {
+  const res = await fetch(apiUrl(`/api/photos/stickers?location=${encodeURIComponent(locationId)}`));
+  if (!res.ok) throw new Error(`Stickers failed: HTTP ${res.status}`);
+  return res.json();
+}
+
+/** <img src> URL for a venue sticker's SVG. Served inert (locked-down CSP) and
+ *  only ever used as image data, never inlined into the DOM. */
+export function venueStickerUrl(id: string): string {
+  return apiUrl(`/api/photos/stickers/${id}/image`);
+}
+
 export async function fetchBoothPhotos(): Promise<BoothPhoto[]> {
   const res = await fetch(apiUrl(`/api/photos?booth=${encodeURIComponent(getBoothId())}`));
   if (!res.ok) throw new Error(`Photos failed: HTTP ${res.status}`);

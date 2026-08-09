@@ -12,13 +12,22 @@ import { HOLE_COUNT } from '../lib/scoring';
 // shape (features/photos/PhotoBooth.tsx imports this as its Sticker type) so
 // there's a single definition. Coordinates are fractions of the photo (0..1),
 // so a draft re-opens identically at any display size.
+//
+// A sticker is one of two kinds, discriminated by which field is set:
+//  - `emoji` — a built-in Unicode emoji (the default sheet)
+//  - `svgId` — a venue-uploaded SVG sticker (server booth_sticker id); on
+//    re-edit it's re-fetched from the venue and re-rasterized. If the venue has
+//    since removed it, the draft drops that one sticker and keeps the rest.
+// Older drafts predate svgId and always carry `emoji`, so this stays backward
+// compatible with no IndexedDB migration.
 export interface BoothSticker {
   id: number;
-  emoji: string;
   x: number;
   y: number;
   scale: number;
   rot: number;
+  emoji?: string;
+  svgId?: string;
 }
 
 // The editable source behind a saved booth photo, kept ONLY on the device that

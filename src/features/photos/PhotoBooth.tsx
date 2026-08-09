@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { loadImage, encodeJpeg, blobToBase64 } from '../../lib/image';
@@ -19,7 +19,10 @@ import {
   shareBoothPhoto,
   shareEditedPhoto,
   boothPhotoUrl,
+  fetchVenueStickers,
+  venueStickerUrl,
   type BoothPhoto,
+  type VenueSticker,
 } from './api';
 
 // Photo booth — snap a photo, slap stickers on it, keep it in the group's
@@ -87,9 +90,9 @@ const STICKER_MARGIN = 0.14;
 const EMOJI_FONT =
   '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
-const stickerCache = new Map<string, StickerBitmap>();
-function stickerBitmap(emoji: string): StickerBitmap {
-  const cached = stickerCache.get(emoji);
+const emojiCache = new Map<string, StickerBitmap>();
+function emojiBitmap(emoji: string): StickerBitmap {
+  const cached = emojiCache.get(emoji);
   if (cached) return cached;
 
   const REF = 256; // reference font px for measuring + drawing
@@ -136,13 +139,60 @@ function stickerBitmap(emoji: string): StickerBitmap {
   // resizes its stickers). Ink beyond the em — and the margin — scale along, and
   // because the bitmap now contains all of it, nothing clips.
   const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), ratio: REF / side };
-  stickerCache.set(emoji, bitmap);
+  emojiCache.set(emoji, bitmap);
   return bitmap;
 }
 
-// The rendered square's side, so the emoji's em ends up STICKER_BASE*width*scale
-// (matching the prior font-based sizing); the measured ink + margin around the
-// em scale along with it, via `ratio`.
+// --- Venue SVG stickers ------------------------------------------------------
+// Venue-uploaded SVGs are rasterized to the SAME bitmap shape as emoji, so the
+// whole preview/export pipeline treats both identically (and the export stays
+// WYSIWYG). The SVG is loaded via an <img> (never inlined — inert, no script
+// execution) and drawn contain-fit into a square canvas; `ratio: 1` sizes the
+// sticker so its larger dimension matches the emoji scale. Same-origin +
+// sanitized (no foreignObject/external refs) means drawing it never taints the
+// canvas, so the export toBlob still works.
+const SVG_RASTER_PX = 512;
+const svgCache = new Map<string, StickerBitmap>();
+const svgPending = new Map<string, Promise<StickerBitmap | null>>();
+
+function loadSvgBitmap(svgId: string, aspectW: number, aspectH: number): Promise<StickerBitmap | null> {
+  const done = svgCache.get(svgId);
+  if (done) return Promise.resolve(done);
+  const inflight = svgPending.get(svgId);
+  if (inflight) return inflight;
+
+  const p = new Promise<StickerBitmap | null>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = SVG_RASTER_PX;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(null);
+      // Contain-fit the SVG's aspect into the square, centered.
+      const scale = SVG_RASTER_PX / Math.max(aspectW, aspectH);
+      const dw = aspectW * scale;
+      const dh = aspectH * scale;
+      ctx.drawImage(img, (SVG_RASTER_PX - dw) / 2, (SVG_RASTER_PX - dh) / 2, dw, dh);
+      let bitmap: StickerBitmap | null;
+      try {
+        bitmap = { canvas, url: canvas.toDataURL(), ratio: 1 };
+      } catch {
+        bitmap = null; // tainted (shouldn't happen for sanitized same-origin SVG)
+      }
+      if (bitmap) svgCache.set(svgId, bitmap);
+      resolve(bitmap);
+    };
+    img.onerror = () => resolve(null); // venue removed it, offline, etc.
+    img.src = venueStickerUrl(svgId);
+  }).finally(() => svgPending.delete(svgId));
+
+  svgPending.set(svgId, p);
+  return p;
+}
+
+// The rendered square's side, so the sticker's reference size ends up
+// STICKER_BASE*width*scale (emoji: the em; SVG: its larger dimension) — the
+// measured margin around it scales along via `ratio`.
 function stickerSide(imageWidth: number, scale: number, ratio: number): number {
   return (STICKER_BASE * imageWidth * scale) / ratio;
 }
@@ -160,7 +210,34 @@ type Editor = {
   editingId: string | null;
 };
 
-function flattenToJpeg(editor: Editor, stickers: Sticker[]): Promise<Blob> {
+// Intrinsic sizes for the venue SVG stickers currently in play, so an SVG
+// sticker rasterizes at the right aspect. Missing entry -> a 1:1 fallback.
+type SvgMeta = Map<string, { width: number; height: number }>;
+
+/** The bitmap for a sticker if it's ready synchronously (emoji always are; an
+ *  SVG only once rasterized). Null means "render nothing yet". */
+function peekBitmap(st: Sticker): StickerBitmap | null {
+  if (st.emoji) return emojiBitmap(st.emoji);
+  if (st.svgId) return svgCache.get(st.svgId) ?? null;
+  return null;
+}
+
+/** The bitmap for a sticker, loading/rasterizing an SVG if needed. Null if the
+ *  SVG can't be fetched (venue removed it, offline) — the caller skips it. */
+function ensureBitmap(st: Sticker, svgMeta: SvgMeta): Promise<StickerBitmap | null> {
+  if (st.emoji) return Promise.resolve(emojiBitmap(st.emoji));
+  if (st.svgId) {
+    const m = svgMeta.get(st.svgId) ?? { width: 100, height: 100 };
+    return loadSvgBitmap(st.svgId, m.width, m.height);
+  }
+  return Promise.resolve(null);
+}
+
+async function flattenToJpeg(
+  editor: Editor,
+  stickers: Sticker[],
+  svgMeta: SvgMeta,
+): Promise<Blob> {
   const { img } = editor;
   const s = Math.min(1, EXPORT_MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
   const w = Math.max(1, Math.round(img.naturalWidth * s));
@@ -169,12 +246,13 @@ function flattenToJpeg(editor: Editor, stickers: Sticker[]): Promise<Blob> {
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return Promise.reject(new Error('Canvas is unavailable'));
+  if (!ctx) throw new Error('Canvas is unavailable');
   ctx.drawImage(img, 0, 0, w, h);
   for (const st of stickers) {
     // Same bitmap the editor previews, centered on the same fractional point —
-    // so the save matches the screen exactly.
-    const bmp = stickerBitmap(st.emoji);
+    // so the save matches the screen exactly. An SVG that won't load is skipped.
+    const bmp = await ensureBitmap(st, svgMeta);
+    if (!bmp) continue;
     const side = stickerSide(w, st.scale, bmp.ratio);
     ctx.save();
     ctx.translate(st.x * w, st.y * h);
@@ -216,6 +294,15 @@ export default function PhotoBooth() {
   const [editorError, setEditorError] = useState<string | null>(null);
   const nextStickerId = useRef(1);
 
+  // Venue SVG stickers for the current location, plus a tick bumped when an SVG
+  // finishes rasterizing so placed-but-still-loading ones re-render into view.
+  const [venueStickers, setVenueStickers] = useState<VenueSticker[]>([]);
+  const [, setSvgTick] = useState(0);
+  const svgMeta = useMemo<SvgMeta>(
+    () => new Map(venueStickers.map((s) => [s.id, { width: s.width, height: s.height }])),
+    [venueStickers],
+  );
+
   const fileRef = useRef<HTMLInputElement>(null);
   // The photo box's rendered width, for sizing sticker previews in px.
   const boxRef = useRef<HTMLDivElement>(null);
@@ -252,6 +339,45 @@ export default function PhotoBooth() {
   useEffect(() => {
     void refreshGallery();
   }, []);
+
+  // The venue's sticker sheet for the current location — refreshed when the
+  // player switches venues. Best-effort: the built-in emoji always work.
+  useEffect(() => {
+    if (!locationId) {
+      setVenueStickers([]);
+      return;
+    }
+    let cancelled = false;
+    void fetchVenueStickers(locationId).then(
+      (list) => {
+        if (!cancelled) setVenueStickers(list);
+      },
+      () => {
+        if (!cancelled) setVenueStickers([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId]);
+
+  // Ensure every placed SVG sticker is rasterizing — covers reopening a draft
+  // (which sets stickers directly) as well as fresh adds. Re-renders as each
+  // one resolves so it appears.
+  useEffect(() => {
+    let cancelled = false;
+    for (const st of stickers) {
+      if (st.svgId && !svgCache.get(st.svgId)) {
+        const m = svgMeta.get(st.svgId) ?? { width: 100, height: 100 };
+        void loadSvgBitmap(st.svgId, m.width, m.height).then(() => {
+          if (!cancelled) setSvgTick((t) => t + 1);
+        });
+      }
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [stickers, svgMeta]);
 
   // Track the photo box's width (rotation, window resize) while editing.
   useEffect(() => {
@@ -317,8 +443,14 @@ export default function PhotoBooth() {
     }
   }
 
-  function addSticker(emoji: string) {
+  function addSticker(kind: { emoji: string } | { svgId: string }) {
     const id = nextStickerId.current++;
+    // An SVG is async — kick off its rasterization now so it appears the moment
+    // it's ready (peekBitmap returns null until then).
+    if ('svgId' in kind) {
+      const m = svgMeta.get(kind.svgId) ?? { width: 100, height: 100 };
+      void loadSvgBitmap(kind.svgId, m.width, m.height).then(() => setSvgTick((t) => t + 1));
+    }
     // Drop new stickers near the middle, staggered a little so a quick series
     // doesn't stack into one invisible pile.
     const n = stickers.length;
@@ -326,7 +458,7 @@ export default function PhotoBooth() {
       ...s,
       {
         id,
-        emoji,
+        ...kind,
         x: 0.5 + ((n % 3) - 1) * 0.08,
         y: 0.5 + ((Math.floor(n / 3) % 3) - 1) * 0.08,
         scale: 1,
@@ -389,7 +521,7 @@ export default function PhotoBooth() {
     setSaving(true);
     setEditorError(null);
     try {
-      const blob = await flattenToJpeg(editor, stickers);
+      const blob = await flattenToJpeg(editor, stickers, svgMeta);
       const imageBase64 = await blobToBase64(blob);
 
       // Re-saving an edit overwrites the same row in place (same id, same
@@ -435,7 +567,7 @@ export default function PhotoBooth() {
     setSaving(true);
     setEditorError(null);
     try {
-      await shareEditedPhoto(await flattenToJpeg(editor, stickers));
+      await shareEditedPhoto(await flattenToJpeg(editor, stickers, svgMeta));
     } catch {
       setEditorError("Couldn't share that — try saving it instead.");
     } finally {
@@ -517,7 +649,10 @@ export default function PhotoBooth() {
             {stickers.map((st) => {
               // The rendered bitmap — identical pixels to what the export bakes,
               // so the preview is truly WYSIWYG. Sized off the box's real width.
-              const bmp = stickerBitmap(st.emoji);
+              // An SVG sticker may not be rasterized yet (peekBitmap null) — skip
+              // it this frame; addSticker/the effect bumps svgTick when ready.
+              const bmp = peekBitmap(st);
+              if (!bmp) return null;
               const side = stickerSide(boxW, st.scale, bmp.ratio);
               const isSel = st.id === selectedId;
               return (
@@ -589,12 +724,30 @@ export default function PhotoBooth() {
             )}
           </div>
 
-          {/* The sticker sheet. */}
+          {/* The sticker sheet — this venue's SVG stickers first (when any),
+              then the built-in emoji. */}
           <div className="surface-sunk mt-2 flex gap-1 overflow-x-auto rounded-2xl p-2">
+            {venueStickers.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => addSticker({ svgId: s.id })}
+                aria-label={`Add ${s.label ?? 'venue'} sticker`}
+                title={s.label ?? undefined}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl p-1.5 transition-transform active:scale-125"
+              >
+                {/* Rendered as an <img>: inert, never inlined. */}
+                <img
+                  src={venueStickerUrl(s.id)}
+                  alt=""
+                  draggable={false}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </button>
+            ))}
             {STICKER_SHEET.map((emoji) => (
               <button
                 key={emoji}
-                onClick={() => addSticker(emoji)}
+                onClick={() => addSticker({ emoji })}
                 aria-label={`Add ${emoji} sticker`}
                 className="shrink-0 rounded-xl p-1.5 text-3xl leading-none transition-transform active:scale-125"
               >
