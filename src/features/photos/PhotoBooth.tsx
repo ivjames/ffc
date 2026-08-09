@@ -144,55 +144,39 @@ function emojiBitmap(emoji: string): StickerBitmap {
 }
 
 // --- Venue SVG stickers ------------------------------------------------------
-// Venue-uploaded SVGs are rasterized to the SAME bitmap shape as emoji, so the
-// whole preview/export pipeline treats both identically (and the export stays
-// WYSIWYG). The SVG is loaded via an <img> (never inlined — inert, no script
-// execution) and drawn contain-fit into a square canvas; `ratio: 1` sizes the
-// sticker so its larger dimension matches the emoji scale. Same-origin +
-// sanitized (no foreignObject/external refs) means drawing it never taints the
-// canvas, so the export toBlob still works.
-const SVG_RASTER_PX = 512;
-const svgCache = new Map<string, StickerBitmap>();
-const svgPending = new Map<string, Promise<StickerBitmap | null>>();
+// Venue SVGs stay VECTORS through editing — the editor renders each as an <img>
+// (inert, never inlined — no script execution) so it's crisp at any size, and
+// rasterization happens only at export, where the SVG is drawn to the flatten
+// canvas at the export resolution (not a fixed pre-raster that would go soft
+// when a sticker is scaled up large). Same-origin + sanitized (no
+// foreignObject/external refs) means drawing it never taints the canvas, so the
+// export toBlob still works. The loaded HTMLImageElement is cached so export
+// can drawImage it synchronously once decoded.
+const svgImages = new Map<string, HTMLImageElement>();
+const svgImagePending = new Map<string, Promise<HTMLImageElement | null>>();
 
-function loadSvgBitmap(svgId: string, aspectW: number, aspectH: number): Promise<StickerBitmap | null> {
-  const done = svgCache.get(svgId);
+function loadSvgImage(svgId: string): Promise<HTMLImageElement | null> {
+  const done = svgImages.get(svgId);
   if (done) return Promise.resolve(done);
-  const inflight = svgPending.get(svgId);
+  const inflight = svgImagePending.get(svgId);
   if (inflight) return inflight;
-
-  const p = new Promise<StickerBitmap | null>((resolve) => {
+  const p = new Promise<HTMLImageElement | null>((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = SVG_RASTER_PX;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return resolve(null);
-      // Contain-fit the SVG's aspect into the square, centered.
-      const scale = SVG_RASTER_PX / Math.max(aspectW, aspectH);
-      const dw = aspectW * scale;
-      const dh = aspectH * scale;
-      ctx.drawImage(img, (SVG_RASTER_PX - dw) / 2, (SVG_RASTER_PX - dh) / 2, dw, dh);
-      let bitmap: StickerBitmap | null;
-      try {
-        bitmap = { canvas, url: canvas.toDataURL(), ratio: 1 };
-      } catch {
-        bitmap = null; // tainted (shouldn't happen for sanitized same-origin SVG)
-      }
-      if (bitmap) svgCache.set(svgId, bitmap);
-      resolve(bitmap);
+      svgImages.set(svgId, img);
+      resolve(img);
     };
     img.onerror = () => resolve(null); // venue removed it, offline, etc.
     img.src = venueStickerUrl(svgId);
-  }).finally(() => svgPending.delete(svgId));
-
-  svgPending.set(svgId, p);
+  }).finally(() => svgImagePending.delete(svgId));
+  svgImagePending.set(svgId, p);
   return p;
 }
 
 // The rendered square's side, so the sticker's reference size ends up
-// STICKER_BASE*width*scale (emoji: the em; SVG: its larger dimension) — the
-// measured margin around it scales along via `ratio`.
+// STICKER_BASE*width*scale (emoji: the em; SVG: its larger dimension). For emoji
+// the measured margin around the em is divided back out via `ratio`; SVG passes
+// ratio 1 (its larger dimension IS the reference).
 function stickerSide(imageWidth: number, scale: number, ratio: number): number {
   return (STICKER_BASE * imageWidth * scale) / ratio;
 }
@@ -211,27 +195,8 @@ type Editor = {
 };
 
 // Intrinsic sizes for the venue SVG stickers currently in play, so an SVG
-// sticker rasterizes at the right aspect. Missing entry -> a 1:1 fallback.
+// sticker draws at the right aspect. Missing entry -> a 1:1 fallback.
 type SvgMeta = Map<string, { width: number; height: number }>;
-
-/** The bitmap for a sticker if it's ready synchronously (emoji always are; an
- *  SVG only once rasterized). Null means "render nothing yet". */
-function peekBitmap(st: Sticker): StickerBitmap | null {
-  if (st.emoji) return emojiBitmap(st.emoji);
-  if (st.svgId) return svgCache.get(st.svgId) ?? null;
-  return null;
-}
-
-/** The bitmap for a sticker, loading/rasterizing an SVG if needed. Null if the
- *  SVG can't be fetched (venue removed it, offline) — the caller skips it. */
-function ensureBitmap(st: Sticker, svgMeta: SvgMeta): Promise<StickerBitmap | null> {
-  if (st.emoji) return Promise.resolve(emojiBitmap(st.emoji));
-  if (st.svgId) {
-    const m = svgMeta.get(st.svgId) ?? { width: 100, height: 100 };
-    return loadSvgBitmap(st.svgId, m.width, m.height);
-  }
-  return Promise.resolve(null);
-}
 
 async function flattenToJpeg(
   editor: Editor,
@@ -249,15 +214,27 @@ async function flattenToJpeg(
   if (!ctx) throw new Error('Canvas is unavailable');
   ctx.drawImage(img, 0, 0, w, h);
   for (const st of stickers) {
-    // Same bitmap the editor previews, centered on the same fractional point —
-    // so the save matches the screen exactly. An SVG that won't load is skipped.
-    const bmp = await ensureBitmap(st, svgMeta);
-    if (!bmp) continue;
-    const side = stickerSide(w, st.scale, bmp.ratio);
     ctx.save();
     ctx.translate(st.x * w, st.y * h);
     ctx.rotate((st.rot * Math.PI) / 180);
-    ctx.drawImage(bmp.canvas, -side / 2, -side / 2, side, side);
+    if (st.emoji) {
+      // The same measured bitmap the editor previews — pixel-identical.
+      const bmp = emojiBitmap(st.emoji);
+      const side = stickerSide(w, st.scale, bmp.ratio);
+      ctx.drawImage(bmp.canvas, -side / 2, -side / 2, side, side);
+    } else if (st.svgId) {
+      // Rasterize the vector HERE, at export resolution, so it's crisp however
+      // large the sticker is. An SVG that won't load is simply skipped.
+      const svg = await loadSvgImage(st.svgId);
+      if (svg) {
+        const side = stickerSide(w, st.scale, 1);
+        const m = svgMeta.get(st.svgId) ?? { width: 100, height: 100 };
+        const fit = side / Math.max(m.width, m.height); // contain by larger side
+        const dw = m.width * fit;
+        const dh = m.height * fit;
+        ctx.drawImage(svg, -dw / 2, -dh / 2, dw, dh);
+      }
+    }
     ctx.restore();
   }
   return new Promise((resolve, reject) => {
@@ -294,10 +271,10 @@ export default function PhotoBooth() {
   const [editorError, setEditorError] = useState<string | null>(null);
   const nextStickerId = useRef(1);
 
-  // Venue SVG stickers for the current location, plus a tick bumped when an SVG
-  // finishes rasterizing so placed-but-still-loading ones re-render into view.
+  // Venue SVG stickers for the current location. In the editor they render as
+  // crisp vector <img>s directly; only the export rasterizes them (at export
+  // resolution), so no pre-raster/tick bookkeeping is needed here.
   const [venueStickers, setVenueStickers] = useState<VenueSticker[]>([]);
-  const [, setSvgTick] = useState(0);
   const svgMeta = useMemo<SvgMeta>(
     () => new Map(venueStickers.map((s) => [s.id, { width: s.width, height: s.height }])),
     [venueStickers],
@@ -361,23 +338,14 @@ export default function PhotoBooth() {
     };
   }, [locationId]);
 
-  // Ensure every placed SVG sticker is rasterizing — covers reopening a draft
-  // (which sets stickers directly) as well as fresh adds. Re-renders as each
-  // one resolves so it appears.
+  // Warm the export cache: decode each placed SVG's HTMLImageElement now (also
+  // covers reopening a draft), so a Save/Share right after placing doesn't wait
+  // on a load. The editor <img>s render regardless; this is just a head start.
   useEffect(() => {
-    let cancelled = false;
     for (const st of stickers) {
-      if (st.svgId && !svgCache.get(st.svgId)) {
-        const m = svgMeta.get(st.svgId) ?? { width: 100, height: 100 };
-        void loadSvgBitmap(st.svgId, m.width, m.height).then(() => {
-          if (!cancelled) setSvgTick((t) => t + 1);
-        });
-      }
+      if (st.svgId) void loadSvgImage(st.svgId);
     }
-    return () => {
-      cancelled = true;
-    };
-  }, [stickers, svgMeta]);
+  }, [stickers]);
 
   // Track the photo box's width (rotation, window resize) while editing.
   useEffect(() => {
@@ -445,12 +413,8 @@ export default function PhotoBooth() {
 
   function addSticker(kind: { emoji: string } | { svgId: string }) {
     const id = nextStickerId.current++;
-    // An SVG is async — kick off its rasterization now so it appears the moment
-    // it's ready (peekBitmap returns null until then).
-    if ('svgId' in kind) {
-      const m = svgMeta.get(kind.svgId) ?? { width: 100, height: 100 };
-      void loadSvgBitmap(kind.svgId, m.width, m.height).then(() => setSvgTick((t) => t + 1));
-    }
+    // Warm the export cache; the editor <img> renders the vector immediately.
+    if ('svgId' in kind) void loadSvgImage(kind.svgId);
     // Drop new stickers near the middle, staggered a little so a quick series
     // doesn't stack into one invisible pile.
     const n = stickers.length;
@@ -647,13 +611,17 @@ export default function PhotoBooth() {
               className="absolute inset-0 h-full w-full object-cover"
             />
             {stickers.map((st) => {
-              // The rendered bitmap — identical pixels to what the export bakes,
-              // so the preview is truly WYSIWYG. Sized off the box's real width.
-              // An SVG sticker may not be rasterized yet (peekBitmap null) — skip
-              // it this frame; addSticker/the effect bumps svgTick when ready.
-              const bmp = peekBitmap(st);
-              if (!bmp) return null;
-              const side = stickerSide(boxW, st.scale, bmp.ratio);
+              // Emoji render from their measured bitmap (pixel-identical to the
+              // export); SVGs render as the crisp vector directly (rasterized
+              // only at export). Sized off the box's real width.
+              const src = st.emoji
+                ? emojiBitmap(st.emoji).url
+                : st.svgId
+                  ? venueStickerUrl(st.svgId)
+                  : null;
+              if (!src) return null;
+              const ratio = st.emoji ? emojiBitmap(st.emoji).ratio : 1;
+              const side = stickerSide(boxW, st.scale, ratio);
               const isSel = st.id === selectedId;
               return (
                 <div
@@ -669,7 +637,7 @@ export default function PhotoBooth() {
                   }}
                 >
                   <img
-                    src={bmp.url}
+                    src={src}
                     alt=""
                     draggable={false}
                     onPointerDown={(e) => {
@@ -678,7 +646,9 @@ export default function PhotoBooth() {
                     }}
                     onPointerMove={onStickerPointerMove}
                     onPointerUp={onStickerPointerUp}
-                    className={`h-full w-full cursor-grab ${
+                    // object-contain keeps an SVG's aspect within the square;
+                    // the emoji bitmap is already square, so it fills exactly.
+                    className={`h-full w-full object-contain cursor-grab ${
                       isSel ? 'rounded-lg ring-2 ring-fairway-300/90' : ''
                     }`}
                     style={{ touchAction: 'none' }}
