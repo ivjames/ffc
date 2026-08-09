@@ -182,6 +182,16 @@ export function playLand(): void {
   tone({ type: 'triangle', freq: 1046.5, dur: 0.18, gain: 0.13, start: 0.14 });
 }
 
+/** High striker near-miss (90+): a heavy pad thump under a rising two-note
+ *  that droops just short of resolving — big and exciting, but audibly
+ *  "not quite the bell". */
+export function playSoClose(): void {
+  buzz('ding');
+  tone({ type: 'sine', freq: 170, freqEnd: 88, dur: 0.2, gain: 0.22 });
+  tone({ type: 'triangle', freq: 659.25, dur: 0.09, gain: 0.15, start: 0.04 });
+  tone({ type: 'triangle', freq: 880, freqEnd: 830.6, dur: 0.22, gain: 0.15, start: 0.13 });
+}
+
 /** Low descending "buzz" for a wrong answer (soft, not harsh). */
 export function playBuzz(): void {
   buzz('buzz');

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
-import { playStroke, playCup, playUndo, playDing, playLand, playFanfare } from '../../lib/sound';
+import { playStroke, playSoClose, playUndo, playDing, playLand, playFanfare } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
 import {
   TWO_PI,
@@ -594,7 +594,7 @@ export default function HighStriker() {
             if (gs.score >= 90) {
               spawnFloater(fx.floaters, W / 2, ay + 16, 'SO CLOSE!', '#fbbf24', { size: 16, life: 1000 });
               fx.shake = Math.max(fx.shake, 4);
-              playCup();
+              playSoClose();
             } else if (gs.score >= 50) {
               spawnFloater(fx.floaters, W / 2, ay + 16, z.label, z.color, { size: 14, life: 900 });
               playDing();
