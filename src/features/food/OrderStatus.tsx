@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { formatCents } from '../../lib/pos/pricing';
 import type { Order, OrderStatus } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
+import { playClick } from '../../lib/sound';
+import {
+  enableOrderNotifications,
+  notificationPermission,
+  notifyOrderStatus,
+  type NotifyPermission,
+} from '../../lib/orderNotifications';
 
 // /food/order/:orderId — live kitchen progress. Polls until the order is
 // picked up (the mock's fake kitchen services tickets through received →
@@ -41,6 +48,7 @@ export default function OrderStatusScreen() {
   const [error, setError] = useState<string | null>(null);
   // 1s ticker so the ETA counts down between polls.
   const [now, setNow] = useState(() => Date.now());
+  const [notifyPerm, setNotifyPerm] = useState<NotifyPermission>(() => notificationPermission());
 
   useEffect(() => {
     if (!orderId || !ordering) return;
@@ -73,6 +81,28 @@ export default function OrderStatusScreen() {
     return () => clearInterval(tick);
   }, [counting]);
 
+  // Alert on each status CHANGE (not the initial load): sound + haptic always,
+  // a system notification too if the user opted in. Keyed on the status string
+  // so it fires once per transition; the ref hands the effect the live order
+  // without widening its deps to every poll.
+  const orderRef = useRef<Order | null>(null);
+  orderRef.current = order;
+  const lastNotifiedRef = useRef<OrderStatus | null>(null);
+  const status = order?.status;
+  useEffect(() => {
+    if (!status) return;
+    const prev = lastNotifiedRef.current;
+    lastNotifiedRef.current = status;
+    if (prev !== null && prev !== status && orderRef.current) {
+      notifyOrderStatus(orderRef.current);
+    }
+  }, [status]);
+
+  async function enableNotifications() {
+    playClick();
+    setNotifyPerm(await enableOrderNotifications());
+  }
+
   if (!ordering) return <Navigate to="/" replace />;
   const stepIndex = order ? STEPS.findIndex((s) => s.status === order.status) : -1;
   const eta = order ? etaLabel(order, now) : null;
@@ -103,6 +133,26 @@ export default function OrderStatusScreen() {
                 </div>
               )}
             </div>
+
+            {order.status !== 'picked_up' && (
+              <div className="mb-5">
+                {notifyPerm === 'default' && (
+                  <Button variant="ghost" onClick={enableNotifications}>
+                    🔔 Notify me when it's ready
+                  </Button>
+                )}
+                {notifyPerm === 'granted' && (
+                  <p className="text-center text-xs text-fairway-100/60">
+                    🔔 Notifications on — we'll alert you when it's ready.
+                  </p>
+                )}
+                {notifyPerm === 'denied' && (
+                  <p className="text-center text-xs text-fairway-100/60">
+                    Notifications are blocked in your browser — we'll still chime and buzz here.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="mb-5 space-y-2">
               {STEPS.map((step, i) => {
