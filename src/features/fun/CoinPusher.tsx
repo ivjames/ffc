@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import { playTick, playPinClack, playScore, playCup, playUndo, playFanfare, playDing } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
@@ -559,8 +558,6 @@ export default function CoinPusher() {
   const [score, setScore] = useState(0);
   const [coinsDropped, setCoinsDropped] = useState(0); // for the done screen
   const [ending, setEnding] = useState(false); // cash-out tapped, waiting to settle
-  // One id per played round — the ticket award's idempotency key.
-  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -814,7 +811,6 @@ export default function CoinPusher() {
     setScore(0);
     setCoinsDropped(0);
     setEnding(false);
-    setSessionId(crypto.randomUUID());
   }, []);
 
   // Pre-play ~PRIME_DROPS phantom drops through the real physics before the
@@ -894,9 +890,8 @@ export default function CoinPusher() {
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">paid out from {coinsDropped} coins</p>
           </div>
-          {/* POS add-on: venues with gameRewards credit tickets for the round
-              (2 tickets per coin paid out, capped at 100). */}
-          <GameTicketAward game="coinpusher" tickets={Math.min(100, score * 2)} sessionId={sessionId} />
+          {/* No ticket earning: the pusher is a chance game (randomized pile,
+              physics payout), and only skill-based games earn tickets. */}
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
