@@ -81,12 +81,18 @@ const EXPORT_MAX_DIM = 1280;
 // centering on the visual box guarantees no clip and a true center for any
 // emoji. `ratio` is the em (reference font size) as a fraction of the square,
 // so the caller sizes the rendered sticker to the prior em-based scale (see
-// stickerBitmap's return).
-type StickerBitmap = { canvas: HTMLCanvasElement; url: string; ratio: number };
+// stickerBitmap's return). `w`/`h` are the bitmap's pixel dimensions — sized to
+// the glyph's ACTUAL aspect (not a square), so the rendered sticker, its
+// selection ring, and its tap area hug the glyph instead of a big square that
+// dwarfs a wide/short emoji like 🕶️.
+type StickerBitmap = { canvas: HTMLCanvasElement; url: string; w: number; h: number };
 
 // Transparent halo around the glyph — room for anti-aliasing and the odd emoji
 // whose reported bounds run a touch tight, without bloating the tap area.
 const STICKER_MARGIN = 0.14;
+// Reference font px the emoji is measured + drawn at; also the sizing unit (the
+// em renders at the sticker's target size, preserving the prior scale).
+const EMOJI_REF = 256;
 const EMOJI_FONT =
   '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
@@ -95,7 +101,7 @@ function emojiBitmap(emoji: string): StickerBitmap {
   const cached = emojiCache.get(emoji);
   if (cached) return cached;
 
-  const REF = 256; // reference font px for measuring + drawing
+  const REF = EMOJI_REF;
   const font = `${REF}px ${EMOJI_FONT}`;
   const measure = document.createElement('canvas').getContext('2d');
   let glyphW = REF;
@@ -116,29 +122,26 @@ function emojiBitmap(emoji: string): StickerBitmap {
     glyphW = Math.max(1, left + right);
     glyphH = Math.max(1, asc + desc);
     // With a center/middle pen, the bbox is offset by these when it isn't
-    // symmetric about the pen — subtract to re-center the glyph in the square.
+    // symmetric about the pen — subtract to re-center the glyph in the bitmap.
     dxCenter = (right - left) / 2;
     dyCenter = (desc - asc) / 2;
   }
-  const maxDim = Math.max(glyphW, glyphH);
-  const side = Math.ceil(maxDim * (1 + 2 * STICKER_MARGIN));
+  // Aspect-correct canvas: glyph bbox + a small margin on each side. Wide/short
+  // glyphs get a wide/short bitmap, so nothing is a forced square.
+  const bw = Math.ceil(glyphW * (1 + 2 * STICKER_MARGIN));
+  const bh = Math.ceil(glyphH * (1 + 2 * STICKER_MARGIN));
 
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = side;
+  canvas.width = bw;
+  canvas.height = bh;
   const ctx = canvas.getContext('2d');
   if (ctx) {
     ctx.font = font;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(emoji, side / 2 - dxCenter, side / 2 - dyCenter);
+    ctx.fillText(emoji, bw / 2 - dxCenter, bh / 2 - dyCenter);
   }
-  // `ratio` is the em (reference font size) as a fraction of the bitmap, NOT the
-  // ink extent: the caller sizes so the EM lands at the target, which preserves
-  // the prior font-based scale exactly (a given `scale` renders an emoji at the
-  // same size as before this measured-bitmap change, so reopening a draft never
-  // resizes its stickers). Ink beyond the em — and the margin — scale along, and
-  // because the bitmap now contains all of it, nothing clips.
-  const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), ratio: REF / side };
+  const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), w: bw, h: bh };
   emojiCache.set(emoji, bitmap);
   return bitmap;
 }
@@ -178,12 +181,27 @@ function loadSvgImage(svgId: string): Promise<HTMLImageElement | null> {
   return p;
 }
 
-// The rendered square's side, so the sticker's reference size ends up
-// STICKER_BASE*width*scale (emoji: the em; SVG: its larger dimension). For emoji
-// the measured margin around the em is divided back out via `ratio`; SVG passes
-// ratio 1 (its larger dimension IS the reference).
-function stickerSide(imageWidth: number, scale: number, ratio: number): number {
-  return (STICKER_BASE * imageWidth * scale) / ratio;
+// The rendered sticker's width/height in px, sized to its ACTUAL aspect so the
+// element (and its ring/tap area) hugs the art. The reference dimension lands
+// at STICKER_BASE*imageWidth*scale: for emoji the em (so the scale matches the
+// prior behavior), for an SVG its larger dimension.
+function displaySize(
+  st: Sticker,
+  imageWidth: number,
+  scale: number,
+  svgMeta: SvgMeta,
+): { dw: number; dh: number } {
+  const target = STICKER_BASE * imageWidth * scale;
+  if (st.emoji) {
+    const b = emojiBitmap(st.emoji);
+    const f = target / EMOJI_REF; // em -> target
+    return { dw: b.w * f, dh: b.h * f };
+  }
+  const meta = st.svgId ? svgMeta.get(st.svgId) : undefined;
+  const aw = st.svgW ?? meta?.width ?? 100;
+  const ah = st.svgH ?? meta?.height ?? 100;
+  const f = target / Math.max(aw, ah);
+  return { dw: aw * f, dh: ah * f };
 }
 
 type Editor = {
@@ -276,26 +294,14 @@ async function flattenToJpeg(
     ctx.rotate((st.rot * Math.PI) / 180);
     if (st.emoji) {
       // The same measured bitmap the editor previews — pixel-identical.
-      const bmp = emojiBitmap(st.emoji);
-      const side = stickerSide(w, st.scale, bmp.ratio);
-      ctx.drawImage(bmp.canvas, -side / 2, -side / 2, side, side);
+      const { dw, dh } = displaySize(st, w, st.scale, svgMeta);
+      ctx.drawImage(emojiBitmap(st.emoji).canvas, -dw / 2, -dh / 2, dw, dh);
     } else if (st.svgId) {
       // Rasterize the vector HERE, at export resolution, so it's crisp however
       // large the sticker is. An SVG that won't load is simply skipped.
       const svg = await loadSvgImage(st.svgId);
       if (svg) {
-        const side = stickerSide(w, st.scale, 1);
-        // Aspect source, most-reliable first: the size persisted with the
-        // sticker, then live venue metadata, then the decoded image's own
-        // intrinsic size, then a 1:1 fallback.
-        const meta = svgMeta.get(st.svgId);
-        const iw = st.svgW ?? meta?.width ?? svg.naturalWidth ?? 0;
-        const ih = st.svgH ?? meta?.height ?? svg.naturalHeight ?? 0;
-        const aw = iw > 0 ? iw : 100;
-        const ah = ih > 0 ? ih : 100;
-        const fit = side / Math.max(aw, ah); // contain by larger side
-        const dw = aw * fit;
-        const dh = ah * fit;
+        const { dw, dh } = displaySize(st, w, st.scale, svgMeta);
         ctx.drawImage(svg, -dw / 2, -dh / 2, dw, dh);
       }
     }
@@ -773,8 +779,8 @@ export default function PhotoBooth() {
                   ? venueStickerUrl(st.svgId)
                   : null;
               if (!src) return null;
-              const ratio = st.emoji ? emojiBitmap(st.emoji).ratio : 1;
-              const side = stickerSide(boxW, st.scale, ratio);
+              // Aspect-correct box so the ring/tap area hug the art.
+              const { dw, dh } = displaySize(st, boxW, st.scale, svgMeta);
               const isSel = st.id === selectedId;
               return (
                 <div
@@ -783,8 +789,8 @@ export default function PhotoBooth() {
                   style={{
                     left: `${st.x * 100}%`,
                     top: `${st.y * 100}%`,
-                    width: `${side}px`,
-                    height: `${side}px`,
+                    width: `${dw}px`,
+                    height: `${dh}px`,
                     transform: `translate(-50%, -50%) rotate(${st.rot}deg)`,
                     touchAction: 'none',
                   }}
@@ -799,9 +805,9 @@ export default function PhotoBooth() {
                     }}
                     onPointerMove={onStickerPointerMove}
                     onPointerUp={onStickerPointerUp}
-                    // object-contain keeps an SVG's aspect within the square;
-                    // the emoji bitmap is already square, so it fills exactly.
-                    className={`h-full w-full object-contain cursor-grab ${
+                    // The box already matches the art's aspect, so the image
+                    // fills it exactly (emoji bitmap and SVG alike).
+                    className={`h-full w-full object-fill cursor-grab ${
                       isSel ? 'rounded-lg ring-2 ring-fairway-300/90' : ''
                     }`}
                     style={{ touchAction: 'none' }}
