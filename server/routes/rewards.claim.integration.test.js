@@ -20,12 +20,16 @@ process.env.APP_TOKEN = "rewards-claim-test-token";
 
 const { app } = await import("../app.js");
 
-// Stub CenterEdge with vendor-side idempotency + a call log.
-const stub = { calls: [], byKey: new Map(), balance: 5000 };
+// Stub CenterEdge with vendor-side idempotency + a call log + a failure toggle.
+const stub = { calls: [], byKey: new Map(), balance: 5000, failNext: false };
 const stubApp = express();
 stubApp.use(express.json());
 stubApp.post("/api/v1/players/:id/tickets/reward", (req, res) => {
   stub.calls.push({ playerId: req.params.id, ...req.body });
+  if (stub.failNext) {
+    stub.failNext = false;
+    return res.status(500).json({ ok: false, error: "stub POS down" });
+  }
   const prior = stub.byKey.get(req.body.idempotencyKey);
   if (prior) return res.json({ ...prior, duplicate: true });
   stub.balance += req.body.tickets;
@@ -57,6 +61,14 @@ function claim(body) {
   });
 }
 
+function admin(path, opts = {}) {
+  return fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    ...opts,
+    headers: { "x-app-token": "rewards-claim-test-token", ...opts.headers },
+  });
+}
+
 async function makeLocation(slug, pos) {
   const row = await testQuery(
     `insert into location (name, slug, tz, pos) values ($1, $2, 'UTC', $3::jsonb) returning id`,
@@ -81,12 +93,12 @@ async function makeGrant(loc, achievement, playerIndex = 0) {
     [course.rows[0].id, clientId]
   );
   const code = `claim-${Date.now()}-${n}`; // unique across runs (column is free text)
-  await testQuery(
+  const grant = await testQuery(
     `insert into reward_grant (code, round_id, player_index, player_tag, achievement)
-     values ($1, $2, $3, 'MPS', $4)`,
+     values ($1, $2, $3, 'MPS', $4) returning id`,
     [code, round.rows[0].id, playerIndex, achievement]
   );
-  return { clientId, code };
+  return { clientId, code, grantId: grant.rows[0].id };
 }
 
 before(async () => {
@@ -197,4 +209,33 @@ test("venue without the gameRewards add-on -> 403", async () => {
   const { clientId } = await makeGrant(noRewardsLocationId, "hole_in_one");
   const res = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-4" });
   assert.equal(res.status, 403);
+});
+
+test("a card-claimed grant can't also be redeemed at the counter", async () => {
+  const { clientId, grantId } = await makeGrant(locationId, "hole_in_one");
+  const c = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-5" });
+  assert.equal(c.status, 200);
+  const res = await admin(`/api/admin/rewards/${grantId}/redeem`);
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /card/);
+});
+
+test("a card claim can't be undone at the counter (its tickets are spent)", async () => {
+  const { clientId, grantId } = await makeGrant(locationId, "hole_in_one");
+  await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-6" });
+  const res = await admin(`/api/admin/rewards/${grantId}/unredeem`);
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /undone/);
+});
+
+test("a held (vendor-failed) claim retries against the RESERVED card", async () => {
+  const { clientId } = await makeGrant(locationId, "hole_in_one");
+  stub.failNext = true; // first vendor credit fails → claim held, not settled
+  const r1 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-RESERVED" });
+  assert.equal(r1.status, 502);
+
+  // Retry with a DIFFERENT linked card — the credit must go to the reserved one.
+  const r2 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-OTHER" });
+  assert.equal(r2.status, 200);
+  assert.equal(stub.calls.at(-1).playerId, "PL-RESERVED");
 });

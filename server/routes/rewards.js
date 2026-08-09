@@ -67,7 +67,7 @@ router.post("/claim", async (req, res) => {
     // Lock this grant so concurrent claims serialize on the same row.
     const gres = await client.query(
       `select g.id, g.redeemed_at, g.redeemed_via, g.tickets_awarded, g.pos_transaction_id,
-              l.pos as pos
+              g.card_player_id, l.pos as pos
          from reward_grant g
          join round r on r.id = g.round_id
          join course c on c.id = r.course_id
@@ -119,10 +119,14 @@ router.post("/claim", async (req, res) => {
     }
 
     const payTickets = grant.tickets_awarded ?? tickets;
+    // Always credit the card THIS claim reserved — on a retry that's the stored
+    // card_player_id, not the current request's (the linked card may have
+    // changed between attempts, but the reward belongs to the reserved card).
+    const creditCard = grant.card_player_id || playerId;
     // The pre-proxy client wrote this exact vendor key directly; reuse it so a
     // summary credited before this deploy de-dupes vendor-side, not double-pays.
     const pos = await rewardTickets(loyalty, {
-      playerId,
+      playerId: creditCard,
       tickets: payTickets,
       source: `golf:${achievement}`,
       idempotencyKey: `golf:${clientId}:${playerIndex}:${achievement}`,
