@@ -5,6 +5,7 @@ import App from './App';
 import { startSyncWorker } from './sync';
 import { registerPwa } from './pwa';
 import { initInstallCapture } from './lib/pwaInstall';
+import { initAnalytics } from './lib/analytics';
 import './fonts';
 import './index.css';
 
@@ -16,6 +17,10 @@ registerPwa();
 // Capture the one-shot `beforeinstallprompt` before React renders so the
 // /install page's "Install" button can fire the native prompt on demand.
 initInstallCapture();
+
+// Start first-party funnel analytics: drain any queued events, wire flush
+// triggers, and record an installed-PWA launch. See lib/analytics.ts.
+initAnalytics();
 
 // Kick off the background sync worker as soon as the app boots (§9): drains any
 // completed-but-unsynced rounds to the API when a connection is available.

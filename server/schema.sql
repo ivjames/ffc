@@ -780,3 +780,25 @@ create table if not exists booth_sticker (
 );
 create index if not exists booth_sticker_location_idx
   on booth_sticker (location_id, sort_order) where active;
+
+-- First-party funnel analytics (adoption + sign-in). Aggregate product usage
+-- only — enough to measure "install prompt shown -> installed" and "sign-in
+-- started -> completed" and find where players drop off. Deliberately
+-- privacy-clean: identity is the anonymous device install id (same id the
+-- announcement-view beacon uses), the signed-in app_user rides along when
+-- present, and NO IP address or other PII is stored. `event` is constrained to
+-- a server-side allowlist in the route, so a bad client can't write junk names.
+-- `meta` carries small, non-identifying context (platform, outcome). One row
+-- per event — a funnel is just a group-by over these.
+create table if not exists funnel_event (
+  id           uuid primary key default gen_random_uuid(),
+  event        text not null,                       -- allowlisted name (see routes/events.js)
+  device_id    uuid not null,                       -- anonymous per-install id
+  app_user_id  uuid references app_user(id) on delete set null,
+  location_id  uuid references location(id) on delete set null,
+  platform     text,                                -- 'ios' | 'android' | 'desktop' | 'other'
+  meta         jsonb not null default '{}'::jsonb,  -- small non-identifying context
+  created_at   timestamptz not null default now()
+);
+create index if not exists funnel_event_name_time_idx on funnel_event (event, created_at);
+create index if not exists funnel_event_device_idx on funnel_event (device_id);

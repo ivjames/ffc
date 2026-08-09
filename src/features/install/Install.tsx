@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useInstallPrompt } from '../../lib/pwaInstall';
+import { track } from '../../lib/analytics';
 
 // §install — landing page for the "install to home screen" QR code. Detects the
 // platform and shows the closest thing each one allows:
@@ -13,9 +14,17 @@ export default function Install() {
   const { platform, installed, canPrompt, promptInstall } = useInstallPrompt();
   const [result, setResult] = useState<'accepted' | 'dismissed' | null>(null);
 
+  // The install page reached a not-yet-installed player — the top of the
+  // adoption funnel, whether or not we can fire a native prompt.
+  useEffect(() => {
+    if (!installed) track('install_prompt_shown', { platform, canPrompt });
+  }, [installed, platform, canPrompt]);
+
   async function onInstall() {
     const outcome = await promptInstall();
     setResult(outcome);
+    if (outcome === 'accepted') track('install_accepted', { platform });
+    else if (outcome === 'dismissed') track('install_dismissed', { platform });
   }
 
   return (
