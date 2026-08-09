@@ -48,6 +48,7 @@ and orders reset to the seed on every deploy (the mock is in-memory).
 | `PORT` | listen port (default 8070) |
 | `MOCK_STATIC_TOKEN` | the always-valid dev bearer token (default `ce-mock-dev-token`) |
 | `MOCK_LATENCY_MS` | fixed artificial latency per request, to see loading states (default 0) |
+| `MOCK_KITCHEN_STATIONS` | simulated cooks in the fake kitchen (default 2) |
 
 ## Auth
 
@@ -96,16 +97,49 @@ player's transaction history as a receipt. Purchases do **not** earn tickets —
 whether/how CenterEdge awards points on F&B spend is an open question, so the
 mock deliberately doesn't invent a rate.
 
-→ `201 {ok, order, kitchen: {printed: true, station: "kitchen-1"}}`.
-`order.status` starts at `received`.
+→ `201 {ok, order, kitchen: {printed: true, station, estimatedReadyAt}}`.
+`order.status` starts at `received`; the order is scheduled into the fake
+kitchen (below), which fixes its station and ETA. Order lines carry resolved
+`modifierNames` alongside `modifierIds` so tickets/receipts render without a
+menu lookup.
 
 Failures: `400` validation (unknown item, 86'd item, missing required
 modifier, >5 toppings, bad quantity, amount mismatch) · `402 payment_declined`
 when `payment.token === "tok_declined"` · `404` unknown `playerId`.
 
 ### `GET /orders/:id`
-Poll for kitchen progress. Status is derived from time since creation:
-`received` (<5s) → `sent_to_kitchen` (<20s) → `preparing` (<45s) → `ready`.
+Poll for kitchen progress: `received` → `sent_to_kitchen` → `preparing` →
+`ready` → `picked_up`, plus `estimatedReadyAt` (ISO) for the tracking ETA.
+Status comes from the fake kitchen's schedule, not a fixed stopwatch — see
+below.
+
+## The fake kitchen
+
+`kitchen.js` services orders like a real (tiny) kitchen instead of a fixed
+timeline: each order becomes a ticket that prints after a short delay, then
+waits for one of `MOCK_KITCHEN_STATIONS` stations. Prep time scales with
+what's on the ticket (pizzas slow, drinks fast; extra units add capped time),
+so a burst of orders backs the queue up and later guests get honest, longer
+ETAs. The whole schedule is computed once at placement and status is derived
+from the clock — the load-aware version of the old "no timers to leak" rule.
+Timing is demo scale (tens of seconds, not kitchen minutes). Unbumped tickets
+auto-complete 10 minutes after ready so boards and polling loops terminate.
+
+### `GET /kitchen` (no auth — a browser page)
+The kitchen display (KDS): live board of open tickets with status, queue and
+ETA, plus a **Bump** button per ticket — first tap marks the food ready,
+second hands it to the guest. Deployed demo: `https://<fqdn>/ce/kitchen`.
+This is how a demo driver plays "the kitchen" while someone orders from the
+app and watches the tracking screen react.
+
+### `GET /kitchen/orders`
+Board JSON: `{ok, stations: {count, busy}, orders, recentlyCompleted}` —
+open tickets oldest-first, last 5 picked-up tickets.
+
+### `POST /kitchen/orders/:id/bump`
+Advance a ticket: not yet ready → `ready` now; `ready` → `picked_up`.
+Idempotent once picked up. Bumping early doesn't reflow other tickets'
+reservations (the sim never rewrites history, erring toward safer ETAs).
 
 ### `GET /players/:id`
 `:id` is the account id (`PL-1001`) **or** the physical card number

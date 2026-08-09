@@ -62,12 +62,12 @@ export type CartLine = {
   notes?: string;
 };
 
-export type OrderStatus = 'received' | 'sent_to_kitchen' | 'preparing' | 'ready';
+export type OrderStatus = 'received' | 'sent_to_kitchen' | 'preparing' | 'ready' | 'picked_up';
 export type Order = {
   id: string;
   orderNumber: number;
   status: OrderStatus;
-  items: Array<CartLine & { name: string; lineTotalCents: number }>;
+  items: Array<CartLine & { name: string; lineTotalCents: number; modifierNames?: string[] }>;
   subtotalCents: number;
   taxCents: number;
   totalCents: number;
@@ -75,6 +75,9 @@ export type Order = {
   guestName: string | null;
   notes: string | null;
   createdAt: string;
+  /** Kitchen ETA (ISO) — once the order is ready/picked up, the time it was
+   *  actually ready. Optional: a vendor may not expose one. */
+  estimatedReadyAt?: string | null;
 };
 
 // The card carries no cash balance — it's a loyalty card (game credits +
@@ -104,7 +107,11 @@ export type PlayerTransaction = {
 export type Fail = { ok: false; error: string; status?: number };
 
 export type PlaceOrderResult =
-  | { ok: true; order: Order; kitchen: { printed: boolean; station: string } }
+  | {
+      ok: true;
+      order: Order;
+      kitchen: { printed: boolean; station: string; estimatedReadyAt?: string };
+    }
   | Fail;
 
 export type RewardResult =

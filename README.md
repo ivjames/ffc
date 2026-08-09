@@ -141,6 +141,13 @@ cd mock-centeredge && npm install && cd ..   # first time only
 npm run mock:centeredge   # http://localhost:8070 (see mock-centeredge/README.md)
 ```
 
+The mock includes a fake kitchen that services orders (stations, queueing,
+per-item prep times) so fulfillment and tracking behave end-to-end: open
+`http://localhost:8070/kitchen` (deployed: `/ce/kitchen`) for the kitchen
+display and bump tickets while the app's order-status screen follows along
+(`received → sent_to_kitchen → preparing → ready → picked_up`, with a live
+ETA).
+
 The email template for requesting real credentials from CenterEdge is
 `mock-centeredge/API-ACCESS-REQUEST.md`.
 
