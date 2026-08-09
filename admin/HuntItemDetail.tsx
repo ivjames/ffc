@@ -148,6 +148,9 @@ function Loaded({
         kind: 'error',
         text: err instanceof ApiError ? err.message : 'Save failed',
       });
+    } finally {
+      // Always clear here: an unchanged save reloads into the same `key`, so
+      // no remount comes along to reset this state.
       setSaving(false);
     }
   }
@@ -209,7 +212,7 @@ function Loaded({
         </Field>
         <Field
           label="Extra judge prompt"
-          hint="Admin-only judging guidance appended to the vision prompt for this item — e.g. “credit only the RED windmill, not the blue one by hole 4”. Players never see this. Vet changes against this item’s images in the vision bench before going live."
+          hint="Admin-only judging guidance appended to the vision prompt for this item — e.g. “credit only the RED windmill, not the blue one by hole 4”. Players never see this."
         >
           <textarea
             className={textareaCls}
@@ -240,10 +243,11 @@ function Loaded({
       <Card className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-700">Vetting images</h2>
         <p className="text-xs text-slate-500">
-          Sample photos of the real prop, for testing the judge (via the vision bench) before this
-          item goes live. Admin-only test data: each upload is screened by one cheap descriptor call
-          (~$0.0002) and rejected if anyone is visible — images here get sent to model providers, so
-          they must be people-free.
+          Sample photos of the real prop, kept with the item for prompt-tuning before it goes live.
+          (The vision bench keeps its own test dataset for judging runs — a one-click bridge from
+          here is a planned follow-up.) Admin-only test data: each upload is screened by one cheap
+          descriptor call (~$0.0002) and rejected if anyone is visible — images here get sent to
+          model providers, so they must be people-free.
         </p>
         <div className="flex flex-wrap gap-4">
           {images.map((image) => (

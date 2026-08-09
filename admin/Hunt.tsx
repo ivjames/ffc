@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError, type HuntItem } from './api';
 import { Button, Card, Banner, Spinner, Pill, Field, Input, useAsync } from './ui';
@@ -11,7 +11,9 @@ import { Button, Card, Banner, Spinner, Pill, Field, Input, useAsync } from './u
 // for super_admins.
 
 // <img src> can't carry the admin auth header — fetch bytes into an object
-// URL, the Photos.tsx arrangement. Exported for reuse in HuntItemDetail.
+// URL, the Photos.tsx arrangement (effect with cleanup, so the blob URL is
+// revoked on unmount and doesn't pile up as the operator browses around).
+// Exported for reuse in HuntItemDetail.
 export function ItemImageThumb({
   imageId,
   alt,
@@ -21,9 +23,26 @@ export function ItemImageThumb({
   alt: string;
   className?: string;
 }) {
-  const { data: url, error } = useAsync(async () => {
-    const blob = await api.fetchHuntItemImage(imageId);
-    return URL.createObjectURL(blob);
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    setUrl(null);
+    setError(false);
+    api.fetchHuntItemImage(imageId).then(
+      (blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setUrl(objectUrl);
+      },
+      () => {
+        if (!cancelled) setError(true);
+      }
+    );
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [imageId]);
   if (error) {
     return (

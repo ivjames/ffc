@@ -207,10 +207,15 @@ on conflict (id) do nothing;
 
 -- Scavenger-hunt lists are per course (hunt_item.course_id). Only the client's
 -- real, confirmed hunt content is seeded; courses without a list yet simply
--- show an empty hunt (the UI handles that gracefully). ON CONFLICT DO UPDATE
--- makes this seed authoritative for its content columns, so migrate can run
--- repeatedly without duplicating rows AND existing rows pick up edits here (e.g.
--- flipping the horseshoe to `countable`). `id` and `active` are left untouched.
+-- show an empty hunt (the UI handles that gracefully).
+--
+-- CREATE-ONLY (ON CONFLICT DO NOTHING): Master Control now owns hunt items
+-- (routes/admin/huntItems.js — the same handoff locations/courses/orgs made
+-- above), so a re-migrate (every `ffc deploy` runs `ffc migrate`) must NOT
+-- overwrite an operator's edits to name/hint/sort_order/countable back to
+-- these seed values. Seeds once on a fresh DB, then leaves the console in
+-- charge. Content changes for already-seeded items go through Master
+-- Control, not this file.
 insert into hunt_item (course_id, slug, name, hint, sort_order, countable) values
   -- Upland · Western — horseshoes are hidden all around the course; each one you
   -- photograph counts, so this item is `countable` (find as many as you can).
@@ -225,11 +230,7 @@ insert into hunt_item (course_id, slug, name, hint, sort_order, countable) value
   ('a3333333-3333-4333-8333-333333333333', 'cow',        'A cartoon cow',          'A big goofy cartoon cow with a lolling tongue — say cheese!', 50, false),
   ('a3333333-3333-4333-8333-333333333333', 'cabbage',    'A giant purple cabbage', 'An oversized purple cabbage, far too big for any garden — find it and snap it.', 60, false),
   ('a3333333-3333-4333-8333-333333333333', 'carrot',     'A giant carrot',         'Enormous orange carrots poke up out of the gravel, green tops and all — snap one.', 70, false)
-on conflict (course_id, slug) do update
-  set name       = excluded.name,
-      hint       = excluded.hint,
-      sort_order = excluded.sort_order,
-      countable  = excluded.countable;
+on conflict (course_id, slug) do nothing;
 
 -- Upland · Blue Course — California themed. Only Upland's Blue Course carries a
 -- themed hunt list for now; the other venues' Blue courses stay on the generic
@@ -244,11 +245,7 @@ insert into hunt_item (course_id, slug, name, hint, sort_order, countable) value
   ('a1111111-1111-4111-8111-111111111111', 'palm',        'A palm tree',          'A tall California palm — find one and snap the fronds against the sky.',           50, false),
   ('a1111111-1111-4111-8111-111111111111', 'bear-flag',   'The bear flag',        'The California grizzly-bear flag flying over the course — say cheese!',            60, false),
   ('a1111111-1111-4111-8111-111111111111', 'poppy',       'A golden poppy',       'The state flower blooms in bright orange clusters along the fairway edges — find as many as you can!', 70, true)
-on conflict (course_id, slug) do update
-  set name       = excluded.name,
-      hint       = excluded.hint,
-      sort_order = excluded.sort_order,
-      countable  = excluded.countable;
+on conflict (course_id, slug) do nothing;
 
 -- Upland · Green Course — classic mini-golf themed. Again Upland only; other
 -- venues' Green courses stay generic until confirmed (§11).
@@ -260,11 +257,7 @@ insert into hunt_item (course_id, slug, name, hint, sort_order, countable) value
   ('a2222222-2222-4222-8222-222222222222', 'castle',         'The castle',         'The classic mini-golf castle with battlements and a drawbridge over the cup.',  50, false),
   ('a2222222-2222-4222-8222-222222222222', 'covered-bridge', 'The covered bridge', 'A small wooden covered bridge the ball rolls straight through.',               60, false),
   ('a2222222-2222-4222-8222-222222222222', 'gnome',          'A garden gnome',     'A cheeky garden gnome tucked into the landscaping — find him and snap it.',     70, false)
-on conflict (course_id, slug) do update
-  set name       = excluded.name,
-      hint       = excluded.hint,
-      sort_order = excluded.sort_order,
-      countable  = excluded.countable;
+on conflict (course_id, slug) do nothing;
 
 -- Converge from an earlier iteration that seeded these California/classic lists
 -- onto ALL three venues' Blue/Green courses. Now that only Upland is themed, drop
