@@ -6,18 +6,32 @@ import type { Order, OrderStatus } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
 
 // /food/order/:orderId — live kitchen progress. Polls until the order is
-// ready (the mock advances received → sent_to_kitchen → preparing → ready on
-// a time-derived schedule; the real API may offer webhooks/SSE instead, in
-// which case this polling loop is the seam to replace).
+// picked up (the mock's fake kitchen services tickets through received →
+// sent_to_kitchen → preparing → ready → picked_up, with load-aware ETAs and
+// staff bumps from its KDS; unbumped orders auto-complete, so this loop
+// always terminates. The real API may offer webhooks/SSE instead, in which
+// case this polling loop is the seam to replace).
 
 const STEPS: Array<{ status: OrderStatus; label: string; emoji: string }> = [
   { status: 'received', label: 'Order received', emoji: '🧾' },
   { status: 'sent_to_kitchen', label: 'Sent to the kitchen', emoji: '📨' },
   { status: 'preparing', label: 'Being prepared', emoji: '🍳' },
   { status: 'ready', label: 'Ready for pickup!', emoji: '🔔' },
+  { status: 'picked_up', label: 'Picked up — enjoy!', emoji: '🎉' },
 ];
 
 const POLL_MS = 4_000;
+
+/** "~2 min" / "under a minute" from the kitchen's ETA; null once it's moot. */
+function etaLabel(order: Order, now: number): string | null {
+  if (order.status === 'ready' || order.status === 'picked_up' || !order.estimatedReadyAt) {
+    return null;
+  }
+  const leftMs = Date.parse(order.estimatedReadyAt) - now;
+  if (!Number.isFinite(leftMs)) return null;
+  if (leftMs < 60_000) return 'under a minute';
+  return `~${Math.round(leftMs / 60_000)} min`;
+}
 
 export default function OrderStatusScreen() {
   const navigate = useNavigate();
@@ -25,6 +39,8 @@ export default function OrderStatusScreen() {
   const { orderId } = useParams<{ orderId: string }>();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 1s ticker so the ETA counts down between polls.
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (!orderId || !ordering) return;
@@ -40,7 +56,7 @@ export default function OrderStatusScreen() {
       }
       setError(null);
       setOrder(res.order);
-      if (res.order.status !== 'ready') timer = setTimeout(() => void poll(), POLL_MS);
+      if (res.order.status !== 'picked_up') timer = setTimeout(() => void poll(), POLL_MS);
     }
 
     void poll();
@@ -50,8 +66,16 @@ export default function OrderStatusScreen() {
     };
   }, [orderId, ordering]);
 
+  const counting = !!order && order.status !== 'ready' && order.status !== 'picked_up';
+  useEffect(() => {
+    if (!counting) return;
+    const tick = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(tick);
+  }, [counting]);
+
   if (!ordering) return <Navigate to="/" replace />;
   const stepIndex = order ? STEPS.findIndex((s) => s.status === order.status) : -1;
+  const eta = order ? etaLabel(order, now) : null;
 
   return (
     <Screen>
@@ -73,6 +97,11 @@ export default function OrderStatusScreen() {
               <div className="font-arcade text-5xl font-black text-fairway-50">
                 #{order.orderNumber}
               </div>
+              {eta && (
+                <div className="mt-1 text-sm font-semibold text-fairway-300">
+                  Estimated ready in {eta}
+                </div>
+              )}
             </div>
 
             <div className="mb-5 space-y-2">
@@ -103,11 +132,18 @@ export default function OrderStatusScreen() {
 
             <div className="surface-sunk mb-5 rounded-2xl border border-fairway-800/60 px-4 py-3 text-sm">
               {order.items.map((line, i) => (
-                <div key={i} className="flex justify-between py-0.5 text-fairway-100/80">
-                  <span>
-                    {line.quantity}× {line.name}
-                  </span>
-                  <span>{formatCents(line.lineTotalCents)}</span>
+                <div key={i} className="py-0.5">
+                  <div className="flex justify-between text-fairway-100/80">
+                    <span>
+                      {line.quantity}× {line.name}
+                    </span>
+                    <span>{formatCents(line.lineTotalCents)}</span>
+                  </div>
+                  {!!line.modifierNames?.length && (
+                    <div className="pl-4 text-xs text-fairway-100/50">
+                      {line.modifierNames.join(', ')}
+                    </div>
+                  )}
                 </div>
               ))}
               <div className="mt-1 flex justify-between border-t border-fairway-800/60 pt-1.5 font-black text-fairway-50">

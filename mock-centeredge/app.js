@@ -10,9 +10,10 @@
 // - The server is the price authority: POST /orders recomputes the total from
 //   the menu and rejects a mismatched payment amount, so the frontend's cart
 //   math gets exercised against an independent implementation.
-// - Order status is derived from elapsed time since creation (received →
-//   sent_to_kitchen → preparing → ready), so polling GET /orders/:id shows a
-//   realistic progression with no timers to leak.
+// - Orders are serviced by a fake kitchen (kitchen.js): tickets queue for a
+//   fixed number of stations with per-item prep times, statuses derive from
+//   the schedule (received → sent_to_kitchen → preparing → ready → picked_up),
+//   and staff can bump tickets from the KDS page at GET /kitchen.
 //
 // Failure simulation (for state-management dev):
 // - payment token "tok_declined"  → 402 payment_declined
@@ -21,27 +22,27 @@ import express from 'express';
 import cors from 'cors';
 import { randomUUID } from 'node:crypto';
 import { MENU, PLAYERS } from './seed.js';
+import {
+  freshKitchen,
+  scheduleTicket,
+  ticketStatus,
+  bumpTicket,
+  completedAtMs,
+} from './kitchen.js';
+import { kdsPage } from './kds.js';
 
 export const STATIC_TOKEN = process.env.MOCK_STATIC_TOKEN || 'ce-mock-dev-token';
 
-// Elapsed-ms thresholds for the derived order status, exported for tests.
-export const STATUS_TIMELINE = [
-  { untilMs: 5_000, status: 'received' },
-  { untilMs: 20_000, status: 'sent_to_kitchen' },
-  { untilMs: 45_000, status: 'preparing' },
-  { untilMs: Infinity, status: 'ready' },
-];
-
-export function orderStatus(createdAtMs, now = Date.now()) {
-  const elapsed = now - createdAtMs;
-  return STATUS_TIMELINE.find((s) => elapsed < s.untilMs).status;
-}
+// How many simulated cooks work the fake kitchen — more stations = less
+// queueing under a burst of orders.
+const STATION_COUNT = Math.max(1, Number(process.env.MOCK_KITCHEN_STATIONS) || 2);
 
 function freshState() {
   return {
     tokens: new Set(),
     players: new Map(PLAYERS.map((p) => [p.id, structuredClone(p)])),
     orders: new Map(),
+    kitchen: freshKitchen(STATION_COUNT),
     // idempotencyKey → completed reward transaction (replayed on duplicates)
     rewardsByKey: new Map(),
     // playerId → newest-first transaction list
@@ -52,8 +53,26 @@ function freshState() {
 
 // Menu lookups don't change per instance — index once at module load.
 const ITEMS_BY_ID = new Map();
+const MODIFIER_NAME_BY_ID = new Map();
 for (const cat of MENU.categories) {
-  for (const item of cat.items) ITEMS_BY_ID.set(item.id, item);
+  for (const item of cat.items) {
+    ITEMS_BY_ID.set(item.id, item);
+    for (const group of item.modifierGroups) {
+      for (const o of group.options) MODIFIER_NAME_BY_ID.set(o.id, o.name);
+    }
+  }
+}
+
+/** Wire shape of an order: internal scheduling stripped, status and ETA
+ *  derived from the fake kitchen's ticket at read time. */
+function publicOrder(order, now = Date.now()) {
+  const { createdAtMs, ticket, ...pub } = order;
+  return {
+    ...pub,
+    status: ticketStatus(ticket, now),
+    station: ticket.station,
+    estimatedReadyAt: new Date(ticket.readyAtMs).toISOString(),
+  };
 }
 
 /** Recompute an order line's price from the menu (server is price authority).
@@ -130,6 +149,13 @@ export function createApp() {
 
   app.get('/api/v1/health', (req, res) => res.json({ ok: true, mock: 'centeredge' }));
 
+  // The fake kitchen's display screen — a plain browser page (no auth, not
+  // under /api/v1), served here so the demo needs nothing but the mock:
+  // http://localhost:8070/kitchen locally, /ce/kitchen deployed.
+  app.get('/kitchen', (req, res) => {
+    res.type('html').send(kdsPage(STATIC_TOKEN));
+  });
+
   app.post('/api/v1/auth/token', (req, res) => {
     const { clientId, clientSecret } = req.body ?? {};
     if (!clientId || !clientSecret) {
@@ -167,11 +193,15 @@ export function createApp() {
       const priced = priceLine(raw ?? {});
       if (priced.error) return res.status(400).json({ ok: false, error: priced.error });
       subtotalCents += priced.priceCents;
+      const modifierIds = raw.modifierIds ?? [];
       lines.push({
         menuItemId: raw.menuItemId,
         name: ITEMS_BY_ID.get(raw.menuItemId).name,
         quantity: raw.quantity,
-        modifierIds: raw.modifierIds ?? [],
+        modifierIds,
+        // Resolved names so the kitchen ticket (and the player's receipt) can
+        // show "16\" Large, Pepperoni" without a menu lookup.
+        modifierNames: modifierIds.map((id) => MODIFIER_NAME_BY_ID.get(id)),
         notes: raw.notes ?? null,
         lineTotalCents: priced.priceCents,
       });
@@ -201,10 +231,10 @@ export function createApp() {
       return res.status(400).json({ ok: false, error: 'notes must be a string of at most 500 chars' });
     }
 
+    const nowMs = Date.now();
     const order = {
       id: `ord-${randomUUID()}`,
       orderNumber: state.nextOrderNumber++,
-      status: 'received',
       items: lines,
       subtotalCents,
       taxCents,
@@ -212,8 +242,11 @@ export function createApp() {
       playerId: player?.id ?? null,
       guestName: typeof guestName === 'string' ? guestName.slice(0, 100) : null,
       notes: notes ?? null,
-      createdAt: new Date().toISOString(),
-      createdAtMs: Date.now(),
+      createdAt: new Date(nowMs).toISOString(),
+      createdAtMs: nowMs,
+      // Hand the ticket to the fake kitchen: reserves a station and fixes the
+      // print/start/ready schedule this order's status derives from.
+      ticket: scheduleTicket(state.kitchen, lines, nowMs),
     };
     state.orders.set(order.id, order);
     // A linked-card order lands in that player's history (a receipt trail) but
@@ -228,19 +261,58 @@ export function createApp() {
         createdAt: order.createdAt,
       });
     }
-    const { createdAtMs, ...publicOrder } = order;
     res.status(201).json({
       ok: true,
-      order: publicOrder,
-      kitchen: { printed: true, station: 'kitchen-1' },
+      order: publicOrder(order, nowMs),
+      kitchen: {
+        printed: true,
+        station: order.ticket.station,
+        estimatedReadyAt: new Date(order.ticket.readyAtMs).toISOString(),
+      },
     });
   });
 
   app.get('/api/v1/orders/:id', (req, res) => {
     const order = state.orders.get(req.params.id);
     if (!order) return res.status(404).json({ ok: false, error: 'order not found' });
-    const { createdAtMs, ...publicOrder } = order;
-    res.json({ ok: true, order: { ...publicOrder, status: orderStatus(createdAtMs) } });
+    res.json({ ok: true, order: publicOrder(order) });
+  });
+
+  // ---- The fake kitchen ---------------------------------------------------
+
+  // The live board: open tickets oldest-first (what a KDS shows), plus the
+  // last few completed ones and station occupancy. Everything is derived at
+  // read time — the sim has no background loop.
+  app.get('/api/v1/kitchen/orders', (req, res) => {
+    const now = Date.now();
+    const all = [...state.orders.values()];
+    const open = all
+      .filter((o) => ticketStatus(o.ticket, now) !== 'picked_up')
+      .sort((a, b) => a.createdAtMs - b.createdAtMs)
+      .map((o) => publicOrder(o, now));
+    const recentlyCompleted = all
+      .filter((o) => ticketStatus(o.ticket, now) === 'picked_up')
+      .sort((a, b) => completedAtMs(b.ticket) - completedAtMs(a.ticket))
+      .slice(0, 5)
+      .map((o) => publicOrder(o, now));
+    res.json({
+      ok: true,
+      stations: {
+        count: STATION_COUNT,
+        busy: state.kitchen.stationFreeAtMs.filter((t) => t > now).length,
+      },
+      orders: open,
+      recentlyCompleted,
+    });
+  });
+
+  // Staff bump: not yet ready → ready now; ready → picked_up. Idempotent once
+  // picked up, so a double-tap on the board is harmless.
+  app.post('/api/v1/kitchen/orders/:id/bump', (req, res) => {
+    const order = state.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ ok: false, error: 'order not found' });
+    bumpTicket(order.ticket, Date.now());
+    res.json({ ok: true, order: publicOrder(order) });
   });
 
   // ---- Player card / loyalty ---------------------------------------------
