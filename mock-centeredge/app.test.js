@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp, STATIC_TOKEN, orderStatus, EARN_CENTS_PER_TICKET } from './app.js';
+import { createApp, STATIC_TOKEN, orderStatus } from './app.js';
 
 let server;
 let base;
@@ -75,7 +75,7 @@ test('order happy path: server-priced total, kitchen status, polling progression
   assert.equal(orderStatus(t0, t0 + 60_000), 'ready');
 });
 
-test('order on a linked card earns loyalty tickets; guest orders do not', async () => {
+test('a linked-card order lands in history but does not earn tickets', async () => {
   const before = (await (await fetch(`${base}/players/PL-1002`, { headers: AUTH })).json())
     .player.balances.tickets;
   const res = await post('/orders', {
@@ -84,25 +84,16 @@ test('order on a linked card earns loyalty tickets; guest orders do not', async 
     playerId: 'PL-1002',
   });
   assert.equal(res.status, 201);
-  const { loyalty } = await res.json();
-  const expected = Math.floor(CART_TOTAL / EARN_CENTS_PER_TICKET);
-  assert.equal(loyalty.earnedTickets, expected);
-  assert.equal(loyalty.newTicketBalance, before + expected);
+  const body = await res.json();
+  assert.equal(body.loyalty, undefined); // no purchase-based earning
 
   const after = (await (await fetch(`${base}/players/PL-1002`, { headers: AUTH })).json())
     .player.balances.tickets;
-  assert.equal(after, before + expected);
+  assert.equal(after, before); // balance unchanged by the purchase
   const txs = (await (await fetch(`${base}/players/PL-1002/transactions`, { headers: AUTH })).json())
     .transactions;
-  assert.equal(txs[0].type, 'food_order');
-  assert.equal(txs[0].earnedTickets, expected);
-
-  const guest = await post('/orders', {
-    items: CART,
-    payment: { token: 'tok_visa_4242', amountCents: CART_TOTAL },
-    guestName: 'Walk-in',
-  });
-  assert.equal((await guest.json()).loyalty, null);
+  assert.equal(txs[0].type, 'food_order'); // still recorded as a receipt
+  assert.equal(txs[0].earnedTickets, undefined);
 });
 
 test('order rejects a total mismatch with the expected breakdown', async () => {

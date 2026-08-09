@@ -110,9 +110,9 @@ export default function Rewards() {
         {!playerId && (
           <>
             <p className="mb-4 text-sm text-fairway-100/70">
-              Link your player card to see your balances, earn on food orders, and collect
-              tickets from the games in While You Wait. The number is printed on the back of
-              your card — or ask at the counter.
+              Link your player card to see your balances, keep your food orders on your
+              account, and collect tickets from the games in While You Wait. The number is
+              printed on the back of your card — or ask at the counter.
             </p>
             <label className="mb-1.5 block text-sm font-semibold text-fairway-100/80">
               Card number
@@ -214,7 +214,7 @@ export default function Rewards() {
                     <span className="text-fairway-100/80">
                       {tx.type === 'ticket_reward'
                         ? `🎟️ Tickets · ${tx.source ?? ''}`
-                        : `🌭 Food order${tx.earnedTickets ? ` · +${tx.earnedTickets} 🎟️` : ''}`}
+                        : '🌭 Food order'}
                     </span>
                     <span className="font-bold text-fairway-50">
                       {tx.type === 'ticket_reward'

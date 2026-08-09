@@ -74,12 +74,7 @@ export default function Checkout() {
       totalCents: res.order.totalCents,
       createdAt: res.order.createdAt,
     });
-    // Tickets the purchase earned ride along as nav state — the status screen
-    // shows them once; a refresh/poll doesn't need to re-derive them.
-    navigate(`/food/order/${res.order.id}`, {
-      replace: true,
-      state: { earnedTickets: res.loyalty?.earnedTickets ?? 0 },
-    });
+    navigate(`/food/order/${res.order.id}`, { replace: true });
   }
 
   return (
@@ -163,7 +158,7 @@ export default function Checkout() {
               <span className="flex items-center gap-2 text-sm">
                 <span aria-hidden="true">🎟️</span>
                 <span className="font-semibold text-fairway-50">
-                  {playerId ? `Earning on card ${playerId}` : 'Link a rewards card'}
+                  {playerId ? `On card ${playerId}` : 'Link a rewards card'}
                 </span>
               </span>
               <span className="text-sm font-semibold text-fairway-400">

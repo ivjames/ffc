@@ -86,8 +86,6 @@ export type PlayerTransaction = {
   createdAt: string;
   orderId?: string;
   amountCents?: number;
-  /** Loyalty tickets a food order earned (linked-card orders only). */
-  earnedTickets?: number;
   tickets?: number;
   source?: string;
 };
@@ -95,13 +93,7 @@ export type PlayerTransaction = {
 export type Fail = { ok: false; error: string; status?: number };
 
 export type PlaceOrderResult =
-  | {
-      ok: true;
-      order: Order;
-      kitchen: { printed: boolean; station: string };
-      /** Tickets the purchase earned — null on guest (no linked card) orders. */
-      loyalty: { earnedTickets: number; newTicketBalance: number } | null;
-    }
+  | { ok: true; order: Order; kitchen: { printed: boolean; station: string } }
   | Fail;
 
 export type RewardResult =

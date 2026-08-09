@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { formatCents } from '../../lib/pos/pricing';
 import type { Order, OrderStatus } from '../../lib/pos/types';
@@ -23,10 +23,6 @@ export default function OrderStatusScreen() {
   const navigate = useNavigate();
   const { ordering } = usePos();
   const { orderId } = useParams<{ orderId: string }>();
-  // Loyalty tickets this purchase earned, handed over by Checkout right after
-  // placing — absent when the screen is reached any other way.
-  const { state } = useLocation() as { state: { earnedTickets?: number } | null };
-  const earnedTickets = state?.earnedTickets ?? 0;
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,12 +74,6 @@ export default function OrderStatusScreen() {
                 #{order.orderNumber}
               </div>
             </div>
-
-            {earnedTickets > 0 && (
-              <div className="surface-1 mb-5 rounded-2xl border border-fairway-800/60 px-4 py-3 text-center text-sm font-bold text-fairway-50">
-                🎟️ +{earnedTickets} tickets earned on your rewards card
-              </div>
-            )}
 
             <div className="mb-5 space-y-2">
               {STEPS.map((step, i) => {

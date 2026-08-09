@@ -75,14 +75,13 @@ The server **recomputes the total** (item + modifiers, × qty, + tax) and
 rejects a mismatched `payment.amountCents` with
 `400 {expected: {subtotalCents, taxCents, totalCents}}` — so client cart math
 is exercised against an independent implementation. `playerId` is optional
-(guest checkout); when present it must exist, the order lands in that player's
-transaction history, and the purchase **earns loyalty tickets** (1 per full
-dollar of the total — `EARN_CENTS_PER_TICKET`), credited to the balance and
-recorded on the transaction as `earnedTickets`.
+(guest checkout); when present it must exist and the order lands in that
+player's transaction history as a receipt. Purchases do **not** earn tickets —
+whether/how CenterEdge awards points on F&B spend is an open question, so the
+mock deliberately doesn't invent a rate.
 
-→ `201 {ok, order, kitchen: {printed: true, station: "kitchen-1"}, loyalty}`
-where `loyalty` is `{earnedTickets, newTicketBalance}` on a linked-card order
-and `null` for guests. `order.status` starts at `received`.
+→ `201 {ok, order, kitchen: {printed: true, station: "kitchen-1"}}`.
+`order.status` starts at `received`.
 
 Failures: `400` validation (unknown item, 86'd item, missing required
 modifier, >5 toppings, bad quantity, amount mismatch) · `402 payment_declined`
