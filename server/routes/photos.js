@@ -42,6 +42,16 @@ const UUID_RE =
 const UPLOAD_DIR =
   process.env.PHOTO_BOOTH_DIR || join(process.cwd(), "data", "booth-photos");
 
+// Where venue sticker SVGs live (written by routes/admin/boothStickers.js,
+// served read-only here). Same env-overridable pattern as UPLOAD_DIR.
+const STICKER_DIR =
+  process.env.PHOTO_BOOTH_STICKER_DIR || join(process.cwd(), "data", "booth-stickers");
+
+// Hardened response headers for serving an uploaded SVG. Even though uploads
+// are validated (lib/svgSanitize.js) and only ever rendered as <img>, serve
+// them inert: no script/network capability, and no MIME sniffing.
+const SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+
 // Same ceiling as the hunt: the client downscales + flattens to well under
 // 1 MB, but be generous so a fallback-path upload still goes through.
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -101,6 +111,60 @@ const uploadRateLimit = makeRateLimit({
 // GET /api/hunt/photo-retention).
 router.get("/retention", (_req, res) => {
   res.json({ days: resolveBoothRetentionDays() });
+});
+
+// --- GET /api/photos/stickers?location=<uuid> -------------------------------
+// The venue's active sticker sheet (public — these are branded decorations,
+// not user content). Returns ids + label + intrinsic size so the client sizes
+// each with the right aspect; the SVG bytes come from /stickers/:id/image.
+router.get("/stickers", async (req, res) => {
+  const location = req.query.location;
+  if (typeof location !== "string" || !UUID_RE.test(location)) {
+    return res.status(400).json({ ok: false, error: "location (uuid) is required" });
+  }
+  try {
+    const result = await pool.query(
+      `select id, label, width, height from booth_sticker
+        where location_id = $1 and active = true
+        order by sort_order asc, created_at asc`,
+      [location]
+    );
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("[photos] stickers list error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// --- GET /api/photos/stickers/:id/image -------------------------------------
+// Serve a venue sticker's SVG, hardened so it can only ever render as inert
+// image data (see SVG_CSP). The client draws it via <img>/canvas, never inline.
+router.get("/stickers/:id/image", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) {
+    return res.status(400).json({ ok: false, error: "bad sticker id" });
+  }
+  try {
+    const result = await pool.query(
+      `select svg_path as "svgPath" from booth_sticker where id = $1 and active = true`,
+      [id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: "not found" });
+    }
+    res.set("Content-Type", "image/svg+xml");
+    res.set("Content-Security-Policy", SVG_CSP);
+    res.set("X-Content-Type-Options", "nosniff");
+    res.set("Cache-Control", "public, max-age=3600");
+    return res.sendFile(result.rows[0].svgPath, (err) => {
+      if (err && !res.headersSent) {
+        res.status(404).json({ ok: false, error: "not found" });
+      }
+    });
+  } catch (err) {
+    console.error("[photos] sticker image error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
 });
 
 // --- GET /api/photos?booth=<id> ---------------------------------------------

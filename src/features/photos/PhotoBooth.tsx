@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { loadImage, encodeJpeg, blobToBase64 } from '../../lib/image';
@@ -19,7 +19,10 @@ import {
   shareBoothPhoto,
   shareEditedPhoto,
   boothPhotoUrl,
+  fetchVenueStickers,
+  venueStickerUrl,
   type BoothPhoto,
+  type VenueSticker,
 } from './api';
 
 // Photo booth — snap a photo, slap stickers on it, keep it in the group's
@@ -87,9 +90,9 @@ const STICKER_MARGIN = 0.14;
 const EMOJI_FONT =
   '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
-const stickerCache = new Map<string, StickerBitmap>();
-function stickerBitmap(emoji: string): StickerBitmap {
-  const cached = stickerCache.get(emoji);
+const emojiCache = new Map<string, StickerBitmap>();
+function emojiBitmap(emoji: string): StickerBitmap {
+  const cached = emojiCache.get(emoji);
   if (cached) return cached;
 
   const REF = 256; // reference font px for measuring + drawing
@@ -136,13 +139,49 @@ function stickerBitmap(emoji: string): StickerBitmap {
   // resizes its stickers). Ink beyond the em — and the margin — scale along, and
   // because the bitmap now contains all of it, nothing clips.
   const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), ratio: REF / side };
-  stickerCache.set(emoji, bitmap);
+  emojiCache.set(emoji, bitmap);
   return bitmap;
 }
 
-// The rendered square's side, so the emoji's em ends up STICKER_BASE*width*scale
-// (matching the prior font-based sizing); the measured ink + margin around the
-// em scale along with it, via `ratio`.
+// --- Venue SVG stickers ------------------------------------------------------
+// Venue SVGs stay VECTORS through editing — the editor renders each as an <img>
+// (inert, never inlined — no script execution) so it's crisp at any size, and
+// rasterization happens only at export, where the SVG is drawn to the flatten
+// canvas at the export resolution (not a fixed pre-raster that would go soft
+// when a sticker is scaled up large). Same-origin + sanitized (no
+// foreignObject/external refs) means drawing it never taints the canvas, so the
+// export toBlob still works. The loaded HTMLImageElement is cached so export
+// can drawImage it synchronously once decoded.
+const svgImages = new Map<string, HTMLImageElement>();
+const svgImagePending = new Map<string, Promise<HTMLImageElement | null>>();
+
+function loadSvgImage(svgId: string): Promise<HTMLImageElement | null> {
+  const done = svgImages.get(svgId);
+  if (done) return Promise.resolve(done);
+  const inflight = svgImagePending.get(svgId);
+  if (inflight) return inflight;
+  const p = new Promise<HTMLImageElement | null>((resolve) => {
+    const img = new Image();
+    // Request CORS so this element stays origin-clean when the API is a
+    // separate origin (VITE_API_BASE) — the API sends permissive CORS headers.
+    // Without it, drawing the SVG onto the export canvas taints it and toBlob
+    // throws. Harmless same-origin. Must be set before src.
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      svgImages.set(svgId, img);
+      resolve(img);
+    };
+    img.onerror = () => resolve(null); // venue removed it, offline, etc.
+    img.src = venueStickerUrl(svgId);
+  }).finally(() => svgImagePending.delete(svgId));
+  svgImagePending.set(svgId, p);
+  return p;
+}
+
+// The rendered square's side, so the sticker's reference size ends up
+// STICKER_BASE*width*scale (emoji: the em; SVG: its larger dimension). For emoji
+// the measured margin around the em is divided back out via `ratio`; SVG passes
+// ratio 1 (its larger dimension IS the reference).
 function stickerSide(imageWidth: number, scale: number, ratio: number): number {
   return (STICKER_BASE * imageWidth * scale) / ratio;
 }
@@ -160,7 +199,15 @@ type Editor = {
   editingId: string | null;
 };
 
-function flattenToJpeg(editor: Editor, stickers: Sticker[]): Promise<Blob> {
+// Intrinsic sizes for the venue SVG stickers currently in play, so an SVG
+// sticker draws at the right aspect. Missing entry -> a 1:1 fallback.
+type SvgMeta = Map<string, { width: number; height: number }>;
+
+async function flattenToJpeg(
+  editor: Editor,
+  stickers: Sticker[],
+  svgMeta: SvgMeta,
+): Promise<Blob> {
   const { img } = editor;
   const s = Math.min(1, EXPORT_MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
   const w = Math.max(1, Math.round(img.naturalWidth * s));
@@ -169,17 +216,37 @@ function flattenToJpeg(editor: Editor, stickers: Sticker[]): Promise<Blob> {
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return Promise.reject(new Error('Canvas is unavailable'));
+  if (!ctx) throw new Error('Canvas is unavailable');
   ctx.drawImage(img, 0, 0, w, h);
   for (const st of stickers) {
-    // Same bitmap the editor previews, centered on the same fractional point —
-    // so the save matches the screen exactly.
-    const bmp = stickerBitmap(st.emoji);
-    const side = stickerSide(w, st.scale, bmp.ratio);
     ctx.save();
     ctx.translate(st.x * w, st.y * h);
     ctx.rotate((st.rot * Math.PI) / 180);
-    ctx.drawImage(bmp.canvas, -side / 2, -side / 2, side, side);
+    if (st.emoji) {
+      // The same measured bitmap the editor previews — pixel-identical.
+      const bmp = emojiBitmap(st.emoji);
+      const side = stickerSide(w, st.scale, bmp.ratio);
+      ctx.drawImage(bmp.canvas, -side / 2, -side / 2, side, side);
+    } else if (st.svgId) {
+      // Rasterize the vector HERE, at export resolution, so it's crisp however
+      // large the sticker is. An SVG that won't load is simply skipped.
+      const svg = await loadSvgImage(st.svgId);
+      if (svg) {
+        const side = stickerSide(w, st.scale, 1);
+        // Aspect source, most-reliable first: the size persisted with the
+        // sticker, then live venue metadata, then the decoded image's own
+        // intrinsic size, then a 1:1 fallback.
+        const meta = svgMeta.get(st.svgId);
+        const iw = st.svgW ?? meta?.width ?? svg.naturalWidth ?? 0;
+        const ih = st.svgH ?? meta?.height ?? svg.naturalHeight ?? 0;
+        const aw = iw > 0 ? iw : 100;
+        const ah = ih > 0 ? ih : 100;
+        const fit = side / Math.max(aw, ah); // contain by larger side
+        const dw = aw * fit;
+        const dh = ah * fit;
+        ctx.drawImage(svg, -dw / 2, -dh / 2, dw, dh);
+      }
+    }
     ctx.restore();
   }
   return new Promise((resolve, reject) => {
@@ -215,6 +282,15 @@ export default function PhotoBooth() {
   const [saving, setSaving] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
   const nextStickerId = useRef(1);
+
+  // Venue SVG stickers for the current location. In the editor they render as
+  // crisp vector <img>s directly; only the export rasterizes them (at export
+  // resolution), so no pre-raster/tick bookkeeping is needed here.
+  const [venueStickers, setVenueStickers] = useState<VenueSticker[]>([]);
+  const svgMeta = useMemo<SvgMeta>(
+    () => new Map(venueStickers.map((s) => [s.id, { width: s.width, height: s.height }])),
+    [venueStickers],
+  );
 
   const fileRef = useRef<HTMLInputElement>(null);
   // The photo box's rendered width, for sizing sticker previews in px.
@@ -252,6 +328,36 @@ export default function PhotoBooth() {
   useEffect(() => {
     void refreshGallery();
   }, []);
+
+  // The venue's sticker sheet for the current location — refreshed when the
+  // player switches venues. Best-effort: the built-in emoji always work.
+  useEffect(() => {
+    if (!locationId) {
+      setVenueStickers([]);
+      return;
+    }
+    let cancelled = false;
+    void fetchVenueStickers(locationId).then(
+      (list) => {
+        if (!cancelled) setVenueStickers(list);
+      },
+      () => {
+        if (!cancelled) setVenueStickers([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [locationId]);
+
+  // Warm the export cache: decode each placed SVG's HTMLImageElement now (also
+  // covers reopening a draft), so a Save/Share right after placing doesn't wait
+  // on a load. The editor <img>s render regardless; this is just a head start.
+  useEffect(() => {
+    for (const st of stickers) {
+      if (st.svgId) void loadSvgImage(st.svgId);
+    }
+  }, [stickers]);
 
   // Track the photo box's width (rotation, window resize) while editing.
   useEffect(() => {
@@ -317,8 +423,17 @@ export default function PhotoBooth() {
     }
   }
 
-  function addSticker(emoji: string) {
+  function addSticker(kind: { emoji: string } | { svgId: string }) {
     const id = nextStickerId.current++;
+    // Warm the export cache; the editor <img> renders the vector immediately.
+    // Capture the SVG's intrinsic size NOW so a reopened draft keeps its aspect
+    // regardless of whether venue metadata is loaded later.
+    let dims: { svgW?: number; svgH?: number } = {};
+    if ('svgId' in kind) {
+      void loadSvgImage(kind.svgId);
+      const m = svgMeta.get(kind.svgId);
+      if (m) dims = { svgW: m.width, svgH: m.height };
+    }
     // Drop new stickers near the middle, staggered a little so a quick series
     // doesn't stack into one invisible pile.
     const n = stickers.length;
@@ -326,7 +441,8 @@ export default function PhotoBooth() {
       ...s,
       {
         id,
-        emoji,
+        ...kind,
+        ...dims,
         x: 0.5 + ((n % 3) - 1) * 0.08,
         y: 0.5 + ((Math.floor(n / 3) % 3) - 1) * 0.08,
         scale: 1,
@@ -389,7 +505,7 @@ export default function PhotoBooth() {
     setSaving(true);
     setEditorError(null);
     try {
-      const blob = await flattenToJpeg(editor, stickers);
+      const blob = await flattenToJpeg(editor, stickers, svgMeta);
       const imageBase64 = await blobToBase64(blob);
 
       // Re-saving an edit overwrites the same row in place (same id, same
@@ -435,7 +551,7 @@ export default function PhotoBooth() {
     setSaving(true);
     setEditorError(null);
     try {
-      await shareEditedPhoto(await flattenToJpeg(editor, stickers));
+      await shareEditedPhoto(await flattenToJpeg(editor, stickers, svgMeta));
     } catch {
       setEditorError("Couldn't share that — try saving it instead.");
     } finally {
@@ -515,10 +631,17 @@ export default function PhotoBooth() {
               className="absolute inset-0 h-full w-full object-cover"
             />
             {stickers.map((st) => {
-              // The rendered bitmap — identical pixels to what the export bakes,
-              // so the preview is truly WYSIWYG. Sized off the box's real width.
-              const bmp = stickerBitmap(st.emoji);
-              const side = stickerSide(boxW, st.scale, bmp.ratio);
+              // Emoji render from their measured bitmap (pixel-identical to the
+              // export); SVGs render as the crisp vector directly (rasterized
+              // only at export). Sized off the box's real width.
+              const src = st.emoji
+                ? emojiBitmap(st.emoji).url
+                : st.svgId
+                  ? venueStickerUrl(st.svgId)
+                  : null;
+              if (!src) return null;
+              const ratio = st.emoji ? emojiBitmap(st.emoji).ratio : 1;
+              const side = stickerSide(boxW, st.scale, ratio);
               const isSel = st.id === selectedId;
               return (
                 <div
@@ -534,7 +657,7 @@ export default function PhotoBooth() {
                   }}
                 >
                   <img
-                    src={bmp.url}
+                    src={src}
                     alt=""
                     draggable={false}
                     onPointerDown={(e) => {
@@ -543,7 +666,9 @@ export default function PhotoBooth() {
                     }}
                     onPointerMove={onStickerPointerMove}
                     onPointerUp={onStickerPointerUp}
-                    className={`h-full w-full cursor-grab ${
+                    // object-contain keeps an SVG's aspect within the square;
+                    // the emoji bitmap is already square, so it fills exactly.
+                    className={`h-full w-full object-contain cursor-grab ${
                       isSel ? 'rounded-lg ring-2 ring-fairway-300/90' : ''
                     }`}
                     style={{ touchAction: 'none' }}
@@ -589,12 +714,30 @@ export default function PhotoBooth() {
             )}
           </div>
 
-          {/* The sticker sheet. */}
+          {/* The sticker sheet — this venue's SVG stickers first (when any),
+              then the built-in emoji. */}
           <div className="surface-sunk mt-2 flex gap-1 overflow-x-auto rounded-2xl p-2">
+            {venueStickers.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => addSticker({ svgId: s.id })}
+                aria-label={`Add ${s.label ?? 'venue'} sticker`}
+                title={s.label ?? undefined}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl p-1.5 transition-transform active:scale-125"
+              >
+                {/* Rendered as an <img>: inert, never inlined. */}
+                <img
+                  src={venueStickerUrl(s.id)}
+                  alt=""
+                  draggable={false}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </button>
+            ))}
             {STICKER_SHEET.map((emoji) => (
               <button
                 key={emoji}
-                onClick={() => addSticker(emoji)}
+                onClick={() => addSticker({ emoji })}
                 aria-label={`Add ${emoji} sticker`}
                 className="shrink-0 rounded-xl p-1.5 text-3xl leading-none transition-transform active:scale-125"
               >

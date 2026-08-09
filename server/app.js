@@ -46,6 +46,9 @@ app.use((req, res, next) => {
   // installs its own 16mb parser for both.
   if (path === "/api/photos") return next();
   if (/^\/api\/photos\/[^/]+\/replace$/.test(path)) return next();
+  // Venue sticker SVG uploads exceed the 256kb cap; the admin router carries
+  // its own parser.
+  if (path === "/api/admin/booth-stickers") return next();
   // Same deal for the (temporary) admin vision bake-off — base64 photos on
   // both /describe and /prescan; the router carries its own 16mb parser.
   if (path.startsWith("/api/admin/vision-bakeoff/")) return next();

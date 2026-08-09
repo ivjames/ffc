@@ -757,3 +757,26 @@ create index if not exists game_ticket_award_player_day_idx
   on game_ticket_award (location_id, player_id, created_at);
 create index if not exists game_ticket_award_created_idx
   on game_ticket_award (location_id, created_at);
+
+-- ---------------------------------------------------------------------------
+-- Photo-booth venue stickers (routes/admin/boothStickers.js + the player
+-- booth's sticker sheet). Venue staff upload their own SVG decorations per
+-- location; players at that venue get them alongside the built-in emoji.
+-- SVG is an XSS vector, so uploads are validated (lib/svgSanitize.js), only
+-- ever rendered as <img>/canvas (never inlined), and served with hardened
+-- headers. Intrinsic width/height are captured at upload so the client sizes
+-- each sticker with the right aspect without parsing the SVG.
+-- ---------------------------------------------------------------------------
+create table if not exists booth_sticker (
+  id          uuid primary key default gen_random_uuid(),
+  location_id uuid not null references location(id) on delete cascade,
+  svg_path    text not null,            -- sanitized SVG file on the droplet disk
+  label       text,                     -- optional admin label / alt text
+  width       int  not null default 100, -- intrinsic px box (aspect ratio source)
+  height      int  not null default 100,
+  sort_order  int  not null default 0,
+  active      boolean not null default true,
+  created_at  timestamptz not null default now()
+);
+create index if not exists booth_sticker_location_idx
+  on booth_sticker (location_id, sort_order) where active;
