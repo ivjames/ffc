@@ -7,6 +7,7 @@ import {
   MAX_EXTRA_MS,
   PRINT_DELAY_MS,
   bumpTicket,
+  completedAtMs,
   freshKitchen,
   prepDurationMs,
   scheduleTicket,
@@ -137,6 +138,20 @@ test('kitchen sim: bump forces ready, then picked up, then is idempotent', () =>
   assert.equal(bumpTicket(ticket, midPrep + 5), 'picked_up'); // handed to the guest
   assert.equal(bumpTicket(ticket, midPrep + 6), 'picked_up'); // double-tap is harmless
   assert.equal(ticketStatus(ticket, midPrep + 7), 'picked_up');
+});
+
+test('kitchen sim: completion time is the bump instant, else auto-pickup', () => {
+  const kitchen = freshKitchen(1);
+  // Made ready early, sat a while, then handed off — completes at the bump.
+  const bumped = scheduleTicket(kitchen, PIZZA, 0);
+  bumpTicket(bumped, 5); // ready
+  bumpTicket(bumped, 9_000); // picked up at t=9000
+  assert.equal(completedAtMs(bumped), 9_000);
+  // Never bumped — completes at the derived auto-pickup instant, which lands
+  // AFTER the bumped ticket's pickup even though it was ready far earlier.
+  const abandoned = scheduleTicket(freshKitchen(1), PIZZA, 0);
+  assert.equal(completedAtMs(abandoned), abandoned.readyAtMs + AUTO_PICKUP_MS);
+  assert.ok(completedAtMs(abandoned) > completedAtMs(bumped));
 });
 
 test('kitchen board lists open tickets and bump services them end to end', async () => {

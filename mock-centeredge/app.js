@@ -22,7 +22,13 @@ import express from 'express';
 import cors from 'cors';
 import { randomUUID } from 'node:crypto';
 import { MENU, PLAYERS } from './seed.js';
-import { freshKitchen, scheduleTicket, ticketStatus, bumpTicket } from './kitchen.js';
+import {
+  freshKitchen,
+  scheduleTicket,
+  ticketStatus,
+  bumpTicket,
+  completedAtMs,
+} from './kitchen.js';
 import { kdsPage } from './kds.js';
 
 export const STATIC_TOKEN = process.env.MOCK_STATIC_TOKEN || 'ce-mock-dev-token';
@@ -286,7 +292,7 @@ export function createApp() {
       .map((o) => publicOrder(o, now));
     const recentlyCompleted = all
       .filter((o) => ticketStatus(o.ticket, now) === 'picked_up')
-      .sort((a, b) => b.ticket.readyAtMs - a.ticket.readyAtMs)
+      .sort((a, b) => completedAtMs(b.ticket) - completedAtMs(a.ticket))
       .slice(0, 5)
       .map((o) => publicOrder(o, now));
     res.json({

@@ -77,6 +77,16 @@ export function scheduleTicket(kitchen, lines, nowMs) {
   };
 }
 
+/** When a picked-up ticket was actually completed: the bump time for a
+ *  hand-off, or the derived auto-pickup instant for a ticket that was never
+ *  bumped. Only meaningful once ticketStatus() reads 'picked_up' — it's what
+ *  the "recently completed" rail sorts on, since a ticket that lingered at
+ *  ready and was just handed off completed AFTER one made ready later but
+ *  bumped earlier. */
+export function completedAtMs(ticket) {
+  return ticket.pickedUpAtMs ?? ticket.readyAtMs + AUTO_PICKUP_MS;
+}
+
 /** Derive a ticket's status from the clock. `sent_to_kitchen` covers the
  *  printed-but-waiting-for-a-station window, so queue pressure is visible. */
 export function ticketStatus(ticket, nowMs) {
