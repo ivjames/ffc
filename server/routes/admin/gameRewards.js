@@ -17,6 +17,7 @@ import { pool } from "../../db.js";
 import { orgScope } from "../../lib/adminAuth.js";
 import {
   GAME_REWARD_GAMES,
+  OTHER_REWARD_SOURCES,
   HARD_MAX_PER_ROUND,
   DEFAULT_DAILY_PER_CARD,
   MAX_DAILY_PER_CARD,
@@ -26,7 +27,10 @@ export const router = Router();
 
 router.get("/meta", (_req, res) => {
   res.json({
-    games: GAME_REWARD_GAMES,
+    // Every ticket-issuing source the award proxy accepts — the mini-games plus
+    // non-game sources (mini-golf) — so the caps editor can set a per-round cap
+    // for each and the issuance rollup can label them (not raw keys).
+    games: [...GAME_REWARD_GAMES, ...OTHER_REWARD_SOURCES],
     hardMaxPerRound: HARD_MAX_PER_ROUND,
     defaultDailyPerCard: DEFAULT_DAILY_PER_CARD,
     maxDailyPerCard: MAX_DAILY_PER_CARD,
