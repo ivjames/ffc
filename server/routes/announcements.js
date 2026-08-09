@@ -44,3 +44,54 @@ router.get("/", async (req, res) => {
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });
+
+// POST /api/announcements/views — view-memory beacon. The player app/TV board
+// fires this when the banner actually displays announcements, so Master Control
+// can answer "who's seen what, and when". Best-effort and idempotent:
+//
+//   { deviceId: <uuid>, ids: [<announcement uuid>, ...] }
+//
+// Identity is the client-minted device install id (always present); the
+// signed-in app_user (if any) rides along via attachUser for the "signed-in
+// accounts" rollup. Each id upserts one (announcement, device) row — first hit
+// stamps first_seen_at, repeats bump last_seen_at + seen_count. Unknown/garbage
+// ids are dropped, never 500'd, so a stale cached id can't wedge the beacon.
+const MAX_VIEW_IDS = 50;
+
+router.post("/views", async (req, res) => {
+  const body = req.body;
+  const deviceId = body && typeof body.deviceId === "string" ? body.deviceId : null;
+  if (!deviceId || !UUID_RE.test(deviceId)) {
+    return res.status(400).json({ ok: false, error: "deviceId must be a uuid" });
+  }
+  const rawIds = Array.isArray(body.ids) ? body.ids : [];
+  // De-dupe, keep only well-formed uuids, and cap the batch so a bad client
+  // can't drive an unbounded write. Dropping the overflow is fine — a beacon
+  // is fire-and-forget and the client re-sends anything still queued.
+  const ids = [...new Set(rawIds.filter((x) => typeof x === "string" && UUID_RE.test(x)))].slice(
+    0,
+    MAX_VIEW_IDS
+  );
+  if (ids.length === 0) return res.json({ ok: true, recorded: 0 });
+
+  const appUserId = req.user?.id ?? null;
+  try {
+    // insert...select over the real announcements filters out ids that don't
+    // exist (no FK 23503), so `recorded` reflects genuine announcements only.
+    const result = await pool.query(
+      `insert into announcement_view (announcement_id, device_id, app_user_id)
+         select a.id, $2::uuid, $3::uuid
+           from announcement a
+          where a.id = any($1::uuid[])
+       on conflict (announcement_id, device_id) do update set
+         last_seen_at = now(),
+         seen_count   = announcement_view.seen_count + 1,
+         app_user_id  = coalesce(excluded.app_user_id, announcement_view.app_user_id)`,
+      [ids, deviceId, appUserId]
+    );
+    return res.json({ ok: true, recorded: result.rowCount });
+  } catch (err) {
+    console.error("[announcements] view beacon error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});

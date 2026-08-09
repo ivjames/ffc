@@ -145,6 +145,13 @@ export type Announcement = {
   sortOrder: number;
   archivedAt: string | null;
   createdAt: string;
+  // View memory rollup (present on the admin list). Devices that have seen the
+  // announcement, distinct signed-in accounts among them, total impressions,
+  // and the most recent sighting (null if never seen).
+  viewDeviceCount?: number;
+  viewUserCount?: number;
+  viewImpressions?: number;
+  viewLastSeenAt?: string | null;
 };
 
 export type Reward = {

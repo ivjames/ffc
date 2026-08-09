@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAnnouncements } from '../lib/announcements';
+import { markAnnouncementsSeen, useAnnouncements } from '../lib/announcements';
 
 // Rotating announcement banner (punchlist #1). One card slot; multiple live
 // announcements cycle through it on a timer. Renders nothing when there's
@@ -22,8 +22,15 @@ export default function AnnouncementBanner({
     return () => clearInterval(id);
   }, [announcements.length]);
 
-  if (announcements.length === 0) return null;
-  const a = announcements[index % announcements.length];
+  const current = announcements.length ? announcements[index % announcements.length] : null;
+  // Record a view when an announcement is actually shown (view memory). The lib
+  // de-dupes per session, so re-visiting on rotation doesn't re-report.
+  useEffect(() => {
+    if (current) markAnnouncementsSeen([current.id]);
+  }, [current?.id]);
+
+  if (!current) return null;
+  const a = current;
 
   return (
     <div

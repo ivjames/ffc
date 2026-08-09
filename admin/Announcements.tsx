@@ -112,6 +112,17 @@ function AnnouncementForm({
   );
 }
 
+// View-memory one-liner: how many devices/accounts have seen the row and when
+// it was last seen (the "who's seen what, and when" rollup from the API).
+function seenSummary(a: Announcement): string {
+  const devices = a.viewDeviceCount ?? 0;
+  if (devices === 0) return 'Not seen yet';
+  const parts = [`Seen by ${devices} ${devices === 1 ? 'device' : 'devices'}`];
+  if (a.viewUserCount) parts.push(`${a.viewUserCount} signed-in`);
+  if (a.viewLastSeenAt) parts.push(`last ${fmtDateTime(a.viewLastSeenAt)}`);
+  return parts.join(' · ');
+}
+
 // Live now / scheduled / ended, from the row's window.
 function windowState(a: Announcement): { label: string; tone: 'slate' | 'amber' } {
   const now = Date.now();
@@ -194,6 +205,7 @@ export default function Announcements({ isSuperAdmin }: { isSuperAdmin: boolean 
                   {' · '}
                   {a.endsAt ? `until ${fmtDateTime(a.endsAt)}` : 'until archived'}
                 </div>
+                <div className="text-xs text-slate-400">{seenSummary(a)}</div>
               </div>
               {!a.archivedAt && (
                 <Button variant="ghost" onClick={() => setEditing(a)}>
