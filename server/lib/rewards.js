@@ -14,6 +14,21 @@ export const ACHIEVEMENTS = {
   hunt_master: "Hunt Master",
 };
 
+// Tickets a card claim pays per achievement — the SERVER-SIDE source of truth.
+// The claim endpoint (routes/rewards.js) derives the payout from the stored
+// grant's achievement, so a tampered request can't mint tickets without an
+// achievement or over-pay one; the client never sends an amount.
+export const ACHIEVEMENT_TICKETS = {
+  hole_in_one: 100,
+  under_par: 50,
+  hunt_master: 75,
+};
+
+/** Tickets for an achievement (0 for an unknown/unpriced one → never paid). */
+export function achievementTickets(achievement) {
+  return ACHIEVEMENT_TICKETS[achievement] ?? 0;
+}
+
 /**
  * Score-based achievements for one synced round.
  * `scoreRows` is the validated [{playerIndex, hole, strokes}] list the rounds

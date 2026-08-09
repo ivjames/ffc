@@ -18,6 +18,7 @@ export const router = Router();
 const REWARD_COLS = `g.id, g.code, g.player_index as "playerIndex",
   g.player_tag as "playerTag", g.achievement,
   g.created_at as "createdAt", g.redeemed_at as "redeemedAt", g.redeemed_by as "redeemedBy",
+  g.redeemed_via as "redeemedVia", g.tickets_awarded as "ticketsAwarded",
   c.name as "courseName", l.name as "locationName"`;
 
 const REWARD_FROM = `from reward_grant g
@@ -69,17 +70,30 @@ async function setRedeemed(req, res, redeemed) {
   try {
     // Scope check first (a 403 must not flip the row).
     const existing = await pool.query(
-      `select l.org_id as "orgId" ${REWARD_FROM} where g.id = $1`,
+      `select l.org_id as "orgId", g.redeemed_at as "redeemedAt", g.redeemed_via as "redeemedVia"
+         ${REWARD_FROM} where g.id = $1`,
       [id]
     );
     if (existing.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
     if (scope && existing.rows[0].orgId !== scope) {
       return res.status(403).json({ ok: false, error: "forbidden: not your org" });
     }
+    // One lane only: a grant already claimed to a rewards card (or already
+    // redeemed) can't also be redeemed at the counter.
+    if (redeemed && existing.rows[0].redeemedAt) {
+      return res.status(409).json({
+        ok: false,
+        error:
+          existing.rows[0].redeemedVia === "card"
+            ? "already claimed to a rewards card"
+            : "already redeemed",
+      });
+    }
     const db = await pool.query(
       `update reward_grant g0
-          set redeemed_at = ${redeemed ? "now()" : "null"},
-              redeemed_by = ${redeemed ? "$2" : "null"}
+          set redeemed_at  = ${redeemed ? "now()" : "null"},
+              redeemed_by  = ${redeemed ? "$2" : "null"},
+              redeemed_via = ${redeemed ? "'counter'" : "null"}
         where g0.id = $1
         returning g0.id`,
       redeemed ? [id, actorLabel(req)] : [id]
