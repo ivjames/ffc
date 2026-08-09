@@ -9,6 +9,10 @@ import { getRound, putRound } from '../../db';
 import { syncPending, fetchRewards, type RewardRow } from '../../sync';
 import { completeGame } from '../../lib/gamesApi';
 import { applyCompleted } from '../../lib/sharedMerge';
+import { usePos } from '../../lib/pos';
+import { useLinkedPlayerId } from '../../lib/rewardsCard';
+import { awardGolfReward } from '../../lib/pos/golfRewards';
+import type { GameAwardOutcome } from '../../lib/pos/gameRewards';
 import { shareRound } from './shareImage';
 import { playFanfare } from '../../lib/sound';
 import type { CourseSeed, LocalRound } from '../../types';
@@ -245,9 +249,13 @@ export default function Summary() {
 
         <SyncNote state={round.syncState} failed={syncFailed} />
 
-        {/* Rewards earned this round (punchlist #8 tier 1) — show a code at
-            the counter; staff mark it redeemed in Master Control. */}
-        {rewards.length > 0 && <RewardsCard rewards={rewards} accent={course.accent} />}
+        {/* Rewards earned this round (punchlist #8 tier 1). Where the venue
+            sells the loyalty add-on, they credit the linked card as tickets
+            (same lane as the games); otherwise they fall back to a counter
+            code staff redeem in Master Control. */}
+        {rewards.length > 0 && (
+          <RewardsCard rewards={rewards} accent={course.accent} clientId={clientId} />
+        )}
 
         <div className="mt-4 space-y-2">
           <Button
@@ -381,7 +389,85 @@ const REWARD_META: Record<string, { emoji: string; label: string }> = {
   hunt_master: { emoji: '🕵️', label: 'Hunt Master' },
 };
 
-function RewardsCard({ rewards, accent }: { rewards: RewardRow[]; accent: string }) {
+function CodePill({ code, accent }: { code: string; accent: string }) {
+  return (
+    <span
+      className="font-mono rounded-lg px-3 py-1.5 text-lg font-black tracking-[0.2em] text-fairway-50"
+      style={{ background: `${accent}2e`, border: `1px solid ${accent}66` }}
+    >
+      {code}
+    </span>
+  );
+}
+
+// The card-lane value for one achievement: the credited ticket count once it
+// lands, "Adding…" while in flight, and the counter code as a fallback if the
+// card system can't be reached (so the reward is never simply dropped).
+function RewardValue({
+  outcome,
+  code,
+  accent,
+}: {
+  outcome: GameAwardOutcome | undefined;
+  code: string;
+  accent: string;
+}) {
+  if (outcome?.status === 'awarded') {
+    return (
+      <span className="whitespace-nowrap text-sm font-black text-fairway-50">
+        +{outcome.tickets} 🎟️
+      </span>
+    );
+  }
+  if (outcome == null) {
+    return <span className="text-xs text-fairway-100/70">Adding…</span>;
+  }
+  return <CodePill code={code} accent={accent} />;
+}
+
+function RewardsCard({
+  rewards,
+  accent,
+  clientId,
+}: {
+  rewards: RewardRow[];
+  accent: string;
+  clientId: string;
+}) {
+  const navigate = useNavigate();
+  const { gameRewards } = usePos();
+  const playerId = useLinkedPlayerId();
+  // Card lane: when the venue sells the loyalty add-on, this device's player
+  // (index 0 — the cardholder) banks tickets on the linked card, the same lane
+  // as the games. Other players in a shared round keep their own counter codes.
+  const cardLane = gameRewards;
+
+  // Credit the cardholder's achievements once. The injection endpoint replays
+  // on a stable per-(round, player, achievement) key, so a re-mounted summary —
+  // or a card linked only after the summary is open — can't double-credit.
+  const [credited, setCredited] = useState<Record<string, GameAwardOutcome>>({});
+  const attempted = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!cardLane || !playerId) return;
+    for (const r of rewards) {
+      if (r.playerIndex !== 0) continue; // this device's player = the cardholder
+      const key = `${r.playerIndex}:${r.achievement}`;
+      if (attempted.current.has(key)) continue;
+      attempted.current.add(key);
+      void awardGolfReward({
+        achievement: r.achievement,
+        clientId,
+        playerIndex: r.playerIndex,
+      }).then((outcome) => setCredited((m) => ({ ...m, [key]: outcome })));
+    }
+  }, [cardLane, playerId, rewards, clientId]);
+
+  const subtitle = cardLane
+    ? playerId
+      ? 'Added to your rewards card.'
+      : 'Link your rewards card to bank these as tickets — or claim by code at the counter.'
+    : 'Show a code at the counter to claim your prize.';
+
   return (
     <div
       className="surface animate-pop-in mt-4 rounded-3xl border border-fairway-500/40 p-4"
@@ -390,16 +476,26 @@ function RewardsCard({ rewards, accent }: { rewards: RewardRow[]; accent: string
       <div className="mb-1 text-center text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
         🎟️ Rewards earned
       </div>
-      <p className="mb-3 text-center text-xs text-fairway-100/70">
-        Show a code at the counter to claim your prize.
-      </p>
+      <p className="mb-3 text-center text-xs text-fairway-100/70">{subtitle}</p>
+
+      {cardLane && !playerId && (
+        <div className="mb-3">
+          <Button variant="ghost" onClick={() => navigate('/rewards')}>
+            🎟️ Link rewards card
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-2">
         {rewards.map((r) => {
           const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
-          const claimed = r.redeemedAt != null;
+          const key = `${r.playerIndex}:${r.achievement}`;
+          // This device's player rides the card lane when it's available;
+          // everyone else in the round keeps their counter code.
+          const onCard = cardLane && playerId != null && r.playerIndex === 0;
           return (
             <div
-              key={`${r.playerIndex}-${r.achievement}`}
+              key={key}
               className="surface-1 flex items-center gap-3 rounded-2xl border border-fairway-800/60 px-4 py-2.5"
             >
               <span className="text-xl" aria-hidden="true">
@@ -409,17 +505,14 @@ function RewardsCard({ rewards, accent }: { rewards: RewardRow[]; accent: string
                 <div className="text-sm font-bold text-fairway-50">{meta.label}</div>
                 <div className="text-xs text-fairway-100/70">{r.playerTag}</div>
               </div>
-              {claimed ? (
+              {onCard ? (
+                <RewardValue outcome={credited[key]} code={r.code} accent={accent} />
+              ) : r.redeemedAt != null ? (
                 <span className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
                   Claimed ✓
                 </span>
               ) : (
-                <span
-                  className="font-mono rounded-lg px-3 py-1.5 text-lg font-black tracking-[0.2em] text-fairway-50"
-                  style={{ background: `${accent}2e`, border: `1px solid ${accent}66` }}
-                >
-                  {r.code}
-                </span>
+                <CodePill code={r.code} accent={accent} />
               )}
             </div>
           );
