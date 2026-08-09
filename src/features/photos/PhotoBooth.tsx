@@ -300,6 +300,11 @@ export default function PhotoBooth() {
     setStickers((s) => s.map((st) => (st.id === selectedId ? { ...st, ...patch(st) } : st)));
   }
 
+  function removeSticker(id: number) {
+    setStickers((s) => s.filter((st) => st.id !== id));
+    setSelectedId((cur) => (cur === id ? null : cur));
+  }
+
   // Drag state — refs, not state: pointermove shouldn't re-render more than
   // the sticker position update itself already does.
   const drag = useRef<{ id: number; dx: number; dy: number } | null>(null);
@@ -470,21 +475,11 @@ export default function PhotoBooth() {
               // The rendered bitmap — identical pixels to what the export bakes,
               // so the preview is truly WYSIWYG. Sized off the box's real width.
               const side = stickerSide(boxW, st.scale);
+              const isSel = st.id === selectedId;
               return (
-                <img
+                <div
                   key={st.id}
-                  src={stickerBitmapUrl(st.emoji)}
-                  alt=""
-                  draggable={false}
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    onStickerPointerDown(e, st);
-                  }}
-                  onPointerMove={onStickerPointerMove}
-                  onPointerUp={onStickerPointerUp}
-                  className={`absolute cursor-grab ${
-                    st.id === selectedId ? 'rounded-lg ring-2 ring-fairway-300/90' : ''
-                  }`}
+                  className="absolute"
                   style={{
                     left: `${st.x * 100}%`,
                     top: `${st.y * 100}%`,
@@ -493,7 +488,42 @@ export default function PhotoBooth() {
                     transform: `translate(-50%, -50%) rotate(${st.rot}deg)`,
                     touchAction: 'none',
                   }}
-                />
+                >
+                  <img
+                    src={stickerBitmapUrl(st.emoji)}
+                    alt=""
+                    draggable={false}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      onStickerPointerDown(e, st);
+                    }}
+                    onPointerMove={onStickerPointerMove}
+                    onPointerUp={onStickerPointerUp}
+                    className={`h-full w-full cursor-grab ${
+                      isSel ? 'rounded-lg ring-2 ring-fairway-300/90' : ''
+                    }`}
+                    style={{ touchAction: 'none' }}
+                  />
+                  {/* Direct delete: an × on the selected sticker, tappable right
+                      on the canvas. Counter-rotated so the glyph stays upright,
+                      and it swallows the pointerdown so tapping it never starts
+                      a drag or deselects. */}
+                  {isSel && (
+                    <button
+                      type="button"
+                      aria-label="Remove sticker"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeSticker(st.id);
+                      }}
+                      className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/80 bg-red-600 text-base font-bold leading-none text-white shadow-md"
+                      style={{ transform: `rotate(${-st.rot}deg)`, touchAction: 'none' }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -506,14 +536,11 @@ export default function PhotoBooth() {
                 {keyBtn('+', () => updateSelected((st) => ({ scale: Math.min(3, st.scale * 1.2) })), 'Bigger')}
                 {keyBtn('↺', () => updateSelected((st) => ({ rot: st.rot - 15 })), 'Rotate left')}
                 {keyBtn('↻', () => updateSelected((st) => ({ rot: st.rot + 15 })), 'Rotate right')}
-                {keyBtn('🗑️', () => {
-                  setStickers((s) => s.filter((st) => st.id !== selectedId));
-                  setSelectedId(null);
-                }, 'Remove sticker')}
+                {keyBtn('🗑️', () => selectedId !== null && removeSticker(selectedId), 'Remove sticker')}
               </>
             ) : (
               <span className="text-xs text-fairway-100/60">
-                Tap a sticker below to add it · drag to move
+                Tap a sticker to select · drag to move · ✕ to remove
               </span>
             )}
           </div>
