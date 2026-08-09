@@ -112,6 +112,7 @@ function intrinsicSize(text) {
   if (!w || !h || !Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
     return { width: 100, height: 100 };
   }
-  // Round to integers; store as the intrinsic pixel box (aspect is what matters).
-  return { width: Math.round(w), height: Math.round(h) };
+  // Round to integers (aspect is what matters), but never below 1 — a sub-0.5
+  // dimension would round to 0 and later divide-by-zero the client's sizing.
+  return { width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) };
 }
