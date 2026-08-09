@@ -141,6 +141,18 @@ Advance a ticket: not yet ready → `ready` now; `ready` → `picked_up`.
 Idempotent once picked up. Bumping early doesn't reflow other tickets'
 reservations (the sim never rewrites history, erring toward safer ETAs).
 
+### Pickup hand-off
+Every order carries a 4-digit `pickupCode` (shown big on the guest's Ready
+screen and on the KDS ready ticket). **Either side can complete the
+hand-off:** staff tap **Hand off** on the KDS (the `ready → picked_up` bump),
+or the guest taps "I've picked it up" in the app, whichever happens first.
+
+### `POST /orders/:id/pickup`
+Guest-side completion. `409` if the order isn't `ready` yet (collecting food
+that's still cooking is rejected, not silently accepted); `→ picked_up` once
+ready; idempotent thereafter. The 10-minute auto-complete stays as the safety
+net so an abandoned order still leaves the board.
+
 ### `GET /players/:id`
 `:id` is the account id (`PL-1001`) **or** the physical card number
 (`770001112223`). → `{ok, player}` with `balances: {cashCents,

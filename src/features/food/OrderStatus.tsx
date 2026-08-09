@@ -49,6 +49,8 @@ export default function OrderStatusScreen() {
   // 1s ticker so the ETA counts down between polls.
   const [now, setNow] = useState(() => Date.now());
   const [notifyPerm, setNotifyPerm] = useState<NotifyPermission>(() => notificationPermission());
+  const [pickingUp, setPickingUp] = useState(false);
+  const [pickupError, setPickupError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orderId || !ordering) return;
@@ -103,6 +105,23 @@ export default function OrderStatusScreen() {
     setNotifyPerm(await enableOrderNotifications());
   }
 
+  // Guest-side hand-off: either the player taps this or staff complete it on
+  // the KDS, whichever happens first. The poll loop stops once it reads
+  // picked_up; setting the returned order here flips the screen immediately.
+  async function pickUp() {
+    if (!orderId || !ordering || pickingUp) return;
+    playClick();
+    setPickingUp(true);
+    setPickupError(null);
+    const res = await ordering.pickUpOrder(orderId);
+    setPickingUp(false);
+    if ('error' in res) {
+      setPickupError(res.error);
+      return;
+    }
+    setOrder(res.order);
+  }
+
   if (!ordering) return <Navigate to="/" replace />;
   const stepIndex = order ? STEPS.findIndex((s) => s.status === order.status) : -1;
   const eta = order ? etaLabel(order, now) : null;
@@ -134,7 +153,29 @@ export default function OrderStatusScreen() {
               )}
             </div>
 
-            {order.status !== 'picked_up' && (
+            {order.status === 'ready' && (
+              <div className="surface-1 animate-glow-pulse mb-5 rounded-2xl border border-fairway-500/40 px-4 py-4 text-center">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
+                  Show this at the counter
+                </div>
+                {order.pickupCode && (
+                  <div className="mt-1 font-arcade text-4xl font-black tracking-[0.3em] text-fairway-50">
+                    {order.pickupCode}
+                  </div>
+                )}
+                <p className="mt-1 text-sm text-fairway-100/70">
+                  Your order is ready — grab it at the counter.
+                </p>
+                <div className="mt-3">
+                  <Button onClick={pickUp} disabled={pickingUp}>
+                    {pickingUp ? 'Confirming…' : "I've picked it up"}
+                  </Button>
+                </div>
+                {pickupError && <p className="mt-2 text-xs text-red-400">{pickupError}</p>}
+              </div>
+            )}
+
+            {order.status !== 'picked_up' && order.status !== 'ready' && (
               <div className="mb-5">
                 {notifyPerm === 'default' && (
                   <Button variant="ghost" onClick={enableNotifications}>

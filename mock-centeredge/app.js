@@ -27,7 +27,9 @@ import {
   scheduleTicket,
   ticketStatus,
   bumpTicket,
+  pickUpTicket,
   completedAtMs,
+  makePickupCode,
 } from './kitchen.js';
 import { kdsPage } from './kds.js';
 
@@ -242,6 +244,9 @@ export function createApp() {
       playerId: player?.id ?? null,
       guestName: typeof guestName === 'string' ? guestName.slice(0, 100) : null,
       notes: notes ?? null,
+      // Shown big on the guest's Ready screen and on the KDS ticket; matching
+      // the two is the pickup hand-off (either side can then complete it).
+      pickupCode: makePickupCode(),
       createdAt: new Date(nowMs).toISOString(),
       createdAtMs: nowMs,
       // Hand the ticket to the fake kitchen: reserves a station and fixes the
@@ -275,6 +280,20 @@ export function createApp() {
   app.get('/api/v1/orders/:id', (req, res) => {
     const order = state.orders.get(req.params.id);
     if (!order) return res.status(404).json({ ok: false, error: 'order not found' });
+    res.json({ ok: true, order: publicOrder(order) });
+  });
+
+  // Guest-side pickup — the app's "I've picked it up" button. Either side can
+  // complete the hand-off, so this mirrors the KDS bump's ready → picked_up
+  // step, but only once the food is ready: collecting an order that's still
+  // cooking is a 409, not a silent no-op. Idempotent once picked up.
+  app.post('/api/v1/orders/:id/pickup', (req, res) => {
+    const order = state.orders.get(req.params.id);
+    if (!order) return res.status(404).json({ ok: false, error: 'order not found' });
+    const status = pickUpTicket(order.ticket, Date.now());
+    if (status !== 'picked_up') {
+      return res.status(409).json({ ok: false, error: 'order is not ready for pickup yet' });
+    }
     res.json({ ok: true, order: publicOrder(order) });
   });
 

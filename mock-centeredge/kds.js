@@ -43,6 +43,8 @@ export function kdsPage(staticToken) {
   .pill.ready { background: #143726; color: #55d58a; animation: pulse 1.2s infinite; }
   @keyframes pulse { 50% { opacity: .55; } }
   .eta { font-size: 12.5px; color: #8fa0af; font-variant-numeric: tabular-nums; }
+  .code { font-weight: 800; letter-spacing: .12em; color: #cfe8d8; background: #143726; padding: 2px 9px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+  .code b { color: #7fe0a6; }
   button.bump { margin-left: auto; border: 0; border-radius: 8px; padding: 6px 14px; font-weight: 700; cursor: pointer; background: #2b6cb0; color: #fff; }
   .ticket.ready button.bump { background: #2f9e5f; }
   #empty { color: #66788a; padding: 40px 18px; text-align: center; grid-column: 1 / -1; }
@@ -99,8 +101,10 @@ export function kdsPage(staticToken) {
           '<span class="age">' + mmss(now - Date.parse(o.createdAt)) + '</span></div>' +
           '<div class="items">' + items + (o.notes ? '<div class="note">' + esc(o.notes) + '</div>' : '') + '</div>' +
           '<div class="tfoot"><span class="pill ' + o.status + '">' + o.status.replace(/_/g, ' ') + '</span>' +
-          '<span class="eta">' + etaText(o, now) + '</span>' +
-          '<button class="bump" data-id="' + esc(o.id) + '">' + (o.status === 'ready' ? 'Picked up' : 'Bump') + '</button></div>' +
+          (o.status === 'ready' && o.pickupCode
+            ? '<span class="code" title="Match this to the guest\\'s screen">🎫 <b>' + esc(o.pickupCode) + '</b></span>'
+            : '<span class="eta">' + etaText(o, now) + '</span>') +
+          '<button class="bump" data-id="' + esc(o.id) + '">' + (o.status === 'ready' ? 'Hand off' : 'Bump') + '</button></div>' +
           '</div>';
       }).join('');
     }

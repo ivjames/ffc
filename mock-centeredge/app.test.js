@@ -7,8 +7,10 @@ import {
   MAX_EXTRA_MS,
   PRINT_DELAY_MS,
   bumpTicket,
+  pickUpTicket,
   completedAtMs,
   freshKitchen,
+  makePickupCode,
   prepDurationMs,
   scheduleTicket,
   ticketStatus,
@@ -152,6 +154,52 @@ test('kitchen sim: completion time is the bump instant, else auto-pickup', () =>
   const abandoned = scheduleTicket(freshKitchen(1), PIZZA, 0);
   assert.equal(completedAtMs(abandoned), abandoned.readyAtMs + AUTO_PICKUP_MS);
   assert.ok(completedAtMs(abandoned) > completedAtMs(bumped));
+});
+
+test('kitchen sim: guest pickup only completes once ready, then is idempotent', () => {
+  const ticket = scheduleTicket(freshKitchen(1), PIZZA, 0);
+  // Still cooking — pickup is a no-op that reports the (unchanged) real status.
+  assert.equal(pickUpTicket(ticket, ticket.startAtMs + 1), 'preparing');
+  assert.equal(ticket.pickedUpAtMs, null);
+  // Ready — the guest can collect it.
+  assert.equal(pickUpTicket(ticket, ticket.readyAtMs + 1), 'picked_up');
+  // Idempotent: a second tap (or staff also completing it) is harmless.
+  assert.equal(pickUpTicket(ticket, ticket.readyAtMs + 5), 'picked_up');
+});
+
+test('makePickupCode is a 4-digit string and honors the injected rng', () => {
+  assert.equal(makePickupCode(() => 0), '1000');
+  assert.equal(makePickupCode(() => 0.9999), '9999');
+  assert.match(makePickupCode(), /^\d{4}$/);
+});
+
+test('guest-side pickup: too-early is 409, ready completes, and it is idempotent', async () => {
+  const placed = await (
+    await post('/orders', {
+      items: CART,
+      payment: { token: 'tok_visa_4242', amountCents: CART_TOTAL },
+      guestName: 'Pickup Test',
+    })
+  ).json();
+  const id = placed.order.id;
+  // The order carries a pickup code for the counter hand-off.
+  assert.match(placed.order.pickupCode, /^\d{4}$/);
+
+  // Still cooking → 409 (not a silent success).
+  assert.equal((await post(`/orders/${id}/pickup`, {})).status, 409);
+
+  // Staff bump it to ready, then the GUEST completes pickup from the app.
+  await post(`/kitchen/orders/${id}/bump`, {});
+  const done = await post(`/orders/${id}/pickup`, {});
+  assert.equal(done.status, 200);
+  assert.equal((await done.json()).order.status, 'picked_up');
+
+  // Idempotent, and reflected on the tracking poll + off the live board.
+  assert.equal((await post(`/orders/${id}/pickup`, {})).status, 200);
+  const polled = await (await fetch(`${base}/orders/${id}`, { headers: AUTH })).json();
+  assert.equal(polled.order.status, 'picked_up');
+
+  assert.equal((await post('/orders/ord-nope/pickup', {})).status, 404);
 });
 
 test('kitchen board lists open tickets and bump services them end to end', async () => {

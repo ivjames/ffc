@@ -115,3 +115,26 @@ export function bumpTicket(ticket, nowMs) {
   ticket.readyAtMs = nowMs;
   return 'ready';
 }
+
+/** Guest-side hand-off — the app's "I've picked it up". Either side can
+ *  complete an order, so this mirrors the KDS bump's ready → picked_up step
+ *  but NEVER forces an un-ready ticket forward: completing pickup only makes
+ *  sense once the food is up. Idempotent once picked up. Returns the resulting
+ *  status; a still-cooking ticket comes back unchanged so the caller can tell
+ *  the guest it isn't ready yet. */
+export function pickUpTicket(ticket, nowMs) {
+  const status = ticketStatus(ticket, nowMs);
+  if (status === 'picked_up') return 'picked_up';
+  if (status === 'ready') {
+    ticket.pickedUpAtMs = nowMs;
+    return 'picked_up';
+  }
+  return status; // received / sent_to_kitchen / preparing — too early to collect
+}
+
+/** A short human-friendly pickup code the guest shows at the counter and staff
+ *  match on the KDS. Not a security token — a demo convenience — so a plain
+ *  4-digit code is enough. `rand` is injected so callers control entropy. */
+export function makePickupCode(rand = Math.random) {
+  return String(1000 + Math.floor(rand() * 9000));
+}
