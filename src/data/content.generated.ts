@@ -21,7 +21,15 @@ export type GeneratedLocation = {
   // import-free.
   pos: {
     ordering: { vendor: string; apiBase: string | null } | null;
-    loyalty: { vendor: string; apiBase: string | null; gameRewards: boolean } | null;
+    loyalty: {
+      vendor: string;
+      apiBase: string | null;
+      gameRewards: boolean;
+      // Venue ticket-economy caps (enforced server-side by the award proxy;
+      // carried here only so the config round-trips). Present only when the
+      // venue overrides a default.
+      gameRewardCaps?: { dailyPerCard: number | null; perGame: Record<string, number> };
+    } | null;
   } | null;
   orgId: string | null;
 };

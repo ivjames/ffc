@@ -210,7 +210,10 @@ Request:
   (`POS_VENDORS` in `lib/validateLocation.js`); at least one block must be
   configured (send `null`/omit to remove the integration); `gameRewards`
   rides inside `loyalty` (tickets need a loyalty balance to land in);
-  `apiBase` is an optional per-venue `http(s)` endpoint override. Stored
+  `apiBase` is an optional per-venue `http(s)` endpoint override for the
+  **client's** read paths only — the server-side award credit deliberately
+  ignores it (it's org_admin-writable, and the server attaches credentials;
+  see `lib/posLoyalty.js`) and always uses the env-configured endpoint. Stored
   canonically with both keys explicit. **Credentials are never part of this
   shape** — vendor secrets stay server-side. Ships via `GET /api/content`
   like the deep links.

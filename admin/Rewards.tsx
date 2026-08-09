@@ -103,6 +103,7 @@ function GameTicketIssuance() {
                   <th className="px-3 py-2 text-right">Rounds</th>
                   <th className="px-3 py-2 text-right">Cards</th>
                   <th className="px-3 py-2 text-right">Capped</th>
+                  <th className="px-3 py-2 text-right">Pending</th>
                   <th className="px-3 py-2 text-right">Tickets</th>
                 </tr>
               </thead>
@@ -115,6 +116,7 @@ function GameTicketIssuance() {
                     <td className="px-3 py-1.5 text-right">{r.rounds}</td>
                     <td className="px-3 py-1.5 text-right">{r.cards}</td>
                     <td className="px-3 py-1.5 text-right">{r.cappedRounds > 0 ? r.cappedRounds : ''}</td>
+                    <td className="px-3 py-1.5 text-right">{r.pendingRounds > 0 ? r.pendingRounds : ''}</td>
                     <td className="px-3 py-1.5 text-right font-semibold">{r.tickets.toLocaleString()}</td>
                   </tr>
                 ))}

@@ -52,7 +52,11 @@ router.get("/usage", async (req, res) => {
                a.game,
                count(*)                                        as rounds,
                count(*) filter (where a.status = 'daily_cap')  as capped_rounds,
-               coalesce(sum(a.tickets_awarded), 0)             as tickets,
+               count(*) filter (where a.status = 'pending')    as pending_rounds,
+               -- confirmed issuance only: 'pending' rows reserve daily-cap
+               -- budget but their vendor credit never confirmed
+               coalesce(sum(a.tickets_awarded)
+                          filter (where a.status = 'awarded'), 0) as tickets,
                count(distinct a.player_id)                     as cards
           from game_ticket_award a
           join location l on l.id = a.location_id
@@ -69,7 +73,8 @@ router.get("/usage", async (req, res) => {
                l.name as location_name,
                a.player_id,
                count(*)                            as rounds,
-               coalesce(sum(a.tickets_awarded), 0) as tickets
+               coalesce(sum(a.tickets_awarded)
+                          filter (where a.status = 'awarded'), 0) as tickets
           from game_ticket_award a
           join location l on l.id = a.location_id
          where a.created_at >= now() - $2::int * interval '1 day'
@@ -91,6 +96,7 @@ router.get("/usage", async (req, res) => {
         game: r.game,
         rounds: Number(r.rounds),
         cappedRounds: Number(r.capped_rounds),
+        pendingRounds: Number(r.pending_rounds),
         tickets: Number(r.tickets),
         cards: Number(r.cards),
       })),

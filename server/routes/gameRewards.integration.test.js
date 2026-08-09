@@ -84,10 +84,16 @@ before(async () => {
   const ceStub = await listenEphemeral(stubApp);
   stubClose = ceStub.close;
 
+  // The server-side credit path deliberately IGNORES the venue-set apiBase
+  // (org_admin-writable — honoring it would let a venue exfiltrate the
+  // credential); it uses trusted env config only. Point env at the stub and
+  // give every venue a dead apiBase to prove awards never follow it.
+  process.env.CENTEREDGE_API_BASE = ceStub.baseUrl;
+
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const loyalty = (extra = {}) => ({
     ordering: null,
-    loyalty: { vendor: "centeredge", apiBase: ceStub.baseUrl, gameRewards: true, ...extra },
+    loyalty: { vendor: "centeredge", apiBase: "http://127.0.0.1:9", gameRewards: true, ...extra },
   });
   locationId = await makeLocation(`a-${stamp}`, loyalty());
   cappedLocationId = await makeLocation(
@@ -96,7 +102,7 @@ before(async () => {
   );
   noRewardsLocationId = await makeLocation(`c-${stamp}`, {
     ordering: null,
-    loyalty: { vendor: "centeredge", apiBase: ceStub.baseUrl, gameRewards: false },
+    loyalty: { vendor: "centeredge", apiBase: "http://127.0.0.1:9", gameRewards: false },
   });
 });
 
@@ -245,22 +251,33 @@ test("a replayed session settles from the ledger without re-crediting", async ()
   assert.equal(rows.rows[0].n, 1);
 });
 
-test("a failed vendor credit releases the reservation for a clean retry", async () => {
+test("a failed vendor credit holds the reservation; a retry settles it", async () => {
   const sessionId = session();
   const body = { locationId, playerId: "PL-106", game: "darts", tickets: 15, sessionId };
 
   stub.failNext = true;
   const failed = await award(body);
   assert.equal(failed.status, 502);
-  const gone = await testQuery(
-    `select count(*)::int as n from game_ticket_award where game = 'darts' and session_id = $1`,
+  // The failure is ambiguous (the credit may have landed) — the reservation
+  // stays pending, still holding its slice of the daily budget.
+  const held = await testQuery(
+    `select status from game_ticket_award where game = 'darts' and session_id = $1`,
     [sessionId]
   );
-  assert.equal(gone.rows[0].n, 0); // budget released
+  assert.equal(held.rows[0].status, "pending");
 
+  // Retrying the same session replays the vendor call under the same
+  // idempotency key and settles the row.
   const retry = await (await award(body)).json();
   assert.equal(retry.status, "awarded");
   assert.equal(retry.ticketsAwarded, 15);
+  const settled = await testQuery(
+    `select status, count(*) over ()::int as n from game_ticket_award
+      where game = 'darts' and session_id = $1`,
+    [sessionId]
+  );
+  assert.equal(settled.rows[0].status, "awarded");
+  assert.equal(settled.rows[0].n, 1);
 });
 
 test("admin usage rollup reports issuance and the daily-cap hits", async () => {

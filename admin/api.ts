@@ -120,6 +120,8 @@ export type GameTicketUsageRow = {
   game: string;
   rounds: number;
   cappedRounds: number;
+  /** Reservations whose vendor credit never confirmed — excluded from tickets. */
+  pendingRounds: number;
   tickets: number;
   cards: number;
 };

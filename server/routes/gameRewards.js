@@ -149,14 +149,15 @@ router.post("/award", async (req, res) => {
     });
 
     if (posResult.ok !== true) {
-      // Credit didn't land: release the reservation (delete frees the daily-cap
-      // budget and lets the client retry this session cleanly). The vendor-side
-      // idempotency key still guards the edge where the credit DID land but the
-      // response was lost — a retry replays it, not double-pays.
-      await pool.query(`delete from game_ticket_award where id = $1 and status = 'pending'`, [
-        row.id,
-      ]);
-      console.error("[game-rewards] POS credit failed:", posResult.error);
+      // A failed vendor call is AMBIGUOUS — the credit may have landed with
+      // the response lost. Keep the 'pending' reservation: it holds this
+      // round's slice of the daily budget (conservative — the cap can't be
+      // exceeded via a lost response + fresh rounds), and a retry of the same
+      // session finds the row, replays the vendor call under the same
+      // idempotency key (the vendor de-dupes), and settles it to 'awarded'.
+      // Un-retried rows stay pending and are excluded from confirmed
+      // issuance in the admin rollup.
+      console.error("[game-rewards] POS credit failed (reservation held):", posResult.error);
       return res.status(502).json({ ok: false, error: posResult.error });
     }
 

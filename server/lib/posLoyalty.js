@@ -9,11 +9,19 @@
 // CenterEdge is the only vendor today, and pre-credential it means the local
 // mock (mock-centeredge/, loopback — see bin/ffc mock_up). Real credentials
 // slot in via CENTEREDGE_API_BASE / CENTEREDGE_API_TOKEN without code changes.
+//
+// SECURITY: the endpoint this module credits against comes ONLY from trusted
+// server env — never from the venue's pos.loyalty.apiBase. That field is
+// org_admin-writable (it exists as a CLIENT read-path override), so honoring
+// it here would let an org admin point the URL at a server they control and
+// exfiltrate the bearer token — or probe the private network — via the public
+// award endpoint. When multi-tenant vendor endpoints become real, they need
+// per-venue credentials stored server-side, resolved together; until then one
+// env-configured endpoint + token is the whole trust story.
 
 const DEFAULT_TOKEN = "ce-mock-dev-token"; // the mock's static dev token
 
-function centerEdgeBase(apiBase) {
-  if (apiBase) return apiBase.replace(/\/$/, "");
+function centerEdgeBase() {
   if (process.env.CENTEREDGE_API_BASE) {
     return process.env.CENTEREDGE_API_BASE.replace(/\/$/, "");
   }
@@ -25,15 +33,16 @@ function centerEdgeBase(apiBase) {
 
 /**
  * Credit tickets to a player card via the venue's loyalty vendor.
- * `loyaltyConfig` is the venue's normalized pos.loyalty block ({ vendor,
- * apiBase, ... }). Resolves to the vendor's RewardResult-shaped body, or an
- * { ok: false, error } — never throws.
+ * `loyaltyConfig` is the venue's normalized pos.loyalty block — only its
+ * `vendor` is honored here (endpoint + token come from server env; see the
+ * security note above). Resolves to the vendor's RewardResult-shaped body, or
+ * an { ok: false, error } — never throws.
  */
 export async function rewardTickets(loyaltyConfig, { playerId, tickets, source, idempotencyKey }) {
   if (loyaltyConfig?.vendor !== "centeredge") {
     return { ok: false, error: `no server-side loyalty client for vendor ${loyaltyConfig?.vendor}` };
   }
-  const base = centerEdgeBase(loyaltyConfig.apiBase);
+  const base = centerEdgeBase();
   const token = process.env.CENTEREDGE_API_TOKEN || DEFAULT_TOKEN;
   try {
     const res = await fetch(
