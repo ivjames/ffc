@@ -2,8 +2,11 @@
 
 Local mock of the **CenterEdge Advantage Web Services** surface the FEC app
 integrates with: mobile F&B ordering (menu → cart → kitchen) and the player
-card / loyalty side (balances, app-earned ticket rewards). Dev-only, in-memory,
-never deployed.
+card / loyalty side (balances, app-earned ticket rewards). In-memory (a restart
+resets to the seed); runs both as a local dev backend and — until real
+CenterEdge credentials land — as a stand-in demo backend on the droplet, behind
+nginx's `/ce` proxy (see "Deployed demo backend" below). It is a mock, never a
+production POS: real venues are served by their configured `pos.apiBase`.
 
 **Why it exists:** we are pre-credential — the venue owner still has to sponsor
 API access via the CenterEdge Support Portal (sandbox, base URLs, tokens; see
@@ -23,9 +26,22 @@ cd mock-centeredge && npm install   # first time only
 npm start                           # or, from the repo root: npm run mock:centeredge
 ```
 
-Listens on `PORT` (default **8070** — the real backend dev port is 8060).
-The frontend client (`src/lib/centeredgeApi.ts`) points here by default;
-override with `VITE_CENTEREDGE_API_BASE`.
+Listens on `PORT` (default **8070** — the real backend dev port is 8060),
+bound to `127.0.0.1` by default (`MOCK_HOST=0.0.0.0` to expose it for
+cross-device testing). The frontend client points here by default; override
+with `VITE_CENTEREDGE_API_BASE`.
+
+## Deployed demo backend
+
+`ffc deploy` runs this mock under pm2 as **`ffc-centeredge-mock`** (loopback,
+`CE_MOCK_PORT`, default 8070) and proxies it same-origin at **`/ce`** via the
+player nginx vhost. The client build bakes `VITE_CENTEREDGE_API_BASE=/ce`, so
+the POS adapter's `/api/v1/…` calls resolve to `https://<fqdn>/ce/api/v1/…`.
+That's what makes the food-ordering + rewards surfaces work in a deployed demo.
+With `VITE_DEV_MODE` on (the default), every venue acts as if all POS
+capabilities are enabled against this base; a real venue instead sets its
+`pos.apiBase` in Master Control, which overrides the baked-in base. Balances
+and orders reset to the seed on every deploy (the mock is in-memory).
 
 | env | purpose |
 | --- | --- |

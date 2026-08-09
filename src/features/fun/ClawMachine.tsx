@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import {
   playStroke,
@@ -798,8 +797,6 @@ export default function ClawMachine() {
   const [credit, setCredit] = useState(0);
   const [score, setScore] = useState(0);
   const [note, setNote] = useState('');
-  // One id per played round — the ticket award's idempotency key.
-  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -1103,7 +1100,6 @@ export default function ClawMachine() {
     setCredit(0);
     setScore(0);
     setNote('');
-    setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
@@ -1122,9 +1118,8 @@ export default function ClawMachine() {
               {gs.won} prize{gs.won === 1 ? '' : 's'} across {CREDITS} credits
             </p>
           </div>
-          {/* POS add-on: venues with gameRewards credit tickets for the round
-              (1 ticket per point — prizes pay their 5/10/25 value, capped at 100). */}
-          <GameTicketAward game="clawmachine" tickets={Math.min(score, 100)} sessionId={sessionId} />
+          {/* No ticket earning: the claw's grip/slip is a chance roll, and only
+              skill-based games earn tickets. */}
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

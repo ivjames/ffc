@@ -78,10 +78,12 @@ export default defineConfig({
         // Never let the SW rewrite these to the app shell:
         //  - /api/* must hit the network (and fail gracefully to the offline
         //    write-queue when down).
+        //  - /ce/* is the CenterEdge POS proxy (menu, orders, player cards) —
+        //    live network calls, same as /api/*.
         //  - /docs/* are the static artist style-guide files (HTML + PDF,
         //    linked from the 🎨 picker); the PDF is a real navigation and must
         //    resolve to the file, not index.html.
-        navigateFallbackDenylist: [/^\/api\//, /^\/docs\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/ce\//, /^\/docs\//],
         cleanupOutdatedCaches: true,
       },
       devOptions: {
