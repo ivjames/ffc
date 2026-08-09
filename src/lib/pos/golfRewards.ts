@@ -22,6 +22,20 @@ export function golfTicketsFor(achievement: string): number {
   return GOLF_ACHIEVEMENT_TICKETS[achievement] ?? 0;
 }
 
+/** Which players' achievements this device credits to its linked card. A
+ *  single-device (pass-and-play) round shares one device and one card, so it
+ *  credits every player — no counter codes. A shared multi-device round credits
+ *  only this device's own slot; every other player is on their own phone and
+ *  card, and every phone fetches the same grant list (clientId `shared:<id>`),
+ *  so crediting all of them would pay each reward onto every card. */
+export function deviceOwnsSlot(opts: {
+  deviceSlot: number;
+  isShared: boolean;
+  playerIndex: number;
+}): boolean {
+  return !opts.isShared || opts.playerIndex === opts.deviceSlot;
+}
+
 /** Stable idempotency key per (round, player, achievement) — a re-viewed
  *  summary or a card linked after the fact replays instead of double-crediting.
  */
