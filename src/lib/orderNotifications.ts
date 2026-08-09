@@ -74,13 +74,23 @@ function orderTag(order: Order): string {
 // Android Chrome forbids `new Notification()` and requires the notification be
 // shown through the service worker registration; desktop + iOS installed PWAs
 // allow the constructor. Try the SW path first, fall back to the constructor.
+const SW_READY_TIMEOUT_MS = 1_500;
+
 async function showViaServiceWorker(
   title: string,
   options: NotificationOptions,
 ): Promise<boolean> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return false;
   try {
-    const reg = await navigator.serviceWorker.ready;
+    // `serviceWorker.ready` NEVER rejects — and when no worker will ever
+    // register (Vite dev with PWA off, or any non-PWA context) it stays
+    // pending forever. Bound the wait so we fall through to the constructor
+    // instead of silently never notifying a user who granted permission.
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SW_READY_TIMEOUT_MS)),
+    ]);
+    if (!reg) return false;
     await reg.showNotification(title, options);
     return true;
   } catch {
