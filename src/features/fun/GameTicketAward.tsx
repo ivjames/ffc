@@ -12,15 +12,21 @@ import { useLinkedPlayerId } from '../../lib/rewardsCard';
 //
 //   <GameTicketAward game="trivia" tickets={score * 5} sessionId={sessionId} />
 
+// The server's hard per-round ceiling (lib/gameRewards.js HARD_MAX_PER_ROUND).
+// Mirrored here so a monster round on an uncapped formula (e.g. batting
+// cages' total*2) never PROMISES more than the award proxy will pay.
+const MAX_PER_ROUND = 100;
+
 export default function GameTicketAward({
   game,
-  tickets,
+  tickets: rawTickets,
   sessionId,
 }: {
   game: string;
   tickets: number;
   sessionId: string;
 }) {
+  const tickets = Math.min(MAX_PER_ROUND, rawTickets);
   const navigate = useNavigate();
   const { gameRewards } = usePos();
   const playerId = useLinkedPlayerId();
@@ -57,10 +63,20 @@ export default function GameTicketAward({
   return (
     <div className="surface-1 mt-4 rounded-2xl border border-fairway-800/60 px-4 py-3 text-center text-sm">
       {outcome === null && <span className="text-fairway-100/70">Adding tickets to your card…</span>}
+      {/* Render the SERVER's number — the award may have been clamped by the
+          venue's per-game ceiling or the card's remaining daily allowance. */}
       {outcome?.status === 'awarded' && (
         <span className="font-bold text-fairway-50">
-          🎟️ +{outcome.tickets} tickets · card balance{' '}
-          {outcome.newTicketBalance.toLocaleString()}
+          🎟️ +{outcome.tickets} tickets
+          {outcome.newTicketBalance !== null && (
+            <> · card balance {outcome.newTicketBalance.toLocaleString()}</>
+          )}
+        </span>
+      )}
+      {outcome?.status === 'daily-cap' && (
+        <span className="text-fairway-100/70">
+          🎟️ You've hit today's app-ticket limit ({outcome.dailyCap.toLocaleString()}) — great
+          run! Earning resets tomorrow.
         </span>
       )}
       {outcome?.status === 'error' && (

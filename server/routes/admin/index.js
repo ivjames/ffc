@@ -21,6 +21,7 @@ import { router as photosRouter } from "./photos.js";
 import { router as boothPhotosRouter } from "./boothPhotos.js";
 import { router as announcementsRouter } from "./announcements.js";
 import { router as rewardsRouter } from "./rewards.js";
+import { router as gameRewardsAdminRouter } from "./gameRewards.js";
 import { router as exportRouter } from "./export.js";
 import {
   router as visionBakeoffRouter,
@@ -47,6 +48,8 @@ router.use("/photos", photosRouter);
 router.use("/booth-photos", boothPhotosRouter);
 router.use("/announcements", announcementsRouter);
 router.use("/rewards", rewardsRouter);
+// Game ticket economy — caps metadata + app-issued ticket rollup.
+router.use("/game-rewards", gameRewardsAdminRouter);
 router.use("/export", exportRouter);
 // Vision vetting bench (super_admin only) — sources/labels/verifies zone
 // images against the production judge and the selected describe model.

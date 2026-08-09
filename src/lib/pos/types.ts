@@ -15,9 +15,17 @@
  *  endpoint per venue; vendor credentials are deliberately NOT part of this
  *  shape (they stay server-side). */
 export type PosCapabilityConfig = { vendor: string; apiBase: string | null };
+/** Venue economy guardrails for app-earned tickets, set in Master Control and
+ *  ENFORCED SERVER-SIDE by the award proxy (server/routes/gameRewards.js) —
+ *  present in the export only so the config round-trips; the client never
+ *  applies them itself. */
+export type GameRewardCaps = {
+  dailyPerCard: number | null; // app tickets per card per venue-day; null = platform default
+  perGame: Record<string, number>; // per-round ceiling overrides by game key
+};
 export type PosConfig = {
   ordering: PosCapabilityConfig | null;
-  loyalty: (PosCapabilityConfig & { gameRewards: boolean }) | null;
+  loyalty: (PosCapabilityConfig & { gameRewards: boolean; gameRewardCaps?: GameRewardCaps }) | null;
 };
 
 export type ModifierOption = { id: string; name: string; priceCents: number };

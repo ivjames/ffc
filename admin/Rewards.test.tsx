@@ -9,6 +9,8 @@ vi.mock('./api', () => ({
     lookupReward: vi.fn(),
     listRewards: vi.fn(),
     redeemReward: vi.fn(),
+    gameRewardsMeta: vi.fn(),
+    gameRewardsUsage: vi.fn(),
   },
 }));
 
@@ -29,6 +31,19 @@ beforeEach(() => {
   vi.mocked(api.listRewards).mockReset().mockResolvedValue([REWARD]);
   vi.mocked(api.lookupReward).mockReset();
   vi.mocked(api.redeemReward).mockReset();
+  vi.mocked(api.gameRewardsMeta)
+    .mockReset()
+    .mockResolvedValue({
+      games: [{ key: 'skeeball', label: 'Skee-Ball' }],
+      hardMaxPerRound: 100,
+      defaultDailyPerCard: 500,
+      maxDailyPerCard: 10000,
+    });
+  vi.mocked(api.gameRewardsUsage).mockReset().mockResolvedValue({
+    days: 30,
+    rows: [],
+    topCards: [],
+  });
 });
 
 describe('Rewards', () => {
