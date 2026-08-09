@@ -208,6 +208,34 @@ type SvgMeta = Map<string, { width: number; height: number }>;
 const WM_FRAC = 0.18;
 const WM_MARGIN = 0.04;
 
+// Thrown by the export when a FORCED watermark can't be composited (its image
+// failed to load) — so a photo never goes out missing the venue's branding.
+const BRANDING_UNAVAILABLE = 'BRANDING_UNAVAILABLE';
+const BRANDING_PENDING_MSG =
+  "Can't confirm this venue's branding yet — check your connection and try again.";
+const BRANDING_FAIL_MSG =
+  "Couldn't apply the venue's branding — reconnect and try again.";
+
+// Durable cache of a venue's asset config, so the forced-watermark requirement
+// is known even offline / before the network resolves — treating an unreachable
+// list as "no watermark" would silently drop branding.
+const VENUE_CACHE_PREFIX = 'ffc:venueStickers:';
+function readVenueCache(locId: string): VenueSticker[] | null {
+  try {
+    const raw = localStorage.getItem(VENUE_CACHE_PREFIX + locId);
+    return raw ? (JSON.parse(raw) as VenueSticker[]) : null;
+  } catch {
+    return null;
+  }
+}
+function writeVenueCache(locId: string, list: VenueSticker[]): void {
+  try {
+    localStorage.setItem(VENUE_CACHE_PREFIX + locId, JSON.stringify(list));
+  } catch {
+    // Storage full / unavailable — the network path still gates export.
+  }
+}
+
 // Full-photo frame + forced corner watermark(s) composited on top of stickers.
 type Overlays = {
   frameId: string | null;
@@ -284,7 +312,9 @@ async function flattenToJpeg(
   // size — drawn last so nothing covers the brand.
   for (const wm of overlays.watermarks) {
     const img = await loadSvgImage(wm.id);
-    if (!img) continue;
+    // A forced watermark that won't load must NOT be silently dropped — abort
+    // the export so the photo never goes out missing the venue's branding.
+    if (!img) throw new Error(BRANDING_UNAVAILABLE);
     const { x, y, slot } = watermarkSlot(wm.corner, w, h);
     const aw = wm.width > 0 ? wm.width : 100;
     const ah = wm.height > 0 ? wm.height : 100;
@@ -344,6 +374,10 @@ export default function PhotoBooth() {
   // The selected full-photo frame (null = none). The forced watermark isn't
   // state — it's always the venue's, applied automatically.
   const [frameId, setFrameId] = useState<string | null>(null);
+  // Whether the venue's asset config is KNOWN (from network or durable cache).
+  // Export is gated on this so a forced watermark is never silently skipped
+  // because the list hadn't loaded. No venue (locationId null) counts as known.
+  const [venueReady, setVenueReady] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   // The photo box's rendered width, for sizing sticker previews in px.
@@ -382,20 +416,37 @@ export default function PhotoBooth() {
     void refreshGallery();
   }, []);
 
-  // The venue's sticker sheet for the current location — refreshed when the
-  // player switches venues. Best-effort: the built-in emoji always work.
+  // The venue's asset config for the current location. Seed from the durable
+  // cache immediately (so the forced-watermark requirement is known even
+  // offline), then refresh from the network. `venueReady` is true once we have
+  // a config from either source; only a first-ever visit that can't reach the
+  // server stays not-ready, which blocks export rather than dropping branding.
   useEffect(() => {
     if (!locationId) {
       setVenueStickers([]);
+      setVenueReady(true); // no venue -> nothing is forced
       return;
     }
     let cancelled = false;
+    const cached = readVenueCache(locationId);
+    if (cached) {
+      setVenueStickers(cached);
+      setVenueReady(true);
+    } else {
+      setVenueStickers([]);
+      setVenueReady(false);
+    }
     void fetchVenueStickers(locationId).then(
       (list) => {
-        if (!cancelled) setVenueStickers(list);
+        if (cancelled) return;
+        setVenueStickers(list);
+        writeVenueCache(locationId, list);
+        setVenueReady(true);
       },
       () => {
-        if (!cancelled) setVenueStickers([]);
+        // Keep the cached config if we had one; otherwise we still don't know
+        // this venue's requirements, so leave venueReady false (export blocked).
+        if (!cancelled && !cached) setVenueReady(false);
       },
     );
     return () => {
@@ -565,6 +616,11 @@ export default function PhotoBooth() {
 
   async function onSave() {
     if (!editor || saving) return;
+    // Don't save until the venue's forced-branding config is known.
+    if (!venueReady) {
+      setEditorError(BRANDING_PENDING_MSG);
+      return;
+    }
     setSaving(true);
     setEditorError(null);
     try {
@@ -604,7 +660,12 @@ export default function PhotoBooth() {
       closeEditor();
       void refreshGallery();
     } catch (err) {
-      setEditorError(err instanceof Error ? err.message : 'Save failed — try again.');
+      const msg = err instanceof Error && err.message === BRANDING_UNAVAILABLE
+        ? BRANDING_FAIL_MSG
+        : err instanceof Error
+          ? err.message
+          : 'Save failed — try again.';
+      setEditorError(msg);
     } finally {
       setSaving(false);
     }
@@ -612,12 +673,20 @@ export default function PhotoBooth() {
 
   async function onShareFromEditor() {
     if (!editor || saving) return;
+    if (!venueReady) {
+      setEditorError(BRANDING_PENDING_MSG);
+      return;
+    }
     setSaving(true);
     setEditorError(null);
     try {
       await shareEditedPhoto(await flattenToJpeg(editor, stickers, svgMeta, overlays));
-    } catch {
-      setEditorError("Couldn't share that — try saving it instead.");
+    } catch (err) {
+      setEditorError(
+        err instanceof Error && err.message === BRANDING_UNAVAILABLE
+          ? BRANDING_FAIL_MSG
+          : "Couldn't share that — try saving it instead.",
+      );
     } finally {
       setSaving(false);
     }
@@ -890,16 +959,25 @@ export default function PhotoBooth() {
           )}
 
           <div className="mt-4 space-y-2">
-            <Button onClick={() => void onSave()} disabled={saving} sound="cup">
+            <Button onClick={() => void onSave()} disabled={saving || !venueReady} sound="cup">
               {saving
                 ? 'Saving…'
                 : editor.editingId
                   ? '✅ Save changes'
                   : '✅ Save to camera roll'}
             </Button>
-            <Button variant="ghost" onClick={() => void onShareFromEditor()} disabled={saving}>
+            <Button
+              variant="ghost"
+              onClick={() => void onShareFromEditor()}
+              disabled={saving || !venueReady}
+            >
               📤 Share
             </Button>
+            {!venueReady && (
+              <p className="text-center text-[11px] text-fairway-100/50">
+                Connecting to this venue to apply its branding…
+              </p>
+            )}
             <Button variant="ghost" onClick={closeEditor} disabled={saving}>
               {editor.editingId ? '✕ Cancel' : '✕ Discard'}
             </Button>
