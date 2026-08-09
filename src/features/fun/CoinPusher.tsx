@@ -58,6 +58,17 @@ const LOST_MS = 260; // gutter drop-in animation
 const COMBO_MS = 1000; // payouts this close together escalate as one stroke
 const CLINK_GAP_MS = 85; // min gap between clink sounds (no machine-gunning)
 
+// Real coin pushers are never freshly reset when you walk up — other players
+// already fed it. A cold random jam commonly takes 80-120+ real drops before
+// anything pays out (measured), so a fresh round "pre-plays" ~110 phantom
+// drops (this game's own measured median time-to-first-payout) through the
+// SAME physics before the player's first tap, landing them roughly where a
+// typical round already would be — a head start, not a guarantee. Runs
+// compressed (not in real time) in small chunks; see the priming effect.
+const PRIME_DROPS = 110;
+const PRIME_CADENCE_MS = 150; // internal phantom-drop spacing — not real-time pacing
+const PRIME_SUBSTEPS_PER_CHUNK = 400; // budget per animation frame while priming
+
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 
 /** Pusher front-face y at sim time `t` — a smooth forward/back sweep. */
@@ -86,7 +97,7 @@ function rollTipAt(): number {
   return EDGE + 2 + Math.random() * 8;
 }
 
-type Phase = 'ready' | 'play' | 'done';
+type Phase = 'ready' | 'priming' | 'play' | 'done';
 type GS = {
   phase: Phase;
   coins: Coin[];
@@ -790,16 +801,75 @@ export default function CoinPusher() {
   }, [stopHold]);
 
   const start = useCallback(() => {
-    const gs = freshGS();
-    gs.phase = 'play';
-    gsRef.current = gs;
-    fxRef.current = freshFX();
-    setPhase('play');
+    // Priming (below) builds the actual starting board; this just clears the
+    // HUD and hands off to it. gsRef/fxRef are swapped in once priming
+    // finishes — whatever they currently hold (a finished previous round, or
+    // the untouched initial mount) just sits there, hidden behind the
+    // priming overlay, until the swap.
+    setPhase('priming');
     setCoinsLeft(STARTING_COINS);
     setScore(0);
     setCoinsDropped(0);
     setEnding(false);
   }, []);
+
+  // Pre-play ~PRIME_DROPS phantom drops through the real physics before the
+  // player's round starts (see PRIME_DROPS above for why), entirely on a
+  // throwaway GS so the visible board never flickers mid-simulation — it
+  // jump-cuts once from whatever was there before straight to the finished,
+  // primed board. Runs in chunks across animation frames (not one blocking
+  // call) since a phone can take noticeably longer than a dev machine to
+  // grind through ~2000 physics substeps.
+  useEffect(() => {
+    if (phase !== 'priming') return;
+    const gs = freshGS();
+    let drops = 0;
+    let nextDropAt = 0;
+    let raf = 0;
+    let cancelled = false;
+
+    function chunk() {
+      if (cancelled) return;
+      for (let i = 0; i < PRIME_SUBSTEPS_PER_CHUNK && drops < PRIME_DROPS; i++) {
+        if (gs.simTime >= nextDropAt) {
+          const x = clamp(W / 2 + (Math.random() - 0.5) * 220, WALL_L + R + 1, WALL_R - R - 1);
+          gs.coins.push({
+            id: gs.nextId++,
+            x,
+            y: 30,
+            vx: 0,
+            vy: 120,
+            gold: Math.random() < GOLD_ODDS,
+            state: 'drop',
+            t: 0,
+            landY: pusherFront(gs.simTime) + R + 2,
+            tipAt: rollTipAt(),
+          });
+          drops += 1;
+          nextDropAt = gs.simTime + PRIME_CADENCE_MS;
+        }
+        step(gs, { clink: 0, landed: 0, payouts: [], lost: [] });
+      }
+      if (drops >= PRIME_DROPS) {
+        // Any phantom payout/loss along the way is uncredited — as far as
+        // the player's concerned, an earlier round already collected or
+        // missed it. Only what's still on the tray (or mid-fall) carries over.
+        gs.coins = gs.coins.filter((c) => c.state === 'tray' || c.state === 'drop');
+        gs.simTime = 0;
+        gs.phase = 'play';
+        gsRef.current = gs;
+        fxRef.current = freshFX();
+        setPhase('play');
+        return;
+      }
+      raf = requestAnimationFrame(chunk);
+    }
+    raf = requestAnimationFrame(chunk);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [phase]);
 
   if (phase === 'done') {
     const remark =
@@ -833,11 +903,13 @@ export default function CoinPusher() {
   const hint =
     phase === 'ready'
       ? 'Time your drops against the pusher — shove the pile over the glowing edge.'
-      : ending
-        ? 'Cashing out — letting the last coin settle…'
-        : coinsLeft > 0
-          ? 'Tap to drop a coin, or hold to keep feeding the pile — best just as the pusher pulls back.'
-          : 'Out of coins — buy more, or cash out to see your payout.';
+      : phase === 'priming'
+        ? 'Setting up the tray…'
+        : ending
+          ? 'Cashing out — letting the last coin settle…'
+          : coinsLeft > 0
+            ? 'Tap to drop a coin, or hold to keep feeding the pile — best just as the pusher pulls back.'
+            : 'Out of coins — buy more, or cash out to see your payout.';
 
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
@@ -879,6 +951,12 @@ export default function CoinPusher() {
               limit. Mind the side gutters.
             </p>
             <Button onClick={start}>Start</Button>
+          </div>
+        )}
+        {phase === 'priming' && (
+          <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-3 rounded-2xl bg-black/70 px-6 py-5 text-center">
+            <span className="animate-pulse text-5xl">🪙</span>
+            <p className="text-sm text-fairway-100">Setting up the tray…</p>
           </div>
         )}
       </div>
