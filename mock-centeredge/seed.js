@@ -349,7 +349,7 @@ export const PLAYERS = [
     email: 'ava@example.com',
     memberSince: '2025-03-14',
     tier: 'gold',
-    balances: { cashCents: 2550, gamePlayCredits: 120, tickets: 4380 },
+    balances: { gamePlayCredits: 120, tickets: 4380 },
   },
   {
     id: 'PL-1002',
@@ -358,7 +358,7 @@ export const PLAYERS = [
     email: 'sam@example.com',
     memberSince: '2026-01-02',
     tier: 'standard',
-    balances: { cashCents: 0, gamePlayCredits: 8, tickets: 215 },
+    balances: { gamePlayCredits: 8, tickets: 215 },
   },
   {
     id: 'PL-1003',
@@ -367,6 +367,6 @@ export const PLAYERS = [
     email: null, // walk-up card with no profile — frontend must handle sparse data
     memberSince: '2026-08-01',
     tier: 'standard',
-    balances: { cashCents: 500, gamePlayCredits: 0, tickets: 0 },
+    balances: { gamePlayCredits: 0, tickets: 0 },
   },
 ];
