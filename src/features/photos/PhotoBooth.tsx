@@ -64,51 +64,80 @@ const STICKER_BASE = 0.22;
 const EXPORT_MAX_DIM = 1280;
 
 // --- Sticker rasterization ---------------------------------------------------
-// Each emoji is drawn ONCE to a square bitmap, and that same bitmap drives both
-// the on-screen preview and the flattened export — so a placed sticker lands in
+// Each emoji is drawn ONCE to a bitmap, and that same bitmap drives both the
+// on-screen preview and the flattened export — so a placed sticker lands in
 // exactly the same spot when saved. (The editor previously drew the emoji as
 // DOM text but the export drew it as canvas text; `translate(-50%,-50%)` on a
 // line box and canvas `textBaseline:'middle'` on the em box anchor an emoji
-// glyph slightly differently, so exported stickers sat a few percent off — most
-// visibly for the bigger ones. One shared bitmap removes that divergence.)
-const STICKER_BITMAP_PX = 320; // rasterization resolution (square, hi-dpi headroom)
-const STICKER_GLYPH_FRAC = 0.7; // glyph size within the bitmap; the rest is
-// padding so a tall/wide emoji isn't clipped. The visible glyph is this
-// fraction of the rendered square, so a square of side S shows a glyph of
-// STICKER_GLYPH_FRAC*S — the sizing math below inverts that to keep the glyph
-// the intended fraction of the photo.
-const stickerBitmaps = new Map<string, HTMLCanvasElement>();
-function stickerBitmap(emoji: string): HTMLCanvasElement {
-  let c = stickerBitmaps.get(emoji);
-  if (c) return c;
-  c = document.createElement('canvas');
-  c.width = c.height = STICKER_BITMAP_PX;
-  const ctx = c.getContext('2d');
+// glyph slightly differently, so exported stickers sat a few percent off. One
+// shared bitmap removes that divergence.)
+//
+// The bitmap is sized to the glyph's MEASURED bounding box plus a small margin,
+// not a fixed square: a fixed square clipped wide or off-center glyphs (e.g. 🕶️
+// overflowed and showed a hard rectangular edge when scaled up). Measuring and
+// centering on the visual box guarantees no clip and a true center for any
+// emoji. `ratio` is the glyph's larger dimension as a fraction of the square,
+// so the caller can size the rendered sticker to a target glyph size.
+type StickerBitmap = { canvas: HTMLCanvasElement; url: string; ratio: number };
+
+// Transparent halo around the glyph — room for anti-aliasing and the odd emoji
+// whose reported bounds run a touch tight, without bloating the tap area.
+const STICKER_MARGIN = 0.14;
+const EMOJI_FONT =
+  '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+
+const stickerCache = new Map<string, StickerBitmap>();
+function stickerBitmap(emoji: string): StickerBitmap {
+  const cached = stickerCache.get(emoji);
+  if (cached) return cached;
+
+  const REF = 256; // reference font px for measuring + drawing
+  const font = `${REF}px ${EMOJI_FONT}`;
+  const measure = document.createElement('canvas').getContext('2d');
+  let glyphW = REF;
+  let glyphH = REF;
+  let dxCenter = 0; // glyph bbox center offset from the pen, in x
+  let dyCenter = 0; // …and y
+  if (measure) {
+    measure.font = font;
+    measure.textAlign = 'center';
+    measure.textBaseline = 'middle';
+    const m = measure.measureText(emoji);
+    // actualBoundingBox* are supported in modern mobile Safari; fall back to
+    // the em box (a centered square) if a browser doesn't report them.
+    const left = m.actualBoundingBoxLeft ?? REF / 2;
+    const right = m.actualBoundingBoxRight ?? REF / 2;
+    const asc = m.actualBoundingBoxAscent ?? REF / 2;
+    const desc = m.actualBoundingBoxDescent ?? REF / 2;
+    glyphW = Math.max(1, left + right);
+    glyphH = Math.max(1, asc + desc);
+    // With a center/middle pen, the bbox is offset by these when it isn't
+    // symmetric about the pen — subtract to re-center the glyph in the square.
+    dxCenter = (right - left) / 2;
+    dyCenter = (desc - asc) / 2;
+  }
+  const maxDim = Math.max(glyphW, glyphH);
+  const side = Math.ceil(maxDim * (1 + 2 * STICKER_MARGIN));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = side;
+  const ctx = canvas.getContext('2d');
   if (ctx) {
+    ctx.font = font;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `${Math.round(STICKER_BITMAP_PX * STICKER_GLYPH_FRAC)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-    ctx.fillText(emoji, STICKER_BITMAP_PX / 2, STICKER_BITMAP_PX / 2);
+    ctx.fillText(emoji, side / 2 - dxCenter, side / 2 - dyCenter);
   }
-  stickerBitmaps.set(emoji, c);
-  return c;
+  const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), ratio: maxDim / side };
+  stickerCache.set(emoji, bitmap);
+  return bitmap;
 }
 
-const stickerUrls = new Map<string, string>();
-function stickerBitmapUrl(emoji: string): string {
-  let url = stickerUrls.get(emoji);
-  if (!url) {
-    url = stickerBitmap(emoji).toDataURL();
-    stickerUrls.set(emoji, url);
-  }
-  return url;
-}
-
-// The rendered square's side, given the target glyph size (a fraction of the
-// photo's width). Inverts STICKER_GLYPH_FRAC so the visible glyph ends up
-// STICKER_BASE*width*scale, matching the preview and the export.
-function stickerSide(imageWidth: number, scale: number): number {
-  return (STICKER_BASE * imageWidth * scale) / STICKER_GLYPH_FRAC;
+// The rendered square's side, so the glyph's larger dimension ends up
+// STICKER_BASE*width*scale regardless of the emoji's shape (the bitmap's
+// transparent margin is divided back out via `ratio`).
+function stickerSide(imageWidth: number, scale: number, ratio: number): number {
+  return (STICKER_BASE * imageWidth * scale) / ratio;
 }
 
 type Editor = {
@@ -138,11 +167,12 @@ function flattenToJpeg(editor: Editor, stickers: Sticker[]): Promise<Blob> {
   for (const st of stickers) {
     // Same bitmap the editor previews, centered on the same fractional point —
     // so the save matches the screen exactly.
-    const side = stickerSide(w, st.scale);
+    const bmp = stickerBitmap(st.emoji);
+    const side = stickerSide(w, st.scale, bmp.ratio);
     ctx.save();
     ctx.translate(st.x * w, st.y * h);
     ctx.rotate((st.rot * Math.PI) / 180);
-    ctx.drawImage(stickerBitmap(st.emoji), -side / 2, -side / 2, side, side);
+    ctx.drawImage(bmp.canvas, -side / 2, -side / 2, side, side);
     ctx.restore();
   }
   return new Promise((resolve, reject) => {
@@ -480,7 +510,8 @@ export default function PhotoBooth() {
             {stickers.map((st) => {
               // The rendered bitmap — identical pixels to what the export bakes,
               // so the preview is truly WYSIWYG. Sized off the box's real width.
-              const side = stickerSide(boxW, st.scale);
+              const bmp = stickerBitmap(st.emoji);
+              const side = stickerSide(boxW, st.scale, bmp.ratio);
               const isSel = st.id === selectedId;
               return (
                 <div
@@ -496,7 +527,7 @@ export default function PhotoBooth() {
                   }}
                 >
                   <img
-                    src={stickerBitmapUrl(st.emoji)}
+                    src={bmp.url}
                     alt=""
                     draggable={false}
                     onPointerDown={(e) => {
