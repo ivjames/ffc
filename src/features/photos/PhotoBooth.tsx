@@ -901,26 +901,37 @@ export default function PhotoBooth() {
                 non-interactive. Sized/inset off the box WIDTH (px), exactly as
                 the export sizes off the photo width, so preview == save. */}
             {watermarks.map((wm) => (
-              <img
+              <div
                 key={wm.id}
-                src={venueStickerUrl(wm.id)}
-                alt=""
-                draggable={false}
-                className="pointer-events-none absolute object-contain"
+                className="pointer-events-none absolute"
                 style={{
                   width: `${WM_FRAC * boxW}px`,
                   height: `${WM_FRAC * boxW}px`,
                   [wm.corner[0] === 't' ? 'top' : 'bottom']: `${WM_MARGIN * boxW}px`,
                   [wm.corner[1] === 'l' ? 'left' : 'right']: `${WM_MARGIN * boxW}px`,
-                  // Mirror the export's baked drop shadow so preview == save.
-                  // Two stacked filters == the export's two shadow passes.
-                  filter: Array(WM_SHADOW_PASSES)
-                    .fill(
-                      `drop-shadow(0 ${WM_SHADOW_OFFSET * boxW}px ${WM_SHADOW_BLUR * boxW}px ${WM_SHADOW_COLOR})`,
-                    )
-                    .join(' '),
                 }}
-              />
+              >
+                {/* One <img> per shadow pass, each carrying a SINGLE drop-shadow.
+                    Stacking chained CSS filters on one element would compound the
+                    offset+blur (each filter shadows the previous filter's output),
+                    drifting the preview away from the export at 4 passes. Instead
+                    these layers are independent — every copy shadows the ORIGINAL
+                    logo at the same offset, exactly like the export's canvas loop
+                    (drawImage N times), so the shadow density accumulates in place
+                    and preview == save. */}
+                {Array.from({ length: WM_SHADOW_PASSES }).map((_, i) => (
+                  <img
+                    key={i}
+                    src={venueStickerUrl(wm.id)}
+                    alt=""
+                    draggable={false}
+                    className="absolute inset-0 h-full w-full object-contain"
+                    style={{
+                      filter: `drop-shadow(0 ${WM_SHADOW_OFFSET * boxW}px ${WM_SHADOW_BLUR * boxW}px ${WM_SHADOW_COLOR})`,
+                    }}
+                  />
+                ))}
+              </div>
             ))}
           </div>
 
