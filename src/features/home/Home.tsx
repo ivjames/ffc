@@ -18,6 +18,7 @@ import { fetchSession, type AppUser } from '../../lib/authApi';
 import { usePos } from '../../lib/pos';
 import ActiveOrdersCard from '../food/ActiveOrdersCard';
 import AdoptionNudge from '../../ui/AdoptionNudge';
+import AdoptionBonusToast from '../../ui/AdoptionBonusToast';
 import type { LocalRound } from '../../types';
 
 // Food & drink deep links for the current venue. External links, so they open
@@ -148,6 +149,10 @@ export default function Home() {
             escalating back-off so it never nags. Self-gates once installed or
             signed in. */}
         <AdoptionNudge signedIn={!!me} authChecked={meChecked} className="mb-3" />
+
+        {/* Collects the one-time install bonus once installed + a card is
+            linked (or invites linking a card to collect). */}
+        <AdoptionBonusToast />
 
         {/* Current location — tap to switch sites (or pick "Use my location"
             there). GPS still auto-detects the venue silently when permitted. */}

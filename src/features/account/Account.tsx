@@ -12,6 +12,7 @@ import {
   type AppUser,
 } from '../../lib/authApi';
 import { track } from '../../lib/analytics';
+import { claimAdoptionBonus } from '../../lib/pos/adoptionBonus';
 
 // Account — passwordless email sign-in (registration IS sign-in: verifying the
 // first code creates the account) plus profile editing once signed in. Email is
@@ -40,6 +41,20 @@ export default function Account() {
     params.get('link') === 'expired' ? 'That sign-in link expired — request a fresh code below.' : null,
   );
   const [saved, setSaved] = useState(false);
+  const [bonusNotice, setBonusNotice] = useState<string | null>(null);
+
+  // On a fresh sign-in, collect the one-time sign-in bonus onto the linked
+  // card. If no card is linked, point the player at the Rewards screen to link
+  // one and collect. Only fired from the explicit verify-success paths (never
+  // the initial session check), so it runs once per real sign-in.
+  async function claimSigninBonus() {
+    const out = await claimAdoptionBonus('signin');
+    if (out.status === 'awarded') {
+      setBonusNotice(`🎟️ +${out.tickets} bonus tickets added to your card!`);
+    } else if (out.status === 'no-card') {
+      setBonusNotice('Link your arcade card on the Rewards screen to collect a sign-in bonus.');
+    }
+  }
 
   useEffect(() => {
     void fetchMe().then((u) => {
@@ -84,6 +99,7 @@ export default function Account() {
       if (verified.user) {
         track('signin_completed', { method: 'bypass' });
         applyUser(verified.user);
+        void claimSigninBonus();
         return;
       }
       track('signin_failed', { method: 'bypass' });
@@ -109,6 +125,7 @@ export default function Account() {
     }
     track('signin_completed', { method: 'code' });
     applyUser(res.user);
+    void claimSigninBonus();
   }
 
   async function saveProfile() {
@@ -149,6 +166,14 @@ export default function Account() {
     <Screen>
       <TopBar title="Account" back="/" />
       <Content>
+        {bonusNotice && (
+          <div
+            className="surface-1 mb-4 rounded-2xl border border-fairway-500/40 px-4 py-3 text-sm font-bold text-fairway-50"
+            role="status"
+          >
+            {bonusNotice}
+          </div>
+        )}
         {stage === 'loading' && <p className="text-fairway-100/70">Loading…</p>}
 
         {stage === 'email' && (
