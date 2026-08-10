@@ -9,6 +9,7 @@ import { Router } from "express";
 import { pool } from "../../db.js";
 import { orgScope } from "../../lib/adminAuth.js";
 import { UUID_RE } from "../../lib/validateLocation.js";
+import { boardSyntheticFilter } from "../../lib/syntheticConfig.js";
 
 export const router = Router();
 
@@ -59,6 +60,7 @@ router.get("/rounds.csv", async (req, res) => {
           and timezone($1, r.completed_at)::date <= coalesce($3::date, timezone($1, now())::date)
           and ($4::uuid is null or c.location_id = $4)
           and ($5::uuid is null or l.org_id = $5)
+          ${boardSyntheticFilter("r", process.env)}
         group by r.id, r.completed_at, l.name, c.name, c.pars, r.group_tag, pt.tag, pt.ord
         order by r.completed_at, r.id, pt.ord`,
       [ADMIN_TZ, from ?? null, to ?? null, locationId ?? null, scope]

@@ -10,6 +10,7 @@
 import { Router } from "express";
 import { pool } from "../../db.js";
 import { orgScope } from "../../lib/adminAuth.js";
+import { boardSyntheticFilter } from "../../lib/syntheticConfig.js";
 
 export const router = Router();
 
@@ -36,6 +37,9 @@ router.get("/series", async (req, res) => {
     // than one correlated query per bucket. The window bound is generous
     // (days+1 in absolute time) and the per-day filter is exact in ADMIN_TZ.
     const since = `now() - ($2::int + 1) * interval '1 day'`;
+    // Synthetic (bot) rounds count by default; excluded when
+    // SYNTHETIC_COUNT_ON_BOARD=false, so admin rollups match the boards.
+    const synFilter = boardSyntheticFilter("r", process.env);
     const [rounds, players, finds] = await Promise.all([
       pool.query(
         `select timezone($1, r.completed_at)::date as day,
@@ -45,6 +49,7 @@ router.get("/series", async (req, res) => {
            join location l on l.id = c.location_id
           where r.completed_at >= ${since}
             and ($3::uuid is null or l.org_id = $3)
+            ${synFilter}
           group by day`,
         [ADMIN_TZ, days, scope]
       ),
@@ -57,6 +62,7 @@ router.get("/series", async (req, res) => {
            cross join lateral unnest(r.player_tags) as pt(tag)
           where r.completed_at >= ${since}
             and ($3::uuid is null or l.org_id = $3)
+            ${synFilter}
           group by day`,
         [ADMIN_TZ, days, scope]
       ),
@@ -115,6 +121,9 @@ router.get("/series", async (req, res) => {
 router.get("/", async (req, res) => {
   const scope = orgScope(req);
   try {
+    // Synthetic rounds count by default; excluded when SYNTHETIC_COUNT_ON_BOARD
+    // =false so the dashboard round counts track the boards.
+    const synFilter = boardSyntheticFilter("r", process.env);
     const [totals, perLocation] = await Promise.all([
       pool.query(
         `
@@ -129,17 +138,20 @@ router.get("/", async (req, res) => {
           (select count(*) from round r
              join course c on c.id = r.course_id
              join location l on l.id = c.location_id
-            where r.completed_at is null and ($1::uuid is null or l.org_id = $1)) as rounds_active,
+            where r.completed_at is null and ($1::uuid is null or l.org_id = $1)
+              ${synFilter}) as rounds_active,
           (select count(*) from round r
              join course c on c.id = r.course_id
              join location l on l.id = c.location_id
             where r.completed_at >= now() - interval '7 days'
-              and ($1::uuid is null or l.org_id = $1)) as rounds_7d,
+              and ($1::uuid is null or l.org_id = $1)
+              ${synFilter}) as rounds_7d,
           (select count(*) from round r
              join course c on c.id = r.course_id
              join location l on l.id = c.location_id
             where r.completed_at >= now() - interval '30 days'
-              and ($1::uuid is null or l.org_id = $1)) as rounds_30d,
+              and ($1::uuid is null or l.org_id = $1)
+              ${synFilter}) as rounds_30d,
           (select count(*) from hunt_find f
              join hunt_item i on i.id = f.item_id
              join course c on c.id = i.course_id
@@ -152,7 +164,9 @@ router.get("/", async (req, res) => {
         `
         select l.id, l.name, l.slug,
                count(distinct c.id) filter (where c.archived_at is null) as courses,
-               count(distinct r.id) filter (where r.completed_at >= now() - interval '30 days') as rounds_30d
+               count(distinct r.id) filter (
+                 where r.completed_at >= now() - interval '30 days' ${synFilter}
+               ) as rounds_30d
           from location l
           left join course c on c.location_id = l.id
           left join round  r on r.course_id  = c.id

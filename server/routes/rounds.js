@@ -10,6 +10,7 @@ import { validateTags, isValidTag } from "../lib/sanitize.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { scoreAchievements } from "../lib/rewards.js";
 import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
+import { resolveSynthetic, syntheticMintsRewards } from "../lib/syntheticConfig.js";
 
 export const router = Router();
 
@@ -138,6 +139,17 @@ router.post("/", rateLimit, async (req, res) => {
     return res.status(400).json({ ok: false, error: "completedAt must be a ms-epoch number or null" });
   }
 
+  // synthetic — a privileged, operator-only flag (bot load/soak + demo seed).
+  // Any device can *send* it, but only a request carrying the matching
+  // x-synthetic-key may actually mark the round synthetic; otherwise it's a
+  // 403 (so a bypassed client can't self-flag to dodge a board). See
+  // lib/syntheticConfig.js.
+  const syn = resolveSynthetic(body.synthetic, req.get("x-synthetic-key"), process.env);
+  if (!syn.ok) {
+    return res.status(403).json({ ok: false, error: syn.error });
+  }
+  const synthetic = syn.synthetic;
+
   // scores — collect the non-null holes to insert.
   const collected = collectScoreRows(scores, playerTags.length);
   if (collected.error) {
@@ -167,8 +179,8 @@ router.post("/", rateLimit, async (req, res) => {
     const ownable = !clientId.startsWith("shared:");
     const appUserId = ownable ? (req.user?.id ?? null) : null;
     const insertRound = await client.query(
-      `insert into round (course_id, player_tags, group_tag, created_at, completed_at, client_id, app_user_id)
-         values ($1, $2, $3, to_timestamp($4 / 1000.0), $5, $6, $7)
+      `insert into round (course_id, player_tags, group_tag, created_at, completed_at, client_id, app_user_id, synthetic)
+         values ($1, $2, $3, to_timestamp($4 / 1000.0), $5, $6, $7, $8)
        on conflict (client_id) do nothing
        returning id`,
       [
@@ -179,6 +191,7 @@ router.post("/", rateLimit, async (req, res) => {
         completedAt === null ? null : new Date(completedAt),
         clientId,
         appUserId,
+        synthetic,
       ]
     );
 
@@ -197,7 +210,11 @@ router.post("/", rateLimit, async (req, res) => {
       // Rewards (punchlist #8): grant achievements for a COMPLETED fresh round.
       // Same transaction as the round itself — a grant without its round (or
       // vice versa) would be a lie at the redemption counter.
-      if (completedAt !== null) {
+      // Synthetic rounds mint grants by default (full-path testing); an
+      // operator can suppress that with SYNTHETIC_MINT_REWARDS=false so a bot
+      // run never dispenses real tickets. Real rounds are unaffected.
+      const mintRewards = !synthetic || syntheticMintsRewards(process.env);
+      if (completedAt !== null && mintRewards) {
         await grantRewards(client, {
           roundId,
           clientId,
