@@ -26,7 +26,12 @@ export type FunnelEvent =
   | 'app_launch_standalone'
   | 'signin_started'
   | 'signin_completed'
-  | 'signin_failed';
+  | 'signin_failed'
+  // Adoption nudges (a dismissible prompt shown at a good moment). `meta.kind`
+  // distinguishes 'install' vs 'signin' so each nudge's funnel is separable.
+  | 'nudge_shown'
+  | 'nudge_clicked'
+  | 'nudge_dismissed';
 
 export type QueuedEvent = {
   /** Stable per-event id minted on the device. Sent to the server, which dedups

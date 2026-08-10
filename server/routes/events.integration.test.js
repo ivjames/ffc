@@ -74,6 +74,28 @@ test("records only allowlisted events and drops the rest", async () => {
   assert.equal(accepted.meta.source, "home-nudge");
 });
 
+test("adoption nudge events are allowlisted and keep their kind", async () => {
+  const dev = "66666666-6666-4666-8666-666666666666";
+  const res = await postEvents({
+    deviceId: dev,
+    events: withIds([
+      { name: "nudge_shown", meta: { kind: "install" } },
+      { name: "nudge_clicked", meta: { kind: "install" } },
+      { name: "nudge_dismissed", meta: { kind: "signin" } },
+    ]),
+  });
+  assert.equal((await res.json()).recorded, 3);
+  const rows = (
+    await testQuery("select event, meta from funnel_event where device_id = $1 order by event", [dev])
+  ).rows;
+  assert.deepEqual(
+    rows.map((r) => r.event),
+    ["nudge_clicked", "nudge_dismissed", "nudge_shown"]
+  );
+  assert.equal(rows.find((r) => r.event === "nudge_dismissed").meta.kind, "signin");
+  await testQuery("delete from funnel_event where device_id = $1", [dev]);
+});
+
 test("drops events with a missing or malformed id (retry-dedupe needs it)", async () => {
   const dev = "44444444-4444-4444-8444-444444444444";
   const res = await postEvents({

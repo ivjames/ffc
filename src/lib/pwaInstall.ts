@@ -40,8 +40,35 @@ export function initInstallCapture(): void {
   // Once installed, the prompt is spent — clear it so the UI flips to "done".
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
+    markInstalled();
     notify();
   });
+}
+
+// `appinstalled` fires in the ORDINARY tab, but that tab keeps running in a
+// browser context — isStandalone() stays false there forever. Persist the fact
+// of installation so "already installed" survives, instead of using the current
+// window's display mode as the sole gate (which would re-nudge to install).
+const INSTALLED_KEY = 'ffc.pwaInstalled';
+
+function markInstalled(): void {
+  try {
+    localStorage.setItem(INSTALLED_KEY, '1');
+  } catch {
+    /* private mode — the flag just won't persist */
+  }
+}
+
+/** True if the app is running standalone OR was installed from this browser
+ *  before (the appinstalled flag). Use this — not isStandalone() alone — to
+ *  decide whether to keep nudging someone to install. */
+export function hasBeenInstalled(): boolean {
+  if (isStandalone()) return true;
+  try {
+    return localStorage.getItem(INSTALLED_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 export type Platform = 'ios' | 'android' | 'desktop' | 'other';
@@ -81,12 +108,12 @@ export interface InstallState {
 
 export function useInstallPrompt(): InstallState {
   const [canPrompt, setCanPrompt] = useState(deferredPrompt !== null);
-  const [installed, setInstalled] = useState(isStandalone());
+  const [installed, setInstalled] = useState(hasBeenInstalled());
 
   useEffect(() => {
     const update = () => {
       setCanPrompt(deferredPrompt !== null);
-      setInstalled(isStandalone());
+      setInstalled(hasBeenInstalled());
     };
     listeners.add(update);
     // Reflect any state that changed between render and effect (e.g. the event

@@ -14,9 +14,10 @@ import {
 import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
 import { playClick, playCup } from '../../lib/sound';
-import { fetchMe, type AppUser } from '../../lib/authApi';
+import { fetchSession, type AppUser } from '../../lib/authApi';
 import { usePos } from '../../lib/pos';
 import ActiveOrdersCard from '../food/ActiveOrdersCard';
+import AdoptionNudge from '../../ui/AdoptionNudge';
 import type { LocalRound } from '../../types';
 
 // Food & drink deep links for the current venue. External links, so they open
@@ -80,6 +81,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [resume, setResume] = useState<LocalRound | null>(null);
   const [me, setMe] = useState<AppUser | null>(null);
+  const [meChecked, setMeChecked] = useState(false);
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
   const courses = coursesByLocation(locationId);
@@ -88,8 +90,13 @@ export default function Home() {
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
-    // Best-effort session check — resolves null offline or signed out.
-    void fetchMe().then(setMe);
+    // Session check that distinguishes signed-out from unreachable: only mark
+    // it "checked" on an authoritative answer, so the sign-in nudge never
+    // shows to an already-signed-in player whose /me call just failed offline.
+    void fetchSession().then((s) => {
+      setMe(s.user);
+      if (s.known) setMeChecked(true);
+    });
   }, []);
 
   // Silent GPS auto-detect: only when location is already granted (so we never
@@ -136,6 +143,11 @@ export default function Home() {
         {/* Venue specials / updates — live from Master Control, cached for
             offline. Renders nothing when there's nothing to announce. */}
         <AnnouncementBanner locationId={locationId} className="mb-3" />
+
+        {/* Proactive, dismissible adoption nudge — install / sign-in, with
+            escalating back-off so it never nags. Self-gates once installed or
+            signed in. */}
+        <AdoptionNudge signedIn={!!me} authChecked={meChecked} className="mb-3" />
 
         {/* Current location — tap to switch sites (or pick "Use my location"
             there). GPS still auto-detects the venue silently when permitted. */}
