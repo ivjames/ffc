@@ -23,6 +23,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { isKnownGame, effectiveCaps } from "../lib/gameRewards.js";
+import { dailySpentTickets } from "../lib/dailyTickets.js";
 import { rewardTickets } from "../lib/posLoyalty.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 
@@ -90,14 +91,14 @@ router.post("/award", async (req, res) => {
         duplicate = true;
         await client.query("commit");
       } else {
-        const spent = await client.query(
-          `select coalesce(sum(tickets_awarded), 0)::int as n
-             from game_ticket_award
-            where location_id = $1 and player_id = $2
-              and (created_at at time zone $3)::date = (now() at time zone $3)::date`,
-          [locationId, playerId, tz]
-        );
-        const remaining = Math.max(0, caps.dailyPerCard - spent.rows[0].n);
+        // One shared daily pool: count golf achievement claims too, so games
+        // and golf draw down the same per-card budget (lib/dailyTickets.js).
+        const spent = await dailySpentTickets(client, {
+          locationId,
+          cardId: playerId,
+          tz,
+        });
+        const remaining = Math.max(0, caps.dailyPerCard - spent);
         const award = Math.min(requested, remaining);
         const inserted = await client.query(
           `insert into game_ticket_award

@@ -412,6 +412,9 @@ function RewardValue({ outcome }: { outcome: GameAwardOutcome | undefined }) {
   if (outcome == null) {
     return <span className="text-xs text-fairway-100/70">Adding…</span>;
   }
+  if (outcome.status === 'daily-cap') {
+    return <span className="text-xs text-fairway-400">Daily cap reached</span>;
+  }
   return <span className="text-xs text-fairway-400">Couldn’t add</span>;
 }
 

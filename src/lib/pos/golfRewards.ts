@@ -56,6 +56,11 @@ export async function awardGolfReward(opts: {
       if (res.status === 403) return { status: 'unavailable' };
       return { status: 'error', error: data.error ?? `HTTP ${res.status}` };
     }
+    // Card already at its shared daily ticket cap — nothing credited (the grant
+    // stays claimable another day). Same signal the mini-games use.
+    if (data.status === 'daily-cap') {
+      return { status: 'daily-cap', dailyCap: data.dailyCap };
+    }
     return {
       status: 'awarded',
       tickets: data.ticketsAwarded,
