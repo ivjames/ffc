@@ -820,3 +820,23 @@ create table if not exists funnel_event (
 );
 create index if not exists funnel_event_name_time_idx on funnel_event (event, created_at);
 create index if not exists funnel_event_device_idx on funnel_event (device_id);
+
+-- Adoption bonuses (lib/adoptionBonus.js + routes/gameRewards.js /bonus): a
+-- ONE-TIME ticket reward per card for installing the app and for signing in.
+-- Distinct from game_ticket_award — a milestone economy, not a per-round one —
+-- so it's kept out of the mini-game daily cap. The unique key makes the award
+-- one-time per (venue, card, kind); the pending -> awarded flow mirrors the
+-- game proxy so a lost POS response is retried under the same idempotency key
+-- rather than double-credited.
+create table if not exists bonus_award (
+  id                 uuid primary key default gen_random_uuid(),
+  location_id        uuid not null references location(id) on delete cascade,
+  player_id          text not null,     -- vendor player/card id (opaque here)
+  kind               text not null,     -- 'install' | 'signin'
+  tickets            int  not null,     -- amount credited (venue-tuned)
+  status             text not null,     -- pending | awarded
+  pos_transaction_id text,              -- vendor tx id once credited
+  created_at         timestamptz not null default now(),
+  unique (location_id, player_id, kind)
+);
+create index if not exists bonus_award_player_idx on bonus_award (location_id, player_id);

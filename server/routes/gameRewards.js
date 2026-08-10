@@ -24,6 +24,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { isKnownGame, effectiveCaps } from "../lib/gameRewards.js";
 import { dailySpentTickets } from "../lib/dailyTickets.js";
+import { isBonusKind, effectiveAdoptionBonus } from "../lib/adoptionBonus.js";
 import { rewardTickets } from "../lib/posLoyalty.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 
@@ -177,6 +178,120 @@ router.post("/award", async (req, res) => {
     });
   } catch (err) {
     console.error("[game-rewards] error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// POST /api/game-rewards/bonus — the one-time adoption bonus (install /
+// sign-in). Credits the player's linked card ONCE per (venue, card, kind) via
+// the same trusted POS path as /award, but off the mini-game daily cap: it's a
+// milestone perk, not a per-round earning. `unique (location_id, player_id,
+// kind)` makes it one-time; the pending -> awarded flow (mirroring /award)
+// keeps a lost vendor response from double-crediting.
+router.post("/bonus", async (req, res) => {
+  const { locationId, playerId, kind } = req.body ?? {};
+
+  if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
+    return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
+  }
+  if (typeof playerId !== "string" || playerId.length < 1 || playerId.length > 100) {
+    return res.status(400).json({ ok: false, error: "playerId is required (1..100 chars)" });
+  }
+  if (typeof kind !== "string" || !isBonusKind(kind)) {
+    return res.status(400).json({ ok: false, error: "kind must be 'install' or 'signin'" });
+  }
+  // The sign-in milestone has a server-verifiable condition — a real player
+  // session — so require it, or an anonymous caller could mint the reward
+  // without signing in. (Install can't be verified server-side; it stays
+  // best-effort, bounded by one-time-per-card + the venue amount.)
+  if (kind === "signin" && !req.user) {
+    return res.status(401).json({ ok: false, error: "sign in to claim the sign-in bonus" });
+  }
+
+  try {
+    const locResult = await pool.query(
+      `select id, pos from location where id = $1 and archived_at is null`,
+      [locationId]
+    );
+    const loc = locResult.rows[0];
+    if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
+    const loyalty = loc.pos?.loyalty ?? null;
+    if (!loyalty?.gameRewards) {
+      return res.status(403).json({ ok: false, error: "ticket rewards not enabled for this venue" });
+    }
+
+    const amount = effectiveAdoptionBonus(loc.pos)[kind];
+    if (amount <= 0) {
+      // The venue switched this milestone off — a clean, non-error no-op.
+      return res.json({ ok: true, status: "disabled", ticketsAwarded: 0 });
+    }
+
+    // Reserve the one-time award (or find the prior one). No daily-cap read —
+    // adoption bonuses live outside the mini-game budget.
+    const insert = await pool.query(
+      `insert into bonus_award (location_id, player_id, kind, tickets, status)
+         values ($1, $2, $3, $4, 'pending')
+       on conflict (location_id, player_id, kind) do nothing
+       returning *`,
+      [locationId, playerId, kind, amount]
+    );
+    let row = insert.rows[0];
+    let duplicate = false;
+    if (!row) {
+      duplicate = true;
+      row = (
+        await pool.query(
+          `select * from bonus_award where location_id = $1 and player_id = $2 and kind = $3`,
+          [locationId, playerId, kind]
+        )
+      ).rows[0];
+    }
+
+    // Already settled (a replay) — answer from the ledger, no vendor call.
+    if (row.status === "awarded") {
+      return res.json({
+        ok: true,
+        status: "awarded",
+        ticketsAwarded: row.tickets,
+        newTicketBalance: null,
+        duplicate: true,
+      });
+    }
+
+    // 'pending' (fresh, or a crashed earlier try) — credit the vendor. The
+    // stable per-(card,kind) idempotency key de-dupes vendor-side on replay.
+    const posResult = await rewardTickets(loyalty, {
+      playerId,
+      tickets: row.tickets,
+      source: `bonus:${kind}`,
+      // Key on the ledger row id (not kind+playerId): it's unique per
+      // (venue, card, kind) so a shared POS that de-dupes keys globally can't
+      // collide the same card's bonus across venues, it's stable across retries
+      // (the pending row persists), and its fixed length stays within the POS
+      // key limit regardless of how long the card id is.
+      idempotencyKey: `bonus:${row.id}`,
+    });
+    if (posResult.ok !== true) {
+      // Ambiguous — keep the pending reservation so a retry replays the same
+      // idempotency key rather than minting a second award.
+      console.error("[game-rewards] bonus POS credit failed (reservation held):", posResult.error);
+      return res.status(502).json({ ok: false, error: posResult.error });
+    }
+
+    await pool.query(
+      `update bonus_award set status = 'awarded', pos_transaction_id = $2 where id = $1`,
+      [row.id, posResult.transactionId ?? null]
+    );
+
+    return res.json({
+      ok: true,
+      status: "awarded",
+      ticketsAwarded: row.tickets,
+      newTicketBalance: posResult.newTicketBalance ?? null,
+      duplicate,
+    });
+  } catch (err) {
+    console.error("[game-rewards] bonus error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });

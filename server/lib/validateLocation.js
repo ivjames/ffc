@@ -7,6 +7,7 @@ import {
   HARD_MAX_PER_ROUND,
   MAX_DAILY_PER_CARD,
 } from "./gameRewards.js";
+import { ADOPTION_BONUS_KINDS, MAX_ADOPTION_BONUS } from "./adoptionBonus.js";
 
 export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -158,6 +159,35 @@ export function normalizePos(value) {
     }
   }
 
+  // Adoption bonuses — the one-time install/sign-in ticket rewards
+  // (lib/adoptionBonus.js), enforced by the /bonus endpoint. Like the caps,
+  // these need the loyalty ticket economy on; each milestone is an integer
+  // 0..MAX (0 disables it). Absent milestones fall back to the platform
+  // default at award time, so we store only what the venue set.
+  const rawBonus = value.loyalty?.adoptionBonus;
+  let adoptionBonus = null;
+  if (rawBonus !== undefined && rawBonus !== null) {
+    if (typeof rawBonus !== "object" || Array.isArray(rawBonus)) {
+      return { error: "pos.loyalty.adoptionBonus must be an object or null" };
+    }
+    if (!loyalty.value || gameRewards !== true) {
+      return { error: "pos.loyalty.adoptionBonus requires gameRewards to be enabled" };
+    }
+    const normalized = {};
+    for (const [kind, amount] of Object.entries(rawBonus)) {
+      if (!ADOPTION_BONUS_KINDS.includes(kind)) {
+        return { error: `pos.loyalty.adoptionBonus: unknown milestone ${JSON.stringify(kind)}` };
+      }
+      if (!Number.isInteger(amount) || amount < 0 || amount > MAX_ADOPTION_BONUS) {
+        return {
+          error: `pos.loyalty.adoptionBonus.${kind} must be an integer 0..${MAX_ADOPTION_BONUS}`,
+        };
+      }
+      normalized[kind] = amount;
+    }
+    if (Object.keys(normalized).length > 0) adoptionBonus = normalized;
+  }
+
   return {
     value: {
       ordering: ordering.value,
@@ -166,6 +196,7 @@ export function normalizePos(value) {
             ...loyalty.value,
             gameRewards: gameRewards === true,
             ...(gameRewardCaps ? { gameRewardCaps } : {}),
+            ...(adoptionBonus ? { adoptionBonus } : {}),
           }
         : null,
     },
