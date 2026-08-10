@@ -30,7 +30,7 @@ export async function dailySpentTickets(client, { locationId, cardId, tz }) {
           from reward_grant g
           join round r on r.id = g.round_id
           join course c on c.id = r.course_id
-         where c.location_id = $1 and g.card_player_id = $2 and g.redeemed_via = 'card'
+         where c.location_id = $1 and g.card_player_id = $2
            and (g.redeemed_at at time zone $3)::date = (now() at time zone $3)::date)
        as n`,
     [locationId, cardId, tz]

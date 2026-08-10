@@ -28,10 +28,10 @@ router.get("/summary", async (req, res) => {
   if (!Number.isFinite(days)) days = 30;
   days = Math.max(1, Math.min(90, days));
 
-  // A grant is "claimed" when it was banked to a loyalty card (redeemed_via =
-  // 'card'), which is the only way it pays out; anything still unredeemed is
-  // outstanding. Tickets only accrue on card claims.
-  const CARD = `g.redeemed_via = 'card'`;
+  // A grant is "claimed" when it was banked to a loyalty card, which is the
+  // only way it pays out (redeemed_at is the consume point); anything still
+  // unredeemed is outstanding. Tickets only accrue on claimed grants.
+  const CARD = `g.redeemed_at is not null`;
   const WHERE = `g.created_at >= now() - $2::int * interval '1 day'
                  and ($1::uuid is null or l.org_id = $1)`;
   const FROM = `from reward_grant g

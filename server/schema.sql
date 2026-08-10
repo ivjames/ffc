@@ -645,18 +645,19 @@ create index if not exists reward_grant_round_idx    on reward_grant (round_id);
 create index if not exists reward_grant_redeemed_idx on reward_grant (redeemed_at) where redeemed_at is null;
 
 -- A grant is claimed exactly once, when it's banked to a loyalty card: the app
--- credits it server-side, sets redeemed_at, and records the value paid + the
--- vendor tx so a re-opened summary settles from the row instead of crediting
--- again. redeemed_via marks the claim lane (only 'card' today).
-alter table reward_grant add column if not exists redeemed_via      text;  -- 'card' (null = unclaimed)
+-- credits it server-side, sets redeemed_at (the single consume point), and
+-- records the value paid + the vendor tx so a re-opened summary settles from
+-- the row instead of crediting again.
 alter table reward_grant add column if not exists tickets_awarded   int;   -- tickets paid on a card claim
 alter table reward_grant add column if not exists card_player_id    text;  -- the loyalty card credited
 alter table reward_grant add column if not exists pos_transaction_id text; -- vendor tx id (null until credited)
--- The counter-redemption flow is retired: redemption codes are no longer minted
--- and Master Control reports on issuance instead of redeeming it. Drop its
--- columns (a grant's identity is its UUID; achievements pay out only as tickets).
+-- The counter-redemption flow is retired: codes are no longer minted, Master
+-- Control reports on issuance instead of redeeming it, and a card claim is the
+-- only lane — so redeemed_at alone marks a claimed grant. Drop its columns (a
+-- grant's identity is its UUID; achievements pay out only as tickets).
 alter table reward_grant drop column if exists code;
 alter table reward_grant drop column if exists redeemed_by;
+alter table reward_grant drop column if exists redeemed_via;
 
 -- Photo auto-moderation (unblocks people-in-photos + the social photo share).
 -- Every hunt photo is classified in the SAME vision call that verifies the

@@ -160,13 +160,13 @@ test("credits the SERVER-derived value once and is idempotent on replay", async 
   assert.equal(call.tickets, 100);
   assert.equal(call.idempotencyKey, `golf:${clientId}:0:hole_in_one`);
 
-  // The grant is consumed via the card lane.
+  // The grant is consumed: redeemed_at set, credited to the card.
   const g = await testQuery(
-    `select redeemed_via as v, tickets_awarded as t, pos_transaction_id as p, card_player_id as c
+    `select redeemed_at as ra, tickets_awarded as t, pos_transaction_id as p, card_player_id as c
        from reward_grant g join round r on r.id = g.round_id where r.client_id = $1`,
     [clientId]
   );
-  assert.equal(g.rows[0].v, "card");
+  assert.ok(g.rows[0].ra);
   assert.equal(g.rows[0].t, 100);
   assert.equal(g.rows[0].c, "PL-1001");
   assert.ok(g.rows[0].p);
@@ -182,20 +182,6 @@ test("under_par pays its own price (client can't over-pay)", async () => {
   const { clientId } = await makeGrant(locationId, "under_par");
   const res = await claim({ clientId, playerIndex: 0, achievement: "under_par", playerId: "PL-2" });
   assert.equal((await res.json()).ticketsAwarded, 50);
-});
-
-test("an already-consumed grant can't be re-credited to a card", async () => {
-  // Data-integrity guard: a grant carrying a redeemed_at that isn't a card
-  // claim (redeemed_via != 'card') must never be credited.
-  const { clientId } = await makeGrant(locationId, "hole_in_one");
-  await testQuery(
-    `update reward_grant set redeemed_at = now()
-       where round_id = (select id from round where client_id = $1)`,
-    [clientId]
-  );
-  const res = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-3" });
-  assert.equal(res.status, 409);
-  assert.match((await res.json()).error, /already redeemed/);
 });
 
 test("venue without the gameRewards add-on -> 403", async () => {
@@ -227,12 +213,12 @@ test("golf shares one daily cap: a claim clamps to the remaining budget, then ho
   const r2 = await claim({ clientId: g2.clientId, playerIndex: 0, achievement: "under_par", playerId: card });
   assert.equal((await r2.json()).ticketsAwarded, 20);
   const gg2 = await testQuery(
-    `select tickets_awarded t, redeemed_via v from reward_grant g
+    `select tickets_awarded t, redeemed_at ra from reward_grant g
        join round r on r.id = g.round_id where r.client_id = $1`,
     [g2.clientId]
   );
   assert.equal(gg2.rows[0].t, 20);
-  assert.equal(gg2.rows[0].v, "card");
+  assert.ok(gg2.rows[0].ra);
 
   // 3) budget exhausted — daily-cap, nothing credited, and the grant is NOT
   //    consumed so the achievement stays claimable another day.

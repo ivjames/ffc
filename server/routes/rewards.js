@@ -73,7 +73,7 @@ router.post("/claim", async (req, res) => {
     await client.query("begin");
     // Lock this grant so concurrent claims serialize on the same row.
     const gres = await client.query(
-      `select g.id, g.redeemed_at, g.redeemed_via, g.tickets_awarded, g.pos_transaction_id,
+      `select g.id, g.redeemed_at, g.tickets_awarded, g.pos_transaction_id,
               g.card_player_id, l.pos as pos, l.id as location_id, l.tz as tz
          from reward_grant g
          join round r on r.id = g.round_id
@@ -95,12 +95,7 @@ router.post("/claim", async (req, res) => {
     }
 
     if (grant.redeemed_at) {
-      if (grant.redeemed_via !== "card") {
-        // Consumed some other way (a redeemed grant should always be a card
-        // claim now) — never re-credit it. Data-integrity guard.
-        await client.query("rollback");
-        return res.status(409).json({ ok: false, error: "already redeemed" });
-      }
+      // Already banked to a card (redeemed_at is the single consume point).
       if (grant.pos_transaction_id) {
         // Already credited to a card; answer from the row (re-opened summary).
         await client.query("commit");
@@ -144,8 +139,7 @@ router.post("/claim", async (req, res) => {
       }
       await client.query(
         `update reward_grant
-            set redeemed_at = now(), redeemed_via = 'card',
-                tickets_awarded = $2, card_player_id = $3
+            set redeemed_at = now(), tickets_awarded = $2, card_player_id = $3
           where id = $1`,
         [grant.id, award, playerId]
       );
