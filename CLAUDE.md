@@ -2,14 +2,14 @@
 
 ## Environment status
 
-- **This deployment is staging / development only — there is NO production
-  yet.** Nothing is live to real players and **no money is attached to
-  anything** — rewards, loyalty-card tickets, and grants have no monetary value
-  in this environment. Treat the app as being in development mode: don't gate
-  work behind production-risk caution (polluting boards, minting "real" tickets,
-  irreversible payouts) — those concerns don't apply until a real production
-  environment exists. Still keep changes reversible and tests green; just don't
-  ask for prod-style sign-off on staging data.
+- **Two environments: development (where we work) and staging, which serves as
+  production — the real deployed system.** There is no separate money-bearing
+  production tier. **No money is attached to anything** anywhere — rewards,
+  loyalty-card tickets, and grants have no monetary value. Treat the app as
+  being in development mode: don't gate work behind production-risk caution
+  (polluting boards, minting "real" tickets, irreversible payouts) — those
+  concerns don't apply here. Keep changes reversible and tests green, and ship
+  without asking for prod-style sign-off.
 
 ## Operator preferences
 
