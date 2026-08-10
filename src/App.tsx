@@ -50,6 +50,7 @@ import JoinGame from './features/shared/JoinGame';
 import Lobby from './features/shared/Lobby';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
+import GeofenceGate from './features/shared/GeofenceGate';
 import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
 import SkinPicker from './ui/SkinPicker';
@@ -79,10 +80,14 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/locations" element={<LocationPicker />} />
-        <Route path="/new" element={<CoursePicker />} />
-        <Route path="/new/setup" element={<PlayerSetup />} />
-        <Route path="/play/:clientId" element={<Scorecard />} />
-        <Route path="/play/:clientId/summary" element={<Summary />} />
+        {/* Golf is an on-location activity — gate starting/playing a round
+            behind the venue geofence (suspended unless VITE_GEOFENCE_ENFORCED). */}
+        <Route element={<GeofenceGate />}>
+          <Route path="/new" element={<CoursePicker />} />
+          <Route path="/new/setup" element={<PlayerSetup />} />
+          <Route path="/play/:clientId" element={<Scorecard />} />
+          <Route path="/play/:clientId/summary" element={<Summary />} />
+        </Route>
         <Route path="/courses" element={<CourseList />} />
         <Route path="/courses/:id/map" element={<CourseMap />} />
         <Route path="/rules" element={<Rules />} />
@@ -97,38 +102,44 @@ export default function App() {
         <Route path="/hunt" element={<Hunt />} />
         {/* Photo booth — photo sharing + stickers, no AI in the pipeline. */}
         <Route path="/photos" element={<PhotoBooth />} />
-        {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
-        <Route path="/putt" element={<PuttGolf />} />
-        {/* §12 "While You Wait" content — fun facts, trivia, challenge spinner. */}
-        <Route path="/fun" element={<FunZone />} />
-        <Route path="/fun/facts" element={<FunFacts />} />
-        <Route path="/fun/trivia" element={<Trivia />} />
-        <Route path="/fun/spinner" element={<Spinner />} />
-        <Route path="/fun/skeeball" element={<SkeeBall />} />
-        <Route path="/fun/airhockey" element={<AirHockey />} />
-        <Route path="/fun/bumper" element={<BumperCars />} />
-        <Route path="/fun/boats" element={<BumperBoats />} />
-        <Route path="/fun/axe" element={<AxeThrow />} />
-        <Route path="/fun/batting" element={<BattingCages />} />
-        <Route path="/fun/bowling" element={<Bowling />} />
-        <Route path="/fun/karts" element={<GoKarts />} />
-        <Route path="/fun/mole" element={<WhackAMole />} />
-        <Route path="/fun/hoops" element={<PopAShot />} />
-        <Route path="/fun/darts" element={<Darts />} />
-        <Route path="/fun/gallery" element={<ShootingGallery />} />
-        <Route path="/fun/claw" element={<ClawMachine />} />
-        <Route path="/fun/striker" element={<HighStriker />} />
-        <Route path="/fun/rings" element={<RingToss />} />
-        <Route path="/fun/bottles" element={<MilkBottle />} />
-        <Route path="/fun/watergun" element={<WaterGunRace />} />
-        <Route path="/fun/pinball" element={<Pinball />} />
-        <Route path="/fun/pusher" element={<CoinPusher />} />
-        {/* Native F&B ordering + rewards card — POS-integration add-ons,
-            rendered only for venues with a paid config (src/lib/pos); each
-            screen redirects home when its capability is off. */}
-        <Route path="/food" element={<Food />} />
-        <Route path="/food/checkout" element={<Checkout />} />
-        <Route path="/food/order/:orderId" element={<OrderStatusScreen />} />
+        {/* Games and native F&B ordering are on-location activities — gate the
+            whole Fun Zone, Arcade Putt, and food behind the venue geofence
+            (suspended unless VITE_GEOFENCE_ENFORCED). Food additionally
+            redirects home when the venue lacks the ordering add-on (src/lib/pos). */}
+        <Route element={<GeofenceGate />}>
+          {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
+          <Route path="/putt" element={<PuttGolf />} />
+          {/* §12 "While You Wait" content — fun facts, trivia, challenge spinner. */}
+          <Route path="/fun" element={<FunZone />} />
+          <Route path="/fun/facts" element={<FunFacts />} />
+          <Route path="/fun/trivia" element={<Trivia />} />
+          <Route path="/fun/spinner" element={<Spinner />} />
+          <Route path="/fun/skeeball" element={<SkeeBall />} />
+          <Route path="/fun/airhockey" element={<AirHockey />} />
+          <Route path="/fun/bumper" element={<BumperCars />} />
+          <Route path="/fun/boats" element={<BumperBoats />} />
+          <Route path="/fun/axe" element={<AxeThrow />} />
+          <Route path="/fun/batting" element={<BattingCages />} />
+          <Route path="/fun/bowling" element={<Bowling />} />
+          <Route path="/fun/karts" element={<GoKarts />} />
+          <Route path="/fun/mole" element={<WhackAMole />} />
+          <Route path="/fun/hoops" element={<PopAShot />} />
+          <Route path="/fun/darts" element={<Darts />} />
+          <Route path="/fun/gallery" element={<ShootingGallery />} />
+          <Route path="/fun/claw" element={<ClawMachine />} />
+          <Route path="/fun/striker" element={<HighStriker />} />
+          <Route path="/fun/rings" element={<RingToss />} />
+          <Route path="/fun/bottles" element={<MilkBottle />} />
+          <Route path="/fun/watergun" element={<WaterGunRace />} />
+          <Route path="/fun/pinball" element={<Pinball />} />
+          <Route path="/fun/pusher" element={<CoinPusher />} />
+          {/* Native F&B ordering + rewards card — POS-integration add-ons,
+              rendered only for venues with a paid config (src/lib/pos); each
+              screen redirects home when its capability is off. */}
+          <Route path="/food" element={<Food />} />
+          <Route path="/food/checkout" element={<Checkout />} />
+          <Route path="/food/order/:orderId" element={<OrderStatusScreen />} />
+        </Route>
         <Route path="/rewards" element={<Rewards />} />
         {/* Player account — passwordless email sign-in + profile. */}
         <Route path="/account" element={<Account />} />
