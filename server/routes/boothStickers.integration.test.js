@@ -178,17 +178,27 @@ test("kind + corner: frames and watermarks upload, validate, and list", async ()
   assert.ok(list.some((s) => s.kind === 'frame'));
 });
 
-// Minimal PNG: signature + an IHDR chunk carrying width/height. validatePng
-// only reads the signature and IHDR dimensions (not CRC/IDAT), so this is
-// enough to exercise the server path.
+// A structurally-valid PNG: signature + IHDR + a (non-empty) IDAT + IEND, with
+// consistent chunk lengths. Enough to pass validatePng's structure checks and
+// exercise the server path (CRC/pixel bytes aren't validated).
+function pngChunk(type, data) {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length, 0);
+  return Buffer.concat([len, Buffer.from(type, "latin1"), data, Buffer.alloc(4) /* crc */]);
+}
 function fakePng(w, h) {
   const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const ihdr = Buffer.alloc(25); // 4 len + 4 type + 13 data + 4 crc
-  ihdr.writeUInt32BE(13, 0);
-  ihdr.write("IHDR", 4, "latin1");
-  ihdr.writeUInt32BE(w, 8);
-  ihdr.writeUInt32BE(h, 12);
-  return Buffer.concat([sig, ihdr]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // color type: RGBA
+  return Buffer.concat([
+    sig,
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", Buffer.from([0x00])),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
 }
 
 test("PNG assets upload, validate, store, and serve as image/png", async () => {
@@ -232,6 +242,34 @@ test("PNG assets upload, validate, store, and serve as image/png", async () => {
     mediaType: "image/gif",
   });
   assert.equal(badType.status, 400);
+
+  // Signature + IHDR but no image data (no IDAT/IEND) -> rejected (undecodable).
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdrOnly = Buffer.concat([
+    sig,
+    (() => {
+      const d = Buffer.alloc(13);
+      d.writeUInt32BE(10, 0);
+      d.writeUInt32BE(10, 4);
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(13, 0);
+      return Buffer.concat([len, Buffer.from("IHDR"), d, Buffer.alloc(4)]);
+    })(),
+  ]);
+  const noData = await adminUpload({
+    locationId,
+    imageBase64: ihdrOnly.toString("base64"),
+    mediaType: "image/png",
+  });
+  assert.equal(noData.status, 400);
+
+  // A decode-bomb resolution (small file, enormous pixel count) -> rejected.
+  const huge = await adminUpload({
+    locationId,
+    imageBase64: fakePng(20000, 20000).toString("base64"),
+    mediaType: "image/png",
+  });
+  assert.equal(huge.status, 400);
 });
 
 test("player endpoints: list a venue's stickers and serve the SVG inert", async () => {
