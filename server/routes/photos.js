@@ -137,8 +137,8 @@ router.get("/stickers", async (req, res) => {
 });
 
 // --- GET /api/photos/stickers/:id/image -------------------------------------
-// Serve a venue sticker's SVG, hardened so it can only ever render as inert
-// image data (see SVG_CSP). The client draws it via <img>/canvas, never inline.
+// Serve a venue sticker asset (SVG or PNG), hardened so it can only ever render
+// as inert image data (see SVG_CSP). The client draws it via <img>/canvas.
 router.get("/stickers/:id/image", async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) {
@@ -146,13 +146,16 @@ router.get("/stickers/:id/image", async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `select svg_path as "svgPath" from booth_sticker where id = $1 and active = true`,
+      `select svg_path as "svgPath", media_type as "mediaType"
+         from booth_sticker where id = $1 and active = true`,
       [id]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ ok: false, error: "not found" });
     }
-    res.set("Content-Type", "image/svg+xml");
+    // media_type is 'image/svg+xml' or 'image/png'. The SVG_CSP is the
+    // load-bearing lockdown for SVG and harmless for PNG.
+    res.set("Content-Type", result.rows[0].mediaType || "application/octet-stream");
     res.set("Content-Security-Policy", SVG_CSP);
     res.set("X-Content-Type-Options", "nosniff");
     res.set("Cache-Control", "public, max-age=3600");

@@ -25,8 +25,73 @@ const CORNER_LABEL: Record<AdminStickerCorner, string> = {
 // the public serve endpoint — never inlined — so a preview can't execute
 // anything even if something slipped through.
 
-// Client-side guard mirroring the server cap, for a friendlier early error.
+// Client-side guards mirroring the server caps, for a friendlier early error.
 const MAX_SVG_BYTES = 512 * 1024;
+const MAX_PNG_BYTES = 4 * 1024 * 1024;
+// Refuse to even decode something absurd (a huge PNG would pin the browser).
+const MAX_PNG_INPUT_BYTES = 40 * 1024 * 1024;
+
+/** Read a Blob's bytes as base64 (data: prefix stripped) — for PNG uploads. */
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error('Could not read the file'));
+    r.onload = () => {
+      const s = String(r.result);
+      const c = s.indexOf(',');
+      resolve(c >= 0 ? s.slice(c + 1) : s);
+    };
+    r.readAsDataURL(blob);
+  });
+}
+
+function loadImageEl(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not read that image'));
+    img.src = src;
+  });
+}
+
+/** Re-encode an image to a PNG whose long edge is at most maxDim (preserving
+ *  aspect + transparency). Null if canvas is unavailable. */
+function encodePngAt(img: HTMLImageElement, maxDim: number): Promise<Blob | null> {
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return Promise.resolve(null);
+  ctx.drawImage(img, 0, 0, w, h);
+  return new Promise((res) => canvas.toBlob(res, 'image/png'));
+}
+
+/** Prepare a PNG for upload: pass it through untouched if it's already under
+ *  the cap, otherwise downscale (in the browser — the server has no image libs)
+ *  by stepping the long edge down until it fits. Returns base64 + whether it was
+ *  resized. PNG is lossless, so size is driven by dimensions — stepping those
+ *  down reliably shrinks a big logo while keeping transparency. */
+async function preparePng(file: File): Promise<{ base64: string; resized: boolean }> {
+  if (file.size <= MAX_PNG_BYTES) return { base64: await blobToBase64(file), resized: false };
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImageEl(url);
+    for (const maxDim of [2048, 1600, 1280, 1024, 800, 640]) {
+      const blob = await encodePngAt(img, maxDim);
+      if (blob && blob.size <= MAX_PNG_BYTES) return { base64: await blobToBase64(blob), resized: true };
+    }
+    // Even 640px didn't fit (extremely detailed) — send the smallest; the
+    // server returns a clear "too large" if it's still over.
+    const smallest = await encodePngAt(img, 512);
+    if (smallest) return { base64: await blobToBase64(smallest), resized: true };
+    throw new Error('Could not process that PNG.');
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 function StickerCard({ sticker, onRemoved }: { sticker: AdminVenueSticker; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -85,6 +150,7 @@ export default function BoothStickers() {
   const [stickers, setStickers] = useState<AdminVenueSticker[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [label, setLabel] = useState('');
   const [kind, setKind] = useState<AdminStickerKind>('sticker');
@@ -138,25 +204,45 @@ export default function BoothStickers() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !locationId) return;
-    if (file.size > MAX_SVG_BYTES) {
+
+    const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+    const isPng = file.type === 'image/png' || /\.png$/i.test(file.name);
+    if (!isSvg && !isPng) {
+      setError('Please choose an SVG or PNG file.');
+      return;
+    }
+    // SVG can't be meaningfully downscaled (it's vector text); a huge one is
+    // pathological, so keep the hard cap. A big PNG is auto-resized below.
+    if (isSvg && file.size > MAX_SVG_BYTES) {
       setError('That SVG is too large (max 512 KB).');
       return;
     }
+    if (isPng && file.size > MAX_PNG_INPUT_BYTES) {
+      setError('That PNG is too large to process — please export a smaller one.');
+      return;
+    }
+
     setUploading(true);
     setError(null);
+    setNotice(null);
     try {
-      const svg = await file.text();
-      await api.uploadBoothSticker({
+      const common = {
         locationId,
         label: label.trim() || undefined,
-        svg,
         kind,
         corner: kind === 'watermark' ? corner : undefined,
-      });
+      };
+      if (isPng) {
+        const { base64, resized } = await preparePng(file);
+        await api.uploadBoothSticker({ ...common, imageBase64: base64, mediaType: 'image/png' });
+        if (resized) setNotice('That PNG was large, so it was automatically resized to fit.');
+      } else {
+        await api.uploadBoothSticker({ ...common, svg: await file.text() });
+      }
       setLabel('');
       reloadStickers();
     } catch (err) {
-      // Server rejection (dangerous/malformed SVG) surfaces here verbatim.
+      // Server rejection (dangerous/malformed SVG, non-PNG, too large) shows here.
       setError((err as Error).message);
     } finally {
       setUploading(false);
@@ -167,14 +253,16 @@ export default function BoothStickers() {
     <div className="space-y-4">
       <h1 className="text-lg font-semibold">Booth stickers</h1>
       <p className="text-sm text-slate-500">
-        Upload SVG art for a venue. <strong>Stickers</strong> are draggable decorations;{' '}
-        <strong>frames</strong> overlay the whole photo (proscenium/border); a{' '}
-        <strong>watermark</strong> is branding forced into a corner of every photo. SVGs are
-        validated on upload (scripts, event handlers, external references, and entity/XXE payloads
-        are rejected) and always served and rendered as inert images.
+        Upload <strong>SVG</strong> or transparent <strong>PNG</strong> art for a venue.{' '}
+        <strong>Stickers</strong> are draggable decorations; <strong>frames</strong> overlay the
+        whole photo (proscenium/border); a <strong>watermark</strong> is branding forced into a
+        corner of every photo. Use a transparent background (SVG or PNG — not JPEG) so the photo
+        shows through. SVGs are validated on upload (scripts, event handlers, external references,
+        and entity/XXE payloads are rejected); everything is served and rendered as inert images.
       </p>
 
       {error && <Banner kind="error">{error}</Banner>}
+      {notice && <Banner kind="info">{notice}</Banner>}
 
       <Card className="space-y-3">
         <label className="block text-sm font-medium text-slate-600">
@@ -233,12 +321,12 @@ export default function BoothStickers() {
           <input
             ref={fileRef}
             type="file"
-            accept=".svg,image/svg+xml"
+            accept=".svg,image/svg+xml,.png,image/png"
             className="hidden"
             onChange={(e) => void onFile(e)}
           />
           <Button disabled={uploading || !locationId} onClick={() => fileRef.current?.click()}>
-            {uploading ? 'Uploading…' : 'Upload SVG'}
+            {uploading ? 'Uploading…' : 'Upload SVG / PNG'}
           </Button>
         </div>
       </Card>
