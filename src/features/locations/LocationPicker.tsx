@@ -4,6 +4,7 @@ import { LOCATIONS, coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId, setCurrentLocationId } from '../../lib/location';
 import { geolocationSupported } from '../../lib/geolocate';
 import { useDetectLocation } from './useDetectLocation';
+import { VenueOpenLine, VenueHoursCard } from '../../ui/VenueHoursInfo';
 
 // §5 Location picker — the client runs several sites; choose which one you're
 // playing at (by hand, or via GPS "Use my location"). The choice is remembered
@@ -47,33 +48,44 @@ export default function LocationPicker() {
             const count = coursesByLocation(loc.id).length;
             const selected = loc.id === current;
             return (
-              <button
-                key={loc.id}
-                onClick={() => choose(loc.id)}
-                className={`surface-1 flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition-transform active:translate-y-px ${
-                  selected ? 'border-fairway-500/60' : 'border-fairway-800/60'
-                }`}
-              >
-                <span
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl"
-                  style={{ background: `${loc.accent}22`, border: `1px solid ${loc.accent}55` }}
+              <div key={loc.id}>
+                <button
+                  onClick={() => choose(loc.id)}
+                  className={`surface-1 flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition-transform active:translate-y-px ${
+                    selected ? 'border-fairway-500/60' : 'border-fairway-800/60'
+                  }`}
                 >
-                  📍
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-lg font-bold text-fairway-50">
-                    {loc.name}
+                  <span
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl"
+                    style={{ background: `${loc.accent}22`, border: `1px solid ${loc.accent}55` }}
+                  >
+                    📍
                   </span>
-                  <span className="block text-sm text-fairway-100/70">
-                    {count} {count === 1 ? 'course' : 'courses'}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-lg font-bold text-fairway-50">
+                      {loc.name}
+                    </span>
+                    <span className="block text-sm text-fairway-100/70">
+                      {count} {count === 1 ? 'course' : 'courses'}
+                    </span>
+                    <VenueOpenLine hours={loc.hours} tz={loc.tz} className="mt-1" />
                   </span>
-                </span>
-                {selected ? (
-                  <span className="text-sm font-semibold text-fairway-400">Current</span>
-                ) : (
-                  <span className="text-xl text-fairway-400">›</span>
-                )}
-              </button>
+                  {selected ? (
+                    <span className="text-sm font-semibold text-fairway-400">Current</span>
+                  ) : (
+                    <span className="text-xl text-fairway-400">›</span>
+                  )}
+                </button>
+                {/* Full weekly hours, collapsed by default — kept out of the
+                    button above (interactive <details> can't nest inside a
+                    <button>). */}
+                <VenueHoursCard
+                  hours={loc.hours}
+                  tz={loc.tz}
+                  showStatus={false}
+                  className="mt-1.5"
+                />
+              </div>
             );
           })}
         </div>

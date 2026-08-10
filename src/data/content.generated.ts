@@ -4,6 +4,16 @@
 // reproducible without a live DB. Frontend-only styling (accents, themed rules,
 // map art) is merged on top in src/data/courses.ts. See master-control-plan.md §5.
 
+// Weekly business hours (per venue, set in Master Control), evaluated in the
+// location's own `tz`. A missing day key = closed; a day may instead be the
+// string "closed"; `close` may be "24:00" (midnight) or earlier than `open`
+// for an overnight close. See src/lib/venueHours.ts (mirrors
+// server/lib/venueHours.js) for the canonical shape doc + open/closed logic.
+export type VenueHoursDay = { open: string; close: string } | 'closed';
+export type VenueHours = Partial<
+  Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', VenueHoursDay>
+>;
+
 export type GeneratedLocation = {
   id: string;
   name: string;
@@ -15,6 +25,7 @@ export type GeneratedLocation = {
   sortOrder: number;
   menuUrl: string | null;
   orderingUrl: string | null;
+  hours: VenueHours | null;
   // POS integration add-on (per-venue, set in Master Control). Structurally
   // matches PosConfig in src/lib/pos/types.ts (capabilities decoupled — each
   // names its own vendor); kept inline so this generated file stays
@@ -56,6 +67,15 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     sortOrder: 10,
     menuUrl: null,
     orderingUrl: null,
+    hours: {
+      mon: { open: "12:00", close: "21:00" },
+      tue: { open: "12:00", close: "21:00" },
+      wed: { open: "12:00", close: "21:00" },
+      thu: { open: "12:00", close: "21:00" },
+      fri: { open: "12:00", close: "23:00" },
+      sat: { open: "11:00", close: "23:00" },
+      sun: { open: "11:00", close: "21:00" },
+    },
     pos: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },
@@ -70,6 +90,15 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     sortOrder: 20,
     menuUrl: null,
     orderingUrl: null,
+    hours: {
+      mon: { open: "11:00", close: "21:00" },
+      tue: { open: "11:00", close: "21:00" },
+      wed: { open: "11:00", close: "21:00" },
+      thu: { open: "11:00", close: "21:00" },
+      fri: { open: "11:00", close: "23:00" },
+      sat: { open: "11:00", close: "23:00" },
+      sun: { open: "11:00", close: "22:00" },
+    },
     pos: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },
@@ -84,6 +113,15 @@ export const GENERATED_LOCATIONS: GeneratedLocation[] = [
     sortOrder: 30,
     menuUrl: null,
     orderingUrl: null,
+    hours: {
+      mon: { open: "11:00", close: "22:00" },
+      tue: { open: "11:00", close: "22:00" },
+      wed: { open: "11:00", close: "22:00" },
+      thu: { open: "11:00", close: "22:00" },
+      fri: { open: "11:00", close: "23:00" },
+      sat: { open: "11:00", close: "23:00" },
+      sun: { open: "11:00", close: "22:00" },
+    },
     pos: null,
     orgId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   },

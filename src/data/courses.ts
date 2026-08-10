@@ -126,6 +126,8 @@ function buildLocations(raw: GeneratedLocation[]): LocationSeed[] {
     lng: l.lng ?? 0,
     geofenceKm: l.geofenceKm ?? undefined,
     sortOrder: l.sortOrder,
+    tz: l.tz ?? undefined,
+    hours: l.hours ?? undefined,
     menuUrl: l.menuUrl ?? undefined,
     orderingUrl: l.orderingUrl ?? undefined,
     pos: l.pos ?? undefined,
