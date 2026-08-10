@@ -1,9 +1,10 @@
 // WebP validation for venue booth assets. The admin compresses a too-large PNG
 // to WebP (lossy, alpha-preserving) at its ORIGINAL dimensions — smaller bytes,
 // same resolution — so we accept WebP alongside PNG/SVG. Like PNG, WebP is a
-// safe raster format; validation is: it really is a WebP, within the byte cap,
-// and its decoded size (read from the header) is bounded so it can't blow up to
-// a huge RGBA bitmap when the booth renders it.
+// safe raster format; validation walks the RIFF chunk stream, requires a real
+// decodable image frame (so an undecodable file is rejected), reads the
+// intrinsic size, and bounds the decoded pixel count so it can't blow up to a
+// huge RGBA bitmap when the booth renders it.
 import { MAX_PNG_SIDE, MAX_PNG_PIXELS } from "./pngInfo.js";
 
 export const MAX_WEBP_BYTES = 4 * 1024 * 1024;
@@ -13,9 +14,10 @@ function readUInt24LE(b, o) {
 }
 
 /**
- * Validate a candidate WebP asset and read its intrinsic size from the header.
- * Handles the three container forms: VP8 (lossy), VP8L (lossless), VP8X
- * (extended — what canvas WebP-with-alpha produces).
+ * Validate a candidate WebP asset: RIFF/WEBP container, a well-formed chunk
+ * stream containing a complete image frame (VP8 lossy, VP8L lossless, or a VP8X
+ * extended header followed by a real frame), intrinsic dimensions, and bounded
+ * decoded size.
  * @param {Buffer} bytes raw file
  * @returns {{ ok: true, width: number, height: number }
  *          | { ok: false, reason: string }}
@@ -27,47 +29,62 @@ export function validateWebp(bytes) {
   if (bytes.length > MAX_WEBP_BYTES) {
     return { ok: false, reason: "file is too large" };
   }
-  // RIFF container: "RIFF" <size> "WEBP" <fourcc> …
   if (
-    bytes.length < 30 ||
+    bytes.length < 20 ||
     bytes.toString("latin1", 0, 4) !== "RIFF" ||
     bytes.toString("latin1", 8, 12) !== "WEBP"
   ) {
     return { ok: false, reason: "not a WebP" };
   }
 
-  const fourcc = bytes.toString("latin1", 12, 16);
   let width = 0;
   let height = 0;
-  if (fourcc === "VP8X") {
-    // Canvas width/height are stored minus one, as 24-bit little-endian.
-    width = readUInt24LE(bytes, 24) + 1;
-    height = readUInt24LE(bytes, 27) + 1;
-    // The extended header must be followed by an actual image frame — a
-    // VP8X-only file decodes nowhere (same class of hole as a PNG with no IDAT).
-    if (!bytes.includes("VP8 ", 30, "latin1") && !bytes.includes("VP8L", 30, "latin1")) {
-      return { ok: false, reason: "incomplete WebP (no image data)" };
+  let sawVP8X = false;
+  let sawFrame = false; // a real VP8/VP8L image chunk was found + validated
+
+  let off = 12;
+  while (off + 8 <= bytes.length) {
+    const cc = bytes.toString("latin1", off, off + 4);
+    const size = bytes.readUInt32LE(off + 4);
+    const p = off + 8; // payload start
+    if (p + size > bytes.length) {
+      return { ok: false, reason: "truncated WebP chunk" };
     }
-  } else if (fourcc === "VP8 ") {
-    // Lossy: after the 10-byte frame header, a 3-byte start code, then 14-bit
-    // width and height little-endian.
-    if (bytes.toString("latin1", 23, 26) !== "\x9d\x01\x2a") {
-      // start code check is best-effort; fall through to reading dimensions
+    if (cc === "VP8X") {
+      if (size < 10) return { ok: false, reason: "malformed VP8X header" };
+      // flags(1) + reserved(3), then canvas width-1 / height-1 as 24-bit LE.
+      width = readUInt24LE(bytes, p + 4) + 1;
+      height = readUInt24LE(bytes, p + 7) + 1;
+      sawVP8X = true;
+    } else if (cc === "VP8L") {
+      // Lossless frame: 0x2f signature, then 14-bit width-1 / height-1.
+      if (size < 5 || bytes[p] !== 0x2f) {
+        return { ok: false, reason: "malformed lossless frame" };
+      }
+      const bits = bytes.readUInt32LE(p + 1);
+      if (!sawVP8X) {
+        width = (bits & 0x3fff) + 1;
+        height = ((bits >> 14) & 0x3fff) + 1;
+      }
+      sawFrame = true;
+    } else if (cc === "VP8 ") {
+      // Lossy key frame: 3-byte start code 0x9d 0x01 0x2a, then 14-bit w/h.
+      if (size < 10 || bytes[p + 3] !== 0x9d || bytes[p + 4] !== 0x01 || bytes[p + 5] !== 0x2a) {
+        return { ok: false, reason: "malformed lossy frame" };
+      }
+      if (!sawVP8X) {
+        width = bytes.readUInt16LE(p + 6) & 0x3fff;
+        height = bytes.readUInt16LE(p + 8) & 0x3fff;
+      }
+      sawFrame = true;
     }
-    width = bytes.readUInt16LE(26) & 0x3fff;
-    height = bytes.readUInt16LE(28) & 0x3fff;
-  } else if (fourcc === "VP8L") {
-    // Lossless: 0x2f signature byte, then 14 bits width-1 and 14 bits height-1.
-    if (bytes[20] !== 0x2f) {
-      return { ok: false, reason: "malformed lossless WebP" };
-    }
-    const bits = bytes.readUInt32LE(21);
-    width = (bits & 0x3fff) + 1;
-    height = ((bits >> 14) & 0x3fff) + 1;
-  } else {
-    return { ok: false, reason: "unsupported WebP form" };
+    // RIFF chunks are padded to an even length.
+    off = p + size + (size & 1);
   }
 
+  if (!sawFrame) {
+    return { ok: false, reason: "incomplete WebP (no image frame)" };
+  }
   if (!width || !height) {
     return { ok: false, reason: "unreadable WebP dimensions" };
   }
