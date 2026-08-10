@@ -81,20 +81,54 @@ const EXPORT_MAX_DIM = 1280;
 // centering on the visual box guarantees no clip and a true center for any
 // emoji. `ratio` is the em (reference font size) as a fraction of the square,
 // so the caller sizes the rendered sticker to the prior em-based scale (see
-// stickerBitmap's return). `w`/`h` are the bitmap's pixel dimensions — sized to
-// the glyph's ACTUAL aspect (not a square), so the rendered sticker, its
-// selection ring, and its tap area hug the glyph instead of a big square that
-// dwarfs a wide/short emoji like 🕶️.
-type StickerBitmap = { canvas: HTMLCanvasElement; url: string; w: number; h: number };
+// stickerBitmap's return). `w`/`h` are the bitmap's pixel dimensions, `inkW`/
+// `inkH` the tight glyph ink inside it — both sized to the glyph's ACTUAL shape
+// so the rendered sticker, its selection ring, and its tap area hug the glyph
+// instead of a big square that dwarfs a wide/short emoji like 🕶️.
+type StickerBitmap = {
+  canvas: HTMLCanvasElement;
+  url: string;
+  w: number;
+  h: number;
+  inkW: number;
+  inkH: number;
+};
 
-// Transparent halo around the glyph — room for anti-aliasing and the odd emoji
-// whose reported bounds run a touch tight, without bloating the tap area.
-const STICKER_MARGIN = 0.14;
-// Reference font px the emoji is measured + drawn at; also the sizing unit (the
-// em renders at the sticker's target size, preserving the prior scale).
+// Transparent halo around the glyph — room for anti-aliasing, without bloating
+// the tap area.
+const STICKER_MARGIN = 0.08;
+// Font px the emoji is drawn at when rasterizing.
 const EMOJI_REF = 256;
 const EMOJI_FONT =
   '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+
+// The tight bounding box of the painted (non-transparent) pixels. measureText's
+// actualBoundingBox is unreliable for color emoji — Apple Color Emoji reports a
+// full-em square regardless of the glyph's real shape — so scan the alpha
+// channel instead. Returns null if nothing was painted.
+function inkBounds(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+): { x: number; y: number; w: number; h: number } | null {
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] > 8) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
 
 const emojiCache = new Map<string, StickerBitmap>();
 function emojiBitmap(emoji: string): StickerBitmap {
@@ -103,45 +137,42 @@ function emojiBitmap(emoji: string): StickerBitmap {
 
   const REF = EMOJI_REF;
   const font = `${REF}px ${EMOJI_FONT}`;
-  const measure = document.createElement('canvas').getContext('2d');
-  let glyphW = REF;
-  let glyphH = REF;
-  let dxCenter = 0; // glyph bbox center offset from the pen, in x
-  let dyCenter = 0; // …and y
-  if (measure) {
-    measure.font = font;
-    measure.textAlign = 'center';
-    measure.textBaseline = 'middle';
-    const m = measure.measureText(emoji);
-    // actualBoundingBox* are supported in modern mobile Safari; fall back to
-    // the em box (a centered square) if a browser doesn't report them.
-    const left = m.actualBoundingBoxLeft ?? REF / 2;
-    const right = m.actualBoundingBoxRight ?? REF / 2;
-    const asc = m.actualBoundingBoxAscent ?? REF / 2;
-    const desc = m.actualBoundingBoxDescent ?? REF / 2;
-    glyphW = Math.max(1, left + right);
-    glyphH = Math.max(1, asc + desc);
-    // With a center/middle pen, the bbox is offset by these when it isn't
-    // symmetric about the pen — subtract to re-center the glyph in the bitmap.
-    dxCenter = (right - left) / 2;
-    dyCenter = (desc - asc) / 2;
+  // Draw big into a padded scratch canvas, then find the real ink box by
+  // scanning pixels (color-emoji font metrics don't give a tight box).
+  const pad = Math.round(REF * 0.6);
+  const work = REF + pad * 2;
+  const wc = document.createElement('canvas');
+  wc.width = wc.height = work;
+  const wctx = wc.getContext('2d', { willReadFrequently: true });
+  let box: { x: number; y: number; w: number; h: number } | null = null;
+  if (wctx) {
+    wctx.font = font;
+    wctx.textAlign = 'center';
+    wctx.textBaseline = 'middle';
+    wctx.fillText(emoji, work / 2, work / 2);
+    box = inkBounds(wctx, work, work);
   }
-  // Aspect-correct canvas: glyph bbox + a small margin on each side. Wide/short
-  // glyphs get a wide/short bitmap, so nothing is a forced square.
-  const bw = Math.ceil(glyphW * (1 + 2 * STICKER_MARGIN));
-  const bh = Math.ceil(glyphH * (1 + 2 * STICKER_MARGIN));
+  // Fallback (no context / getImageData blocked): a centered em square.
+  if (!box) box = { x: (work - REF) / 2, y: (work - REF) / 2, w: REF, h: REF };
 
+  const margin = Math.round(Math.max(box.w, box.h) * STICKER_MARGIN);
+  const bw = box.w + margin * 2;
+  const bh = box.h + margin * 2;
   const canvas = document.createElement('canvas');
   canvas.width = bw;
   canvas.height = bh;
   const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.font = font;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(emoji, bw / 2 - dxCenter, bh / 2 - dyCenter);
-  }
-  const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), w: bw, h: bh };
+  // Copy just the ink region out of the scratch canvas, centered with margin.
+  if (ctx && wctx) ctx.drawImage(wc, box.x, box.y, box.w, box.h, margin, margin, box.w, box.h);
+
+  const bitmap: StickerBitmap = {
+    canvas,
+    url: canvas.toDataURL(),
+    w: bw,
+    h: bh,
+    inkW: box.w,
+    inkH: box.h,
+  };
   emojiCache.set(emoji, bitmap);
   return bitmap;
 }
@@ -182,9 +213,9 @@ function loadSvgImage(svgId: string): Promise<HTMLImageElement | null> {
 }
 
 // The rendered sticker's width/height in px, sized to its ACTUAL aspect so the
-// element (and its ring/tap area) hugs the art. The reference dimension lands
-// at STICKER_BASE*imageWidth*scale: for emoji the em (so the scale matches the
-// prior behavior), for an SVG its larger dimension.
+// element (and its ring/tap area) hugs the art. The glyph's larger INK
+// dimension lands at STICKER_BASE*imageWidth*scale; the box (ink + margin)
+// scales with it. SVG is sized the same way from its intrinsic larger side.
 function displaySize(
   st: Sticker,
   imageWidth: number,
@@ -194,7 +225,7 @@ function displaySize(
   const target = STICKER_BASE * imageWidth * scale;
   if (st.emoji) {
     const b = emojiBitmap(st.emoji);
-    const f = target / EMOJI_REF; // em -> target
+    const f = target / Math.max(b.inkW, b.inkH); // ink's larger side -> target
     return { dw: b.w * f, dh: b.h * f };
   }
   const meta = st.svgId ? svgMeta.get(st.svgId) : undefined;
