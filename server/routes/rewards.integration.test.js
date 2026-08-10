@@ -104,7 +104,24 @@ test("a par round earns nothing; an under-par full card and a hole-in-one earn g
       ["HIO", "hole_in_one", null],
     ]
   );
-  assert.ok(grants.every((g) => /^[A-Z2-9]{6}$/.test(g.code)), "codes are 6-char unambiguous");
+  // The player-facing GET must NOT leak a redemption code — tickets on the
+  // loyalty card are the only player-facing payout.
+  assert.ok(
+    grants.every((g) => !("code" in g)),
+    "GET /api/rewards never exposes a code to the player"
+  );
+  // But the grant still mints a staff-redemption code server-side (its identity
+  // in Master Control) — assert that invariant directly against the DB.
+  const codes = await testQuery(
+    `select g.code from reward_grant g
+       join round r on r.id = g.round_id
+      where r.client_id = $1`,
+    [body.clientId]
+  );
+  assert.ok(
+    codes.rows.length === 2 && codes.rows.every((g) => /^[A-Z2-9]{6}$/.test(g.code)),
+    "codes are minted 6-char unambiguous server-side"
+  );
 });
 
 test("an in-progress sync earns nothing; a re-sync never double-grants", async () => {
@@ -163,9 +180,16 @@ test("hunt master: verified finds covering the course's full list earn the grant
 test("admin lookup by code + redeem/unredeem round-trip with audit", async () => {
   const body = round({ scores: { 0: Array(18).fill(1) } }); // ace + under par
   await postRound(body);
-  const grants = await (await fetch(`${baseUrl}/api/rewards?clientId=${body.clientId}`)).json();
-  assert.equal(grants.length, 2);
-  const code = grants[0].code;
+  // The staff-redemption code lives server-side only (the player GET never
+  // returns it); read it from the DB to drive the Master Control lookup.
+  const grants = await testQuery(
+    `select g.code from reward_grant g
+       join round r on r.id = g.round_id
+      where r.client_id = $1 order by g.player_index`,
+    [body.clientId]
+  );
+  assert.equal(grants.rows.length, 2);
+  const code = grants.rows[0].code;
 
   // Lookup is case-insensitive and includes venue context.
   const found = await (await admin(`/api/admin/rewards?code=${code.toLowerCase()}`)).json();

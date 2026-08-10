@@ -228,6 +228,87 @@ test("a card claim can't be undone at the counter (its tickets are spent)", asyn
   assert.match((await res.json()).error, /undone/);
 });
 
+test("golf shares one daily cap: a claim clamps to the remaining budget, then holds", async () => {
+  const capLoc = await makeLocation(`cap-${Date.now()}`, {
+    ordering: null,
+    loyalty: {
+      vendor: "centeredge",
+      apiBase: "http://127.0.0.1:9",
+      gameRewards: true,
+      gameRewardCaps: { dailyPerCard: 120, perGame: {} },
+    },
+  });
+  const card = "PL-CAP-GOLF";
+
+  // 1) hole_in_one (100) pays in full — 20 of the 120 budget left.
+  const g1 = await makeGrant(capLoc, "hole_in_one");
+  const r1 = await claim({ clientId: g1.clientId, playerIndex: 0, achievement: "hole_in_one", playerId: card });
+  assert.equal((await r1.json()).ticketsAwarded, 100);
+
+  // 2) under_par (50) with only 20 left — clamped to 20 and the grant is
+  //    consumed at that value (partial, like the mini-games clamp).
+  const g2 = await makeGrant(capLoc, "under_par");
+  const r2 = await claim({ clientId: g2.clientId, playerIndex: 0, achievement: "under_par", playerId: card });
+  assert.equal((await r2.json()).ticketsAwarded, 20);
+  const gg2 = await testQuery(
+    `select tickets_awarded t, redeemed_via v from reward_grant g
+       join round r on r.id = g.round_id where r.client_id = $1`,
+    [g2.clientId]
+  );
+  assert.equal(gg2.rows[0].t, 20);
+  assert.equal(gg2.rows[0].v, "card");
+
+  // 3) budget exhausted — daily-cap, nothing credited, and the grant is NOT
+  //    consumed so the achievement stays claimable another day.
+  const g3 = await makeGrant(capLoc, "under_par");
+  const r3 = await claim({ clientId: g3.clientId, playerIndex: 0, achievement: "under_par", playerId: card });
+  const b3 = await r3.json();
+  assert.equal(b3.status, "daily-cap");
+  assert.equal(b3.ticketsAwarded, 0);
+  assert.equal(b3.dailyCap, 120);
+  const gg3 = await testQuery(
+    `select redeemed_at ra from reward_grant g
+       join round r on r.id = g.round_id where r.client_id = $1`,
+    [g3.clientId]
+  );
+  assert.equal(gg3.rows[0].ra, null);
+});
+
+test("golf and games draw down the SAME per-card daily budget", async () => {
+  const capLoc = await makeLocation(`cap2-${Date.now()}`, {
+    ordering: null,
+    loyalty: {
+      vendor: "centeredge",
+      apiBase: "http://127.0.0.1:9",
+      gameRewards: true,
+      gameRewardCaps: { dailyPerCard: 120, perGame: {} },
+    },
+  });
+  const card = "PL-CAP-SHARED";
+
+  // Golf spends 100 of the 120 budget first.
+  const g = await makeGrant(capLoc, "hole_in_one");
+  const rg = await claim({ clientId: g.clientId, playerIndex: 0, achievement: "hole_in_one", playerId: card });
+  assert.equal((await rg.json()).ticketsAwarded, 100);
+
+  // A mini-game award on the same card now sees only 20 left — the game
+  // endpoint counts the golf claim through the shared pool.
+  const gameRes = await fetch(`${baseUrl}/api/game-rewards/award`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      locationId: capLoc,
+      playerId: card,
+      game: "skeeball",
+      tickets: 100,
+      sessionId: `cross-${Date.now()}`,
+    }),
+  });
+  const gb = await gameRes.json();
+  assert.equal(gb.ok, true);
+  assert.equal(gb.ticketsAwarded, 20);
+});
+
 test("a held (vendor-failed) claim retries against the RESERVED card", async () => {
   const { clientId } = await makeGrant(locationId, "hole_in_one");
   stub.failNext = true; // first vendor credit fails → claim held, not settled

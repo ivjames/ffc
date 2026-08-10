@@ -1,18 +1,28 @@
+import { useSyncExternalStore } from 'react';
 import type { CourseSeed, LocationSeed } from '../types';
 import {
   GENERATED_LOCATIONS,
   GENERATED_COURSES,
   type GeneratedCourse,
+  type GeneratedLocation,
 } from './content.generated';
 
 // §4 White-label content. The DB (managed in Master Control) is the source of
 // truth for the DATA of locations and courses — names, slugs, coords, tz,
-// geofence, pars, themes, sort order. That data lives in `content.generated.ts`,
-// regenerated at build time from the API and committed (see
-// master-control-plan.md §5). This module merges the FRONTEND-ONLY styling that
-// isn't in the DB — per-location/per-course accent colors and the themed Rules
-// copy — on top of the generated data, and re-exports the same `LOCATIONS` /
-// `COURSES` / helper API the rest of the app already consumes.
+// geofence, pars, themes, sort order, AND per-venue POS config. That data lives
+// in `content.generated.ts`, regenerated at build time from the API. This
+// module merges the FRONTEND-ONLY styling that isn't in the DB — per-location/
+// per-course accent colors and the themed Rules copy — on top of it, and
+// re-exports the same `LOCATIONS` / `COURSES` / helper API the rest of the app
+// already consumes.
+//
+// LIVE HYDRATION: the generated file is only the build-time snapshot + offline
+// fallback. On load we re-fetch GET /api/content and swap in the live catalog,
+// so an operator's Master Control change (e.g. enabling a POS capability) reaches
+// players on the next app open — no redeploy. The last good fetch is cached for
+// instant/offline starts. Read POS/venue state through the accessors below (not
+// a captured snapshot) and subscribe with `useContentRevision()` to re-render on
+// update.
 
 // Stable site ids (mirror content.generated.ts / the Postgres seed).
 const LOC_UPLAND = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -105,31 +115,125 @@ function courseAccent(c: GeneratedCourse): string {
 }
 
 // Merge generated (DB) data + frontend styling into the app's LocationSeed/
-// CourseSeed shapes. The rest of the app imports these exactly as before.
-export const LOCATIONS: LocationSeed[] = GENERATED_LOCATIONS.map((l) => ({
-  id: l.id,
-  name: l.name,
-  slug: l.slug,
-  accent: LOCATION_ACCENTS[l.id] ?? DEFAULT_ACCENT,
-  lat: l.lat ?? 0,
-  lng: l.lng ?? 0,
-  geofenceKm: l.geofenceKm ?? undefined,
-  sortOrder: l.sortOrder,
-  menuUrl: l.menuUrl ?? undefined,
-  orderingUrl: l.orderingUrl ?? undefined,
-  pos: l.pos ?? undefined,
-}));
+// CourseSeed shapes. Pure so they can re-run against live content too.
+function buildLocations(raw: GeneratedLocation[]): LocationSeed[] {
+  return raw.map((l) => ({
+    id: l.id,
+    name: l.name,
+    slug: l.slug,
+    accent: LOCATION_ACCENTS[l.id] ?? DEFAULT_ACCENT,
+    lat: l.lat ?? 0,
+    lng: l.lng ?? 0,
+    geofenceKm: l.geofenceKm ?? undefined,
+    sortOrder: l.sortOrder,
+    menuUrl: l.menuUrl ?? undefined,
+    orderingUrl: l.orderingUrl ?? undefined,
+    pos: l.pos ?? undefined,
+  }));
+}
 
-export const COURSES: CourseSeed[] = GENERATED_COURSES.map((c) => ({
-  id: c.id,
-  locationId: c.locationId ?? '',
-  name: c.name,
-  theme: c.theme,
-  holeCount: 18,
-  pars: c.pars,
-  accent: courseAccent(c),
-  rules: THEME_RULES[c.theme],
-}));
+function buildCourses(raw: GeneratedCourse[]): CourseSeed[] {
+  return raw.map((c) => ({
+    id: c.id,
+    locationId: c.locationId ?? '',
+    name: c.name,
+    theme: c.theme,
+    holeCount: 18,
+    pars: c.pars,
+    accent: courseAccent(c),
+    rules: THEME_RULES[c.theme],
+  }));
+}
+
+// ---- live-hydrated content store -------------------------------------------
+
+const CONTENT_CACHE_KEY = 'ffc.content';
+type RawContent = { locations: GeneratedLocation[]; courses: GeneratedCourse[] };
+
+/** Shape-guard a parsed /api/content (or cache) before trusting it. Requires at
+ *  least one location: `getCurrentLocationId()` falls back to `LOCATIONS[0].id`,
+ *  so an empty catalog (fresh DB, or every venue archived) would crash every
+ *  catalog consumer — and caching it would poison later offline reloads too. The
+ *  build-time exporter rejects zero locations for the same reason; match it. */
+export function isValidContent(c: unknown): c is RawContent {
+  const v = c as RawContent | null;
+  return (
+    !!v &&
+    Array.isArray(v.locations) &&
+    v.locations.length > 0 &&
+    Array.isArray(v.courses) &&
+    v.locations.every((l) => l && typeof l.id === 'string' && typeof l.name === 'string') &&
+    v.courses.every((cs) => cs && typeof cs.id === 'string' && Array.isArray(cs.pars))
+  );
+}
+
+function readCache(): RawContent | null {
+  try {
+    const raw = localStorage.getItem(CONTENT_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    return isValidContent(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Start from the freshest available: a cached live fetch, else the baked
+// snapshot. `let` (not `const`) so hydration can swap in live data and importers
+// of LOCATIONS/COURSES that read at call-time see it (ES live bindings).
+const cached = readCache();
+export let LOCATIONS: LocationSeed[] = buildLocations(cached?.locations ?? GENERATED_LOCATIONS);
+export let COURSES: CourseSeed[] = buildCourses(cached?.courses ?? GENERATED_COURSES);
+
+let revision = 0;
+const listeners = new Set<() => void>();
+
+function applyContent(raw: RawContent): void {
+  LOCATIONS = buildLocations(raw.locations);
+  COURSES = buildCourses(raw.courses);
+  revision += 1;
+  listeners.forEach((cb) => cb());
+}
+
+/** Re-fetch the live catalog (venues, courses, POS config) and swap it in, so a
+ *  Master Control change reaches players without a redeploy. Best-effort: on any
+ *  failure the current (cached or baked) content stands. Call once at app boot. */
+export async function hydrateContent(): Promise<void> {
+  try {
+    const base = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');
+    const res = await fetch(`${base}/api/content`, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return;
+    const data = (await res.json()) as unknown;
+    if (!isValidContent(data)) return;
+    try {
+      localStorage.setItem(
+        CONTENT_CACHE_KEY,
+        JSON.stringify({ locations: data.locations, courses: data.courses }),
+      );
+    } catch {
+      // Non-fatal: we just won't have an instant/offline copy next launch.
+    }
+    applyContent(data);
+  } catch {
+    // Offline or server down — keep the current content.
+  }
+}
+
+function subscribe(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+function getRevision(): number {
+  return revision;
+}
+
+/** Subscribe a component to live-content updates — re-renders when the catalog
+ *  (including POS config) is hydrated. The returned number is opaque. */
+export function useContentRevision(): number {
+  return useSyncExternalStore(subscribe, getRevision, getRevision);
+}
 
 export function courseById(id: string): CourseSeed | undefined {
   return COURSES.find((c) => c.id === id);

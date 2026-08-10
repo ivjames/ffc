@@ -1,15 +1,23 @@
 // GET /api/rewards?clientId= — the rewards earned by a round, for the final
-// scorecard's "show this at the counter" screen (punchlist #8 tier 1).
+// scorecard (punchlist #8 tier 1).
 //
 // Keyed by the round's client-generated UUID (the same unguessable id the
 // sync path dedupes on), so only the device that played the round — or someone
-// it shared the link with — can pull its codes. No auth beyond that: the
-// stakes are arcade tickets, and staff mark codes redeemed in Master Control,
-// so a code only ever pays out once.
+// it shared the link with — can pull its rewards. No auth beyond that: the
+// stakes are arcade tickets.
+//
+// The grant's `code` is DELIBERATELY not returned: tickets on the loyalty card
+// are the only player-facing payout, and the player app must never surface a
+// redemption code. The code stays server-side as the grant's staff-redemption
+// identity in Master Control.
 import { Router } from "express";
 import { pool } from "../db.js";
 import { achievementTickets } from "../lib/rewards.js";
+import { effectiveCaps } from "../lib/gameRewards.js";
+import { dailySpentTickets } from "../lib/dailyTickets.js";
 import { rewardTickets } from "../lib/posLoyalty.js";
+
+const VENUE_TZ = process.env.VENUE_TZ || "America/Los_Angeles";
 
 export const router = Router();
 
@@ -20,7 +28,7 @@ router.get("/", async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `select g.code, g.player_index as "playerIndex", g.player_tag as "playerTag",
+      `select g.player_index as "playerIndex", g.player_tag as "playerTag",
               g.achievement, g.redeemed_at as "redeemedAt", g.created_at as "createdAt"
          from reward_grant g
          join round r on r.id = g.round_id
@@ -67,7 +75,7 @@ router.post("/claim", async (req, res) => {
     // Lock this grant so concurrent claims serialize on the same row.
     const gres = await client.query(
       `select g.id, g.redeemed_at, g.redeemed_via, g.tickets_awarded, g.pos_transaction_id,
-              g.card_player_id, l.pos as pos
+              g.card_player_id, l.pos as pos, l.id as location_id, l.tz as tz
          from reward_grant g
          join round r on r.id = g.round_id
          join course c on c.id = r.course_id
@@ -108,14 +116,43 @@ router.post("/claim", async (req, res) => {
       // two) — keep the claim and retry the credit below under the same key.
       await client.query("commit");
     } else {
+      // First claim. Golf shares the SAME per-card daily cap as the mini-games
+      // (one pool — lib/dailyTickets.js): serialize same-card awards on the
+      // per-(venue, card) advisory lock, sum today's spend across both ledgers,
+      // and clamp this achievement's payout to what's left of the budget.
+      if (!grant.location_id) {
+        await client.query("rollback");
+        return res.status(409).json({ ok: false, error: "grant has no venue" });
+      }
+      const dailyCap = effectiveCaps(grant.pos, achievement).dailyPerCard;
+      const tz = grant.tz || VENUE_TZ;
+      await client.query("select pg_advisory_xact_lock(hashtext($1), hashtext($2))", [
+        grant.location_id,
+        playerId,
+      ]);
+      const spent = await dailySpentTickets(client, {
+        locationId: grant.location_id,
+        cardId: playerId,
+        tz,
+      });
+      const award = Math.min(tickets, Math.max(0, dailyCap - spent));
+      if (award <= 0) {
+        // Card is already at its daily cap. Do NOT consume the grant — the
+        // achievement stays claimable another day; nothing is credited now.
+        await client.query("rollback");
+        return res.json({ ok: true, status: "daily-cap", ticketsAwarded: 0, dailyCap });
+      }
       await client.query(
         `update reward_grant
             set redeemed_at = now(), redeemed_via = 'card',
                 tickets_awarded = $2, card_player_id = $3
           where id = $1`,
-        [grant.id, tickets, playerId]
+        [grant.id, award, playerId]
       );
       await client.query("commit");
+      // Reflect the reserved (clamped) amount in the row we credit from below.
+      grant.tickets_awarded = award;
+      grant.card_player_id = grant.card_player_id || playerId;
     }
 
     const payTickets = grant.tickets_awarded ?? tickets;

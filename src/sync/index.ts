@@ -152,7 +152,6 @@ export function courseBoardsStreamUrl(opts: CourseBoardOpts): string {
 /** Rewards earned by a round (punchlist #8 tier 1), fetched by the round's
  *  unguessable clientId once it has synced. */
 export type RewardRow = {
-  code: string;
   playerIndex: number;
   playerTag: string;
   achievement: string;
