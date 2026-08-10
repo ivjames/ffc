@@ -257,10 +257,12 @@ const WM_MARGIN = 0.04;
 
 // Drop shadow behind the watermark, so the brand stays legible over any photo.
 // Blur + vertical offset are fractions of the photo width, so export and the
-// CSS-scaled preview both track the rendered size.
-const WM_SHADOW_COLOR = 'rgba(0,0,0,0.5)';
-const WM_SHADOW_BLUR = 0.012;
-const WM_SHADOW_OFFSET = 0.004;
+// CSS-scaled preview both track the rendered size. Drawn as two stacked passes
+// so the shadow reads strongly even over a bright, busy background.
+const WM_SHADOW_COLOR = 'rgba(0,0,0,0.85)';
+const WM_SHADOW_BLUR = 0.022;
+const WM_SHADOW_OFFSET = 0.006;
+const WM_SHADOW_PASSES = 2;
 
 // Thrown by the export when a FORCED watermark can't be composited (its image
 // failed to load) — so a photo never goes out missing the venue's branding.
@@ -372,7 +374,11 @@ async function flattenToJpeg(
     ctx.shadowColor = WM_SHADOW_COLOR;
     ctx.shadowBlur = WM_SHADOW_BLUR * w;
     ctx.shadowOffsetY = WM_SHADOW_OFFSET * w;
-    ctx.drawImage(img, x + (slot - dw) / 2, y + (slot - dh) / 2, dw, dh);
+    // Redraw in place; each pass lays down the same alpha-shaped shadow, so the
+    // shadow accumulates (deeper) while the mark itself stays crisp on top.
+    const dx = x + (slot - dw) / 2;
+    const dy = y + (slot - dh) / 2;
+    for (let p = 0; p < WM_SHADOW_PASSES; p++) ctx.drawImage(img, dx, dy, dw, dh);
     ctx.restore();
   }
 
@@ -906,7 +912,12 @@ export default function PhotoBooth() {
                   [wm.corner[0] === 't' ? 'top' : 'bottom']: `${WM_MARGIN * boxW}px`,
                   [wm.corner[1] === 'l' ? 'left' : 'right']: `${WM_MARGIN * boxW}px`,
                   // Mirror the export's baked drop shadow so preview == save.
-                  filter: `drop-shadow(0 ${WM_SHADOW_OFFSET * boxW}px ${WM_SHADOW_BLUR * boxW}px ${WM_SHADOW_COLOR})`,
+                  // Two stacked filters == the export's two shadow passes.
+                  filter: Array(WM_SHADOW_PASSES)
+                    .fill(
+                      `drop-shadow(0 ${WM_SHADOW_OFFSET * boxW}px ${WM_SHADOW_BLUR * boxW}px ${WM_SHADOW_COLOR})`,
+                    )
+                    .join(' '),
                 }}
               />
             ))}
