@@ -81,17 +81,15 @@ const EXPORT_MAX_DIM = 1280;
 // centering on the visual box guarantees no clip and a true center for any
 // emoji. `ratio` is the em (reference font size) as a fraction of the square,
 // so the caller sizes the rendered sticker to the prior em-based scale (see
-// stickerBitmap's return). `w`/`h` are the bitmap's pixel dimensions, `inkW`/
-// `inkH` the tight glyph ink inside it — both sized to the glyph's ACTUAL shape
-// so the rendered sticker, its selection ring, and its tap area hug the glyph
-// instead of a big square that dwarfs a wide/short emoji like 🕶️.
+// stickerBitmap's return). `w`/`h` are the bitmap's pixel dimensions, cropped to
+// the glyph's ACTUAL ink (+ a small margin), so the rendered sticker, its
+// selection ring, and its tap area hug the glyph instead of a big square that
+// dwarfs a wide/short emoji like 🕶️.
 type StickerBitmap = {
   canvas: HTMLCanvasElement;
   url: string;
   w: number;
   h: number;
-  inkW: number;
-  inkH: number;
 };
 
 // Transparent halo around the glyph — room for anti-aliasing, without bloating
@@ -165,14 +163,7 @@ function emojiBitmap(emoji: string): StickerBitmap {
   // Copy just the ink region out of the scratch canvas, centered with margin.
   if (ctx && wctx) ctx.drawImage(wc, box.x, box.y, box.w, box.h, margin, margin, box.w, box.h);
 
-  const bitmap: StickerBitmap = {
-    canvas,
-    url: canvas.toDataURL(),
-    w: bw,
-    h: bh,
-    inkW: box.w,
-    inkH: box.h,
-  };
+  const bitmap: StickerBitmap = { canvas, url: canvas.toDataURL(), w: bw, h: bh };
   emojiCache.set(emoji, bitmap);
   return bitmap;
 }
@@ -212,10 +203,12 @@ function loadSvgImage(svgId: string): Promise<HTMLImageElement | null> {
   return p;
 }
 
-// The rendered sticker's width/height in px, sized to its ACTUAL aspect so the
-// element (and its ring/tap area) hugs the art. The glyph's larger INK
-// dimension lands at STICKER_BASE*imageWidth*scale; the box (ink + margin)
-// scales with it. SVG is sized the same way from its intrinsic larger side.
+// The rendered sticker's width/height in px, sized so the box (and its ring/tap
+// area) hugs the art. Emoji are anchored to the em (EMOJI_REF) exactly as
+// before this change: the visible glyph resolves to inkW*target/REF either way,
+// so a stored `scale` means the same thing and pre-existing drafts don't
+// resize — the only thing that changed is a tighter, aspect-correct box. SVG is
+// sized from its intrinsic larger side.
 function displaySize(
   st: Sticker,
   imageWidth: number,
@@ -225,7 +218,7 @@ function displaySize(
   const target = STICKER_BASE * imageWidth * scale;
   if (st.emoji) {
     const b = emojiBitmap(st.emoji);
-    const f = target / Math.max(b.inkW, b.inkH); // ink's larger side -> target
+    const f = target / EMOJI_REF; // em -> target (unchanged scale semantics)
     return { dw: b.w * f, dh: b.h * f };
   }
   const meta = st.svgId ? svgMeta.get(st.svgId) : undefined;
