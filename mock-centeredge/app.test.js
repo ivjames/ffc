@@ -1,5 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createApp, STATIC_TOKEN } from './app.js';
 import {
   AUTO_PICKUP_MS,
@@ -368,4 +371,49 @@ test('_reset restores seed balances', async () => {
   await post('/_reset', {});
   const player = (await (await fetch(`${base}/players/PL-1001`, { headers: AUTH })).json()).player;
   assert.equal(player.balances.tickets, 4380);
+});
+
+test('a stateFile persists balances + idempotency across a restart', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ce-mock-'));
+  const stateFile = join(dir, 'state.json');
+  const reward = { tickets: 250, source: 'minigame:skee-ball', idempotencyKey: 'persist-key-1' };
+
+  // First "process": award tickets, then shut down.
+  const app1 = createApp({ stateFile }).listen(0);
+  await new Promise((r) => app1.on('listening', r));
+  const base1 = `http://127.0.0.1:${app1.address().port}/api/v1`;
+  const first = await (
+    await fetch(`${base1}/players/PL-1003/tickets/reward`, {
+      method: 'POST',
+      headers: JSON_AUTH,
+      body: JSON.stringify(reward),
+    })
+  ).json();
+  assert.equal(first.newTicketBalance, 250); // seed 0 + 250
+  await new Promise((r) => app1.close(r));
+
+  // Second "process" over the same file: the balance survived the restart, and
+  // the same idempotencyKey replays instead of double-crediting.
+  const app2 = createApp({ stateFile }).listen(0);
+  await new Promise((r) => app2.on('listening', r));
+  const base2 = `http://127.0.0.1:${app2.address().port}/api/v1`;
+  try {
+    const restored = (
+      await (await fetch(`${base2}/players/PL-1003`, { headers: AUTH })).json()
+    ).player;
+    assert.equal(restored.balances.tickets, 250);
+
+    const replay = await (
+      await fetch(`${base2}/players/PL-1003/tickets/reward`, {
+        method: 'POST',
+        headers: JSON_AUTH,
+        body: JSON.stringify(reward),
+      })
+    ).json();
+    assert.equal(replay.duplicate, true);
+    assert.equal(replay.newTicketBalance, 250); // not 500 — no double credit
+  } finally {
+    await new Promise((r) => app2.close(r));
+    await rm(dir, { recursive: true, force: true });
+  }
 });

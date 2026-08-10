@@ -510,8 +510,13 @@ function RewardsCard({
 
       <div className="space-y-2">
         {shown.map((r) => {
-          const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
           const key = `${r.playerIndex}:${r.achievement}`;
+          // Card already at its daily cap → nothing was banked and there's
+          // nothing to nag about. Drop the row entirely rather than leave a
+          // reward line with a blank value (same as the mini-game banner
+          // vanishing on a cap).
+          if (credited[key]?.status === 'daily-cap') return null;
+          const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
           return (
             <div
               key={key}
