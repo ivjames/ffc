@@ -414,6 +414,23 @@ alter table app_user drop column if exists phone;
 alter table round add column if not exists app_user_id uuid references app_user(id) on delete set null;
 create index if not exists round_app_user_idx on round (app_user_id);
 
+-- Synthetic (bot-generated) rounds. Additive and default-false so every real
+-- round keeps its exact meaning. A synthetic round is written by the load/soak
+-- + demo-seed bot (scripts/course-bot.mjs) through the SAME /api/rounds path a
+-- real device uses, so it exercises the real insert, reward, and leaderboard
+-- code. Isolation is by identification, not by a separate path: the flag (plus
+-- the bot's `synthetic:<...>` client_id namespace) makes every bot round
+-- trivially findable and bulk-deletable — `delete from round where synthetic`
+-- cascades to its scores and any minted reward_grant rows (both ON DELETE
+-- CASCADE), so a test run leaves zero residue once torn down. Whether synthetic
+-- rounds ALSO count on leaderboards / mint reward tickets is a runtime choice
+-- (lib/syntheticConfig.js), defaulting to yes so testing hits the full path.
+alter table round add column if not exists synthetic boolean not null default false;
+-- Partial index: cleanup + board-exclusion both filter on `synthetic = true`,
+-- a tiny fraction of rows, so a partial index stays cheap and unused by the
+-- default (synthetic-included) board queries.
+create index if not exists round_synthetic_idx on round (synthetic) where synthetic;
+
 -- Server-side player sessions (lib/userAuth.js) — the admin_session pattern:
 -- `id` is an opaque high-entropy token (the ffc_session cookie's value, looked
 -- up, never decoded). 30-day sliding TTL, refreshed on use.

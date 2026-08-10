@@ -21,6 +21,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
+import { boardSyntheticFilter } from "../lib/syntheticConfig.js";
 
 export const router = Router();
 
@@ -80,6 +81,11 @@ router.get("/", async (req, res) => {
     locationFilter = `and c.location_id = $${params.length}`;
   }
 
+  // Synthetic (bot) rounds count on the board by default; excluded only when
+  // SYNTHETIC_COUNT_ON_BOARD=false. Fragment is "" or `and not r.synthetic` —
+  // a caller-chosen literal, no user input, no bound param claimed.
+  const syntheticFilter = boardSyntheticFilter("r", process.env);
+
   // Query walkthrough:
   //  1. round_totals: one row per (round, player) with that player's total strokes.
   //     A player's tag lives positionally in round.player_tags, so we unnest the
@@ -109,6 +115,7 @@ router.get("/", async (req, res) => {
         and r.group_tag is not null
         ${timeFilter}
         ${locationFilter}
+        ${syntheticFilter}
       group by r.id, r.group_tag, r.course_id, c.name, r.completed_at
     ),
     best_per_team_course as (
@@ -145,6 +152,7 @@ router.get("/", async (req, res) => {
       where r.completed_at is not null
         ${timeFilter}
         ${locationFilter}
+        ${syntheticFilter}
       group by pt.tag, r.course_id, c.name, r.completed_at, r.id
     ),
     best_per_tag_course as (
@@ -218,7 +226,8 @@ async function computeCourseBoards({ period, by, locationId, limit, unit }) {
       where r.completed_at is not null
         and ($2::text is null
              or r.completed_at >= timezone(${zone}, date_trunc($2, timezone(${zone}, now()))))
-        and ($3::uuid is null or c.location_id = $3)`;
+        and ($3::uuid is null or c.location_id = $3)
+        ${boardSyntheticFilter("r", process.env)}`;
 
   const playerRowsSql = `
     with round_totals as (

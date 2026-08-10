@@ -73,6 +73,10 @@ Request:
   an array of length 18 of `number|null`. Only non-null holes are stored; strokes
   must be integers >= 1.
 - `completedAt` may be `null`; `createdAt`/`completedAt` are ms-epoch numbers.
+- `synthetic` (optional, **privileged**): `true` marks the round as bot-generated
+  (see "Synthetic rounds & the load bot" below). Requires the `x-synthetic-key`
+  header to match `SYNTHETIC_BOT_KEY`; otherwise the request is `403`. Any other
+  client's `synthetic: true` is rejected, so a bypassed device can't self-flag.
 - **Rewards**: when a *completed* round first syncs, achievement grants
   (hole-in-one; under par on a full card; hunt master when the player's verified
   finds cover the course's active non-countable hunt list) are written to
@@ -88,6 +92,39 @@ Responses:
 - `400 { "ok": false, "error": "<reason>" }` — validation failure.
 - `429 { "ok": false, "error": "rate limit exceeded" }` — per-IP write cap
   (30/min per IP by default).
+
+#### Synthetic rounds & the load bot
+`scripts/course-bot.mjs` drives synthetic player traffic — a load/soak test, an
+end-to-end smoke test, and a demo-data seeder in one. It discovers live courses
+(`GET /api/leaderboard/courses`), then plays each a few times per sweep on a
+repeating interval by POSTing rounds with `synthetic: true` and the
+`x-synthetic-key` header. Each round takes the **real** production path (insert
+→ rewards → leaderboards), so it exercises exactly what real play does.
+
+Isolation is by **identification, not a separate path** (`lib/syntheticConfig.js`):
+- The `synthetic` flag is a privileged, operator-only field — no `SYNTHETIC_BOT_KEY`
+  set (server) → the feature is off and every `synthetic: true` is `403`.
+- Every synthetic round is stamped `round.synthetic = true` and carries a
+  reserved `synthetic:<runId>:<uuid>` client_id, so a run is bulk-deletable with
+  zero residue: `delete from round where synthetic;` (or, per run,
+  `... where client_id like 'synthetic:<runId>:%'`) — both cascade to `score`
+  and `reward_grant`.
+
+Two runtime policy flags (both **default on**, so testing hits the full path):
+- `SYNTHETIC_MINT_REWARDS=false` → synthetic rounds mint no reward grants.
+- `SYNTHETIC_COUNT_ON_BOARD=false` → synthetic rounds are excluded from every
+  leaderboard and admin rollup (they're still written and still deletable).
+
+Real rounds are never affected by either flag. The bot prints a pre-flight
+projection (rounds & players per hour/day/year for the chosen cadence) plus
+per-sweep and cumulative stats (OK/failed, latency p50/p95/max, throughput,
+bytes) — no third-party model calls are made, so there's no per-token cost, only
+API/DB load. Example:
+```
+node scripts/course-bot.mjs --api https://ffc.example.com \
+  --key "$SYNTHETIC_BOT_KEY" --plays-per-course 2 --interval-min 60
+# 2 plays × 4 courses, hourly ≈ 8 rounds/hr ≈ 192/day ≈ 70,080 rounds/year
+```
 
 ### `GET /api/leaderboard?period=day|week|month|all&by=player|team`
 Arcade high-score board. For each player **tag**, computes total strokes per
