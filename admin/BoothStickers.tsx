@@ -25,8 +25,23 @@ const CORNER_LABEL: Record<AdminStickerCorner, string> = {
 // the public serve endpoint — never inlined — so a preview can't execute
 // anything even if something slipped through.
 
-// Client-side guard mirroring the server cap, for a friendlier early error.
+// Client-side guards mirroring the server caps, for a friendlier early error.
 const MAX_SVG_BYTES = 512 * 1024;
+const MAX_PNG_BYTES = 4 * 1024 * 1024;
+
+/** Read a file's bytes as base64 (data: prefix stripped) — for PNG uploads. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error('Could not read the file'));
+    r.onload = () => {
+      const s = String(r.result);
+      const c = s.indexOf(',');
+      resolve(c >= 0 ? s.slice(c + 1) : s);
+    };
+    r.readAsDataURL(file);
+  });
+}
 
 function StickerCard({ sticker, onRemoved }: { sticker: AdminVenueSticker; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -138,25 +153,44 @@ export default function BoothStickers() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !locationId) return;
-    if (file.size > MAX_SVG_BYTES) {
+
+    const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+    const isPng = file.type === 'image/png' || /\.png$/i.test(file.name);
+    if (!isSvg && !isPng) {
+      setError('Please choose an SVG or PNG file.');
+      return;
+    }
+    if (isPng && file.size > MAX_PNG_BYTES) {
+      setError('That PNG is too large (max 4 MB).');
+      return;
+    }
+    if (isSvg && file.size > MAX_SVG_BYTES) {
       setError('That SVG is too large (max 512 KB).');
       return;
     }
+
     setUploading(true);
     setError(null);
     try {
-      const svg = await file.text();
-      await api.uploadBoothSticker({
+      const common = {
         locationId,
         label: label.trim() || undefined,
-        svg,
         kind,
         corner: kind === 'watermark' ? corner : undefined,
-      });
+      };
+      if (isPng) {
+        await api.uploadBoothSticker({
+          ...common,
+          imageBase64: await fileToBase64(file),
+          mediaType: 'image/png',
+        });
+      } else {
+        await api.uploadBoothSticker({ ...common, svg: await file.text() });
+      }
       setLabel('');
       reloadStickers();
     } catch (err) {
-      // Server rejection (dangerous/malformed SVG) surfaces here verbatim.
+      // Server rejection (dangerous/malformed SVG, non-PNG, too large) shows here.
       setError((err as Error).message);
     } finally {
       setUploading(false);
@@ -167,11 +201,12 @@ export default function BoothStickers() {
     <div className="space-y-4">
       <h1 className="text-lg font-semibold">Booth stickers</h1>
       <p className="text-sm text-slate-500">
-        Upload SVG art for a venue. <strong>Stickers</strong> are draggable decorations;{' '}
-        <strong>frames</strong> overlay the whole photo (proscenium/border); a{' '}
-        <strong>watermark</strong> is branding forced into a corner of every photo. SVGs are
-        validated on upload (scripts, event handlers, external references, and entity/XXE payloads
-        are rejected) and always served and rendered as inert images.
+        Upload <strong>SVG</strong> or transparent <strong>PNG</strong> art for a venue.{' '}
+        <strong>Stickers</strong> are draggable decorations; <strong>frames</strong> overlay the
+        whole photo (proscenium/border); a <strong>watermark</strong> is branding forced into a
+        corner of every photo. Use a transparent background (SVG or PNG — not JPEG) so the photo
+        shows through. SVGs are validated on upload (scripts, event handlers, external references,
+        and entity/XXE payloads are rejected); everything is served and rendered as inert images.
       </p>
 
       {error && <Banner kind="error">{error}</Banner>}
@@ -233,12 +268,12 @@ export default function BoothStickers() {
           <input
             ref={fileRef}
             type="file"
-            accept=".svg,image/svg+xml"
+            accept=".svg,image/svg+xml,.png,image/png"
             className="hidden"
             onChange={(e) => void onFile(e)}
           />
           <Button disabled={uploading || !locationId} onClick={() => fileRef.current?.click()}>
-            {uploading ? 'Uploading…' : 'Upload SVG'}
+            {uploading ? 'Uploading…' : 'Upload SVG / PNG'}
           </Button>
         </div>
       </Card>

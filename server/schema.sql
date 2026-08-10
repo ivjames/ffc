@@ -770,7 +770,8 @@ create index if not exists game_ticket_award_created_idx
 create table if not exists booth_sticker (
   id          uuid primary key default gen_random_uuid(),
   location_id uuid not null references location(id) on delete cascade,
-  svg_path    text not null,            -- sanitized SVG file on the droplet disk
+  svg_path    text not null,            -- asset file on the droplet disk (svg or png)
+  media_type  text not null default 'image/svg+xml', -- image/svg+xml | image/png
   label       text,                     -- optional admin label / alt text
   width       int  not null default 100, -- intrinsic px box (aspect ratio source)
   height      int  not null default 100,
@@ -788,6 +789,7 @@ create table if not exists booth_sticker (
 -- For databases created before kinds existed: add them idempotently.
 alter table booth_sticker add column if not exists kind   text not null default 'sticker';
 alter table booth_sticker add column if not exists corner text not null default 'tr';
+alter table booth_sticker add column if not exists media_type text not null default 'image/svg+xml';
 create index if not exists booth_sticker_location_idx
   on booth_sticker (location_id, sort_order) where active;
 

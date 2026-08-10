@@ -186,6 +186,7 @@ export type AdminVenueSticker = {
   height: number;
   kind: AdminStickerKind;
   corner: AdminStickerCorner;
+  mediaType: string; // image/svg+xml | image/png
   sortOrder: number;
   active: boolean;
   createdAt: string;
@@ -398,12 +399,15 @@ export const api = {
   // are public branded assets, so no auth header is needed for the thumbnail.
   listBoothStickers: (locationId: string) =>
     req<AdminVenueSticker[]>('GET', `/booth-stickers?location=${encodeURIComponent(locationId)}`),
+  // Upload an SVG (raw text via `svg`) or a PNG (`imageBase64` + mediaType).
   uploadBoothSticker: (body: {
     locationId: string;
     label?: string;
-    svg: string;
     kind?: AdminStickerKind;
     corner?: AdminStickerCorner;
+    svg?: string;
+    imageBase64?: string;
+    mediaType?: 'image/png';
   }) => req<AdminVenueSticker>('POST', '/booth-stickers', body),
   removeBoothSticker: (id: string) => req<{ ok: true }>('POST', `/booth-stickers/${id}/remove`),
 

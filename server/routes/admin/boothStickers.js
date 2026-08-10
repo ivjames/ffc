@@ -24,6 +24,7 @@ import { pool } from "../../db.js";
 import { audit, orgScope, actorLabel } from "../../lib/adminAuth.js";
 import { UUID_RE } from "../../lib/validateLocation.js";
 import { validateSvgSticker } from "../../lib/svgSanitize.js";
+import { validatePng } from "../../lib/pngInfo.js";
 
 export const router = Router();
 
@@ -43,6 +44,7 @@ router.get("/", async (req, res) => {
     const scope = orgScope(req);
     const result = await pool.query(
       `select s.id, s.label, s.width, s.height, s.kind, s.corner,
+              s.media_type as "mediaType",
               s.sort_order as "sortOrder", s.active, s.created_at as "createdAt"
          from booth_sticker s
          join location l on l.id = s.location_id
@@ -58,12 +60,12 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Resolve one sticker's file path within the caller's org scope.
+// Resolve one sticker's file path + media type within the caller's org scope.
 async function scopedStickerPath(req) {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return { status: 400 };
   const result = await pool.query(
-    `select s.svg_path as "svgPath", l.org_id as "orgId"
+    `select s.svg_path as "svgPath", s.media_type as "mediaType", l.org_id as "orgId"
        from booth_sticker s join location l on l.id = s.location_id
       where s.id = $1`,
     [id]
@@ -71,17 +73,18 @@ async function scopedStickerPath(req) {
   if (result.rowCount === 0) return { status: 404 };
   const scope = orgScope(req);
   if (scope && result.rows[0].orgId !== scope) return { status: 403 };
-  return { status: 200, svgPath: result.rows[0].svgPath };
+  return { status: 200, svgPath: result.rows[0].svgPath, mediaType: result.rows[0].mediaType };
 }
 
 // --- Preview ----------------------------------------------------------------
 router.get("/:id/image", async (req, res) => {
   try {
-    const { status, svgPath } = await scopedStickerPath(req);
+    const { status, svgPath, mediaType } = await scopedStickerPath(req);
     if (status !== 200) {
       return res.status(status).json({ ok: false, error: status === 403 ? "forbidden: not your org" : "not found" });
     }
-    res.set("Content-Type", "image/svg+xml");
+    res.set("Content-Type", mediaType || "application/octet-stream");
+    // Harmless for PNG; the load-bearing lockdown for SVG.
     res.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     res.set("X-Content-Type-Options", "nosniff");
     res.set("Cache-Control", "private, max-age=300");
@@ -95,9 +98,10 @@ router.get("/:id/image", async (req, res) => {
 });
 
 // --- Upload -----------------------------------------------------------------
-// SVG arrives as a raw string (it's text) — own parser since it can exceed the
-// 256kb global cap (app.js skips this path).
-router.post("/", express.json({ limit: "2mb" }), async (req, res) => {
+// An SVG arrives as a raw string (it's text); a PNG arrives as base64 with
+// mediaType 'image/png'. Own parser since either can exceed the 256kb global
+// cap (app.js skips this path).
+router.post("/", express.json({ limit: "6mb" }), async (req, res) => {
   const body = req.body ?? {};
   const { locationId, label, svg } = body;
   const kind = body.kind ?? "sticker";
@@ -112,17 +116,47 @@ router.post("/", express.json({ limit: "2mb" }), async (req, res) => {
   if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
     return res.status(400).json({ ok: false, error: "locationId (uuid) is required" });
   }
-  if (typeof svg !== "string" || svg.length === 0) {
-    return res.status(400).json({ ok: false, error: "svg is required" });
-  }
   if (label !== undefined && (typeof label !== "string" || label.length > 100)) {
     return res.status(400).json({ ok: false, error: "label must be <= 100 chars" });
   }
 
-  // Validate BEFORE anything else — reject a dangerous or malformed SVG.
-  const check = validateSvgSticker(Buffer.from(svg, "utf8"));
-  if (!check.ok) {
-    return res.status(400).json({ ok: false, error: `SVG rejected: ${check.reason}` });
+  // Resolve the asset: SVG text (validated + sanitized) or a PNG (validated by
+  // magic bytes + IHDR). `payload` is what we write; `ext`/`mediaType`/`width`/
+  // `height` come from the validator.
+  let payload, encoding, ext, mediaType, width, height;
+  if (typeof svg === "string" && svg.length > 0) {
+    const check = validateSvgSticker(Buffer.from(svg, "utf8"));
+    if (!check.ok) {
+      return res.status(400).json({ ok: false, error: `SVG rejected: ${check.reason}` });
+    }
+    payload = check.text;
+    encoding = "utf8";
+    ext = "svg";
+    mediaType = "image/svg+xml";
+    width = check.width;
+    height = check.height;
+  } else if (typeof body.imageBase64 === "string" && body.imageBase64.length > 0) {
+    if (body.mediaType !== "image/png") {
+      return res.status(400).json({ ok: false, error: "only PNG or SVG assets are supported" });
+    }
+    let bytes;
+    try {
+      bytes = Buffer.from(body.imageBase64, "base64");
+    } catch {
+      return res.status(400).json({ ok: false, error: "imageBase64 is not valid base64" });
+    }
+    const check = validatePng(bytes);
+    if (!check.ok) {
+      return res.status(400).json({ ok: false, error: `PNG rejected: ${check.reason}` });
+    }
+    payload = bytes;
+    encoding = null; // raw buffer
+    ext = "png";
+    mediaType = "image/png";
+    width = check.width;
+    height = check.height;
+  } else {
+    return res.status(400).json({ ok: false, error: "svg or imageBase64 is required" });
   }
 
   try {
@@ -140,22 +174,22 @@ router.post("/", express.json({ limit: "2mb" }), async (req, res) => {
     }
 
     await mkdir(STICKER_DIR, { recursive: true });
-    const svgPath = join(STICKER_DIR, `${randomUUID()}.svg`);
-    await writeFile(svgPath, check.text, "utf8");
+    const assetPath = join(STICKER_DIR, `${randomUUID()}.${ext}`);
+    await writeFile(assetPath, payload, encoding ? { encoding } : undefined);
 
     let ins;
     try {
       // Append after existing stickers for this venue.
       ins = await pool.query(
-        `insert into booth_sticker (location_id, svg_path, label, width, height, kind, corner, sort_order)
-         values ($1, $2, $3, $4, $5, $6, $7,
+        `insert into booth_sticker (location_id, svg_path, media_type, label, width, height, kind, corner, sort_order)
+         values ($1, $2, $3, $4, $5, $6, $7, $8,
                  coalesce((select max(sort_order) + 1 from booth_sticker where location_id = $1), 0))
-         returning id, label, width, height, kind, corner,
+         returning id, label, width, height, kind, corner, media_type as "mediaType",
                    sort_order as "sortOrder", active, created_at as "createdAt"`,
-        [locationId, svgPath, label ?? null, check.width, check.height, kind, corner]
+        [locationId, assetPath, mediaType, label ?? null, width, height, kind, corner]
       );
     } catch (err) {
-      await rm(svgPath, { force: true }).catch(() => {});
+      await rm(assetPath, { force: true }).catch(() => {});
       throw err;
     }
 

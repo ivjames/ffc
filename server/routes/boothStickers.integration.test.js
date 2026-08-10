@@ -178,6 +178,62 @@ test("kind + corner: frames and watermarks upload, validate, and list", async ()
   assert.ok(list.some((s) => s.kind === 'frame'));
 });
 
+// Minimal PNG: signature + an IHDR chunk carrying width/height. validatePng
+// only reads the signature and IHDR dimensions (not CRC/IDAT), so this is
+// enough to exercise the server path.
+function fakePng(w, h) {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(25); // 4 len + 4 type + 13 data + 4 crc
+  ihdr.writeUInt32BE(13, 0);
+  ihdr.write("IHDR", 4, "latin1");
+  ihdr.writeUInt32BE(w, 8);
+  ihdr.writeUInt32BE(h, 12);
+  return Buffer.concat([sig, ihdr]);
+}
+
+test("PNG assets upload, validate, store, and serve as image/png", async () => {
+  const png = fakePng(240, 90);
+  const up = await adminUpload({
+    locationId,
+    label: "Logo",
+    kind: "watermark",
+    corner: "br",
+    imageBase64: png.toString("base64"),
+    mediaType: "image/png",
+  });
+  assert.equal(up.status, 200);
+  const body = await up.json();
+  assert.equal(body.mediaType, "image/png");
+  assert.equal(body.width, 240);
+  assert.equal(body.height, 90);
+  assert.equal(body.kind, "watermark");
+
+  const row = await testQuery(`select svg_path, media_type from booth_sticker where id = $1`, [body.id]);
+  assert.match(row.rows[0].svg_path, /\.png$/);
+  assert.equal(row.rows[0].media_type, "image/png");
+
+  // Player serve carries the PNG content type.
+  const img = await fetch(`${baseUrl}/api/photos/stickers/${body.id}/image`);
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get("content-type"), "image/png");
+
+  // Not actually a PNG -> rejected.
+  const bad = await adminUpload({
+    locationId,
+    imageBase64: Buffer.from("this is not a png").toString("base64"),
+    mediaType: "image/png",
+  });
+  assert.equal(bad.status, 400);
+
+  // A non-PNG mediaType on the base64 path -> rejected.
+  const badType = await adminUpload({
+    locationId,
+    imageBase64: png.toString("base64"),
+    mediaType: "image/gif",
+  });
+  assert.equal(badType.status, 400);
+});
+
 test("player endpoints: list a venue's stickers and serve the SVG inert", async () => {
   const up = await adminUpload({ locationId, label: "Star", svg: GOOD_SVG });
   const { id } = await up.json();
