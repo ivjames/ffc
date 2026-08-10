@@ -170,29 +170,9 @@ export default function Home() {
             reached + a card is linked (or invites linking a card to collect). */}
         <AdoptionBonusToast signedIn={!!me} />
 
-        {/* Current location — tap to switch sites (or pick "Use my location"
-            there). GPS still auto-detects the venue silently when permitted. */}
-        <div className="mb-2.5">
-          <button
-            onClick={() => navigate('/locations')}
-            className="surface-1 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-2.5 text-left transition-transform active:translate-y-px"
-          >
-            <span className="flex items-center gap-2">
-              <span className="text-lg" aria-hidden="true">
-                📍
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
-                  Location
-                </span>
-                <span className="block truncate font-bold text-fairway-50">
-                  {location?.name ?? 'Choose a location'}
-                </span>
-              </span>
-            </span>
-            <span className="text-sm font-semibold text-fairway-400">Change</span>
-          </button>
-        </div>
+        {/* Current location + "change location" live in the nav drawer (it
+            shows the venue name and links to /locations). GPS still
+            auto-detects the venue silently when permitted. */}
 
         {resume && resumeCourse && (
           <button
