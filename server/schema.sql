@@ -657,6 +657,14 @@ alter table reward_grant add column if not exists pos_transaction_id text; -- ve
 -- grant's identity is its UUID; achievements pay out only as tickets).
 alter table reward_grant drop column if exists code;
 alter table reward_grant drop column if exists redeemed_by;
+-- Before dropping the lane marker, wipe any grant redeemed at the counter: it
+-- carries redeemed_at but never reserved a card, so once redeemed_via is gone
+-- the claim route can't tell it from an interrupted card claim and could credit
+-- a card for a prize already handed out. A card claim always sets card_player_id
+-- atomically with redeemed_at, so `redeemed_at is not null and card_player_id is
+-- null` matches ONLY the old counter lane. Nothing historical here is worth
+-- keeping. (No-op on a fresh DB and idempotent — no such rows exist.)
+delete from reward_grant where redeemed_at is not null and card_player_id is null;
 alter table reward_grant drop column if exists redeemed_via;
 
 -- Photo auto-moderation (unblocks people-in-photos + the social photo share).
