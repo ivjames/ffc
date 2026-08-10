@@ -280,18 +280,20 @@ requested venue. Without `locationId` only global rows return.
 
 ### `GET /api/rewards?clientId=<device round id>`
 Open read keyed by the round's client-generated UUID (unguessable, same id the
-sync path dedupes on) — the final scorecard's "show this at the counter"
-screen. Returns the round's grants:
+sync path dedupes on) — the final scorecard's rewards screen. Returns the
+round's grants (no redemption code — tickets on the loyalty card are the only
+payout):
 
 ```json
 [
-  { "code": "K7M2PX", "playerIndex": 0, "playerTag": "ACE",
+  { "playerIndex": 0, "playerTag": "ACE",
     "achievement": "hole_in_one", "redeemedAt": null,
     "createdAt": "2026-08-07T18:00:00.000Z" }
 ]
 ```
-Achievements: `hole_in_one` · `under_par` · `hunt_master`. Staff redeem codes in
-Master Control (below), so a code pays out once.
+Achievements: `hole_in_one` · `under_par` · `hunt_master`. A grant is banked to
+the player's loyalty card as tickets exactly once (`POST /api/rewards/claim`);
+`redeemedAt` is the single consume point.
 
 ### Master Control — `/api/admin/*`
 Back-office API for onboarding/managing orgs (owner/franchise), locations
@@ -327,8 +329,6 @@ no domain history hangs off an account.)
 | `GET  /api/admin/announcements?archived=` · `POST /api/admin/announcements` | list / create-update announcements; global rows (`locationId: null`) are **super_admin only** to write, `org_admin` manages rows pinned to their own org's venues (and sees global ones read-only) |
 | `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
 | `GET  /api/admin/rewards/summary?days=1..90` | achievement issuance rollup: per-achievement totals (earned / banked to a card / unclaimed / tickets paid) + a per venue-local-day drilldown; org-scoped via the round's course → location |
-| `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | **legacy**: look up one redemption code (case-insensitive) or list recent grants; codes are no longer minted, so `?code=` only resolves pre-#157 grants; org-scoped |
-| `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | **legacy** counter redemption: mark a reward handed out (records who) / undo a mistaken redemption; audited |
 | `GET  /api/admin/photos?people=1\|minors=1&limit=&before=` | stored hunt photos, newest first, with item/course/venue + moderation and people/minors flags; `before` (the previous page's last `createdAt`) keyset-paginates older photos; org-scoped via find → item → course → location |
 | `GET  /api/admin/photos/:id/image` | the image bytes, for the review UI (same scoping) |
 | `POST /api/admin/photos/:id/remove` | delete the photo file from disk and mark the find `moderation='rejected'` (the find keeps its credit); audited — the "please delete that photo" path. Time-based deletion is the retention sweep (`HUNT_PHOTO_RETENTION_DAYS`) |

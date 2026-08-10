@@ -25,10 +25,9 @@ function AchievementRewards({ days }: { days: number }) {
       granted: acc.granted + a.granted,
       cardClaims: acc.cardClaims + a.cardClaims,
       unclaimed: acc.unclaimed + a.unclaimed,
-      counter: acc.counter + a.counterRedemptions,
       tickets: acc.tickets + a.tickets,
     }),
-    { granted: 0, cardClaims: 0, unclaimed: 0, counter: 0, tickets: 0 }
+    { granted: 0, cardClaims: 0, unclaimed: 0, tickets: 0 }
   );
 
   return (
@@ -58,14 +57,7 @@ function AchievementRewards({ days }: { days: number }) {
               <tbody>
                 {summary.data.byAchievement.map((a) => (
                   <tr key={a.achievement} className="border-b border-slate-100">
-                    <td className="px-3 py-1.5">
-                      {achLabel(a.achievement)}
-                      {a.counterRedemptions > 0 && (
-                        <span className="ml-2 text-slate-400">
-                          +{a.counterRedemptions} counter
-                        </span>
-                      )}
-                    </td>
+                    <td className="px-3 py-1.5">{achLabel(a.achievement)}</td>
                     <td className="px-3 py-1.5 text-right">{a.granted.toLocaleString()}</td>
                     <td className="px-3 py-1.5 text-right">{a.cardClaims.toLocaleString()}</td>
                     <td className="px-3 py-1.5 text-right">

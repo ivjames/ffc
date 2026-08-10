@@ -15,22 +15,8 @@ vi.mock('./api', () => ({
 const SUMMARY: RewardSummary = {
   days: 30,
   byAchievement: [
-    {
-      achievement: 'hole_in_one',
-      granted: 12,
-      cardClaims: 9,
-      counterRedemptions: 1,
-      unclaimed: 2,
-      tickets: 900,
-    },
-    {
-      achievement: 'under_par',
-      granted: 5,
-      cardClaims: 5,
-      counterRedemptions: 0,
-      unclaimed: 0,
-      tickets: 250,
-    },
+    { achievement: 'hole_in_one', granted: 12, cardClaims: 9, unclaimed: 2, tickets: 900 },
+    { achievement: 'under_par', granted: 5, cardClaims: 5, unclaimed: 0, tickets: 250 },
   ],
   rows: [
     {
@@ -70,8 +56,6 @@ describe('Rewards', () => {
     expect(screen.getByText('Under Par')).toBeInTheDocument();
     // Tickets paid for hole-in-one appears in the summary table.
     expect(screen.getByText('900')).toBeInTheDocument();
-    // Legacy counter redemptions are surfaced as an annotation.
-    expect(screen.getByText('+1 counter')).toBeInTheDocument();
     // The per-day drilldown shows the venue.
     expect(screen.getByText('Upland')).toBeInTheDocument();
   });

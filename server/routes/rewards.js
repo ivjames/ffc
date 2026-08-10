@@ -43,15 +43,14 @@ router.get("/", async (req, res) => {
   }
 });
 
-// POST /api/rewards/claim — redeem an earned achievement to a loyalty card as
-// tickets (the app's grant-backed alternative to the counter code). Unlike the
-// game-rewards proxy, golf is NOT client-scored: the server looks up the stored
-// `reward_grant`, derives the payout from its achievement, and refuses if no
-// grant exists — so a request can't mint tickets without an achievement or
-// over-pay one. `reward_grant.redeemed_at` is the single consume point, so a
-// card claim and a counter redemption are mutually exclusive, and a re-opened
-// summary settles from the row instead of crediting twice. Auth model matches
-// GET above: the round's unguessable clientId is the capability.
+// POST /api/rewards/claim — bank an earned achievement to a loyalty card as
+// tickets. Unlike the game-rewards proxy, golf is NOT client-scored: the server
+// looks up the stored `reward_grant`, derives the payout from its achievement,
+// and refuses if no grant exists — so a request can't mint tickets without an
+// achievement or over-pay one. `reward_grant.redeemed_at` is the single consume
+// point, so a grant is banked exactly once and a re-opened summary settles from
+// the row instead of crediting twice. Auth model matches GET above: the round's
+// unguessable clientId is the capability.
 router.post("/claim", async (req, res) => {
   const { clientId, playerIndex, achievement, playerId } = req.body ?? {};
   if (typeof clientId !== "string" || clientId.length < 1 || clientId.length > 200) {
@@ -97,9 +96,10 @@ router.post("/claim", async (req, res) => {
 
     if (grant.redeemed_at) {
       if (grant.redeemed_via !== "card") {
-        // Consumed at the counter — the other lane won it.
+        // Consumed some other way (a redeemed grant should always be a card
+        // claim now) — never re-credit it. Data-integrity guard.
         await client.query("rollback");
-        return res.status(409).json({ ok: false, error: "already redeemed at the counter" });
+        return res.status(409).json({ ok: false, error: "already redeemed" });
       }
       if (grant.pos_transaction_id) {
         // Already credited to a card; answer from the row (re-opened summary).

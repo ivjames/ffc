@@ -61,14 +61,6 @@ function claim(body) {
   });
 }
 
-function admin(path, opts = {}) {
-  return fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    ...opts,
-    headers: { "x-app-token": "rewards-claim-test-token", ...opts.headers },
-  });
-}
-
 async function makeLocation(slug, pos) {
   const row = await testQuery(
     `insert into location (name, slug, tz, pos) values ($1, $2, 'UTC', $3::jsonb) returning id`,
@@ -78,7 +70,7 @@ async function makeLocation(slug, pos) {
   return row.rows[0].id;
 }
 
-/** Create a round at `loc` with one reward_grant, returns {clientId, code}. */
+/** Create a round at `loc` with one reward_grant, returns {clientId, grantId}. */
 async function makeGrant(loc, achievement, playerIndex = 0) {
   const n = seq++;
   const course = await testQuery(
@@ -92,13 +84,12 @@ async function makeGrant(loc, achievement, playerIndex = 0) {
      values ($1, '{MPS,AAA}', $2, now()) returning id`,
     [course.rows[0].id, clientId]
   );
-  const code = `claim-${Date.now()}-${n}`; // unique across runs (column is free text)
   const grant = await testQuery(
-    `insert into reward_grant (code, round_id, player_index, player_tag, achievement)
-     values ($1, $2, $3, 'MPS', $4) returning id`,
-    [code, round.rows[0].id, playerIndex, achievement]
+    `insert into reward_grant (round_id, player_index, player_tag, achievement)
+     values ($1, $2, 'MPS', $3) returning id`,
+    [round.rows[0].id, playerIndex, achievement]
   );
-  return { clientId, code, grantId: grant.rows[0].id };
+  return { clientId, grantId: grant.rows[0].id };
 }
 
 before(async () => {
@@ -193,39 +184,24 @@ test("under_par pays its own price (client can't over-pay)", async () => {
   assert.equal((await res.json()).ticketsAwarded, 50);
 });
 
-test("a grant already redeemed at the counter can't be claimed to a card", async () => {
+test("an already-consumed grant can't be re-credited to a card", async () => {
+  // Data-integrity guard: a grant carrying a redeemed_at that isn't a card
+  // claim (redeemed_via != 'card') must never be credited.
   const { clientId } = await makeGrant(locationId, "hole_in_one");
   await testQuery(
-    `update reward_grant set redeemed_at = now(), redeemed_via = 'counter'
+    `update reward_grant set redeemed_at = now()
        where round_id = (select id from round where client_id = $1)`,
     [clientId]
   );
   const res = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-3" });
   assert.equal(res.status, 409);
-  assert.match((await res.json()).error, /counter/);
+  assert.match((await res.json()).error, /already redeemed/);
 });
 
 test("venue without the gameRewards add-on -> 403", async () => {
   const { clientId } = await makeGrant(noRewardsLocationId, "hole_in_one");
   const res = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-4" });
   assert.equal(res.status, 403);
-});
-
-test("a card-claimed grant can't also be redeemed at the counter", async () => {
-  const { clientId, grantId } = await makeGrant(locationId, "hole_in_one");
-  const c = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-5" });
-  assert.equal(c.status, 200);
-  const res = await admin(`/api/admin/rewards/${grantId}/redeem`);
-  assert.equal(res.status, 409);
-  assert.match((await res.json()).error, /card/);
-});
-
-test("a card claim can't be undone at the counter (its tickets are spent)", async () => {
-  const { clientId, grantId } = await makeGrant(locationId, "hole_in_one");
-  await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-6" });
-  const res = await admin(`/api/admin/rewards/${grantId}/unredeem`);
-  assert.equal(res.status, 409);
-  assert.match((await res.json()).error, /undone/);
 });
 
 test("golf shares one daily cap: a claim clamps to the remaining budget, then holds", async () => {

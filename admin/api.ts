@@ -161,7 +161,6 @@ export type RewardAchievementTotal = {
   achievement: string;
   granted: number; // achievements earned in the window
   cardClaims: number; // banked to a loyalty card (redeemed_via = 'card')
-  counterRedemptions: number; // legacy counter redemptions of pre-#157 codes
   unclaimed: number; // earned but not yet banked to a card
   tickets: number; // tickets paid out across the card claims
 };
