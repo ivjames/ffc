@@ -46,16 +46,28 @@ export async function verifyCode(email: string, code: string): Promise<{ user?: 
   return { user: data.user };
 }
 
-/** Who am I? Null when signed out (or offline). */
-export async function fetchMe(): Promise<AppUser | null> {
+/** Session check that distinguishes "definitively signed out" from "couldn't
+ *  tell" (offline / server error) — a null user alone can't tell them apart,
+ *  and treating an unreachable check as signed-out would nudge an
+ *  already-signed-in-but-offline player to sign in. `known` is true only for an
+ *  authoritative answer: a 401 (signed out) or a 200 (whatever user it says). */
+export type SessionCheck = { user: AppUser | null; known: boolean };
+
+export async function fetchSession(): Promise<SessionCheck> {
   try {
     const res = await fetch(apiUrl('/api/auth/me'));
-    if (!res.ok) return null;
+    if (res.status === 401) return { user: null, known: true }; // authoritatively signed out
+    if (!res.ok) return { user: null, known: false }; // 5xx etc. — inconclusive
     const data = await res.json();
-    return data.user ?? null;
+    return { user: data.user ?? null, known: true };
   } catch {
-    return null;
+    return { user: null, known: false }; // offline — inconclusive
   }
+}
+
+/** Who am I? Null when signed out (or offline/unknown). */
+export async function fetchMe(): Promise<AppUser | null> {
+  return (await fetchSession()).user;
 }
 
 export async function updateProfile(profile: Profile): Promise<{ user?: AppUser; error?: string }> {

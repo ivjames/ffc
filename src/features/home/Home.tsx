@@ -14,7 +14,7 @@ import {
 import { isStandalone } from '../../lib/pwaInstall';
 import { themeEmoji } from '../../lib/theme';
 import { playClick, playCup } from '../../lib/sound';
-import { fetchMe, type AppUser } from '../../lib/authApi';
+import { fetchSession, type AppUser } from '../../lib/authApi';
 import { usePos } from '../../lib/pos';
 import ActiveOrdersCard from '../food/ActiveOrdersCard';
 import AdoptionNudge from '../../ui/AdoptionNudge';
@@ -90,10 +90,12 @@ export default function Home() {
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
-    // Best-effort session check — resolves null offline or signed out.
-    void fetchMe().then((u) => {
-      setMe(u);
-      setMeChecked(true);
+    // Session check that distinguishes signed-out from unreachable: only mark
+    // it "checked" on an authoritative answer, so the sign-in nudge never
+    // shows to an already-signed-in player whose /me call just failed offline.
+    void fetchSession().then((s) => {
+      setMe(s.user);
+      if (s.known) setMeChecked(true);
     });
   }, []);
 
