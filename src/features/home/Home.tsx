@@ -126,18 +126,15 @@ export default function Home() {
 
   const resumeCourse = resume ? courseById(resume.courseId) : undefined;
 
-  // The section grid. Mini Golf leads only when this venue actually has courses;
-  // Food gets a native tile only for POS-integrated venues (others use the
-  // deep-link card below). Everything else is always present.
+  // The section grid — top-level destinations only. Golf-specific features
+  // (leaderboard, scavenger hunt) live inside the Mini Golf hub, not here. Mini
+  // Golf leads only when this venue actually has courses; Food gets a native
+  // tile only for POS-integrated venues (others use the deep-link card below).
   const sections: SectionTile[] = [
     ...(hasGolf
       ? [{ to: '/golf', emoji: '⛳️', title: 'Mini Golf', accent: '#16a34a' } as SectionTile]
       : []),
     { to: '/arcade', emoji: '🎮', title: 'Arcade', accent: '#a855f7' },
-    { to: '/golf/leaderboard', emoji: '🏆', title: 'Leaderboard', accent: '#f59e0b' },
-    ...(hasGolf
-      ? [{ to: '/golf/hunt', emoji: '🔍', title: 'Scavenger Hunt', accent: '#0ea5e9' } as SectionTile]
-      : []),
     { to: '/arcade/photos', emoji: '📸', title: 'Photo Booth', accent: '#ec4899' },
     ...(pos.ordering
       ? [{ to: '/food', emoji: '🌭', title: 'Food & Drink', accent: '#ef4444' } as SectionTile]
