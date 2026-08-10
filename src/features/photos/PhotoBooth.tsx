@@ -92,9 +92,9 @@ type StickerBitmap = {
   h: number;
 };
 
-// Transparent halo around the glyph — room for anti-aliasing, without bloating
-// the tap area.
-const STICKER_MARGIN = 0.08;
+// The box hugs the glyph's ink; this is just a hair of breathing room so the
+// anti-aliased edge isn't shaved and the selection ring doesn't touch the ink.
+const STICKER_MARGIN = 0.02;
 // Font px the emoji is drawn at when rasterizing.
 const EMOJI_REF = 256;
 const EMOJI_FONT =
