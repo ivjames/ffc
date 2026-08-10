@@ -42,6 +42,10 @@ export const ALLOWED_EVENTS = new Set([
   "signin_started", // requested an email code / opened sign-in
   "signin_completed", // verified a code -> session
   "signin_failed", // verify rejected
+  // Adoption nudges (meta.kind = 'install' | 'signin')
+  "nudge_shown", // a nudge was presented
+  "nudge_clicked", // the player acted on it
+  "nudge_dismissed", // the player dismissed it
 ]);
 
 const ALLOWED_PLATFORMS = new Set(["ios", "android", "desktop", "other"]);
