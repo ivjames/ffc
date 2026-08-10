@@ -168,9 +168,13 @@ router.post("/", rateLimit, async (req, res) => {
     // Idempotent insert on client_id. ON CONFLICT DO NOTHING means a re-sync
     // returns 0 rows; we then look up the existing round and return its id
     // without touching its scores.
+    // Attribute the round to the signed-in player, if any (req.user is
+    // resolved from the session cookie by attachUser). Anonymous syncs stay
+    // null — the walk-up tag flow is unchanged.
+    const appUserId = req.user?.id ?? null;
     const insertRound = await client.query(
-      `insert into round (course_id, player_tags, group_tag, created_at, completed_at, client_id)
-         values ($1, $2, $3, to_timestamp($4 / 1000.0), $5, $6)
+      `insert into round (course_id, player_tags, group_tag, created_at, completed_at, client_id, app_user_id)
+         values ($1, $2, $3, to_timestamp($4 / 1000.0), $5, $6, $7)
        on conflict (client_id) do nothing
        returning id`,
       [
@@ -180,6 +184,7 @@ router.post("/", rateLimit, async (req, res) => {
         createdAt,
         completedAt === null ? null : new Date(completedAt),
         clientId,
+        appUserId,
       ]
     );
 
@@ -209,12 +214,21 @@ router.post("/", rateLimit, async (req, res) => {
         });
       }
     } else {
-      // Duplicate sync — round already exists. Return its id, leave scores alone.
+      // Duplicate sync — round already exists. Return its id, leave scores
+      // alone. If the device is signed in now and the round is still
+      // unowned, attribute it (a re-sync doubles as a retroactive claim);
+      // never overwrite an existing owner.
       const existing = await client.query(
-        "select id from round where client_id = $1",
-        [clientId]
+        appUserId
+          ? `update round set app_user_id = $2
+               where client_id = $1 and app_user_id is null
+             returning id`
+          : "select id from round where client_id = $1",
+        appUserId ? [clientId, appUserId] : [clientId]
       );
-      roundId = existing.rows[0].id;
+      roundId =
+        existing.rows[0]?.id ??
+        (await client.query("select id from round where client_id = $1", [clientId])).rows[0].id;
     }
 
     await client.query("COMMIT");
@@ -230,5 +244,36 @@ router.post("/", rateLimit, async (req, res) => {
     return res.status(500).json({ ok: false, error: "internal error" });
   } finally {
     client.release();
+  }
+});
+
+// POST /api/rounds/claim — retroactively attach this device's already-synced
+// rounds to the signed-in account ("sign in to keep your scores"). The device
+// sends the client_ids it holds; we claim only the ones that exist and are
+// still UNOWNED — tags collide by design, so ownership is keyed off the
+// device's own round ids, never the tag, and we never take a round already
+// owned by another account. Requires a player session.
+const MAX_CLAIM_IDS = 500;
+
+router.post("/claim", async (req, res) => {
+  if (!req.user) return res.status(401).json({ ok: false, error: "sign in to claim rounds" });
+  const raw = Array.isArray(req.body?.clientIds) ? req.body.clientIds : null;
+  if (!raw) return res.status(400).json({ ok: false, error: "clientIds must be an array" });
+  // Keep well-formed, de-duped ids, capped so a bad client can't drive an
+  // unbounded update.
+  const clientIds = [
+    ...new Set(raw.filter((x) => typeof x === "string" && x.length > 0 && x.length <= 200)),
+  ].slice(0, MAX_CLAIM_IDS);
+  if (clientIds.length === 0) return res.json({ ok: true, claimed: 0 });
+  try {
+    const result = await pool.query(
+      `update round set app_user_id = $1
+         where client_id = any($2::text[]) and app_user_id is null`,
+      [req.user.id, clientIds]
+    );
+    return res.json({ ok: true, claimed: result.rowCount });
+  } catch (err) {
+    console.error("[rounds] claim error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
   }
 });

@@ -13,6 +13,7 @@ import {
 } from '../../lib/authApi';
 import { track } from '../../lib/analytics';
 import { claimAdoptionBonus } from '../../lib/pos/adoptionBonus';
+import { claimMyRounds } from '../../lib/claimRounds';
 
 // Account — passwordless email sign-in (registration IS sign-in: verifying the
 // first code creates the account) plus profile editing once signed in. Email is
@@ -42,6 +43,16 @@ export default function Account() {
   );
   const [saved, setSaved] = useState(false);
   const [bonusNotice, setBonusNotice] = useState<string | null>(null);
+  const [roundsNotice, setRoundsNotice] = useState<string | null>(null);
+
+  // On a fresh sign-in, keep the device's already-played rounds by attaching
+  // them to the account, and confirm how many were saved.
+  async function claimRoundsToAccount() {
+    const n = await claimMyRounds();
+    if (n > 0) {
+      setRoundsNotice(`Saved ${n} recent ${n === 1 ? 'round' : 'rounds'} to your account.`);
+    }
+  }
 
   // On a fresh sign-in, collect the one-time sign-in bonus onto the linked
   // card. If no card is linked, point the player at the Rewards screen to link
@@ -102,6 +113,7 @@ export default function Account() {
         track('signin_completed', { method: 'bypass' });
         applyUser(verified.user);
         void claimSigninBonus();
+        void claimRoundsToAccount();
         return;
       }
       track('signin_failed', { method: 'bypass' });
@@ -128,6 +140,7 @@ export default function Account() {
     track('signin_completed', { method: 'code' });
     applyUser(res.user);
     void claimSigninBonus();
+    void claimRoundsToAccount();
   }
 
   async function saveProfile() {
@@ -174,6 +187,14 @@ export default function Account() {
             role="status"
           >
             {bonusNotice}
+          </div>
+        )}
+        {roundsNotice && (
+          <div
+            className="surface-1 mb-4 rounded-2xl border border-fairway-800/60 px-4 py-3 text-sm text-fairway-100/80"
+            role="status"
+          >
+            🏌️ {roundsNotice}
           </div>
         )}
         {stage === 'loading' && <p className="text-fairway-100/70">Loading…</p>}
