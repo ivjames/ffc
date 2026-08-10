@@ -246,7 +246,7 @@ export default function Hunt() {
               ready for your group on the course.
             </p>
             <div className="mt-6">
-              <Button onClick={() => navigate('/new')}>Start new round</Button>
+              <Button onClick={() => navigate('/golf/new')}>Start new round</Button>
             </div>
           </div>
         </Content>
@@ -280,10 +280,10 @@ export default function Hunt() {
           )}
         </p>
         {/* The photo pipeline's player-facing disclosure — photos go to an AI
-            check and live on the venue server for a while (see /privacy). */}
+            check and live on the venue server for a while (see /me/privacy). */}
         <p className="mb-4 text-xs text-fairway-100/50">
           Photos are checked by AI and stored so your group can share them.{' '}
-          <Link to="/privacy" className="underline">
+          <Link to="/me/privacy" className="underline">
             How photos are handled
           </Link>
         </p>

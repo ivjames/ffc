@@ -734,7 +734,7 @@ export default function PuttGolf() {
   if (mode === null) {
     return (
       <Screen>
-        <TopBar title="Arcade Putt" back="/fun" />
+        <TopBar title="Arcade Putt" back="/arcade" />
         <Content>
           <div className="mt-6 text-center">
             <div className="text-5xl">⛳️</div>
@@ -763,7 +763,7 @@ export default function PuttGolf() {
   if (phase !== 'done') {
     return (
       <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
-        <TopBar title="Arcade Putt" back="/fun" />
+        <TopBar title="Arcade Putt" back="/arcade" />
         <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
           <span className="font-bold text-fairway-50">
             Hole {holeIndex + 1}
@@ -824,7 +824,7 @@ export default function PuttGolf() {
 
   return (
     <Screen>
-      <TopBar title="Arcade Putt" back="/fun" />
+      <TopBar title="Arcade Putt" back="/arcade" />
       <Content>
         <div className="mt-4">
             <div className="mb-4 text-center">

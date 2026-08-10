@@ -13,10 +13,10 @@ export default function CourseList() {
   const courses = coursesByLocation(locationId);
   return (
     <Screen>
-      <TopBar title="Courses" back="/" />
+      <TopBar title="Courses" back="/golf" />
       <Content>
         <Link
-          to="/locations?next=/courses"
+          to="/locations?next=/golf/courses"
           className="mb-3 flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-3 py-2 text-sm active:bg-fairway-800/60"
         >
           <span className="text-fairway-100/70">
@@ -35,7 +35,7 @@ export default function CourseList() {
           {courses.map((c) => (
             <button
               key={c.id}
-              onClick={() => navigate(`/courses/${c.id}/map`)}
+              onClick={() => navigate(`/golf/courses/${c.id}/map`)}
               className="flex w-full items-center gap-4 rounded-2xl border border-fairway-800 bg-fairway-900/40 p-4 text-left active:bg-fairway-800/60"
             >
               <span className="min-w-0 flex-1">

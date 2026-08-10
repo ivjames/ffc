@@ -130,7 +130,7 @@ export default function Lobby() {
             )}
           </div>
 
-          <Button sound="cup" onClick={() => navigate(`/play/${clientId}`)}>
+          <Button sound="cup" onClick={() => navigate(`/golf/play/${clientId}`)}>
             Start playing
           </Button>
           <p className="mt-2 text-center text-xs text-fairway-100/60">

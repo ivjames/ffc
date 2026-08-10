@@ -43,7 +43,7 @@ export default function Teams() {
       setError(res.error);
       return;
     }
-    navigate(`/teams/${res.team.id}`);
+    navigate(`/me/teams/${res.team.id}`);
   }
 
   return (
@@ -59,7 +59,7 @@ export default function Teams() {
               start shared games everyone scores from their own phone. Sign in to create or
               see your teams.
             </p>
-            <Button onClick={() => navigate('/account')}>Sign in / register</Button>
+            <Button onClick={() => navigate('/me/account')}>Sign in / register</Button>
           </>
         )}
 
@@ -74,7 +74,7 @@ export default function Teams() {
                 {teams.map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => navigate(`/teams/${t.id}`)}
+                    onClick={() => navigate(`/me/teams/${t.id}`)}
                     className="surface-1 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-3 text-left transition-transform active:translate-y-px"
                   >
                     <span className="min-w-0">

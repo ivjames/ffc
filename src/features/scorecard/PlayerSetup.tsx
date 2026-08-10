@@ -87,7 +87,7 @@ export default function PlayerSetup() {
     setSubmitting(true);
     const round = createLocalRound(courseId, activeTags, teamTag.length === TAG_LENGTH ? teamTag : null);
     await putRound(round);
-    navigate(`/play/${round.clientId}`, { replace: true });
+    navigate(`/golf/play/${round.clientId}`, { replace: true });
   }
 
   // Host a shared multi-device game: the host's own tag is player 1's field;
@@ -100,7 +100,7 @@ export default function PlayerSetup() {
     }
     if (me === 'loading') return;
     if (!me) {
-      navigate('/account');
+      navigate('/me/account');
       return;
     }
     setSubmitting(true);
@@ -133,13 +133,13 @@ export default function PlayerSetup() {
     setSubmitting(true);
     const round = createLocalRound(courseId, roster);
     await putRound(round);
-    navigate(`/play/${round.clientId}`, { replace: true, state: { autoPlay: mode } });
+    navigate(`/golf/play/${round.clientId}`, { replace: true, state: { autoPlay: mode } });
   }
 
   return (
     <CourseTheme theme={course.theme} accent={course.accent}>
     <Screen>
-      <TopBar title={course.name} back={`/courses/${courseId}/map`} />
+      <TopBar title={course.name} back={`/golf/courses/${courseId}/map`} />
       <Content>
         <label className="mb-2 block text-sm font-semibold text-fairway-100/80">Players</label>
         <div className="mb-6 grid grid-cols-4 gap-2">

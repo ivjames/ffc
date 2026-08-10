@@ -29,7 +29,7 @@ export default function FunFacts() {
 
   return (
     <Screen>
-      <TopBar title="Fun Facts" back="/fun" />
+      <TopBar title="Fun Facts" back="/arcade" />
       <Content>
         {/* Tapping the card advances too, so the whole surface is the control. */}
         <button

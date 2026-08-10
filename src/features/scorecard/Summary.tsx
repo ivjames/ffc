@@ -281,7 +281,7 @@ export default function Summary() {
           <Button
             variant="ghost"
             onClick={() =>
-              navigate('/tv', {
+              navigate('/golf/leaderboard', {
                 state: {
                   highlightCourseId: round.courseId,
                   // Carry this session's exact totals — a tag alone isn't a stable
@@ -488,7 +488,7 @@ function RewardsCard({
 
       {!playerId && (
         <div className="mb-3">
-          <Button variant="ghost" onClick={() => navigate('/rewards')}>
+          <Button variant="ghost" onClick={() => navigate('/me/rewards')}>
             🎟️ Link rewards card
           </Button>
         </div>

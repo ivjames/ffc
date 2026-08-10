@@ -61,7 +61,7 @@ export default function AcceptInvite() {
               You've been invited to a team! Sign in (or register) first, then open the
               invite link from your email again to join.
             </p>
-            <Button onClick={() => navigate('/account')}>Sign in / register</Button>
+            <Button onClick={() => navigate('/me/account')}>Sign in / register</Button>
           </>
         )}
 
@@ -70,7 +70,7 @@ export default function AcceptInvite() {
             <p className="mb-4 text-fairway-50">
               You're in — welcome to <span className="font-bold">{teamName}</span>! 🎉
             </p>
-            <Button onClick={() => navigate('/teams')}>See my teams</Button>
+            <Button onClick={() => navigate('/me/teams')}>See my teams</Button>
           </>
         )}
 

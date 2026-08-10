@@ -31,7 +31,7 @@ export default function TeamDetail() {
   async function load() {
     const user = await fetchMe();
     if (!user) {
-      navigate('/teams', { replace: true });
+      navigate('/me/teams', { replace: true });
       return;
     }
     setMe(user);
@@ -53,7 +53,7 @@ export default function TeamDetail() {
   if (team === null) {
     return (
       <Screen>
-        <TopBar title="Team" back="/teams" />
+        <TopBar title="Team" back="/me/teams" />
         <Content>
           <p className="text-fairway-100/70">Loading…</p>
         </Content>
@@ -64,7 +64,7 @@ export default function TeamDetail() {
   if (team === 'missing') {
     return (
       <Screen>
-        <TopBar title="Team" back="/teams" />
+        <TopBar title="Team" back="/me/teams" />
         <Content>
           <p className="text-fairway-100/70">
             Team not found — it may have been archived, or you're not a member.
@@ -121,7 +121,7 @@ export default function TeamDetail() {
       return;
     }
     if (userId === me?.id) {
-      navigate('/teams', { replace: true });
+      navigate('/me/teams', { replace: true });
       return;
     }
     void load();
@@ -138,12 +138,12 @@ export default function TeamDetail() {
       setError(res.error);
       return;
     }
-    navigate('/teams', { replace: true });
+    navigate('/me/teams', { replace: true });
   }
 
   return (
     <Screen>
-      <TopBar title={team.name} back="/teams" />
+      <TopBar title={team.name} back="/me/teams" />
       <Content>
         <label className="mb-1.5 block text-sm font-semibold text-fairway-100/80">Members</label>
         <div className="mb-5 space-y-2">

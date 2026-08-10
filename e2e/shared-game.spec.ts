@@ -53,7 +53,7 @@ test('two phones mark the same scorecard live, and offline edits reconcile', asy
     { name: 'ffc_session', value: hostSession, url: PLAYER_APP },
   ]);
   const phoneA = await contextA.newPage();
-  await phoneA.goto(`${PLAYER_APP}/new/setup?courseId=${COURSE_ID}`);
+  await phoneA.goto(`${PLAYER_APP}/golf/new/setup?courseId=${COURSE_ID}`);
   await phoneA.getByLabel('Player 1 tag').fill('AAA');
   await phoneA.getByRole('button', { name: /Play together/ }).click();
 
@@ -68,12 +68,12 @@ test('two phones mark the same scorecard live, and offline edits reconcile', asy
   await phoneB.goto(`${PLAYER_APP}/join?code=${joinCode}`);
   await phoneB.getByLabel('Your player tag').fill('BBB');
   await phoneB.getByRole('button', { name: 'Join game' }).click();
-  await expect(phoneB).toHaveURL(/\/play\/shared:/);
+  await expect(phoneB).toHaveURL(/\/golf\/play\/shared:/);
 
   // Host's lobby roster picks up the joiner live, then play starts.
   await expect(phoneA.getByText('BBB')).toBeVisible({ timeout: 10_000 });
   await phoneA.getByRole('button', { name: 'Start playing' }).click();
-  await expect(phoneA).toHaveURL(/\/play\/shared:/);
+  await expect(phoneA).toHaveURL(/\/golf\/play\/shared:/);
 
   // --- Live propagation -----------------------------------------------------
   // A scores for AAA; B sees it.

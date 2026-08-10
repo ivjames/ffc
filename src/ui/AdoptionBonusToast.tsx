@@ -98,7 +98,7 @@ export default function AdoptionBonusToast({ signedIn }: { signedIn: boolean }) 
             </div>
             <div className="mt-2 flex items-center gap-3">
               <button
-                onClick={() => navigate('/rewards')}
+                onClick={() => navigate('/me/rewards')}
                 className="btn-accent rounded-lg px-3 py-1.5 text-xs font-bold text-fairway-50"
               >
                 Link my card

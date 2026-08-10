@@ -27,7 +27,7 @@ const COPY: Record<Kind, { icon: string; title: string; body: string; cta: strin
     title: 'Save your scores & rewards',
     body: 'Sign in to keep your rounds and tickets with you across every visit.',
     cta: 'Sign in',
-    to: '/account',
+    to: '/me/account',
   },
 };
 

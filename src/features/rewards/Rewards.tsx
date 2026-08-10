@@ -110,7 +110,7 @@ export default function Rewards() {
 
   return (
     <Screen>
-      <TopBar title="Rewards card" back="/" />
+      <TopBar title="Rewards card" back="/me" />
       <Content>
         {!playerId && (
           <>

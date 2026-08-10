@@ -90,7 +90,7 @@ export default function Trivia() {
       pct === 100 ? 'Perfect score! 🏆' : pct >= 70 ? 'Nicely done! 🎉' : pct >= 40 ? 'Not bad! 👍' : 'Keep playing! 🎮';
     return (
       <Screen>
-        <TopBar title="Trivia" back="/fun" />
+        <TopBar title="Trivia" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
             <span className="text-6xl">🧠</span>
@@ -118,7 +118,7 @@ export default function Trivia() {
 
   return (
     <Screen>
-      <TopBar title="Trivia" back="/fun" />
+      <TopBar title="Trivia" back="/arcade" />
       <Content>
         <div className="mb-3 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-fairway-400">
           <span>

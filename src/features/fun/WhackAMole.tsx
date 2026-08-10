@@ -698,7 +698,7 @@ export default function WhackAMole() {
             : 'Keep whacking! 🎮';
     return (
       <Screen>
-        <TopBar title="Whack-a-Mole" back="/fun" />
+        <TopBar title="Whack-a-Mole" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
             <span className="text-6xl">🔨</span>
@@ -734,7 +734,7 @@ export default function WhackAMole() {
 
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
-      <TopBar title="Whack-a-Mole" back="/fun" />
+      <TopBar title="Whack-a-Mole" back="/arcade" />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
         <span className="font-bold text-fairway-50">
           Score <span className="text-fairway-100">{score}</span>

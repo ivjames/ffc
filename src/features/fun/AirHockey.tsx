@@ -562,7 +562,7 @@ export default function AirHockey() {
     const won = you > cpu;
     return (
       <Screen>
-        <TopBar title="Air Hockey" back="/fun" />
+        <TopBar title="Air Hockey" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
             <span className="text-6xl">{won ? '🏆' : '🤖'}</span>
@@ -586,7 +586,7 @@ export default function AirHockey() {
 
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
-      <TopBar title="Air Hockey" back="/fun" />
+      <TopBar title="Air Hockey" back="/arcade" />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
         <span className="font-bold text-red-400">CPU {cpu}</span>
         <span className="text-fairway-400">First to {TARGET}</span>

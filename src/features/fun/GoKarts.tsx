@@ -908,7 +908,7 @@ export default function GoKarts() {
   if (phase === 'select') {
     return (
       <Screen>
-        <TopBar title="Go-Karts" back="/fun" />
+        <TopBar title="Go-Karts" back="/arcade" />
         <Content>
           <p className="mb-3 text-sm text-fairway-100/80">
             Pick a track — drag to lead your kart around. {LAPS} laps, fastest lap wins.
@@ -956,7 +956,7 @@ export default function GoKarts() {
     const pace = total / idealMs;
     return (
       <Screen>
-        <TopBar title="Go-Karts" back="/fun" right={<span className="pr-1 text-sm text-fairway-300">{track.name}</span>} />
+        <TopBar title="Go-Karts" back="/arcade" right={<span className="pr-1 text-sm text-fairway-300">{track.name}</span>} />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
             <span className="text-6xl">🏁</span>
@@ -992,7 +992,7 @@ export default function GoKarts() {
   // —— Race / countdown ————————————————————————————————————————————————————
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
-      <TopBar title="Go-Karts" back="/fun" right={<span className="pr-1 text-sm text-fairway-300">{track.name}</span>} />
+      <TopBar title="Go-Karts" back="/arcade" right={<span className="pr-1 text-sm text-fairway-300">{track.name}</span>} />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
         <span className="font-bold text-fairway-50">
           Lap <span className="text-fairway-100">{Math.min(lap, LAPS)}</span>

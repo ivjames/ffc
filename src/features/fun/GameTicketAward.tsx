@@ -45,7 +45,7 @@ export default function GameTicketAward({
   if (!playerId) {
     return (
       <button
-        onClick={() => navigate('/rewards')}
+        onClick={() => navigate('/me/rewards')}
         className="surface-1 mt-4 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-3 text-left transition-transform active:translate-y-px"
       >
         <span className="text-sm text-fairway-100/80">

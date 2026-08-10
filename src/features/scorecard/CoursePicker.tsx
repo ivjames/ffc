@@ -13,12 +13,12 @@ export default function CoursePicker() {
   const courses = coursesByLocation(locationId);
   return (
     <Screen>
-      <TopBar title="Pick a course" back="/" />
+      <TopBar title="Pick a course" back="/golf" />
       <Content>
         {/* Which site these courses belong to — tap to switch. Raised row
             material (`.surface-1`), matching Home's location bar. */}
         <Link
-          to="/locations?next=/new"
+          to="/locations?next=/golf/new"
           className="surface-1 mb-3 flex items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-2.5 text-sm transition-transform active:translate-y-px"
         >
           <span className="text-fairway-100/70">
@@ -37,7 +37,7 @@ export default function CoursePicker() {
           {courses.map((c) => (
             <button
               key={c.id}
-              onClick={() => navigate(`/new/setup?courseId=${c.id}`)}
+              onClick={() => navigate(`/golf/new/setup?courseId=${c.id}`)}
               className="surface-1 flex w-full items-center gap-4 rounded-2xl border border-fairway-800/60 p-4 text-left transition-transform active:translate-y-px"
             >
               <span

@@ -336,7 +336,7 @@ export default function Scorecard() {
             {/* Jump to the scavenger hunt, carrying where we came from so its
                 back button returns here rather than to Home (§Phase 3). */}
             <button
-              onClick={() => navigate('/hunt', { state: { from: `/play/${clientId}` } })}
+              onClick={() => navigate('/golf/hunt', { state: { from: `/golf/play/${clientId}` } })}
               className="rounded-lg px-2 py-2 text-lg leading-none active:bg-fairway-800"
               aria-label="Scavenger hunt"
               title="Scavenger hunt"
@@ -348,8 +348,8 @@ export default function Scorecard() {
                 and returns here on back (§12). */}
             <button
               onClick={() =>
-                navigate('/fun/spinner', {
-                  state: { from: `/play/${clientId}`, courseId: round.courseId },
+                navigate('/arcade/spinner', {
+                  state: { from: `/golf/play/${clientId}`, courseId: round.courseId },
                 })
               }
               className="rounded-lg px-2 py-2 text-lg leading-none active:bg-fairway-800"
@@ -569,7 +569,7 @@ export default function Scorecard() {
           ) : (
             <Button
               sound="cup"
-              onClick={() => navigate(`/play/${clientId}/summary`)}
+              onClick={() => navigate(`/golf/play/${clientId}/summary`)}
               disabled={!complete || autoPlaying}
             >
               Finish

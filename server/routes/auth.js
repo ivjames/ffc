@@ -130,7 +130,7 @@ router.get("/magic", verifyLimit, async (req, res) => {
     if (!result.ok) {
       // Send the browser somewhere sensible either way — the app shows its
       // signed-out state and the user can request a fresh code.
-      return res.redirect(302, `${appUrl.replace(/\/$/, "")}/account?link=expired`);
+      return res.redirect(302, `${appUrl.replace(/\/$/, "")}/me/account?link=expired`);
     }
     await establishSession(res, result.email, result.profile);
     return res.redirect(302, appUrl);

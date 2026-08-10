@@ -11,8 +11,6 @@ import {
   geoPermissionState,
   detectNearestLocation,
 } from '../../lib/geolocate';
-import { isStandalone } from '../../lib/pwaInstall';
-import { themeEmoji } from '../../lib/theme';
 import { playClick, playCup } from '../../lib/sound';
 import { fetchSession, type AppUser } from '../../lib/authApi';
 import { usePos } from '../../lib/pos';
@@ -77,7 +75,14 @@ function FoodDrinkCard({ menuUrl, orderingUrl }: { menuUrl?: string; orderingUrl
   );
 }
 
-// §7 Home — start round, view maps/rules, resume an in-progress game.
+// A top-level section tile for the dashboard grid. Big, glossy, tappable — the
+// launcher into each part of the app.
+type SectionTile = { to: string; emoji: string; title: string; accent: string };
+
+// Home — the FEC venue dashboard. This used to be the Mini Golf course picker;
+// in the restructure it becomes a launcher for the whole family-fun-center:
+// what's happening at this venue (announcements, resume, active orders) plus a
+// grid into the top-level sections. Mini golf is now one tile among many.
 export default function Home() {
   const navigate = useNavigate();
   const [resume, setResume] = useState<LocalRound | null>(null);
@@ -86,7 +91,7 @@ export default function Home() {
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
   const courses = coursesByLocation(locationId);
-  const courseCount = courses.length;
+  const hasGolf = courses.length > 0;
   const pos = usePos();
 
   useEffect(() => {
@@ -121,24 +126,38 @@ export default function Home() {
 
   const resumeCourse = resume ? courseById(resume.courseId) : undefined;
 
+  // The section grid. Mini Golf leads only when this venue actually has courses;
+  // Food gets a native tile only for POS-integrated venues (others use the
+  // deep-link card below). Everything else is always present.
+  const sections: SectionTile[] = [
+    ...(hasGolf
+      ? [{ to: '/golf', emoji: '⛳️', title: 'Mini Golf', accent: '#16a34a' } as SectionTile]
+      : []),
+    { to: '/arcade', emoji: '🎮', title: 'Arcade', accent: '#a855f7' },
+    { to: '/golf/leaderboard', emoji: '🏆', title: 'Leaderboard', accent: '#f59e0b' },
+    ...(hasGolf
+      ? [{ to: '/golf/hunt', emoji: '🔍', title: 'Scavenger Hunt', accent: '#0ea5e9' } as SectionTile]
+      : []),
+    { to: '/arcade/photos', emoji: '📸', title: 'Photo Booth', accent: '#ec4899' },
+    ...(pos.ordering
+      ? [{ to: '/food', emoji: '🌭', title: 'Food & Drink', accent: '#ef4444' } as SectionTile]
+      : []),
+  ];
+
   return (
     <Screen>
       <Content>
-        {/* Home has no TopBar, so keep the light/dark + mute switches reachable
-            from its top-right corner. */}
+        {/* Home has no TopBar, so keep the header cluster (menu + light/dark +
+            mute) reachable from its top-right corner. */}
         <div className="mb-1 flex justify-end">
           <HeaderControls />
         </div>
         <div className="mb-4 text-center">
-          <div className="animate-wiggle inline-block text-5xl leading-none drop-shadow">
-            ⛳️
-          </div>
+          <div className="animate-wiggle inline-block text-5xl leading-none drop-shadow">🎡</div>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-fairway-50">
-            Mini Golf
+            {location?.name ?? 'Family Fun Center'}
           </h1>
-          <p className="mt-0.5 text-sm text-fairway-100/70">
-            {courseCount} {courseCount === 1 ? 'course' : 'courses'} · eighteen holes each
-          </p>
+          <p className="mt-0.5 text-sm text-fairway-100/70">What do you want to do?</p>
         </div>
 
         {/* Venue specials / updates — live from Master Control, cached for
@@ -182,7 +201,7 @@ export default function Home() {
           <button
             onClick={() => {
               playCup();
-              navigate(`/play/${resume.clientId}`);
+              navigate(`/golf/play/${resume.clientId}`);
             }}
             className="surface animate-glow-pulse mb-3 w-full rounded-2xl border border-fairway-500/40 p-3.5 text-left transition-transform active:translate-y-px"
             style={{ '--glow': resumeCourse.accent } as CSSProperties}
@@ -201,98 +220,49 @@ export default function Home() {
           </button>
         )}
 
-        {/* Pick a course to play. Each tile opens that course's map, where a
-            tap begins the round. */}
-        {courses.length === 0 ? (
-          <p className="mb-6 text-center text-sm text-fairway-100/70">
-            No courses at this location yet.
-          </p>
-        ) : (
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            {courses.map((c, i) => (
-              <button
-                key={c.id}
-                onClick={() => {
-                  playClick();
-                  navigate(`/courses/${c.id}/map`);
-                }}
-                className="tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-4 text-center"
-                style={{ '--i': i, '--tile-accent': c.accent } as CSSProperties}
-              >
-                {/* Domed emoji puck — a radial highlight + inner shade make the
-                    disc read as a glossy 3D button cap in the course color. */}
-                <span
-                  className="course-puck flex h-14 w-14 items-center justify-center rounded-full text-3xl transition-transform duration-150 group-active:scale-110"
-                  style={{ '--puck-accent': c.accent } as CSSProperties}
-                >
-                  <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
-                    {themeEmoji(c.theme)}
-                  </span>
-                </span>
-                <span className="text-sm font-black leading-tight text-fairway-50">
-                  {c.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
         {/* An order this device placed that's still in the kitchen — link
             back to its status screen (self-gating, usually renders nothing). */}
         <ActiveOrdersCard />
 
+        {/* The section launcher — the heart of the dashboard. Each tile opens a
+            top-level part of the app. */}
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          {sections.map((s, i) => (
+            <button
+              key={s.to}
+              onClick={() => {
+                playClick();
+                navigate(s.to);
+              }}
+              className="tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-5 text-center"
+              style={{ '--i': i, '--tile-accent': s.accent } as CSSProperties}
+            >
+              <span
+                className="course-puck flex h-14 w-14 items-center justify-center rounded-full text-3xl transition-transform duration-150 group-active:scale-110"
+                style={{ '--puck-accent': s.accent } as CSSProperties}
+              >
+                <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">{s.emoji}</span>
+              </span>
+              <span className="text-sm font-black leading-tight text-fairway-50">{s.title}</span>
+            </button>
+          ))}
+        </div>
+
         {/* Food & drink (punchlist #7 tier 1) — deep links into the venue's
             menu / ordering system, set per location in Master Control. Hidden
-            when the venue has no links; ordering needs a connection. */}
-        <FoodDrinkCard
-          menuUrl={location?.menuUrl}
-          orderingUrl={location?.orderingUrl}
-        />
+            when the venue has no links; the native ordering tile above covers
+            POS-integrated venues instead. */}
+        {!pos.ordering && (
+          <FoodDrinkCard menuUrl={location?.menuUrl} orderingUrl={location?.orderingUrl} />
+        )}
 
         <div className="space-y-2">
-          {/* The scavenger hunt is a play-time activity, reached from the
-              scorecard during a round — it's intentionally not on Home. */}
           <Button variant="ghost" onClick={() => navigate('/join')}>
             📲 Join a friend's game
           </Button>
-          <Button variant="ghost" onClick={() => navigate('/fun')}>
-            🎡 While You Wait
+          <Button variant="ghost" onClick={() => navigate('/me')}>
+            {me ? `👤 ${me.displayName || me.defaultTag || me.email}` : '👤 Sign in / register'}
           </Button>
-          <Button variant="ghost" onClick={() => navigate('/photos')}>
-            📸 Photo Booth
-          </Button>
-          {/* Native in-app ordering + rewards — POS-integration add-ons,
-              shown only when this venue's Master Control config enables the
-              capability (src/lib/pos; DEV_MODE enables both against the local
-              mock). Un-integrated venues keep the FoodDrinkCard deep links. */}
-          {pos.ordering && (
-            <Button variant="ghost" onClick={() => navigate('/food')}>
-              🍕 Order food & drinks
-            </Button>
-          )}
-          {pos.loyalty && (
-            <Button variant="ghost" onClick={() => navigate('/rewards')}>
-              🎟️ Rewards card
-            </Button>
-          )}
-          <Button variant="ghost" onClick={() => navigate('/rules')}>
-            Rules
-          </Button>
-          <Button variant="ghost" onClick={() => navigate('/tv')}>
-            See the leaderboard
-          </Button>
-          <Button variant="ghost" onClick={() => navigate('/account')}>
-            {me
-              ? `👤 ${me.displayName || me.defaultTag || me.email}`
-              : '👤 Sign in / register'}
-          </Button>
-          {/* Only worth showing when we're running in a browser tab, not the
-              already-installed standalone app. */}
-          {!isStandalone() && (
-            <Button variant="ghost" onClick={() => navigate('/install')}>
-              📲 Install app
-            </Button>
-          )}
         </div>
       </Content>
     </Screen>

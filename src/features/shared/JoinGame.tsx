@@ -69,7 +69,7 @@ export default function JoinGame() {
           }
         : createSharedLocalRound(res.snapshot, res.participantToken, res.slot);
     await putRound(round);
-    navigate(`/play/${clientId}`, { replace: true });
+    navigate(`/golf/play/${clientId}`, { replace: true });
   }
 
   return (

@@ -1196,7 +1196,7 @@ export default function Pinball() {
             : 'Keep flipping! 🎮';
     return (
       <Screen>
-        <TopBar title="Pinball" back="/fun" />
+        <TopBar title="Pinball" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
             <span className="text-6xl">🕹️</span>
@@ -1227,7 +1227,7 @@ export default function Pinball() {
 
   return (
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
-      <TopBar title="Pinball" back="/fun" />
+      <TopBar title="Pinball" back="/arcade" />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
         <span className="font-bold text-fairway-50">
           Ball <span className="text-fairway-100">{Math.min(ballNo, BALLS)}</span>

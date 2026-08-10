@@ -182,7 +182,7 @@ export default function Account() {
 
   return (
     <Screen>
-      <TopBar title="Account" back="/" />
+      <TopBar title="Account" back="/me" />
       <Content>
         {bonusNotice && (
           <div
@@ -268,7 +268,7 @@ export default function Account() {
               </Button>
             </div>
             <p className="mt-4 text-xs text-fairway-100/50">
-              <Link to="/privacy" className="underline">
+              <Link to="/me/privacy" className="underline">
                 How we handle your info
               </Link>
             </p>
@@ -356,7 +356,7 @@ export default function Account() {
               <Button onClick={() => void saveProfile()} disabled={busy || !profileValid}>
                 {busy ? 'Saving…' : 'Save'}
               </Button>
-              <Button variant="ghost" onClick={() => navigate('/teams')}>
+              <Button variant="ghost" onClick={() => navigate('/me/teams')}>
                 👥 My teams
               </Button>
               <Button variant="ghost" onClick={() => void signOut()} disabled={busy}>
@@ -364,7 +364,7 @@ export default function Account() {
               </Button>
             </div>
             <p className="mt-4 text-xs text-fairway-100/50">
-              <Link to="/privacy" className="underline">
+              <Link to="/me/privacy" className="underline">
                 How we handle your info
               </Link>
             </p>

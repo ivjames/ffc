@@ -15,7 +15,7 @@ export default function CourseMap() {
   if (!course) {
     return (
       <Screen>
-        <TopBar title="Map" back="/" />
+        <TopBar title="Map" back="/golf" />
         <Content>
           <p className="text-fairway-100/70">Course not found.</p>
         </Content>
@@ -23,7 +23,7 @@ export default function CourseMap() {
     );
   }
 
-  const begin = () => navigate(`/new/setup?courseId=${course.id}`);
+  const begin = () => navigate(`/golf/new/setup?courseId=${course.id}`);
 
   return (
     <CourseTheme theme={course.theme} accent={course.accent}>
@@ -36,7 +36,7 @@ export default function CourseMap() {
         on notched iPhones the column doesn't exceed the visible area and push
         the bottom prompt/tap zone below the fold. */}
     <div className="mx-auto flex min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md flex-col">
-      <TopBar title={course.name} back="/" />
+      <TopBar title={course.name} back="/golf" />
       {/* Tap anywhere on the opening screen to begin the round. */}
       {/* The map fills the whole area below the bar; tapping anywhere begins.
           Edge-to-edge (no inner frame) per the layout spec — the prompt is

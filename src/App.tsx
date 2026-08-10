@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Home from './features/home/Home';
+import GolfHome from './features/golf/GolfHome';
+import MeHome from './features/me/MeHome';
+import Achievements from './features/me/Achievements';
 import CoursePicker from './features/scorecard/CoursePicker';
 import PlayerSetup from './features/scorecard/PlayerSetup';
 import Scorecard from './features/scorecard/Scorecard';
@@ -55,8 +58,40 @@ import { BuildStamp } from './ui/BuildStamp';
 import { UpdateModal } from './ui/UpdateModal';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
+import NavDrawer from './ui/NavDrawer';
 import { DEV_MODE } from './lib/flags';
 import { hydrateContent, useContentRevision } from './data/courses';
+
+// Legacy → canonical redirect. The FEC restructure moved every screen under a
+// section namespace (/golf/*, /arcade/*, /me/*); these forwarders keep old
+// paths — printed QR codes, shared links, muscle memory, and any internal link
+// not yet migrated — working. Preserves the sub-path and query string, so
+// e.g. /account?link=expired → /me/account?link=expired and
+// /fun/skeeball → /arcade/skeeball.
+function PrefixRedirect({ from, to }: { from: string; to: string }) {
+  const loc = useLocation();
+  const rest = loc.pathname.slice(from.length); // '' for an exact hit, else '/sub…'
+  return <Navigate to={`${to}${rest}${loc.search}`} replace />;
+}
+
+// Old → new section roots. Each entry forwards the exact path AND its sub-tree.
+// Paths that are baked into external artifacts (printed QR /install, emailed
+// /teams/accept, TV /tv, QR /join, shared-game /games/:id/lobby) are NOT
+// renamespaced — they keep rendering at their original path below.
+const REDIRECTS: [from: string, to: string][] = [
+  ['/new', '/golf/new'],
+  ['/play', '/golf/play'],
+  ['/courses', '/golf/courses'],
+  ['/rules', '/golf/rules'],
+  ['/hunt', '/golf/hunt'],
+  ['/fun', '/arcade'],
+  ['/putt', '/arcade/putt'],
+  ['/photos', '/arcade/photos'],
+  ['/account', '/me/account'],
+  ['/rewards', '/me/rewards'],
+  ['/privacy', '/me/privacy'],
+  ['/teams', '/me/teams'],
+];
 
 // §7 Routes / screens.
 export default function App() {
@@ -64,8 +99,8 @@ export default function App() {
   // so it's exempt from the portrait nudge every phone screen gets.
   const isWall = useLocation().pathname.startsWith('/tv/wall');
   // Subscribe the whole route tree to live-content updates here, at the common
-  // ancestor: catalog screens (/locations, /new, /courses, /rules, /tv/wall)
-  // read LOCATIONS/COURSES as module globals without their own subscription, so
+  // ancestor: catalog screens (/locations, /golf/*, /arcade, /tv/wall) read
+  // LOCATIONS/COURSES as module globals without their own subscription, so
   // hydrating after first paint would otherwise leave them stale until an
   // unrelated render. Re-rendering App re-renders every route with fresh data.
   useContentRevision();
@@ -80,83 +115,114 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/locations" element={<LocationPicker />} />
+
+        {/* ── Mini Golf section ─────────────────────────────────────────── */}
+        <Route path="/golf" element={<GolfHome />} />
         {/* Golf is an on-location activity — gate starting/playing a round
             behind the venue geofence (suspended unless VITE_GEOFENCE_ENFORCED). */}
         <Route element={<GeofenceGate />}>
-          <Route path="/new" element={<CoursePicker />} />
-          <Route path="/new/setup" element={<PlayerSetup />} />
-          <Route path="/play/:clientId" element={<Scorecard />} />
-          <Route path="/play/:clientId/summary" element={<Summary />} />
+          <Route path="/golf/new" element={<CoursePicker />} />
+          <Route path="/golf/new/setup" element={<PlayerSetup />} />
+          <Route path="/golf/play/:clientId" element={<Scorecard />} />
+          <Route path="/golf/play/:clientId/summary" element={<Summary />} />
         </Route>
-        <Route path="/courses" element={<CourseList />} />
-        <Route path="/courses/:id/map" element={<CourseMap />} />
-        <Route path="/rules" element={<Rules />} />
-        {/* Plain-language disclosure of everything the app records. */}
-        <Route path="/privacy" element={<Privacy />} />
-        {/* P2 preview — the API already serves the leaderboard. */}
-        <Route path="/tv" element={<TvLeaderboard />} />
-        {/* Venue display wall — all of a venue's course boards side by side,
-            for a TV pointed at the URL (configured via query params). */}
-        <Route path="/tv/wall" element={<TvWall />} />
-        {/* P3 — AI scavenger hunt. */}
-        <Route path="/hunt" element={<Hunt />} />
-        {/* Photo booth — photo sharing + stickers, no AI in the pipeline. */}
-        <Route path="/photos" element={<PhotoBooth />} />
+        <Route path="/golf/courses" element={<CourseList />} />
+        <Route path="/golf/courses/:id/map" element={<CourseMap />} />
+        <Route path="/golf/rules" element={<Rules />} />
+        {/* AI scavenger hunt — a golf-round activity. */}
+        <Route path="/golf/hunt" element={<Hunt />} />
+        {/* Player-facing leaderboard (the /tv board is phone-friendly and doubles
+            as the venue display; /tv stays below for TVs/QRs). */}
+        <Route path="/golf/leaderboard" element={<TvLeaderboard />} />
+
+        {/* ── Arcade section ────────────────────────────────────────────── */}
         {/* Games and native F&B ordering are on-location activities — gate the
-            whole Fun Zone, Arcade Putt, and food behind the venue geofence
-            (suspended unless VITE_GEOFENCE_ENFORCED). Food additionally
-            redirects home when the venue lacks the ordering add-on (src/lib/pos). */}
+            whole Arcade and food behind the venue geofence (suspended unless
+            VITE_GEOFENCE_ENFORCED). Food additionally redirects home when the
+            venue lacks the ordering add-on (src/lib/pos). The photo booth is
+            deliberately NOT gated (it's below, outside this group). */}
         <Route element={<GeofenceGate />}>
-          {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
-          <Route path="/putt" element={<PuttGolf />} />
+          <Route path="/arcade" element={<FunZone />} />
           {/* §12 "While You Wait" content — fun facts, trivia, challenge spinner. */}
-          <Route path="/fun" element={<FunZone />} />
-          <Route path="/fun/facts" element={<FunFacts />} />
-          <Route path="/fun/trivia" element={<Trivia />} />
-          <Route path="/fun/spinner" element={<Spinner />} />
-          <Route path="/fun/skeeball" element={<SkeeBall />} />
-          <Route path="/fun/airhockey" element={<AirHockey />} />
-          <Route path="/fun/bumper" element={<BumperCars />} />
-          <Route path="/fun/boats" element={<BumperBoats />} />
-          <Route path="/fun/axe" element={<AxeThrow />} />
-          <Route path="/fun/batting" element={<BattingCages />} />
-          <Route path="/fun/bowling" element={<Bowling />} />
-          <Route path="/fun/karts" element={<GoKarts />} />
-          <Route path="/fun/mole" element={<WhackAMole />} />
-          <Route path="/fun/hoops" element={<PopAShot />} />
-          <Route path="/fun/darts" element={<Darts />} />
-          <Route path="/fun/gallery" element={<ShootingGallery />} />
-          <Route path="/fun/claw" element={<ClawMachine />} />
-          <Route path="/fun/striker" element={<HighStriker />} />
-          <Route path="/fun/rings" element={<RingToss />} />
-          <Route path="/fun/bottles" element={<MilkBottle />} />
-          <Route path="/fun/watergun" element={<WaterGunRace />} />
-          <Route path="/fun/pinball" element={<Pinball />} />
-          <Route path="/fun/pusher" element={<CoinPusher />} />
-          {/* Native F&B ordering + rewards card — POS-integration add-ons,
-              rendered only for venues with a paid config (src/lib/pos); each
-              screen redirects home when its capability is off. */}
+          <Route path="/arcade/facts" element={<FunFacts />} />
+          <Route path="/arcade/trivia" element={<Trivia />} />
+          <Route path="/arcade/spinner" element={<Spinner />} />
+          {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
+          <Route path="/arcade/putt" element={<PuttGolf />} />
+          <Route path="/arcade/skeeball" element={<SkeeBall />} />
+          <Route path="/arcade/airhockey" element={<AirHockey />} />
+          <Route path="/arcade/bumper" element={<BumperCars />} />
+          <Route path="/arcade/boats" element={<BumperBoats />} />
+          <Route path="/arcade/axe" element={<AxeThrow />} />
+          <Route path="/arcade/batting" element={<BattingCages />} />
+          <Route path="/arcade/bowling" element={<Bowling />} />
+          <Route path="/arcade/karts" element={<GoKarts />} />
+          <Route path="/arcade/mole" element={<WhackAMole />} />
+          <Route path="/arcade/hoops" element={<PopAShot />} />
+          <Route path="/arcade/darts" element={<Darts />} />
+          <Route path="/arcade/gallery" element={<ShootingGallery />} />
+          <Route path="/arcade/claw" element={<ClawMachine />} />
+          <Route path="/arcade/striker" element={<HighStriker />} />
+          <Route path="/arcade/rings" element={<RingToss />} />
+          <Route path="/arcade/bottles" element={<MilkBottle />} />
+          <Route path="/arcade/watergun" element={<WaterGunRace />} />
+          <Route path="/arcade/pinball" element={<Pinball />} />
+          <Route path="/arcade/pusher" element={<CoinPusher />} />
+          {/* Native F&B ordering — POS-integration add-on, rendered only for
+              venues with a paid config (src/lib/pos); each screen redirects home
+              when its capability is off. */}
           <Route path="/food" element={<Food />} />
           <Route path="/food/checkout" element={<Checkout />} />
           <Route path="/food/order/:orderId" element={<OrderStatusScreen />} />
         </Route>
-        <Route path="/rewards" element={<Rewards />} />
+        {/* Photo booth — photo sharing + stickers, no AI in the pipeline. Not
+            geofenced (matches its pre-restructure behavior). */}
+        <Route path="/arcade/photos" element={<PhotoBooth />} />
+
+        {/* ── Me section ────────────────────────────────────────────────── */}
+        <Route path="/me" element={<MeHome />} />
         {/* Player account — passwordless email sign-in + profile. */}
-        <Route path="/account" element={<Account />} />
-        {/* Persistent teams (signed-in). /teams/accept is the emailed-invite
-            deep link and must sit above the :id match. */}
-        <Route path="/teams" element={<Teams />} />
+        <Route path="/me/account" element={<Account />} />
+        {/* Persistent teams (signed-in). */}
+        <Route path="/me/teams" element={<Teams />} />
+        <Route path="/me/teams/:id" element={<TeamDetail />} />
+        {/* Rewards card — POS loyalty add-on; redirects home when off. */}
+        <Route path="/me/rewards" element={<Rewards />} />
+        {/* Player achievements / badges gallery. */}
+        <Route path="/me/achievements" element={<Achievements />} />
+        {/* Plain-language disclosure of everything the app records. */}
+        <Route path="/me/privacy" element={<Privacy />} />
+
+        {/* ── Stable external targets (NOT renamespaced) ────────────────── */}
+        {/* Emailed-invite deep link — must keep its original path for links
+            already in inboxes. Ranks above /teams/* redirect (static > splat). */}
         <Route path="/teams/accept" element={<AcceptInvite />} />
-        <Route path="/teams/:id" element={<TeamDetail />} />
         {/* Shared multi-device games — join by code (QR target) + host lobby. */}
         <Route path="/join" element={<JoinGame />} />
         <Route path="/games/:gameId/lobby" element={<Lobby />} />
-        {/* Install-to-home-screen landing page (QR-code target). */}
+        {/* Install-to-home-screen landing page (printed-QR target). */}
         <Route path="/install" element={<Install />} />
+        {/* Leaderboard preview + venue display wall — TV / QR targets. */}
+        <Route path="/tv" element={<TvLeaderboard />} />
+        <Route path="/tv/wall" element={<TvWall />} />
         {/* Living component inventory / style guide — the theming reference. */}
         <Route path="/style" element={<StyleGuide />} />
+
+        {/* ── Legacy redirects (old paths → new namespaces) ─────────────── */}
+        {REDIRECTS.map(([from, to]) => (
+          <Route key={from}>
+            <Route path={from} element={<PrefixRedirect from={from} to={to} />} />
+            <Route path={`${from}/*`} element={<PrefixRedirect from={from} to={to} />} />
+          </Route>
+        ))}
+
         <Route path="*" element={<Home />} />
       </Routes>
+
+      {/* The global navigation drawer — opened by the hamburger in every
+          screen's HeaderControls; the app's one persistent way between
+          sections. Mounted once here so it overlays the whole route tree. */}
+      <NavDrawer />
 
       {/* Dev-only chrome — build stamp (bottom-right) and skin picker
           (bottom-left). Gated behind DEV_MODE alongside the app's other
