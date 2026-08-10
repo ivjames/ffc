@@ -272,6 +272,60 @@ test("PNG assets upload, validate, store, and serve as image/png", async () => {
   assert.equal(huge.status, 400);
 });
 
+// A minimal VP8X WebP: RIFF/WEBP + VP8X (carrying canvas dims) + a VP8L frame
+// marker (validateWebp checks structure/dims, not the pixel bytes).
+function fakeWebp(w, h) {
+  const head = Buffer.alloc(30);
+  head.write("RIFF", 0, "latin1");
+  head.write("WEBP", 8, "latin1");
+  head.write("VP8X", 12, "latin1");
+  head.writeUInt32LE(10, 16); // VP8X chunk size
+  // width-1 / height-1 as 24-bit LE at offsets 24 / 27
+  const w1 = w - 1;
+  const h1 = h - 1;
+  head[24] = w1 & 0xff;
+  head[25] = (w1 >> 8) & 0xff;
+  head[26] = (w1 >> 16) & 0xff;
+  head[27] = h1 & 0xff;
+  head[28] = (h1 >> 8) & 0xff;
+  head[29] = (h1 >> 16) & 0xff;
+  // A VP8L frame chunk so the file carries image data.
+  const frame = Buffer.concat([Buffer.from("VP8L"), Buffer.from([0x00, 0x00, 0x00, 0x00]), Buffer.from([0x2f])]);
+  const body = Buffer.concat([head, frame]);
+  body.writeUInt32LE(body.length - 8, 4); // RIFF size
+  return body;
+}
+
+test("WebP assets upload, validate, store, and serve as image/webp", async () => {
+  const webp = fakeWebp(300, 120);
+  const up = await adminUpload({
+    locationId,
+    kind: "frame",
+    imageBase64: webp.toString("base64"),
+    mediaType: "image/webp",
+  });
+  assert.equal(up.status, 200);
+  const body = await up.json();
+  assert.equal(body.mediaType, "image/webp");
+  assert.equal(body.width, 300);
+  assert.equal(body.height, 120);
+
+  const row = await testQuery(`select svg_path, media_type from booth_sticker where id = $1`, [body.id]);
+  assert.match(row.rows[0].svg_path, /\.webp$/);
+
+  const img = await fetch(`${baseUrl}/api/photos/stickers/${body.id}/image`);
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get("content-type"), "image/webp");
+
+  // Not a WebP -> rejected.
+  const bad = await adminUpload({
+    locationId,
+    imageBase64: Buffer.from("nope").toString("base64"),
+    mediaType: "image/webp",
+  });
+  assert.equal(bad.status, 400);
+});
+
 test("player endpoints: list a venue's stickers and serve the SVG inert", async () => {
   const up = await adminUpload({ locationId, label: "Star", svg: GOOD_SVG });
   const { id } = await up.json();

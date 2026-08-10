@@ -407,7 +407,7 @@ export const api = {
     corner?: AdminStickerCorner;
     svg?: string;
     imageBase64?: string;
-    mediaType?: 'image/png';
+    mediaType?: 'image/png' | 'image/webp';
   }) => req<AdminVenueSticker>('POST', '/booth-stickers', body),
   removeBoothSticker: (id: string) => req<{ ok: true }>('POST', `/booth-stickers/${id}/remove`),
 
