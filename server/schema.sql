@@ -657,14 +657,19 @@ alter table reward_grant add column if not exists pos_transaction_id text; -- ve
 -- grant's identity is its UUID; achievements pay out only as tickets).
 alter table reward_grant drop column if exists code;
 alter table reward_grant drop column if exists redeemed_by;
--- Before dropping the lane marker, wipe any grant redeemed at the counter: it
--- carries redeemed_at but never reserved a card, so once redeemed_via is gone
--- the claim route can't tell it from an interrupted card claim and could credit
--- a card for a prize already handed out. A card claim always sets card_player_id
--- atomically with redeemed_at, so `redeemed_at is not null and card_player_id is
--- null` matches ONLY the old counter lane. Nothing historical here is worth
--- keeping. (No-op on a fresh DB and idempotent — no such rows exist.)
-delete from reward_grant where redeemed_at is not null and card_player_id is null;
+-- All existing reward_grant data is test data, so clear the table before
+-- dropping the lane marker — this leaves no historical counter redemption for
+-- the claim route to misread once redeemed_via is gone (a card claim for the
+-- same round could otherwise re-credit a prize already handed out at the
+-- counter). Guarded on redeemed_via's existence so it fires exactly ONCE, on
+-- the upgrade that drops the column, and never on a later schema re-apply
+-- (schema.sql re-runs in full when its content changes) or a fresh DB.
+do $$ begin
+  if exists (select 1 from information_schema.columns
+             where table_name = 'reward_grant' and column_name = 'redeemed_via') then
+    delete from reward_grant;
+  end if;
+end $$;
 alter table reward_grant drop column if exists redeemed_via;
 
 -- Photo auto-moderation (unblocks people-in-photos + the social photo share).
