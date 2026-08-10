@@ -41,7 +41,6 @@ function useSectionRows(): { primary: Item[]; secondary: Item[] } {
   const secondary: Item[] = [
     { to: '/photos', emoji: '📸', label: 'Photo Booth' },
     ...(pos.loyalty ? [{ to: '/me/rewards', emoji: '🎟️', label: 'Rewards card' }] : []),
-    { to: '/join', emoji: '📲', label: "Join a friend's game" },
     { to: '/locations', emoji: '📍', label: 'Change location' },
     ...(!isStandalone() ? [{ to: '/install', emoji: '⬇️', label: 'Install app' }] : []),
   ];

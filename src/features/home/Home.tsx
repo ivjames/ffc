@@ -257,9 +257,6 @@ export default function Home() {
         )}
 
         <div className="space-y-2">
-          <Button variant="ghost" onClick={() => navigate('/join')}>
-            📲 Join a friend's game
-          </Button>
           <Button variant="ghost" onClick={() => navigate('/me')}>
             {me ? `👤 ${me.displayName || me.defaultTag || me.email}` : '👤 Sign in / register'}
           </Button>

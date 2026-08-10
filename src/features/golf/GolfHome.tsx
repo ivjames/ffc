@@ -90,6 +90,11 @@ export default function GolfHome() {
         )}
 
         <div className="space-y-2">
+          {/* Guest side of a shared multi-device round — the host's QR deep-links
+              here too; this is the manual "enter a code" path. */}
+          <Button variant="ghost" onClick={() => navigate('/join')}>
+            📲 Join a friend's game
+          </Button>
           <Button variant="ghost" onClick={() => navigate('/golf/leaderboard')}>
             🏆 Leaderboard
           </Button>
