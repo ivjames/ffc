@@ -154,17 +154,32 @@ export type Announcement = {
   viewLastSeenAt?: string | null;
 };
 
-export type Reward = {
-  id: string;
-  code: string;
-  playerIndex: number;
-  playerTag: string;
+// Golf achievement rewards reporting (admin `/rewards/summary`). Since #157 the
+// app pays achievements straight to a loyalty card as tickets and shows no
+// counter codes, so Master Control reports on issuance instead of redeeming it.
+export type RewardAchievementTotal = {
   achievement: string;
-  createdAt: string;
-  redeemedAt: string | null;
-  redeemedBy: string | null;
-  courseName: string;
+  granted: number; // achievements earned in the window
+  cardClaims: number; // banked to a loyalty card (redeemed_via = 'card')
+  counterRedemptions: number; // legacy counter redemptions of pre-#157 codes
+  unclaimed: number; // earned but not yet banked to a card
+  tickets: number; // tickets paid out across the card claims
+};
+
+export type RewardSummaryRow = {
+  day: string;
+  locationId: string | null;
   locationName: string | null;
+  achievement: string;
+  granted: number;
+  cardClaims: number;
+  tickets: number;
+};
+
+export type RewardSummary = {
+  days: number;
+  byAchievement: RewardAchievementTotal[];
+  rows: RewardSummaryRow[];
 };
 
 // A stored photo-booth picture (the AI-free pipeline — no moderation verdict
@@ -489,7 +504,9 @@ export const api = {
     return res.blob();
   },
 
-  // Rewards (punchlist #8 tier 1).
+  // Rewards & usage reporting (punchlist #8 tier 1).
+  // Golf achievement rewards — per-achievement + per-day issuance rollup.
+  rewardsSummary: (days = 30) => req<RewardSummary>('GET', `/rewards/summary?days=${days}`),
   // Game ticket economy — caps metadata + the app-issued ticket rollup.
   gameRewardsMeta: () => req<GameRewardsMeta>('GET', '/game-rewards/meta'),
   gameRewardsUsage: (days = 30) =>
@@ -497,9 +514,4 @@ export const api = {
       'GET',
       `/game-rewards/usage?days=${days}`
     ),
-
-  lookupReward: (code: string) => req<Reward[]>('GET', `/rewards?code=${encodeURIComponent(code)}`),
-  listRewards: (redeemed = false) => req<Reward[]>('GET', `/rewards${redeemed ? '?redeemed=1' : ''}`),
-  redeemReward: (id: string, redeemed: boolean) =>
-    req<{ ok: true; reward: Reward }>('POST', `/rewards/${id}/${redeemed ? 'redeem' : 'unredeem'}`),
 };

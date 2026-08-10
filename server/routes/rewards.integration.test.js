@@ -226,3 +226,64 @@ test("admin lookup by code + redeem/unredeem round-trip with audit", async () =>
   const anon = await fetch(`${baseUrl}/api/admin/rewards`);
   assert.equal(anon.status, 401);
 });
+
+test("admin summary rolls up achievement issuance per venue + achievement", async () => {
+  // A dedicated venue so the per-location rows are isolated from the other
+  // tests' grants (the global byAchievement totals are not).
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Summary Venue ${stamp}`, `summary-${stamp}`]
+  );
+  const sLoc = loc.rows[0].id;
+  const crs = await testQuery(
+    `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+    ["Summary Course", "test", Array(18).fill(3), sLoc]
+  );
+  const sCourse = crs.rows[0].id;
+  const sRound = (over) => ({
+    clientId: `sum-${Date.now()}-${Math.random()}`,
+    courseId: sCourse,
+    createdAt: Date.now(),
+    completedAt: Date.now(),
+    ...over,
+  });
+  try {
+    // under_par (all 2s = 36 < 54, no ace) and hole_in_one (ace but 55 > 54).
+    await postRound(sRound({ playerTags: ["UPR"], scores: { 0: Array(18).fill(2) } }));
+    await postRound(
+      sRound({ playerTags: ["HIO"], scores: { 0: [1, ...Array(16).fill(3), 6] } })
+    );
+
+    const summary = await (await admin(`/api/admin/rewards/summary`)).json();
+    assert.equal(summary.days, 30);
+
+    // Per-day/venue drilldown for THIS venue: one row per achievement, freshly
+    // earned so nothing is banked to a card yet.
+    const mine = summary.rows.filter((r) => r.locationId === sLoc);
+    const byAch = Object.fromEntries(mine.map((r) => [r.achievement, r]));
+    assert.equal(byAch.under_par.granted, 1);
+    assert.equal(byAch.under_par.cardClaims, 0);
+    assert.equal(byAch.under_par.tickets, 0);
+    assert.equal(byAch.under_par.locationName, `Summary Venue ${stamp}`);
+    assert.equal(byAch.hole_in_one.granted, 1);
+    assert.equal(byAch.hole_in_one.cardClaims, 0);
+
+    // Global per-achievement totals include (at least) these grants.
+    const totals = Object.fromEntries(summary.byAchievement.map((a) => [a.achievement, a]));
+    assert.ok(totals.under_par.granted >= 1);
+    assert.ok(totals.under_par.unclaimed >= 1);
+    assert.ok(totals.hole_in_one.granted >= 1);
+
+    // days is clamped to [1, 90].
+    assert.equal((await (await admin(`/api/admin/rewards/summary?days=999`)).json()).days, 90);
+    assert.equal((await (await admin(`/api/admin/rewards/summary?days=0`)).json()).days, 1);
+
+    const anon = await fetch(`${baseUrl}/api/admin/rewards/summary`);
+    assert.equal(anon.status, 401);
+  } finally {
+    await testQuery(`delete from round where course_id = $1`, [sCourse]);
+    await testQuery(`delete from course where id = $1`, [sCourse]);
+    await testQuery(`delete from location where id = $1`, [sLoc]);
+  }
+});

@@ -1,50 +1,129 @@
 import { useState } from 'react';
-import { api, type GameRewardsMeta, type Reward } from './api';
-import { Button, Card, Input, Banner, Spinner, Pill, useAsync, fmtDateTime } from './ui';
+import { api, type GameRewardsMeta } from './api';
+import { Card, Banner, Spinner, useAsync } from './ui';
 
-// Reward redemption (punchlist #8 tier 1) — the counter flow. A player shows
-// the code from their final scorecard; staff type it here, check who/what,
-// and mark it redeemed so it only pays out once.
+// Rewards & usage reporting. Since #157 tickets are the only player-facing
+// reward — golf achievements pay straight to a loyalty card and no counter
+// codes are surfaced anywhere — so Master Control reports on what's being
+// minted (this page) rather than redeeming codes at a counter. Two ledgers:
+// golf achievements (reward_grant) and app/arcade rounds (game_ticket_award),
+// which share one per-card daily cap.
 
 const ACHIEVEMENT_LABELS: Record<string, string> = {
   hole_in_one: 'Hole-in-One',
   under_par: 'Under Par',
   hunt_master: 'Hunt Master',
 };
+const achLabel = (key: string) => ACHIEVEMENT_LABELS[key] ?? key;
 
-function RewardRow({ reward, onChanged }: { reward: Reward; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false);
+// Golf achievement issuance — earned vs. banked to a card, and tickets paid.
+function AchievementRewards({ days }: { days: number }) {
+  const summary = useAsync(() => api.rewardsSummary(days), [days]);
+
+  const totals = summary.data?.byAchievement.reduce(
+    (acc, a) => ({
+      granted: acc.granted + a.granted,
+      cardClaims: acc.cardClaims + a.cardClaims,
+      unclaimed: acc.unclaimed + a.unclaimed,
+      counter: acc.counter + a.counterRedemptions,
+      tickets: acc.tickets + a.tickets,
+    }),
+    { granted: 0, cardClaims: 0, unclaimed: 0, counter: 0, tickets: 0 }
+  );
+
   return (
-    <Card className="flex items-center gap-3">
-      <span className="font-mono text-lg font-semibold tracking-widest">{reward.code}</span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{ACHIEVEMENT_LABELS[reward.achievement] ?? reward.achievement}</span>
-          <Pill>{reward.playerTag}</Pill>
-        </div>
-        <div className="text-xs text-slate-400">
-          {reward.courseName}
-          {reward.locationName ? ` · ${reward.locationName}` : ''} · earned {fmtDateTime(reward.createdAt)}
-          {reward.redeemedAt &&
-            ` · redeemed ${fmtDateTime(reward.redeemedAt)}${reward.redeemedBy ? ` by ${reward.redeemedBy}` : ''}`}
-        </div>
-      </div>
-      <Button
-        variant={reward.redeemedAt ? 'ghost' : 'primary'}
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            await api.redeemReward(reward.id, !reward.redeemedAt);
-            onChanged();
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {busy ? '…' : reward.redeemedAt ? 'Undo redeem' : 'Mark redeemed'}
-      </Button>
-    </Card>
+    <div className="space-y-2">
+      <h2 className="text-sm font-semibold text-slate-700">Achievement rewards (golf)</h2>
+
+      {summary.loading && <Spinner />}
+      {summary.error && <Banner kind="error">{summary.error.message}</Banner>}
+      {summary.data && summary.data.byAchievement.length === 0 && (
+        <p className="py-3 text-center text-sm text-slate-400">
+          No golf achievements earned in this window.
+        </p>
+      )}
+      {summary.data && totals && summary.data.byAchievement.length > 0 && (
+        <>
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full text-left text-xs">
+              <thead className="text-slate-500">
+                <tr className="border-b border-slate-200">
+                  <th className="px-3 py-2">Achievement</th>
+                  <th className="px-3 py-2 text-right">Earned</th>
+                  <th className="px-3 py-2 text-right">Banked to card</th>
+                  <th className="px-3 py-2 text-right">Unclaimed</th>
+                  <th className="px-3 py-2 text-right">Tickets paid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.data.byAchievement.map((a) => (
+                  <tr key={a.achievement} className="border-b border-slate-100">
+                    <td className="px-3 py-1.5">
+                      {achLabel(a.achievement)}
+                      {a.counterRedemptions > 0 && (
+                        <span className="ml-2 text-slate-400">
+                          +{a.counterRedemptions} counter
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">{a.granted.toLocaleString()}</td>
+                    <td className="px-3 py-1.5 text-right">{a.cardClaims.toLocaleString()}</td>
+                    <td className="px-3 py-1.5 text-right">
+                      {a.unclaimed > 0 ? a.unclaimed.toLocaleString() : ''}
+                    </td>
+                    <td className="px-3 py-1.5 text-right font-semibold">
+                      {a.tickets.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="text-slate-600">
+                <tr className="border-t border-slate-200 font-semibold">
+                  <td className="px-3 py-2">Total</td>
+                  <td className="px-3 py-2 text-right">{totals.granted.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right">{totals.cardClaims.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right">
+                    {totals.unclaimed > 0 ? totals.unclaimed.toLocaleString() : ''}
+                  </td>
+                  <td className="px-3 py-2 text-right">{totals.tickets.toLocaleString()}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </Card>
+
+          {summary.data.rows.length > 0 && (
+            <Card className="overflow-x-auto p-0">
+              <table className="w-full text-left text-xs">
+                <thead className="text-slate-500">
+                  <tr className="border-b border-slate-200">
+                    <th className="px-3 py-2">Day</th>
+                    <th className="px-3 py-2">Venue</th>
+                    <th className="px-3 py-2">Achievement</th>
+                    <th className="px-3 py-2 text-right">Earned</th>
+                    <th className="px-3 py-2 text-right">Banked</th>
+                    <th className="px-3 py-2 text-right">Tickets</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.data.rows.map((r, i) => (
+                    <tr key={i} className="border-b border-slate-100">
+                      <td className="px-3 py-1.5 whitespace-nowrap">{r.day.slice(0, 10)}</td>
+                      <td className="px-3 py-1.5">{r.locationName ?? '—'}</td>
+                      <td className="px-3 py-1.5">{achLabel(r.achievement)}</td>
+                      <td className="px-3 py-1.5 text-right">{r.granted.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right">{r.cardClaims.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right font-semibold">
+                        {r.tickets.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -53,8 +132,7 @@ function RewardRow({ reward, onChanged }: { reward: Reward; onChanged: () => voi
 // metric is `tickets` vs the floor's paid economy; capped rounds show the
 // daily cap actually biting. Caps are tuned per venue in Location →
 // Ticket economy caps.
-function GameTicketIssuance() {
-  const [days, setDays] = useState(30);
+function GameTicketIssuance({ days }: { days: number }) {
   const usage = useAsync(
     async () => {
       const [meta, data] = await Promise.all([
@@ -71,18 +149,7 @@ function GameTicketIssuance() {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3">
-        <h2 className="text-sm font-semibold text-slate-700">App ticket issuance</h2>
-        <select
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-          className="ml-auto rounded border border-slate-300 px-1.5 py-1 text-xs"
-        >
-          <option value={7}>Last 7 days</option>
-          <option value={30}>Last 30 days</option>
-          <option value={90}>Last 90 days</option>
-        </select>
-      </div>
+      <h2 className="text-sm font-semibold text-slate-700">App ticket issuance (arcade)</h2>
 
       {usage.loading && <Spinner />}
       {usage.error && <Banner kind="error">{usage.error.message}</Banner>}
@@ -147,97 +214,29 @@ function GameTicketIssuance() {
 }
 
 export default function Rewards() {
-  const [code, setCode] = useState('');
-  const [lookup, setLookup] = useState<Reward[] | null>(null);
-  const [lookupErr, setLookupErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [showRedeemed, setShowRedeemed] = useState(false);
-  const recent = useAsync(() => api.listRewards(showRedeemed), [showRedeemed]);
-
-  async function find(e: React.FormEvent) {
-    e.preventDefault();
-    setLookupErr(null);
-    setBusy(true);
-    try {
-      const rows = await api.lookupReward(code.trim());
-      setLookup(rows);
-      if (rows.length === 0) setLookupErr(`No reward found for code "${code.trim().toUpperCase()}".`);
-    } catch (err) {
-      setLookup(null);
-      setLookupErr((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const refreshAll = () => {
-    recent.reload();
-    if (code.trim()) {
-      api.lookupReward(code.trim()).then(setLookup, () => {});
-    }
-  };
+  const [days, setDays] = useState(30);
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Rewards</h1>
-
-      <Card>
-        <h2 className="mb-2 text-sm font-semibold text-slate-700">Look up a code</h2>
-        <form onSubmit={find} className="flex gap-2">
-          <Input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="K7M2PX"
-            className="font-mono uppercase tracking-widest"
-            maxLength={6}
-          />
-          <Button type="submit" disabled={busy || !code.trim()}>
-            {busy ? 'Looking…' : 'Look up'}
-          </Button>
-        </form>
-        {lookupErr && (
-          <div className="mt-2">
-            <Banner kind="error">{lookupErr}</Banner>
-          </div>
-        )}
-        {lookup && lookup.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {lookup.map((r) => (
-              <RewardRow key={r.id} reward={r} onChanged={refreshAll} />
-            ))}
-          </div>
-        )}
-      </Card>
-
       <div className="flex items-center gap-3">
-        <h2 className="text-sm font-semibold text-slate-700">
-          {showRedeemed ? 'Recently redeemed' : 'Outstanding (unredeemed)'}
-        </h2>
-        <button
-          type="button"
-          className="ml-auto text-xs text-slate-500 underline"
-          onClick={() => setShowRedeemed((v) => !v)}
+        <h1 className="text-lg font-semibold">Rewards &amp; usage</h1>
+        <select
+          value={days}
+          onChange={(e) => setDays(Number(e.target.value))}
+          className="ml-auto rounded border border-slate-300 px-1.5 py-1 text-xs"
         >
-          {showRedeemed ? 'Show outstanding' : 'Show redeemed'}
-        </button>
+          <option value={7}>Last 7 days</option>
+          <option value={30}>Last 30 days</option>
+          <option value={90}>Last 90 days</option>
+        </select>
       </div>
+      <p className="-mt-2 text-xs text-slate-500">
+        Tickets are the only player-facing reward — golf achievements pay straight to a
+        loyalty card, so there are no counter codes to redeem.
+      </p>
 
-      {recent.loading && <Spinner />}
-      {recent.error && <Banner kind="error">{recent.error.message}</Banner>}
-      {recent.data && (
-        <div className="space-y-2">
-          {recent.data.map((r) => (
-            <RewardRow key={r.id} reward={r} onChanged={refreshAll} />
-          ))}
-          {recent.data.length === 0 && (
-            <p className="py-4 text-center text-sm text-slate-400">
-              {showRedeemed ? 'Nothing redeemed yet.' : 'No outstanding rewards.'}
-            </p>
-          )}
-        </div>
-      )}
-
-      <GameTicketIssuance />
+      <AchievementRewards days={days} />
+      <GameTicketIssuance days={days} />
     </div>
   );
 }
