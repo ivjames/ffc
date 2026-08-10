@@ -21,6 +21,9 @@ npm-debug.log*
 # runtime-uploaded scavenger-hunt photos (server/lib default dir)
 server/data/
 
+# ffc backups + CenterEdge mock persisted state (bin/ffc, MOCK_STATE_FILE)
+data/
+
 # editor / os
 .DS_Store
 .vscode/

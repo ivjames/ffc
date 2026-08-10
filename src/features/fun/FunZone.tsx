@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import type { CSSProperties } from 'react';
 import { Screen, TopBar, Content } from '../../ui/components';
 import { playClick } from '../../lib/sound';
+import { usePos } from '../../lib/pos';
 
 // The Arcade section (formerly "While You Wait") — the venue's whole roster of
 // offline line-entertainment: ~24 attraction mini-games plus fun facts, trivia,
@@ -14,6 +15,12 @@ type Tile = {
   title: string;
   blurb: string;
   accent: string;
+  // Games that credit tickets on the linked card — mirrors the server's
+  // GAME_REWARD_GAMES registry (server/lib/gameRewards.js), i.e. the tiles whose
+  // screen mounts <GameTicketAward>. Chance games (claw, coin pusher), Arcade
+  // Putt, and Fun Facts don't earn, so they carry no flag. Drives the 🎟️ hint,
+  // shown only where the venue actually sells game rewards.
+  earns?: boolean;
 };
 
 const TILES: Tile[] = [
@@ -30,6 +37,7 @@ const TILES: Tile[] = [
     title: 'Trivia',
     blurb: 'Ten quick questions — how many can you get?',
     accent: '#3b82f6',
+    earns: true,
   },
   {
     to: '/arcade/putt',
@@ -44,6 +52,7 @@ const TILES: Tile[] = [
     title: 'Skee-Ball',
     blurb: 'Roll the lane — nail the corners for 100.',
     accent: '#22c55e',
+    earns: true,
   },
   {
     to: '/arcade/airhockey',
@@ -51,6 +60,7 @@ const TILES: Tile[] = [
     title: 'Air Hockey',
     blurb: 'Face the CPU — first to seven goals wins.',
     accent: '#38bdf8',
+    earns: true,
   },
   {
     to: '/arcade/bumper',
@@ -58,6 +68,7 @@ const TILES: Tile[] = [
     title: 'Bumper Cars',
     blurb: 'Ram the pack — most bumps in 30 seconds.',
     accent: '#f97316',
+    earns: true,
   },
   {
     to: '/arcade/boats',
@@ -65,6 +76,7 @@ const TILES: Tile[] = [
     title: 'Bumper Boats',
     blurb: 'Bumper cars on water — floatier, driftier bumps.',
     accent: '#0ea5e9',
+    earns: true,
   },
   {
     to: '/arcade/axe',
@@ -72,6 +84,7 @@ const TILES: Tile[] = [
     title: 'Axe Throwing',
     blurb: 'Time your throw — stick the bullseye or a clutch.',
     accent: '#eab308',
+    earns: true,
   },
   {
     to: '/arcade/batting',
@@ -79,6 +92,7 @@ const TILES: Tile[] = [
     title: 'Batting Cages',
     blurb: 'Time your swing — crush it for a home run.',
     accent: '#ef4444',
+    earns: true,
   },
   {
     to: '/arcade/bowling',
@@ -86,6 +100,7 @@ const TILES: Tile[] = [
     title: 'Bowling',
     blurb: 'Roll a full 10-frame game — go for the strike.',
     accent: '#a855f7',
+    earns: true,
   },
   {
     to: '/arcade/karts',
@@ -93,6 +108,7 @@ const TILES: Tile[] = [
     title: 'Go-Karts',
     blurb: 'Three-lap time trial — set your best lap.',
     accent: '#06b6d4',
+    earns: true,
   },
   {
     to: '/arcade/mole',
@@ -100,6 +116,7 @@ const TILES: Tile[] = [
     title: 'Whack-a-Mole',
     blurb: 'Bop the gophers — gold pays triple, bombs bite.',
     accent: '#84cc16',
+    earns: true,
   },
   {
     to: '/arcade/hoops',
@@ -107,6 +124,7 @@ const TILES: Tile[] = [
     title: 'Pop-a-Shot',
     blurb: '45 seconds of buckets — hit the bonus round.',
     accent: '#fb923c',
+    earns: true,
   },
   {
     to: '/arcade/darts',
@@ -114,6 +132,7 @@ const TILES: Tile[] = [
     title: 'Darts',
     blurb: 'Nine darts — trebles, doubles, and the bull.',
     accent: '#dc2626',
+    earns: true,
   },
   {
     to: '/arcade/gallery',
@@ -121,6 +140,7 @@ const TILES: Tile[] = [
     title: 'Shooting Gallery',
     blurb: 'Six shots, three shelves — drop the tin ducks.',
     accent: '#facc15',
+    earns: true,
   },
   {
     to: '/arcade/claw',
@@ -135,6 +155,7 @@ const TILES: Tile[] = [
     title: 'High Striker',
     blurb: 'One perfect swing — ring the bell.',
     accent: '#f43f5e',
+    earns: true,
   },
   {
     to: '/arcade/rings',
@@ -142,6 +163,7 @@ const TILES: Tile[] = [
     title: 'Ring Toss',
     blurb: 'Flick rings onto the bottles — red pays five.',
     accent: '#8b5cf6',
+    earns: true,
   },
   {
     to: '/arcade/bottles',
@@ -149,6 +171,7 @@ const TILES: Tile[] = [
     title: 'Milk Bottles',
     blurb: 'Three racks — smash the pyramid clean.',
     accent: '#e5e7eb',
+    earns: true,
   },
   {
     to: '/arcade/watergun',
@@ -156,6 +179,7 @@ const TILES: Tile[] = [
     title: 'Water Gun Race',
     blurb: 'Soak the bullseye — first balloon to pop wins.',
     accent: '#2dd4bf',
+    earns: true,
   },
   {
     to: '/arcade/pinball',
@@ -163,6 +187,7 @@ const TILES: Tile[] = [
     title: 'Pinball',
     blurb: 'Three balls, two flippers — light the lanes.',
     accent: '#d946ef',
+    earns: true,
   },
   {
     to: '/arcade/pusher',
@@ -175,6 +200,9 @@ const TILES: Tile[] = [
 
 export default function FunZone() {
   const navigate = useNavigate();
+  // The 🎟️ hint only makes sense where the venue actually credits tickets — if
+  // this location doesn't sell game rewards, no game pays out, so show nothing.
+  const { gameRewards } = usePos();
 
   return (
     <Screen>
@@ -203,9 +231,19 @@ export default function FunZone() {
               >
                 {t.emoji}
               </span>
-              <span className="block min-w-0 text-sm font-bold leading-tight text-fairway-50">
+              <span className="block min-w-0 flex-1 text-sm font-bold leading-tight text-fairway-50">
                 {t.title}
               </span>
+              {gameRewards && t.earns && (
+                <span
+                  className="shrink-0 text-base leading-none"
+                  role="img"
+                  aria-label="Earns tickets"
+                  title="Earns tickets"
+                >
+                  🎟️
+                </span>
+              )}
             </button>
           ))}
         </div>

@@ -1,5 +1,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createApp, STATIC_TOKEN } from './app.js';
 import {
   AUTO_PICKUP_MS,
@@ -368,4 +371,87 @@ test('_reset restores seed balances', async () => {
   await post('/_reset', {});
   const player = (await (await fetch(`${base}/players/PL-1001`, { headers: AUTH })).json()).player;
   assert.equal(player.balances.tickets, 4380);
+});
+
+test('a stateFile persists balances + idempotency across a restart', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ce-mock-'));
+  const stateFile = join(dir, 'state.json');
+  const reward = { tickets: 250, source: 'minigame:skee-ball', idempotencyKey: 'persist-key-1' };
+
+  // First "process": award tickets, then shut down.
+  const app1 = createApp({ stateFile }).listen(0);
+  await new Promise((r) => app1.on('listening', r));
+  const base1 = `http://127.0.0.1:${app1.address().port}/api/v1`;
+  const first = await (
+    await fetch(`${base1}/players/PL-1003/tickets/reward`, {
+      method: 'POST',
+      headers: JSON_AUTH,
+      body: JSON.stringify(reward),
+    })
+  ).json();
+  assert.equal(first.newTicketBalance, 250); // seed 0 + 250
+  await new Promise((r) => app1.close(r));
+
+  // Second "process" over the same file: the balance survived the restart, and
+  // the same idempotencyKey replays instead of double-crediting.
+  const app2 = createApp({ stateFile }).listen(0);
+  await new Promise((r) => app2.on('listening', r));
+  const base2 = `http://127.0.0.1:${app2.address().port}/api/v1`;
+  try {
+    const restored = (
+      await (await fetch(`${base2}/players/PL-1003`, { headers: AUTH })).json()
+    ).player;
+    assert.equal(restored.balances.tickets, 250);
+
+    const replay = await (
+      await fetch(`${base2}/players/PL-1003/tickets/reward`, {
+        method: 'POST',
+        headers: JSON_AUTH,
+        body: JSON.stringify(reward),
+      })
+    ).json();
+    assert.equal(replay.duplicate, true);
+    assert.equal(replay.newTicketBalance, 250); // not 500 — no double credit
+  } finally {
+    await new Promise((r) => app2.close(r));
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('an old snapshot overlays balances without shadowing the current seed', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'ce-mock-'));
+  const stateFile = join(dir, 'state.json');
+  // A stale snapshot: only PL-1003 (with a saved balance) plus a card that no
+  // longer exists in the seed. PL-1001 is absent from the snapshot entirely.
+  await writeFile(
+    stateFile,
+    JSON.stringify({
+      v: 1,
+      players: [
+        { id: 'PL-1003', balances: { gamePlayCredits: 0, tickets: 999 } },
+        { id: 'PL-RETIRED', balances: { gamePlayCredits: 0, tickets: 5 } },
+      ],
+      transactions: [],
+      rewardsByKey: [],
+      nextOrderNumber: 1001,
+    }),
+  );
+
+  const app = createApp({ stateFile }).listen(0);
+  await new Promise((r) => app.on('listening', r));
+  const b = `http://127.0.0.1:${app.address().port}/api/v1`;
+  try {
+    // Saved balance overlays the matching seed card.
+    const pl3 = (await (await fetch(`${b}/players/PL-1003`, { headers: AUTH })).json()).player;
+    assert.equal(pl3.balances.tickets, 999);
+    // A seed card missing from the snapshot is NOT dropped — still its seed value.
+    const pl1 = (await (await fetch(`${b}/players/PL-1001`, { headers: AUTH })).json()).player;
+    assert.equal(pl1.balances.tickets, 4380);
+    assert.equal(pl1.displayName, 'Ava Martinez');
+    // A snapshot-only card that's no longer in the seed doesn't resurrect.
+    assert.equal((await fetch(`${b}/players/PL-RETIRED`, { headers: AUTH })).status, 404);
+  } finally {
+    await new Promise((r) => app.close(r));
+    await rm(dir, { recursive: true, force: true });
+  }
 });

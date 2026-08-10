@@ -138,8 +138,9 @@ api_up(){
 }
 
 # Install deps + (re)start the CenterEdge mock under pm2, bound to loopback on
-# CE_MOCK_PORT (nginx's /ce proxy is the only entry). In-memory by design, so a
-# restart resets balances/orders to the seed — fine for a demo backend. Skips
+# CE_MOCK_PORT (nginx's /ce proxy is the only entry). Card balances + history
+# persist to $APP_DIR/data (MOCK_STATE_FILE) so a redeploy's restart no longer
+# wipes them to the seed; the fake kitchen's orders stay ephemeral. Skips
 # cleanly if the mock dir is ever absent.
 mock_up(){
   [ -d "$APP_DIR/mock-centeredge" ] || return 0

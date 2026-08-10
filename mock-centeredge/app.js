@@ -1,6 +1,14 @@
-// Mock CenterEdge Advantage Web Services backend. In-memory only — restart =
-// clean slate (or POST /api/v1/_reset). Exports a factory so tests boot fresh
-// isolated instances; index.js is the process entrypoint.
+// Mock CenterEdge Advantage Web Services backend. Exports a factory so tests
+// boot fresh isolated instances; index.js is the process entrypoint.
+//
+// State: in-memory, but OPTIONALLY persisted to disk when the factory is given
+// a `stateFile` (index.js does this; tests don't, so they stay isolated). The
+// real vendor keeps balances across our deploys, so the mock must too —
+// otherwise a redeploy silently wipes every card's ticket balance back to the
+// seed. We persist the loyalty-relevant slice (player balances, transaction
+// history, and the reward idempotency map so a replay after a restart still
+// de-dupes); the fake kitchen's orders stay ephemeral. POST /api/v1/_reset
+// still restores the seed on demand.
 //
 // Contract notes (kept intentionally close to what we expect from the real
 // API so the swap later is a base-URL + auth change, not a reshape):
@@ -21,6 +29,8 @@
 import express from 'express';
 import cors from 'cors';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { MENU, PLAYERS } from './seed.js';
 import {
   freshKitchen,
@@ -51,6 +61,54 @@ function freshState() {
     transactions: new Map(),
     nextOrderNumber: 1001,
   };
+}
+
+// The persisted slice of state (see the header note): balances, history, and
+// the reward idempotency map. Orders/kitchen/tokens are deliberately left out —
+// they're ephemeral demo sim state, safe to reset on restart.
+function serializeState(state) {
+  return JSON.stringify({
+    v: 1,
+    players: [...state.players.values()],
+    transactions: [...state.transactions.entries()],
+    rewardsByKey: [...state.rewardsByKey.entries()],
+    nextOrderNumber: state.nextOrderNumber,
+  });
+}
+
+// Overlay a persisted snapshot onto a fresh state. Tolerant of a missing or
+// malformed file (returns without changes) so a corrupt snapshot degrades to
+// the seed rather than crashing the mock on boot.
+function loadPersisted(state, stateFile) {
+  let data;
+  try {
+    data = JSON.parse(readFileSync(stateFile, 'utf8'));
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.warn(`[mock-centeredge] ignoring unreadable state file ${stateFile}: ${err.message}`);
+    }
+    return;
+  }
+  if (!data || typeof data !== 'object') return;
+  if (Array.isArray(data.players)) {
+    // Overlay ONLY the mutable balances onto the current seed roster — never
+    // replace it. Otherwise an old snapshot would shadow the live seed forever:
+    // a later release's new demo card would 404 and updated card metadata would
+    // stay stale until a balance-destroying _reset. Cards no longer in the seed
+    // are simply dropped; new seed cards keep their seed balance.
+    const savedBalances = new Map(
+      data.players.filter((p) => p && p.id).map((p) => [p.id, p.balances]),
+    );
+    for (const [id, player] of state.players) {
+      const saved = savedBalances.get(id);
+      if (saved && typeof saved === 'object') {
+        player.balances = { ...player.balances, ...saved };
+      }
+    }
+  }
+  if (Array.isArray(data.transactions)) state.transactions = new Map(data.transactions);
+  if (Array.isArray(data.rewardsByKey)) state.rewardsByKey = new Map(data.rewardsByKey);
+  if (Number.isInteger(data.nextOrderNumber)) state.nextOrderNumber = data.nextOrderNumber;
 }
 
 // Menu lookups don't change per instance — index once at module load.
@@ -146,8 +204,32 @@ function pushTransaction(state, playerId, tx) {
   state.transactions.set(playerId, list);
 }
 
-export function createApp() {
+export function createApp({ stateFile = null } = {}) {
   const state = freshState();
+  // Persistence is opt-in: only the long-running process passes a stateFile.
+  // Tests call createApp() with none, so they stay fully in-memory and isolated.
+  if (stateFile) {
+    try {
+      mkdirSync(dirname(stateFile), { recursive: true });
+    } catch (err) {
+      console.warn(`[mock-centeredge] could not create state dir for ${stateFile}: ${err.message}`);
+    }
+    loadPersisted(state, stateFile);
+  }
+  // Write the persisted slice atomically (tmp + rename). Best-effort: a failed
+  // write is logged but never breaks the request that triggered it — the mock
+  // keeps serving from memory.
+  const persist = () => {
+    if (!stateFile) return;
+    try {
+      const tmp = `${stateFile}.tmp`;
+      writeFileSync(tmp, serializeState(state));
+      renameSync(tmp, stateFile);
+    } catch (err) {
+      console.warn(`[mock-centeredge] failed to persist state to ${stateFile}: ${err.message}`);
+    }
+  };
+
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: '1mb' }));
@@ -285,6 +367,7 @@ export function createApp() {
         createdAt: order.createdAt,
       });
     }
+    persist(); // nextOrderNumber + any linked-card transaction
     res.status(201).json({
       ok: true,
       order: publicOrder(order, nowMs),
@@ -399,6 +482,7 @@ export function createApp() {
       duplicate: false,
     };
     state.rewardsByKey.set(idempotencyKey, response);
+    persist(); // balance + transaction + idempotency record must survive restart
     res.json(response);
   });
 
@@ -409,6 +493,7 @@ export function createApp() {
     const tokens = state.tokens;
     Object.assign(state, freshState());
     state.tokens = tokens;
+    persist(); // overwrite the snapshot with the seed so the reset survives restart
     res.json({ ok: true });
   });
 
