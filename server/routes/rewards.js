@@ -43,15 +43,14 @@ router.get("/", async (req, res) => {
   }
 });
 
-// POST /api/rewards/claim — redeem an earned achievement to a loyalty card as
-// tickets (the app's grant-backed alternative to the counter code). Unlike the
-// game-rewards proxy, golf is NOT client-scored: the server looks up the stored
-// `reward_grant`, derives the payout from its achievement, and refuses if no
-// grant exists — so a request can't mint tickets without an achievement or
-// over-pay one. `reward_grant.redeemed_at` is the single consume point, so a
-// card claim and a counter redemption are mutually exclusive, and a re-opened
-// summary settles from the row instead of crediting twice. Auth model matches
-// GET above: the round's unguessable clientId is the capability.
+// POST /api/rewards/claim — bank an earned achievement to a loyalty card as
+// tickets. Unlike the game-rewards proxy, golf is NOT client-scored: the server
+// looks up the stored `reward_grant`, derives the payout from its achievement,
+// and refuses if no grant exists — so a request can't mint tickets without an
+// achievement or over-pay one. `reward_grant.redeemed_at` is the single consume
+// point, so a grant is banked exactly once and a re-opened summary settles from
+// the row instead of crediting twice. Auth model matches GET above: the round's
+// unguessable clientId is the capability.
 router.post("/claim", async (req, res) => {
   const { clientId, playerIndex, achievement, playerId } = req.body ?? {};
   if (typeof clientId !== "string" || clientId.length < 1 || clientId.length > 200) {
@@ -74,7 +73,7 @@ router.post("/claim", async (req, res) => {
     await client.query("begin");
     // Lock this grant so concurrent claims serialize on the same row.
     const gres = await client.query(
-      `select g.id, g.redeemed_at, g.redeemed_via, g.tickets_awarded, g.pos_transaction_id,
+      `select g.id, g.redeemed_at, g.tickets_awarded, g.pos_transaction_id,
               g.card_player_id, l.pos as pos, l.id as location_id, l.tz as tz
          from reward_grant g
          join round r on r.id = g.round_id
@@ -96,11 +95,7 @@ router.post("/claim", async (req, res) => {
     }
 
     if (grant.redeemed_at) {
-      if (grant.redeemed_via !== "card") {
-        // Consumed at the counter — the other lane won it.
-        await client.query("rollback");
-        return res.status(409).json({ ok: false, error: "already redeemed at the counter" });
-      }
+      // Already banked to a card (redeemed_at is the single consume point).
       if (grant.pos_transaction_id) {
         // Already credited to a card; answer from the row (re-opened summary).
         await client.query("commit");
@@ -144,8 +139,7 @@ router.post("/claim", async (req, res) => {
       }
       await client.query(
         `update reward_grant
-            set redeemed_at = now(), redeemed_via = 'card',
-                tickets_awarded = $2, card_player_id = $3
+            set redeemed_at = now(), tickets_awarded = $2, card_player_id = $3
           where id = $1`,
         [grant.id, award, playerId]
       );

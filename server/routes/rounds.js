@@ -8,7 +8,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { validateTags, isValidTag } from "../lib/sanitize.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
-import { scoreAchievements, newRewardCode } from "../lib/rewards.js";
+import { scoreAchievements } from "../lib/rewards.js";
 import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
 
 export const router = Router();
@@ -91,26 +91,16 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
   }
 
   for (const grant of grants) {
-    // Retry the random short code on the (rare) unique collision — behind a
-    // savepoint, because a unique violation otherwise aborts the whole round
-    // transaction. The per-(round, player, achievement) uniqueness makes
-    // re-grants no-ops.
-    for (let attempt = 0; attempt < 5; attempt++) {
-      await client.query("SAVEPOINT reward_grant_sp");
-      try {
-        await client.query(
-          `insert into reward_grant (code, round_id, player_index, player_tag, achievement)
-             values ($1, $2, $3, $4, $5)
-           on conflict (round_id, player_index, achievement) do nothing`,
-          [newRewardCode(), roundId, grant.playerIndex, playerTags[grant.playerIndex], grant.achievement]
-        );
-        await client.query("RELEASE SAVEPOINT reward_grant_sp");
-        break;
-      } catch (err) {
-        await client.query("ROLLBACK TO SAVEPOINT reward_grant_sp");
-        if (!(err && err.code === "23505" && attempt < 4)) throw err;
-      }
-    }
+    // No redemption code is minted: tickets on the loyalty card are the only
+    // payout (since #157), and a grant's internal identity is its UUID plus the
+    // per-(round, player, achievement) unique key — which also makes a
+    // duplicate re-sync a no-op via ON CONFLICT.
+    await client.query(
+      `insert into reward_grant (round_id, player_index, player_tag, achievement)
+         values ($1, $2, $3, $4)
+       on conflict (round_id, player_index, achievement) do nothing`,
+      [roundId, grant.playerIndex, playerTags[grant.playerIndex], grant.achievement]
+    );
   }
 }
 

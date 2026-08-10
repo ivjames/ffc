@@ -1,14 +1,8 @@
 // Unit coverage for the reward rules (lib/rewards.js) — the score-based
-// achievement logic and the redemption-code shape.
+// achievement logic and the payout pricing.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  scoreAchievements,
-  newRewardCode,
-  CODE_LENGTH,
-  achievementTickets,
-  ACHIEVEMENTS,
-} from "./rewards.js";
+import { scoreAchievements, achievementTickets, ACHIEVEMENTS } from "./rewards.js";
 
 const PARS = Array(18).fill(3); // course par 54
 
@@ -55,13 +49,4 @@ test("a full card of aces earns both, and players are independent", () => {
 test("stray score rows outside the roster are ignored", () => {
   const rows = [{ playerIndex: 3, hole: 1, strokes: 1 }];
   assert.deepEqual(scoreAchievements(rows, 1, PARS), []);
-});
-
-test("redemption codes are the right length from the unambiguous charset", () => {
-  for (let i = 0; i < 200; i++) {
-    const code = newRewardCode();
-    assert.equal(code.length, CODE_LENGTH);
-    assert.match(code, /^[ABCDEFGHJKMNPQRSTUVWXYZ2345679]+$/);
-    assert.doesNotMatch(code, /[01OIL8]/, "no ambiguous characters");
-  }
 });
