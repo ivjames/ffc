@@ -22,6 +22,10 @@ describe('isValidContent', () => {
       false, // course missing pars[]
     );
   });
+
+  it('rejects an empty location catalog (would crash LOCATIONS[0] fallback)', () => {
+    expect(isValidContent({ locations: [], courses: [] })).toBe(false);
+  });
 });
 
 describe('hydrateContent', () => {

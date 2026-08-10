@@ -55,13 +55,19 @@ import { UpdateModal } from './ui/UpdateModal';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
 import { DEV_MODE } from './lib/flags';
-import { hydrateContent } from './data/courses';
+import { hydrateContent, useContentRevision } from './data/courses';
 
 // §7 Routes / screens.
 export default function App() {
   // The venue display wall is landscape by design (a TV pointed at the URL),
   // so it's exempt from the portrait nudge every phone screen gets.
   const isWall = useLocation().pathname.startsWith('/tv/wall');
+  // Subscribe the whole route tree to live-content updates here, at the common
+  // ancestor: catalog screens (/locations, /new, /courses, /rules, /tv/wall)
+  // read LOCATIONS/COURSES as module globals without their own subscription, so
+  // hydrating after first paint would otherwise leave them stale until an
+  // unrelated render. Re-rendering App re-renders every route with fresh data.
+  useContentRevision();
   // Pull the live catalog (venues, courses, POS config) once at boot so Master
   // Control changes reach players without a redeploy. Best-effort; falls back to
   // the cached/baked content offline. See src/data/courses.ts.
