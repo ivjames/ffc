@@ -57,8 +57,15 @@ export default function GameTicketAward({
   }
 
   // Post-call gating surprises (venue config changed mid-session, card
-  // unlinked between render and call) — just disappear quietly.
-  if (outcome?.status === 'unavailable' || outcome?.status === 'no-card') return null;
+  // unlinked between render and call) — just disappear quietly. Hitting the
+  // card's daily ticket cap is the same: not a failure worth nagging about, so
+  // the banner simply doesn't show.
+  if (
+    outcome?.status === 'unavailable' ||
+    outcome?.status === 'no-card' ||
+    outcome?.status === 'daily-cap'
+  )
+    return null;
 
   return (
     <div className="surface-1 mt-4 rounded-2xl border border-fairway-800/60 px-4 py-3 text-center text-sm">
@@ -71,12 +78,6 @@ export default function GameTicketAward({
           {outcome.newTicketBalance !== null && (
             <> · card balance {outcome.newTicketBalance.toLocaleString()}</>
           )}
-        </span>
-      )}
-      {outcome?.status === 'daily-cap' && (
-        <span className="text-fairway-100/70">
-          🎟️ You've hit today's app-ticket limit ({outcome.dailyCap.toLocaleString()}) — great
-          run! Earning resets tomorrow.
         </span>
       )}
       {outcome?.status === 'error' && (
