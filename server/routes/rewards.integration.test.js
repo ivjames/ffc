@@ -110,8 +110,8 @@ test("a par round earns nothing; an under-par full card and a hole-in-one earn g
     grants.every((g) => !("code" in g)),
     "GET /api/rewards never exposes a code to the player"
   );
-  // But the grant still mints a staff-redemption code server-side (its identity
-  // in Master Control) — assert that invariant directly against the DB.
+  // And no redemption code is minted server-side anymore (since #157 tickets
+  // are the only payout) — the grant's identity is its UUID. Assert directly.
   const codes = await testQuery(
     `select g.code from reward_grant g
        join round r on r.id = g.round_id
@@ -119,8 +119,8 @@ test("a par round earns nothing; an under-par full card and a hole-in-one earn g
     [body.clientId]
   );
   assert.ok(
-    codes.rows.length === 2 && codes.rows.every((g) => /^[A-Z2-9]{6}$/.test(g.code)),
-    "codes are minted 6-char unambiguous server-side"
+    codes.rows.length === 2 && codes.rows.every((g) => g.code === null),
+    "no redemption code is minted server-side"
   );
 });
 
@@ -177,19 +177,21 @@ test("hunt master: verified finds covering the course's full list earn the grant
   );
 });
 
-test("admin lookup by code + redeem/unredeem round-trip with audit", async () => {
+test("admin lookup by (legacy) code + redeem/unredeem round-trip with audit", async () => {
   const body = round({ scores: { 0: Array(18).fill(1) } }); // ace + under par
   await postRound(body);
-  // The staff-redemption code lives server-side only (the player GET never
-  // returns it); read it from the DB to drive the Master Control lookup.
+  // New grants carry no code (codes are no longer minted). The legacy Master
+  // Control lookup still resolves any pre-#157 grant that DOES carry a code, so
+  // stamp one on directly to exercise that still-supported path.
   const grants = await testQuery(
-    `select g.code from reward_grant g
+    `select g.id from reward_grant g
        join round r on r.id = g.round_id
       where r.client_id = $1 order by g.player_index`,
     [body.clientId]
   );
   assert.equal(grants.rows.length, 2);
-  const code = grants.rows[0].code;
+  const code = `LGCY${Date.now() % 100}`;
+  await testQuery(`update reward_grant set code = $1 where id = $2`, [code, grants.rows[0].id]);
 
   // Lookup is case-insensitive and includes venue context.
   const found = await (await admin(`/api/admin/rewards?code=${code.toLowerCase()}`)).json();

@@ -1,10 +1,10 @@
-// Rewards (punchlist #8 tier 1) — achievement computation + redemption codes.
+// Rewards (punchlist #8 tier 1) — achievement computation + payout pricing.
 //
 // Achievements are granted server-side when a completed round first syncs
-// (routes/rounds.js), one reward_grant row per (player, achievement). The
-// player shows the short code at the counter; staff look it up in Master
-// Control and mark it redeemed. Pure functions here so the rules are
-// unit-testable without a DB.
+// (routes/rounds.js), one reward_grant row per (player, achievement), and pay
+// out as tickets on the player's loyalty card. Pure functions here so the
+// rules are unit-testable without a DB. (No redemption codes are minted — the
+// grant's identity is its UUID; see routes/rounds.js.)
 
 // The venue-facing catalog. Labels are what staff see in Master Control; the
 // player app carries its own copy of the same labels (src/features/rewards).
@@ -57,18 +57,4 @@ export function scoreAchievements(scoreRows, playerCount, pars) {
     }
   }
   return grants;
-}
-
-// Short human redemption code: 6 chars from an unambiguous charset (no 0/O,
-// 1/I/L) so it survives being read aloud over a counter. 30^6 ≈ 7.3e8 —
-// collisions are handled by unique-retry at insert time.
-const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ2345679";
-export const CODE_LENGTH = 6;
-
-export function newRewardCode() {
-  let code = "";
-  for (let i = 0; i < CODE_LENGTH; i++) {
-    code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  }
-  return code;
 }

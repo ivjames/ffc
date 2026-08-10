@@ -76,9 +76,11 @@ Request:
 - **Rewards**: when a *completed* round first syncs, achievement grants
   (hole-in-one; under par on a full card; hunt master when the player's verified
   finds cover the course's active non-countable hunt list) are written to
-  `reward_grant` in the same transaction — one short redemption code per
-  (player, achievement). A duplicate re-sync never re-grants. See
-  `GET /api/rewards` and the admin redemption flow below.
+  `reward_grant` in the same transaction — one row per (player, achievement),
+  identified by its UUID. They pay out as tickets on the player's loyalty card;
+  no redemption code is minted (since #157 tickets are the only player-facing
+  payout). A duplicate re-sync never re-grants. See `GET /api/rewards` and the
+  admin rewards reporting below.
 
 Responses:
 - `200 { "ok": true, "roundId": "<uuid>" }` — created, or the existing round id
@@ -324,8 +326,9 @@ no domain history hangs off an account.)
 | `GET  /api/admin/export/rounds.csv?from=&to=&locationId=` | CSV download, one row per (completed round, player); `from`/`to` are `YYYY-MM-DD` calendar days in `ADMIN_TZ`, inclusive, defaulting to the last 30 days; org-scoped |
 | `GET  /api/admin/announcements?archived=` · `POST /api/admin/announcements` | list / create-update announcements; global rows (`locationId: null`) are **super_admin only** to write, `org_admin` manages rows pinned to their own org's venues (and sees global ones read-only) |
 | `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
-| `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | look up one redemption code (case-insensitive), or list recent grants (default: unredeemed, limit 50); org-scoped via the round's course → location |
-| `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | mark a reward handed out (records who) / undo a mistaken redemption; audited |
+| `GET  /api/admin/rewards/summary?days=1..90` | achievement issuance rollup: per-achievement totals (earned / banked to a card / unclaimed / tickets paid) + a per venue-local-day drilldown; org-scoped via the round's course → location |
+| `GET  /api/admin/rewards?code=` · `?redeemed=&limit=` | **legacy**: look up one redemption code (case-insensitive) or list recent grants; codes are no longer minted, so `?code=` only resolves pre-#157 grants; org-scoped |
+| `POST /api/admin/rewards/:id/redeem` · `…/unredeem` | **legacy** counter redemption: mark a reward handed out (records who) / undo a mistaken redemption; audited |
 | `GET  /api/admin/photos?people=1\|minors=1&limit=&before=` | stored hunt photos, newest first, with item/course/venue + moderation and people/minors flags; `before` (the previous page's last `createdAt`) keyset-paginates older photos; org-scoped via find → item → course → location |
 | `GET  /api/admin/photos/:id/image` | the image bytes, for the review UI (same scoping) |
 | `POST /api/admin/photos/:id/remove` | delete the photo file from disk and mark the find `moderation='rejected'` (the find keeps its credit); audited — the "please delete that photo" path. Time-based deletion is the retention sweep (`HUNT_PHOTO_RETENTION_DAYS`) |

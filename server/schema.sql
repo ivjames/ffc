@@ -634,7 +634,7 @@ alter table location add column if not exists pos jsonb;
 -- for display. Cascade with the round like score does.
 create table if not exists reward_grant (
   id           uuid primary key default gen_random_uuid(),
-  code         text not null unique,     -- short human code, e.g. 'K7M2PX'
+  code         text unique,              -- legacy counter code; no longer minted (see below)
   round_id     uuid not null references round(id) on delete cascade,
   player_index int  not null,            -- 0..3
   player_tag   text not null,            -- [A-Z0-9]{3} at grant time
@@ -656,6 +656,11 @@ alter table reward_grant add column if not exists redeemed_via      text;  -- 'c
 alter table reward_grant add column if not exists tickets_awarded   int;   -- tickets paid on a card claim
 alter table reward_grant add column if not exists card_player_id    text;  -- the loyalty card credited
 alter table reward_grant add column if not exists pos_transaction_id text; -- vendor tx id (null until credited)
+-- Redemption codes are no longer minted (since #157 tickets are the only
+-- player-facing payout — routes/rounds.js). New grants leave `code` null; the
+-- column stays nullable so existing pre-#157 codes still resolve in the legacy
+-- Master Control lookup. NULLs don't collide under the unique constraint.
+alter table reward_grant alter column code drop not null;
 
 -- Photo auto-moderation (unblocks people-in-photos + the social photo share).
 -- Every hunt photo is classified in the SAME vision call that verifies the
