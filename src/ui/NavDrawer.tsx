@@ -6,6 +6,8 @@ import { locationById } from '../data/courses';
 import { usePos } from '../lib/pos';
 import { isStandalone } from '../lib/pwaInstall';
 import { playClick } from '../lib/sound';
+import ThemeToggle from './ThemeToggle';
+import SoundToggle from './SoundToggle';
 
 // The global navigation drawer — the app's one persistent way to move between
 // the top-level sections (Home / Golf / Arcade / Food / Me). Opened by the
@@ -176,6 +178,31 @@ export default function NavDrawer() {
               </li>
             ))}
           </ul>
+
+          {/* Settings — the sound + light/dark switches used to ride in every
+              screen's header; they live here now. Each row's control is the same
+              toggle component, keeping one source of truth for the state. */}
+          <div className="mx-1 my-3 h-px bg-fairway-800/60" />
+          <div className="space-y-1">
+            <div className="flex items-center justify-between rounded-xl px-3.5 py-2">
+              <span className="flex items-center gap-3 text-sm font-semibold text-fairway-100/90">
+                <span className="text-base" aria-hidden="true">
+                  🔊
+                </span>
+                Sound
+              </span>
+              <SoundToggle />
+            </div>
+            <div className="flex items-center justify-between rounded-xl px-3.5 py-2">
+              <span className="flex items-center gap-3 text-sm font-semibold text-fairway-100/90">
+                <span className="text-base" aria-hidden="true">
+                  🌙
+                </span>
+                Dark mode
+              </span>
+              <ThemeToggle />
+            </div>
+          </div>
         </nav>
 
         <div className="px-4 pb-3 pt-1 text-center">

@@ -144,8 +144,8 @@ export default function Home() {
   return (
     <Screen>
       <Content>
-        {/* Home has no TopBar, so keep the header cluster (menu + light/dark +
-            mute) reachable from its top-right corner. */}
+        {/* Home has no TopBar, so keep the menu button reachable from its
+            top-right corner (light/dark + mute now live in the drawer). */}
         <div className="mb-1 flex justify-end">
           <HeaderControls />
         </div>
