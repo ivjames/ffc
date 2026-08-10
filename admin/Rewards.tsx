@@ -24,10 +24,11 @@ function AchievementRewards({ days }: { days: number }) {
     (acc, a) => ({
       granted: acc.granted + a.granted,
       cardClaims: acc.cardClaims + a.cardClaims,
+      pending: acc.pending + a.pending,
       unclaimed: acc.unclaimed + a.unclaimed,
       tickets: acc.tickets + a.tickets,
     }),
-    { granted: 0, cardClaims: 0, unclaimed: 0, tickets: 0 }
+    { granted: 0, cardClaims: 0, pending: 0, unclaimed: 0, tickets: 0 }
   );
 
   return (
@@ -50,6 +51,7 @@ function AchievementRewards({ days }: { days: number }) {
                   <th className="px-3 py-2">Achievement</th>
                   <th className="px-3 py-2 text-right">Earned</th>
                   <th className="px-3 py-2 text-right">Banked to card</th>
+                  <th className="px-3 py-2 text-right">Pending</th>
                   <th className="px-3 py-2 text-right">Unclaimed</th>
                   <th className="px-3 py-2 text-right">Tickets paid</th>
                 </tr>
@@ -60,6 +62,9 @@ function AchievementRewards({ days }: { days: number }) {
                     <td className="px-3 py-1.5">{achLabel(a.achievement)}</td>
                     <td className="px-3 py-1.5 text-right">{a.granted.toLocaleString()}</td>
                     <td className="px-3 py-1.5 text-right">{a.cardClaims.toLocaleString()}</td>
+                    <td className="px-3 py-1.5 text-right">
+                      {a.pending > 0 ? a.pending.toLocaleString() : ''}
+                    </td>
                     <td className="px-3 py-1.5 text-right">
                       {a.unclaimed > 0 ? a.unclaimed.toLocaleString() : ''}
                     </td>
@@ -74,6 +79,9 @@ function AchievementRewards({ days }: { days: number }) {
                   <td className="px-3 py-2">Total</td>
                   <td className="px-3 py-2 text-right">{totals.granted.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right">{totals.cardClaims.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right">
+                    {totals.pending > 0 ? totals.pending.toLocaleString() : ''}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     {totals.unclaimed > 0 ? totals.unclaimed.toLocaleString() : ''}
                   </td>
@@ -93,6 +101,7 @@ function AchievementRewards({ days }: { days: number }) {
                     <th className="px-3 py-2">Achievement</th>
                     <th className="px-3 py-2 text-right">Earned</th>
                     <th className="px-3 py-2 text-right">Banked</th>
+                    <th className="px-3 py-2 text-right">Pending</th>
                     <th className="px-3 py-2 text-right">Tickets</th>
                   </tr>
                 </thead>
@@ -104,6 +113,9 @@ function AchievementRewards({ days }: { days: number }) {
                       <td className="px-3 py-1.5">{achLabel(r.achievement)}</td>
                       <td className="px-3 py-1.5 text-right">{r.granted.toLocaleString()}</td>
                       <td className="px-3 py-1.5 text-right">{r.cardClaims.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right">
+                        {r.pending > 0 ? r.pending.toLocaleString() : ''}
+                      </td>
                       <td className="px-3 py-1.5 text-right font-semibold">
                         {r.tickets.toLocaleString()}
                       </td>

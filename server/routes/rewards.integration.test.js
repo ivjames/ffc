@@ -214,6 +214,34 @@ test("admin summary rolls up achievement issuance per venue + achievement", asyn
     assert.ok(totals.under_par.unclaimed >= 1);
     assert.ok(totals.hole_in_one.granted >= 1);
 
+    // Only a CONFIRMED vendor credit counts as banked/tickets; a claim that
+    // committed redeemed_at but whose credit hasn't settled is pending, not
+    // paid. Mark hole_in_one confirmed and under_par pending, directly.
+    await testQuery(
+      `update reward_grant g set redeemed_at = now(), tickets_awarded = 100,
+              card_player_id = 'PL-CONF', pos_transaction_id = 'tx-1'
+         from round r
+        where r.id = g.round_id and r.course_id = $1 and g.achievement = 'hole_in_one'`,
+      [sCourse]
+    );
+    await testQuery(
+      `update reward_grant g set redeemed_at = now(), tickets_awarded = 50,
+              card_player_id = 'PL-PEND', pos_transaction_id = null
+         from round r
+        where r.id = g.round_id and r.course_id = $1 and g.achievement = 'under_par'`,
+      [sCourse]
+    );
+    const s2 = await (await admin(`/api/admin/rewards/summary`)).json();
+    const mine2 = Object.fromEntries(
+      s2.rows.filter((r) => r.locationId === sLoc).map((r) => [r.achievement, r])
+    );
+    assert.equal(mine2.hole_in_one.cardClaims, 1);
+    assert.equal(mine2.hole_in_one.pending, 0);
+    assert.equal(mine2.hole_in_one.tickets, 100);
+    assert.equal(mine2.under_par.cardClaims, 0, "unsettled credit is not banked");
+    assert.equal(mine2.under_par.pending, 1);
+    assert.equal(mine2.under_par.tickets, 0, "unsettled credit pays no tickets");
+
     // days is clamped to [1, 90].
     assert.equal((await (await admin(`/api/admin/rewards/summary?days=999`)).json()).days, 90);
     assert.equal((await (await admin(`/api/admin/rewards/summary?days=0`)).json()).days, 1);

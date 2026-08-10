@@ -160,9 +160,10 @@ export type Announcement = {
 export type RewardAchievementTotal = {
   achievement: string;
   granted: number; // achievements earned in the window
-  cardClaims: number; // banked to a loyalty card (redeemed)
+  cardClaims: number; // banked to a card with the vendor credit confirmed
+  pending: number; // banked but the vendor credit hasn't confirmed yet
   unclaimed: number; // earned but not yet banked to a card
-  tickets: number; // tickets paid out across the card claims
+  tickets: number; // tickets paid out across the confirmed card claims
 };
 
 export type RewardSummaryRow = {
@@ -172,6 +173,7 @@ export type RewardSummaryRow = {
   achievement: string;
   granted: number;
   cardClaims: number;
+  pending: number;
   tickets: number;
 };
 

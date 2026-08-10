@@ -15,8 +15,8 @@ vi.mock('./api', () => ({
 const SUMMARY: RewardSummary = {
   days: 30,
   byAchievement: [
-    { achievement: 'hole_in_one', granted: 12, cardClaims: 9, unclaimed: 2, tickets: 900 },
-    { achievement: 'under_par', granted: 5, cardClaims: 5, unclaimed: 0, tickets: 250 },
+    { achievement: 'hole_in_one', granted: 12, cardClaims: 9, pending: 1, unclaimed: 2, tickets: 900 },
+    { achievement: 'under_par', granted: 5, cardClaims: 5, pending: 0, unclaimed: 0, tickets: 250 },
   ],
   rows: [
     {
@@ -26,6 +26,7 @@ const SUMMARY: RewardSummary = {
       achievement: 'hole_in_one',
       granted: 3,
       cardClaims: 2,
+      pending: 1,
       tickets: 200,
     },
   ],

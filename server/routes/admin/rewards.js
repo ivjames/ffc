@@ -28,10 +28,15 @@ router.get("/summary", async (req, res) => {
   if (!Number.isFinite(days)) days = 30;
   days = Math.max(1, Math.min(90, days));
 
-  // A grant is "claimed" when it was banked to a loyalty card, which is the
-  // only way it pays out (redeemed_at is the consume point); anything still
-  // unredeemed is outstanding. Tickets only accrue on claimed grants.
-  const CARD = `g.redeemed_at is not null`;
+  // A grant pays out only when its vendor credit CONFIRMS — pos_transaction_id
+  // is the settlement marker (set after the loyalty credit succeeds). A grant
+  // whose redeemed_at committed but whose credit hasn't confirmed yet (a crash
+  // or a 502 between the two, retried on the next claim) is PENDING, not paid —
+  // so only confirmed credits count as banked/tickets, and pending is surfaced
+  // separately, exactly as the game-ticket usage rollup does. Anything still
+  // unredeemed is outstanding.
+  const CONFIRMED = `g.pos_transaction_id is not null`;
+  const PENDING = `g.redeemed_at is not null and g.pos_transaction_id is null`;
   const WHERE = `g.created_at >= now() - $2::int * interval '1 day'
                  and ($1::uuid is null or l.org_id = $1)`;
   const FROM = `from reward_grant g
@@ -43,10 +48,11 @@ router.get("/summary", async (req, res) => {
     const [byAch, rollup] = await Promise.all([
       pool.query(
         `select g.achievement,
-                count(*)                                         as granted,
-                count(*) filter (where ${CARD})                  as card_claims,
-                count(*) filter (where g.redeemed_at is null)    as unclaimed,
-                coalesce(sum(g.tickets_awarded) filter (where ${CARD}), 0) as tickets
+                count(*)                                          as granted,
+                count(*) filter (where ${CONFIRMED})              as card_claims,
+                count(*) filter (where ${PENDING})                as pending,
+                count(*) filter (where g.redeemed_at is null)     as unclaimed,
+                coalesce(sum(g.tickets_awarded) filter (where ${CONFIRMED}), 0) as tickets
            ${FROM}
           where ${WHERE}
           group by g.achievement
@@ -58,9 +64,10 @@ router.get("/summary", async (req, res) => {
                 l.id   as location_id,
                 l.name as location_name,
                 g.achievement,
-                count(*)                          as granted,
-                count(*) filter (where ${CARD})   as card_claims,
-                coalesce(sum(g.tickets_awarded) filter (where ${CARD}), 0) as tickets
+                count(*)                              as granted,
+                count(*) filter (where ${CONFIRMED})  as card_claims,
+                count(*) filter (where ${PENDING})    as pending,
+                coalesce(sum(g.tickets_awarded) filter (where ${CONFIRMED}), 0) as tickets
            ${FROM}
           where ${WHERE}
           group by 1, l.id, l.name, g.achievement
@@ -75,6 +82,7 @@ router.get("/summary", async (req, res) => {
         achievement: r.achievement,
         granted: Number(r.granted),
         cardClaims: Number(r.card_claims),
+        pending: Number(r.pending),
         unclaimed: Number(r.unclaimed),
         tickets: Number(r.tickets),
       })),
@@ -85,6 +93,7 @@ router.get("/summary", async (req, res) => {
         achievement: r.achievement,
         granted: Number(r.granted),
         cardClaims: Number(r.card_claims),
+        pending: Number(r.pending),
         tickets: Number(r.tickets),
       })),
     });
