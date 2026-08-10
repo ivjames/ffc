@@ -483,14 +483,23 @@ function RewardsCard({
 
   // Only this device's own rewards land here (others are on their own
   // phones/cards). Nothing owned → nothing to show.
-  const shown = rewards.filter((r) => owns(r.playerIndex));
-  // A reward whose card is already at its daily cap banks nothing, so it's
-  // hidden. Decide visibility on the POST-cap set: if every owned reward is
-  // capped, suppress the whole card rather than render an empty "Rewards
-  // earned" panel (which would reintroduce the blank-notification symptom).
-  const visible = shown.filter(
-    (r) => credited[`${r.playerIndex}:${r.achievement}`]?.status !== 'daily-cap',
-  );
+  const keyOf = (r: RewardRow) => `${r.playerIndex}:${r.achievement}`;
+  const owned = rewards.filter((r) => owns(r.playerIndex));
+  if (owned.length === 0) return null;
+
+  // A reward we're actively crediting (card linked, not yet redeemed) hasn't
+  // resolved until credited[key] is set. Hold the WHOLE card off screen until
+  // every such award has come back, so it appears once in its final form
+  // instead of flashing in with pending rows and then vanishing the moment the
+  // only reward turns out to be daily-capped.
+  const isPending = (r: RewardRow) =>
+    playerId != null && r.redeemedAt == null && credited[keyOf(r)] === undefined;
+  if (owned.some(isPending)) return null;
+
+  // Everything's resolved now: hide daily-capped rewards (they banked nothing).
+  // If that leaves nothing, stay hidden — the card never appeared, so there's
+  // no empty panel and nothing flashes.
+  const visible = owned.filter((r) => credited[keyOf(r)]?.status !== 'daily-cap');
   if (visible.length === 0) return null;
 
   const subtitle = playerId
@@ -517,7 +526,7 @@ function RewardsCard({
 
       <div className="space-y-2">
         {visible.map((r) => {
-          const key = `${r.playerIndex}:${r.achievement}`;
+          const key = keyOf(r);
           const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
           return (
             <div
