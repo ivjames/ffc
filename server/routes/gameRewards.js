@@ -200,6 +200,13 @@ router.post("/bonus", async (req, res) => {
   if (typeof kind !== "string" || !isBonusKind(kind)) {
     return res.status(400).json({ ok: false, error: "kind must be 'install' or 'signin'" });
   }
+  // The sign-in milestone has a server-verifiable condition — a real player
+  // session — so require it, or an anonymous caller could mint the reward
+  // without signing in. (Install can't be verified server-side; it stays
+  // best-effort, bounded by one-time-per-card + the venue amount.)
+  if (kind === "signin" && !req.user) {
+    return res.status(401).json({ ok: false, error: "sign in to claim the sign-in bonus" });
+  }
 
   try {
     const locResult = await pool.query(
@@ -257,7 +264,12 @@ router.post("/bonus", async (req, res) => {
       playerId,
       tickets: row.tickets,
       source: `bonus:${kind}`,
-      idempotencyKey: `bonus:${kind}:${playerId}`,
+      // Key on the ledger row id (not kind+playerId): it's unique per
+      // (venue, card, kind) so a shared POS that de-dupes keys globally can't
+      // collide the same card's bonus across venues, it's stable across retries
+      // (the pending row persists), and its fixed length stays within the POS
+      // key limit regardless of how long the card id is.
+      idempotencyKey: `bonus:${row.id}`,
     });
     if (posResult.ok !== true) {
       // Ambiguous — keep the pending reservation so a retry replays the same
