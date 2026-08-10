@@ -1,7 +1,8 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePos } from '../../lib/pos';
 import { useCurrentLocationId } from '../../lib/location';
-import { usePlacedOrders, activeOrders } from '../../lib/foodOrders';
+import { usePlacedOrders, activeOrders, forgetOrder } from '../../lib/foodOrders';
 
 // "Your order is in the kitchen" re-entry point — placed orders otherwise
 // have their id only in the /food/order/:id URL, so navigating away would
@@ -14,9 +15,30 @@ export default function ActiveOrdersCard() {
   const { ordering } = usePos();
   const locationId = useCurrentLocationId();
   const placed = usePlacedOrders();
-  if (!ordering) return null;
-  const active = activeOrders(placed, locationId);
-  if (active.length === 0) return null;
+  const active = ordering ? activeOrders(placed, locationId) : [];
+
+  // Proactively verify each remembered order so a dead flag clears on its own,
+  // without the player having to tap into it: after a redeploy wipes the
+  // in-memory mock, GET /orders/:id 404s and we forget the order (same rule as
+  // OrderStatus). A network error (no status) is transient — left alone. Keyed
+  // on the id set so it runs when the shown orders change, not every render.
+  const idsKey = active.map((o) => o.id).join(',');
+  useEffect(() => {
+    if (!ordering || active.length === 0) return;
+    let cancelled = false;
+    for (const order of active) {
+      void ordering.fetchOrder(order.id).then((res) => {
+        if (!cancelled && 'error' in res && res.status === 404) forgetOrder(order.id);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // `active` is captured via idsKey; re-running only when the id set changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey, ordering]);
+
+  if (!ordering || active.length === 0) return null;
 
   return (
     <div className="mb-3 space-y-2">
