@@ -257,12 +257,13 @@ const WM_MARGIN = 0.04;
 
 // Drop shadow behind the watermark, so the brand stays legible over any photo.
 // Blur + vertical offset are fractions of the photo width, so export and the
-// CSS-scaled preview both track the rendered size. Drawn as two stacked passes
-// so the shadow reads strongly even over a bright, busy background.
-const WM_SHADOW_COLOR = 'rgba(0,0,0,0.85)';
-const WM_SHADOW_BLUR = 0.022;
-const WM_SHADOW_OFFSET = 0.006;
-const WM_SHADOW_PASSES = 2;
+// CSS-scaled preview both track the rendered size. Drawn as several stacked
+// passes at full opacity so the shadow reads as a thick, solid halo even over a
+// bright, busy background (e.g. the green mini-golf frame).
+const WM_SHADOW_COLOR = 'rgba(0,0,0,1)';
+const WM_SHADOW_BLUR = 0.04;
+const WM_SHADOW_OFFSET = 0.01;
+const WM_SHADOW_PASSES = 4;
 
 // Thrown by the export when a FORCED watermark can't be composited (its image
 // failed to load) — so a photo never goes out missing the venue's branding.
