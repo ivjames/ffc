@@ -255,6 +255,13 @@ type SvgMeta = Map<string, { width: number; height: number }>;
 const WM_FRAC = 0.18;
 const WM_MARGIN = 0.04;
 
+// Drop shadow behind the watermark, so the brand stays legible over any photo.
+// Blur + vertical offset are fractions of the photo width, so export and the
+// CSS-scaled preview both track the rendered size.
+const WM_SHADOW_COLOR = 'rgba(0,0,0,0.5)';
+const WM_SHADOW_BLUR = 0.012;
+const WM_SHADOW_OFFSET = 0.004;
+
 // Thrown by the export when a FORCED watermark can't be composited (its image
 // failed to load) — so a photo never goes out missing the venue's branding.
 const BRANDING_UNAVAILABLE = 'BRANDING_UNAVAILABLE';
@@ -358,7 +365,15 @@ async function flattenToJpeg(
     const dh = ah * fit;
     // Center the contained mark within the slot (matches the preview's
     // object-contain), so preview and export line up.
+    // A soft drop shadow lifts the mark off busy photos so it stays legible
+    // over any background. Sized relative to photo width so it scales with the
+    // export; mirrored by the preview's CSS drop-shadow filter.
+    ctx.save();
+    ctx.shadowColor = WM_SHADOW_COLOR;
+    ctx.shadowBlur = WM_SHADOW_BLUR * w;
+    ctx.shadowOffsetY = WM_SHADOW_OFFSET * w;
     ctx.drawImage(img, x + (slot - dw) / 2, y + (slot - dh) / 2, dw, dh);
+    ctx.restore();
   }
 
   return new Promise((resolve, reject) => {
@@ -890,6 +905,8 @@ export default function PhotoBooth() {
                   height: `${WM_FRAC * boxW}px`,
                   [wm.corner[0] === 't' ? 'top' : 'bottom']: `${WM_MARGIN * boxW}px`,
                   [wm.corner[1] === 'l' ? 'left' : 'right']: `${WM_MARGIN * boxW}px`,
+                  // Mirror the export's baked drop shadow so preview == save.
+                  filter: `drop-shadow(0 ${WM_SHADOW_OFFSET * boxW}px ${WM_SHADOW_BLUR * boxW}px ${WM_SHADOW_COLOR})`,
                 }}
               />
             ))}
