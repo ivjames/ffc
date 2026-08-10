@@ -73,6 +73,9 @@ export default function Account() {
     void fetchMe().then((u) => {
       if (u) {
         applyUser(u);
+        // Restored session (not just a fresh verify): claim any rounds played
+        // anonymously since last time. Idempotent, and only notices on N>0.
+        void claimRoundsToAccount();
       } else {
         setStage('email');
       }

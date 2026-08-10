@@ -170,8 +170,12 @@ router.post("/", rateLimit, async (req, res) => {
     // without touching its scores.
     // Attribute the round to the signed-in player, if any (req.user is
     // resolved from the session cookie by attachUser). Anonymous syncs stay
-    // null — the walk-up tag flow is unchanged.
-    const appUserId = req.user?.id ?? null;
+    // null — the walk-up tag flow is unchanged. Shared games are NEVER
+    // single-owned: every participant syncs the same `shared:<gameId>` id to
+    // one canonical round, so a single app_user_id would just be whoever
+    // synced first.
+    const ownable = !clientId.startsWith("shared:");
+    const appUserId = ownable ? (req.user?.id ?? null) : null;
     const insertRound = await client.query(
       `insert into round (course_id, player_tags, group_tag, created_at, completed_at, client_id, app_user_id)
          values ($1, $2, $3, to_timestamp($4 / 1000.0), $5, $6, $7)
@@ -260,9 +264,14 @@ router.post("/claim", async (req, res) => {
   const raw = Array.isArray(req.body?.clientIds) ? req.body.clientIds : null;
   if (!raw) return res.status(400).json({ ok: false, error: "clientIds must be an array" });
   // Keep well-formed, de-duped ids, capped so a bad client can't drive an
-  // unbounded update.
+  // unbounded update. Shared-game rounds (`shared:<gameId>`) are excluded — one
+  // canonical round is shared by all participants, so it can't be single-owned.
   const clientIds = [
-    ...new Set(raw.filter((x) => typeof x === "string" && x.length > 0 && x.length <= 200)),
+    ...new Set(
+      raw.filter(
+        (x) => typeof x === "string" && x.length > 0 && x.length <= 200 && !x.startsWith("shared:"),
+      ),
+    ),
   ].slice(0, MAX_CLAIM_IDS);
   if (clientIds.length === 0) return res.json({ ok: true, claimed: 0 });
   try {

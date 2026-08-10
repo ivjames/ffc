@@ -103,6 +103,18 @@ test("claims this device's unowned rounds, and only those", async () => {
   assert.equal(otherOwner, other.id);
 });
 
+test("never claims a shared-game round (one canonical round, many players)", async () => {
+  const me = await makeUserCookie(`claim-e-${Date.now()}@e.com`);
+  const sharedId = `shared:game-${Date.now()}`;
+  await makeRound(sharedId, null); // canonical shared round, unowned
+  const res = await claim({ clientIds: [sharedId] }, me.cookie);
+  assert.equal((await res.json()).claimed, 0);
+  const owner = (
+    await testQuery("select app_user_id from round where client_id = $1", [sharedId])
+  ).rows[0].app_user_id;
+  assert.equal(owner, null); // stays shared/unowned
+});
+
 test("a repeat claim is idempotent (0 the second time)", async () => {
   const me = await makeUserCookie(`claim-d-${Date.now()}@e.com`);
   const cid = `cid-idem-${Date.now()}`;

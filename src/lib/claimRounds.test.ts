@@ -17,4 +17,9 @@ describe('collectClaimableClientIds', () => {
     const many = Array.from({ length: 600 }, (_, i) => r(`id-${i}`, 1));
     expect(collectClaimableClientIds(many)).toHaveLength(500);
   });
+
+  it('excludes shared games (one canonical round, many participants)', () => {
+    const ids = collectClaimableClientIds([r('solo-1', 1), r('shared:game-9', 1)]);
+    expect(ids).toEqual(['solo-1']);
+  });
 });
