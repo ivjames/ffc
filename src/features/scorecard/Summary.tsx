@@ -33,6 +33,9 @@ export default function Summary() {
   const [syncFailed, setSyncFailed] = useState(false);
   const [rewards, setRewards] = useState<RewardRow[]>([]);
   const [sharing, setSharing] = useState(false);
+  // The hole-by-hole grid starts hidden behind a button — the summary leads
+  // with the winner + standings, and the full scorecard is one tap away.
+  const [showScorecard, setShowScorecard] = useState(false);
   // Celebrate exactly once when the final scorecard first appears.
   const celebrated = useRef(false);
 
@@ -239,13 +242,22 @@ export default function Summary() {
           </div>
         )}
 
-        {/* Hole-by-hole grid — split into front/back nines so 18 columns don't
-            overflow and scroll on a phone. Each nine is 9 holes + a label
-            column = 10 columns, which fits the width. */}
-        <div className="mb-6 space-y-2">
-          <NineGrid round={round} course={course} label="Front" start={0} />
-          <NineGrid round={round} course={course} label="Back" start={9} />
-        </div>
+        {/* Hole-by-hole grid — hidden behind a button so the summary leads with
+            the result. Split into front/back nines so 18 columns don't overflow
+            and scroll on a phone. Each nine is 9 holes + a label column = 10
+            columns, which fits the width. */}
+        {showScorecard ? (
+          <div className="mb-6 space-y-2">
+            <NineGrid round={round} course={course} label="Front" start={0} />
+            <NineGrid round={round} course={course} label="Back" start={9} />
+          </div>
+        ) : (
+          <div className="mb-6">
+            <Button variant="ghost" onClick={() => setShowScorecard(true)}>
+              📋 View scorecard
+            </Button>
+          </div>
+        )}
 
         <SyncNote state={round.syncState} failed={syncFailed} />
 
@@ -412,8 +424,10 @@ function RewardValue({ outcome }: { outcome: GameAwardOutcome | undefined }) {
   if (outcome == null) {
     return <span className="text-xs text-fairway-100/70">Adding…</span>;
   }
+  // Hitting the card's daily ticket cap isn't a failure — the player just can't
+  // bank more today. Don't nag about it; show nothing for that achievement.
   if (outcome.status === 'daily-cap') {
-    return <span className="text-xs text-fairway-400">Daily cap reached</span>;
+    return null;
   }
   return <span className="text-xs text-fairway-400">Couldn’t add</span>;
 }
