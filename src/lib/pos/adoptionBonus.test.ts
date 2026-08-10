@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveBonusClaim } from './adoptionBonus';
+import { resolveBonusClaim, wasAttempted, markAttempted } from './adoptionBonus';
 
 // Pure gating only — the network claim + one-shot storage are exercised in the
 // app (node env here, no DOM).
@@ -21,5 +21,18 @@ describe('resolveBonusClaim', () => {
     expect(resolveBonusClaim({ capabilities: { gameRewards: true }, playerId: 'PL-9', kind: 'install' })).toEqual({
       request: { playerId: 'PL-9', kind: 'install' },
     });
+  });
+});
+
+describe('the attempt guard is scoped to (kind, venue, card)', () => {
+  it("doesn't leak across venue or card — so switching either re-attempts", () => {
+    markAttempted('install', 'loc-a', 'PL-1');
+    expect(wasAttempted('install', 'loc-a', 'PL-1')).toBe(true);
+    // Different venue, different card, or different kind are all still open.
+    expect(wasAttempted('install', 'loc-b', 'PL-1')).toBe(false);
+    expect(wasAttempted('install', 'loc-a', 'PL-2')).toBe(false);
+    expect(wasAttempted('signin', 'loc-a', 'PL-1')).toBe(false);
+    // No linked card is its own bucket (re-attempts once a card links).
+    expect(wasAttempted('install', 'loc-a', null)).toBe(false);
   });
 });

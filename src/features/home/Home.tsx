@@ -150,9 +150,9 @@ export default function Home() {
             signed in. */}
         <AdoptionNudge signedIn={!!me} authChecked={meChecked} className="mb-3" />
 
-        {/* Collects the one-time install bonus once installed + a card is
-            linked (or invites linking a card to collect). */}
-        <AdoptionBonusToast />
+        {/* Collects the one-time install/sign-in bonuses once the milestone is
+            reached + a card is linked (or invites linking a card to collect). */}
+        <AdoptionBonusToast signedIn={!!me} />
 
         {/* Current location — tap to switch sites (or pick "Use my location"
             there). GPS still auto-detects the venue silently when permitted. */}

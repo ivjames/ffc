@@ -33,7 +33,9 @@ export type BonusOutcome =
   | { status: 'unavailable' }
   | { status: 'no-card' } // prompt the player to link their card to collect
   | { status: 'disabled' } // venue set this milestone's amount to 0
-  | { status: 'awarded'; tickets: number }
+  // `duplicate` is true when the server replayed an already-settled award (no
+  // new credit) — the caller must NOT re-announce "+N tickets" in that case.
+  | { status: 'awarded'; tickets: number; duplicate: boolean }
   | { status: 'error'; error: string };
 
 export async function submitBonus(body: {
@@ -53,7 +55,7 @@ export async function submitBonus(body: {
       return { status: 'error', error: data.error ?? `HTTP ${res.status}` };
     }
     if (data.status === 'disabled') return { status: 'disabled' };
-    return { status: 'awarded', tickets: data.ticketsAwarded };
+    return { status: 'awarded', tickets: data.ticketsAwarded, duplicate: data.duplicate === true };
   } catch {
     return { status: 'error', error: 'network error' };
   }
@@ -75,22 +77,20 @@ export async function claimAdoptionBonus(kind: BonusKind): Promise<BonusOutcome>
   return submitBonus({ locationId, ...plan.request });
 }
 
-// One-shot bookkeeping so we don't re-attempt / re-toast a milestone every
-// launch (the server is idempotent per card, but the UX shouldn't repeat).
-const HANDLED_KEY = (kind: BonusKind) => `ffc.bonusHandled.${kind}`;
+// Session-scoped "already tried this" guard so the auto-claim doesn't fire on
+// every render/re-mount. Keyed by (kind, venue, card) — the SAME grain the
+// server grants on — so switching venue or linking a different card re-attempts
+// (a device-wide, kind-only flag would wrongly block those). Deliberately NOT
+// persisted: across app launches we re-attempt, which is harmless — the server
+// is idempotent per card and a duplicate award is suppressed in the UI.
+const attempted = new Set<string>();
+const attemptKey = (kind: BonusKind, locationId: string, playerId: string | null) =>
+  `${kind}:${locationId}:${playerId ?? 'none'}`;
 
-export function isBonusHandled(kind: BonusKind): boolean {
-  try {
-    return localStorage.getItem(HANDLED_KEY(kind)) === '1';
-  } catch {
-    return false;
-  }
+export function wasAttempted(kind: BonusKind, locationId: string, playerId: string | null): boolean {
+  return attempted.has(attemptKey(kind, locationId, playerId));
 }
 
-export function markBonusHandled(kind: BonusKind): void {
-  try {
-    localStorage.setItem(HANDLED_KEY(kind), '1');
-  } catch {
-    /* private mode — we'll just re-attempt next launch (idempotent server-side) */
-  }
+export function markAttempted(kind: BonusKind, locationId: string, playerId: string | null): void {
+  attempted.add(attemptKey(kind, locationId, playerId));
 }

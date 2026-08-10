@@ -49,7 +49,9 @@ export default function Account() {
   // the initial session check), so it runs once per real sign-in.
   async function claimSigninBonus() {
     const out = await claimAdoptionBonus('signin');
-    if (out.status === 'awarded') {
+    // Only announce a FRESH award — a duplicate replay credits nothing, so
+    // don't claim tickets landed that didn't.
+    if (out.status === 'awarded' && !out.duplicate) {
       setBonusNotice(`🎟️ +${out.tickets} bonus tickets added to your card!`);
     } else if (out.status === 'no-card') {
       setBonusNotice('Link your arcade card on the Rewards screen to collect a sign-in bonus.');
