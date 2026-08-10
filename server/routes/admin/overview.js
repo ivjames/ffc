@@ -164,7 +164,9 @@ router.get("/", async (req, res) => {
         `
         select l.id, l.name, l.slug,
                count(distinct c.id) filter (where c.archived_at is null) as courses,
-               count(distinct r.id) filter (where r.completed_at >= now() - interval '30 days') as rounds_30d
+               count(distinct r.id) filter (
+                 where r.completed_at >= now() - interval '30 days' ${synFilter}
+               ) as rounds_30d
           from location l
           left join course c on c.location_id = l.id
           left join round  r on r.course_id  = c.id

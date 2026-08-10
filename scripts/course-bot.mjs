@@ -157,14 +157,40 @@ async function discoverCourses(api, location) {
   const res = await fetch(url);
   if (!res.ok) fail(`course discovery failed: GET ${url} → ${res.status}`);
   const body = await res.json();
-  const courses = (body.courses ?? []).map((c) => ({
+  const boardCourses = body.courses ?? [];
+  if (boardCourses.length === 0) fail("no live courses found to play");
+
+  // The board list omits pars, so scores would otherwise be a flat par-3. Pars
+  // live in the open content catalog (GET /api/content — same rows the app
+  // bundles); pull them so each course's scores are course-relative (real
+  // par 2..4 per hole → correct under-par frequency + demo standings). Only if
+  // a course's pars can't be reached do we fall back to flat par-3.
+  const parsById = new Map();
+  try {
+    const cRes = await fetch(`${api}/api/content`);
+    if (cRes.ok) {
+      const content = await cRes.json();
+      for (const c of content.courses ?? []) {
+        if (Array.isArray(c.pars) && c.pars.length > 0) parsById.set(c.id, c.pars);
+      }
+    }
+  } catch {
+    /* leave parsById empty → flat-par fallback below */
+  }
+
+  const courses = boardCourses.map((c) => ({
     courseId: c.courseId,
     courseName: c.courseName,
     locationName: c.locationName,
+    pars: parsById.get(c.courseId) ?? null,
   }));
-  if (courses.length === 0) fail("no live courses found to play");
-  // The board list omits pars; fetch them so scores respect each course's pars.
-  // Falls back to all-3s if the (admin-only) pars aren't reachable.
+  const missing = courses.filter((c) => !c.pars).length;
+  if (missing > 0) {
+    console.warn(
+      `  ! pars unavailable for ${missing}/${courses.length} course(s) via /api/content — ` +
+        `using flat par-3 for those`
+    );
+  }
   return courses;
 }
 
