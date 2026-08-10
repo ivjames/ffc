@@ -1,5 +1,16 @@
 # FFC — notes for Claude sessions
 
+## Environment status
+
+- **This deployment is staging / development only — there is NO production
+  yet.** Nothing is live to real players and **no money is attached to
+  anything** — rewards, loyalty-card tickets, and grants have no monetary value
+  in this environment. Treat the app as being in development mode: don't gate
+  work behind production-risk caution (polluting boards, minting "real" tickets,
+  irreversible payouts) — those concerns don't apply until a real production
+  environment exists. Still keep changes reversible and tests green; just don't
+  ask for prod-style sign-off on staging data.
+
 ## Operator preferences
 
 - **Always surface token burn and cost stats for large operations.** Any
