@@ -249,14 +249,15 @@ export default function Summary() {
 
         <SyncNote state={round.syncState} failed={syncFailed} />
 
-        {/* Rewards earned this round (punchlist #8 tier 1). Where the venue
-            sells the loyalty add-on, they credit the linked card as tickets
-            (same lane as the games); otherwise they fall back to a counter
-            code staff redeem in Master Control. */}
+        {/* Rewards earned this round (punchlist #8 tier 1). Tickets on the
+            linked card are the ONLY payout: where the venue sells the loyalty
+            add-on, achievements credit the card (same lane as the games).
+            Where it doesn't, they don't pay out here at all — there are no
+            counter codes anywhere in the player app. The card renders nothing
+            unless there's a ticket to land. */}
         {rewards.length > 0 && (
           <RewardsCard
             rewards={rewards}
-            accent={course.accent}
             clientId={clientId}
             locationId={course.locationId}
             deviceSlot={round.shared?.slot ?? 0}
@@ -396,29 +397,11 @@ const REWARD_META: Record<string, { emoji: string; label: string }> = {
   hunt_master: { emoji: '🕵️', label: 'Hunt Master' },
 };
 
-function CodePill({ code, accent }: { code: string; accent: string }) {
-  return (
-    <span
-      className="font-mono rounded-lg px-3 py-1.5 text-lg font-black tracking-[0.2em] text-fairway-50"
-      style={{ background: `${accent}2e`, border: `1px solid ${accent}66` }}
-    >
-      {code}
-    </span>
-  );
-}
-
-// The card-lane value for one achievement: the credited ticket count once it
-// lands, "Adding…" while in flight, and the counter code as a fallback if the
-// card system can't be reached (so the reward is never simply dropped).
-function RewardValue({
-  outcome,
-  code,
-  accent,
-}: {
-  outcome: GameAwardOutcome | undefined;
-  code: string;
-  accent: string;
-}) {
+// The value shown for one owned achievement. Tickets or nothing — there is NO
+// code fallback. A credit that fails leaves its grant untouched server-side (so
+// staff can still see/settle it in Master Control), but the player never sees a
+// code: we say so honestly instead.
+function RewardValue({ outcome }: { outcome: GameAwardOutcome | undefined }) {
   if (outcome?.status === 'awarded') {
     return (
       <span className="whitespace-nowrap text-sm font-black text-fairway-50">
@@ -429,19 +412,17 @@ function RewardValue({
   if (outcome == null) {
     return <span className="text-xs text-fairway-100/70">Adding…</span>;
   }
-  return <CodePill code={code} accent={accent} />;
+  return <span className="text-xs text-fairway-400">Couldn’t add</span>;
 }
 
 function RewardsCard({
   rewards,
-  accent,
   clientId,
   locationId,
   deviceSlot,
   isShared,
 }: {
   rewards: RewardRow[];
-  accent: string;
   clientId: string;
   locationId: string;
   deviceSlot: number;
@@ -452,24 +433,19 @@ function RewardsCard({
   // round belongs to the course it was played on.
   const { gameRewards } = posFor(locationId);
   const playerId = useLinkedPlayerId();
-  // Card lane: when the venue sells the loyalty add-on, achievements bank as
-  // tickets on the linked card instead of a counter code. A single-device round
-  // credits every player to the one card; a shared round credits only this
-  // device's own slot (the rest are on their own phones/cards).
-  const cardLane = gameRewards;
   const owns = (playerIndex: number) => deviceOwnsSlot({ deviceSlot, isShared, playerIndex });
 
-  // Credit the owned achievements once. The injection endpoint replays on a
-  // stable per-(round, player, achievement) key, so a re-mounted summary — or a
-  // card linked only after the summary is open — can't double-credit. A grant
-  // already redeemed at the counter is skipped so it can't pay twice.
+  // Credit the owned achievements once, as tickets on the linked card. The claim
+  // endpoint replays on a stable per-(round, player, achievement) key, so a
+  // re-mounted summary — or a card linked only after the summary is open — can't
+  // double-credit. An already-redeemed grant is skipped so it can't pay twice.
   const [credited, setCredited] = useState<Record<string, GameAwardOutcome>>({});
   const attempted = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!cardLane || !playerId) return;
+    if (!gameRewards || !playerId) return;
     for (const r of rewards) {
       if (!owns(r.playerIndex)) continue; // credited on another device
-      if (r.redeemedAt != null) continue; // already claimed at the counter
+      if (r.redeemedAt != null) continue; // already redeemed
       const key = `${r.playerIndex}:${r.achievement}`;
       if (attempted.current.has(key)) continue;
       attempted.current.add(key);
@@ -481,18 +457,21 @@ function RewardsCard({
       }).then((outcome) => setCredited((m) => ({ ...m, [key]: outcome })));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardLane, playerId, rewards, clientId, locationId, deviceSlot, isShared]);
+  }, [gameRewards, playerId, rewards, clientId, locationId, deviceSlot, isShared]);
 
-  // In card-lane mode only this device's own rewards are shown (as tickets) —
-  // other players' rewards live on their own cards, never as a code here. With
-  // no add-on, every row shows its counter code as before.
-  const shown = cardLane ? rewards.filter((r) => owns(r.playerIndex)) : rewards;
+  // Tickets or nothing. If this venue doesn't sell app-earned tickets, golf
+  // achievements simply don't pay out here — no card, no codes, no rewards
+  // surface at all.
+  if (!gameRewards) return null;
 
-  const subtitle = cardLane
-    ? playerId
-      ? 'Added to your rewards card.'
-      : 'Link your rewards card to bank these as tickets — or claim by code at the counter.'
-    : 'Show a code at the counter to claim your prize.';
+  // Only this device's own rewards land here (others are on their own
+  // phones/cards). Nothing owned → nothing to show.
+  const shown = rewards.filter((r) => owns(r.playerIndex));
+  if (shown.length === 0) return null;
+
+  const subtitle = playerId
+    ? 'Added to your rewards card as tickets.'
+    : 'Link your rewards card to bank these as tickets.';
 
   return (
     <div
@@ -504,7 +483,7 @@ function RewardsCard({
       </div>
       <p className="mb-3 text-center text-xs text-fairway-100/70">{subtitle}</p>
 
-      {cardLane && !playerId && (
+      {!playerId && (
         <div className="mb-3">
           <Button variant="ghost" onClick={() => navigate('/rewards')}>
             🎟️ Link rewards card
@@ -516,10 +495,6 @@ function RewardsCard({
         {shown.map((r) => {
           const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
           const key = `${r.playerIndex}:${r.achievement}`;
-          // In card-lane mode a linked card banks the reward as tickets, unless
-          // it was already claimed at the counter; without a card (or add-on)
-          // it's the code / "Claimed ✓".
-          const onCard = cardLane && playerId != null && r.redeemedAt == null;
           return (
             <div
               key={key}
@@ -532,14 +507,14 @@ function RewardsCard({
                 <div className="text-sm font-bold text-fairway-50">{meta.label}</div>
                 <div className="text-xs text-fairway-100/70">{r.playerTag}</div>
               </div>
-              {onCard ? (
-                <RewardValue outcome={credited[key]} code={r.code} accent={accent} />
-              ) : r.redeemedAt != null ? (
+              {r.redeemedAt != null ? (
                 <span className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
                   Claimed ✓
                 </span>
+              ) : !playerId ? (
+                <span className="text-xs text-fairway-400">Link card to claim</span>
               ) : (
-                <CodePill code={r.code} accent={accent} />
+                <RewardValue outcome={credited[key]} />
               )}
             </div>
           );

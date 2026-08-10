@@ -6,11 +6,11 @@ import type { GameAwardOutcome } from './gameRewards';
 // Golf round achievements redeem to the linked card as tickets through the
 // server's grant-backed claim endpoint (POST /api/rewards/claim). Golf is NOT a
 // client-scored game: the server looks up the recorded `reward_grant`, derives
-// the payout from its achievement, and marks the grant redeemed — so a card
-// claim and the counter code are mutually exclusive, and the client can't set
-// the amount. The counter code stays the fallback for venues without the
-// loyalty add-on. The app side just identifies (round, player, achievement) and
-// renders the tickets the server says it paid.
+// the payout from its achievement, and marks the grant redeemed — the client
+// can't set the amount. Tickets are the ONLY player-facing payout: a venue
+// without the loyalty add-on simply doesn't reward golf here (no counter codes
+// anywhere in the app). The app side just identifies (round, player,
+// achievement) and renders the tickets the server says it paid.
 
 /** Which players' achievements this device redeems to its linked card. A
  *  single-device (pass-and-play) round shares one device and one card, so it

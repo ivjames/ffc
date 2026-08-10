@@ -1,11 +1,15 @@
 // GET /api/rewards?clientId= — the rewards earned by a round, for the final
-// scorecard's "show this at the counter" screen (punchlist #8 tier 1).
+// scorecard (punchlist #8 tier 1).
 //
 // Keyed by the round's client-generated UUID (the same unguessable id the
 // sync path dedupes on), so only the device that played the round — or someone
-// it shared the link with — can pull its codes. No auth beyond that: the
-// stakes are arcade tickets, and staff mark codes redeemed in Master Control,
-// so a code only ever pays out once.
+// it shared the link with — can pull its rewards. No auth beyond that: the
+// stakes are arcade tickets.
+//
+// The grant's `code` is DELIBERATELY not returned: tickets on the loyalty card
+// are the only player-facing payout, and the player app must never surface a
+// redemption code. The code stays server-side as the grant's staff-redemption
+// identity in Master Control.
 import { Router } from "express";
 import { pool } from "../db.js";
 import { achievementTickets } from "../lib/rewards.js";
@@ -20,7 +24,7 @@ router.get("/", async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `select g.code, g.player_index as "playerIndex", g.player_tag as "playerTag",
+      `select g.player_index as "playerIndex", g.player_tag as "playerTag",
               g.achievement, g.redeemed_at as "redeemedAt", g.created_at as "createdAt"
          from reward_grant g
          join round r on r.id = g.round_id
