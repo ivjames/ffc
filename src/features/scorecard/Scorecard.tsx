@@ -348,7 +348,7 @@ export default function Scorecard() {
                 and returns here on back (§12). */}
             <button
               onClick={() =>
-                navigate('/arcade/spinner', {
+                navigate('/golf/spinner', {
                   state: { from: `/golf/play/${clientId}`, courseId: round.courseId },
                 })
               }

@@ -1065,7 +1065,7 @@ export default function PhotoBooth() {
   // --- Gallery mode ----------------------------------------------------------
   return (
     <Screen>
-      <TopBar title="Photo Booth" back="/arcade" />
+      <TopBar title="Photo Booth" back="/" />
       {/* No `capture` on purpose (unlike the hunt): the booth wants selfies and
           library picks alike — the OS sheet offers front/rear camera and the
           photo roll, and there's nothing to verify, so nothing to lock down. */}

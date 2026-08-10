@@ -86,7 +86,11 @@ const REDIRECTS: [from: string, to: string][] = [
   ['/hunt', '/golf/hunt'],
   ['/fun', '/arcade'],
   ['/putt', '/arcade/putt'],
-  ['/photos', '/arcade/photos'],
+  // Photo booth and the challenge spinner are not arcade features — the booth
+  // is a top-level venue activity, the spinner a mid-round golf feature — so
+  // their brief stay under /arcade/* forwards on to the real homes.
+  ['/arcade/photos', '/photos'],
+  ['/arcade/spinner', '/golf/spinner'],
   ['/account', '/me/account'],
   ['/rewards', '/me/rewards'],
   ['/privacy', '/me/privacy'],
@@ -125,6 +129,9 @@ export default function App() {
           <Route path="/golf/new/setup" element={<PlayerSetup />} />
           <Route path="/golf/play/:clientId" element={<Scorecard />} />
           <Route path="/golf/play/:clientId/summary" element={<Summary />} />
+          {/* Challenge spinner — a mid-round handicap/dare wheel opened from the
+              scorecard (carries the round's course + return path in nav state). */}
+          <Route path="/golf/spinner" element={<Spinner />} />
         </Route>
         <Route path="/golf/courses" element={<CourseList />} />
         <Route path="/golf/courses/:id/map" element={<CourseMap />} />
@@ -143,10 +150,9 @@ export default function App() {
             deliberately NOT gated (it's below, outside this group). */}
         <Route element={<GeofenceGate />}>
           <Route path="/arcade" element={<FunZone />} />
-          {/* §12 "While You Wait" content — fun facts, trivia, challenge spinner. */}
+          {/* §12 "While You Wait" content — fun facts and trivia. */}
           <Route path="/arcade/facts" element={<FunFacts />} />
           <Route path="/arcade/trivia" element={<Trivia />} />
-          <Route path="/arcade/spinner" element={<Spinner />} />
           {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
           <Route path="/arcade/putt" element={<PuttGolf />} />
           <Route path="/arcade/skeeball" element={<SkeeBall />} />
@@ -175,9 +181,10 @@ export default function App() {
           <Route path="/food/checkout" element={<Checkout />} />
           <Route path="/food/order/:orderId" element={<OrderStatusScreen />} />
         </Route>
-        {/* Photo booth — photo sharing + stickers, no AI in the pipeline. Not
+        {/* Photo booth — photo sharing + stickers, no AI in the pipeline. A
+            general venue activity, not an arcade game: top-level and not
             geofenced (matches its pre-restructure behavior). */}
-        <Route path="/arcade/photos" element={<PhotoBooth />} />
+        <Route path="/photos" element={<PhotoBooth />} />
 
         {/* ── Me section ────────────────────────────────────────────────── */}
         <Route path="/me" element={<MeHome />} />

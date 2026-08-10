@@ -39,20 +39,6 @@ const TILES: Tile[] = [
     accent: '#16a34a',
   },
   {
-    to: '/arcade/spinner',
-    emoji: '🎡',
-    title: 'Challenge Spinner',
-    blurb: 'Spin the wheel for a quick group dare.',
-    accent: '#e11d48',
-  },
-  {
-    to: '/arcade/photos',
-    emoji: '📸',
-    title: 'Photo Booth',
-    blurb: 'Snap a pic, add stickers, share it.',
-    accent: '#0ea5e9',
-  },
-  {
     to: '/arcade/skeeball',
     emoji: '🎳',
     title: 'Skee-Ball',
@@ -195,7 +181,7 @@ export default function FunZone() {
       <TopBar title="Arcade" back="/" />
       <Content>
         <p className="mb-3 text-center text-sm text-fairway-100/70">
-          Every game in the house — plus facts, trivia, and the photo booth.
+          Every game in the house — plus facts and trivia.
           <br />
           Pass the time between attractions.
         </p>

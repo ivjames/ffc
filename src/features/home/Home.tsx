@@ -135,7 +135,7 @@ export default function Home() {
       ? [{ to: '/golf', emoji: '⛳️', title: 'Mini Golf', accent: '#16a34a' } as SectionTile]
       : []),
     { to: '/arcade', emoji: '🎮', title: 'Arcade', accent: '#a855f7' },
-    { to: '/arcade/photos', emoji: '📸', title: 'Photo Booth', accent: '#ec4899' },
+    { to: '/photos', emoji: '📸', title: 'Photo Booth', accent: '#ec4899' },
     ...(pos.ordering
       ? [{ to: '/food', emoji: '🌭', title: 'Food & Drink', accent: '#ef4444' } as SectionTile]
       : []),
