@@ -86,24 +86,24 @@ export default function Achievements() {
     <Screen>
       <TopBar title="Achievements" back="/me" />
       <Content>
-        <p className="mb-4 text-center text-sm text-fairway-100/70">
+        <p className="mb-3 text-center text-sm text-fairway-100/70">
           {earned == null
             ? 'Checking your rounds…'
             : `${earnedCount} of ${BADGES.length} unlocked · earn tickets at the counter`}
         </p>
 
-        <ul className="space-y-2.5">
+        <ul className="space-y-2">
           {BADGES.map((b) => {
             const isEarned = !!earned?.has(b.key);
             return (
               <li
                 key={b.key}
-                className={`surface-1 flex items-center gap-3.5 rounded-2xl border px-4 py-3.5 ${
+                className={`surface-1 flex items-center gap-3 rounded-2xl border px-4 py-3 ${
                   isEarned ? 'border-fairway-500/50' : 'border-fairway-800/60'
                 }`}
               >
                 <span
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl ${
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-2xl ${
                     isEarned ? '' : 'grayscale'
                   }`}
                   style={{
@@ -132,7 +132,7 @@ export default function Achievements() {
           })}
         </ul>
 
-        <p className="mt-5 text-center text-xs text-fairway-100/60">
+        <p className="mt-4 text-center text-xs text-fairway-100/60">
           Achievements are tracked on this device. Sign in on the Me screen to keep them across
           visits.
         </p>

@@ -152,9 +152,9 @@ export default function Home() {
         <div className="mb-1 flex justify-end">
           <HeaderControls />
         </div>
-        <div className="mb-4 text-center">
-          <div className="animate-wiggle inline-block text-5xl leading-none drop-shadow">🎡</div>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-fairway-50">
+        <div className="mb-3 text-center">
+          <div className="animate-wiggle inline-block text-4xl leading-none drop-shadow">🎡</div>
+          <h1 className="mt-1.5 text-2xl font-black tracking-tight text-fairway-50">
             {location?.name ?? 'Family Fun Center'}
           </h1>
           <p className="mt-0.5 text-sm text-fairway-100/70">What do you want to do?</p>
@@ -162,12 +162,12 @@ export default function Home() {
 
         {/* Venue specials / updates — live from Master Control, cached for
             offline. Renders nothing when there's nothing to announce. */}
-        <AnnouncementBanner locationId={locationId} className="mb-3" />
+        <AnnouncementBanner locationId={locationId} className="mb-2.5" />
 
         {/* Proactive, dismissible adoption nudge — install / sign-in, with
             escalating back-off so it never nags. Self-gates once installed or
             signed in. */}
-        <AdoptionNudge signedIn={!!me} authChecked={meChecked} className="mb-3" />
+        <AdoptionNudge signedIn={!!me} authChecked={meChecked} className="mb-2.5" />
 
         {/* Collects the one-time install/sign-in bonuses once the milestone is
             reached + a card is linked (or invites linking a card to collect). */}
@@ -175,7 +175,7 @@ export default function Home() {
 
         {/* Current location — tap to switch sites (or pick "Use my location"
             there). GPS still auto-detects the venue silently when permitted. */}
-        <div className="mb-3">
+        <div className="mb-2.5">
           <button
             onClick={() => navigate('/locations')}
             className="surface-1 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-2.5 text-left transition-transform active:translate-y-px"
@@ -203,7 +203,7 @@ export default function Home() {
               playCup();
               navigate(`/golf/play/${resume.clientId}`);
             }}
-            className="surface animate-glow-pulse mb-3 w-full rounded-2xl border border-fairway-500/40 p-3.5 text-left transition-transform active:translate-y-px"
+            className="surface animate-glow-pulse mb-2.5 w-full rounded-2xl border border-fairway-500/40 p-3.5 text-left transition-transform active:translate-y-px"
             style={{ '--glow': resumeCourse.accent } as CSSProperties}
           >
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
@@ -225,8 +225,9 @@ export default function Home() {
         <ActiveOrdersCard />
 
         {/* The section launcher — the heart of the dashboard. Each tile opens a
-            top-level part of the app. */}
-        <div className="mb-4 grid grid-cols-2 gap-2">
+            top-level part of the app. Compact horizontal cards keep the grid
+            dense so the whole launcher fits with little scrolling. */}
+        <div className="mb-3 grid grid-cols-2 gap-2">
           {sections.map((s, i) => (
             <button
               key={s.to}
@@ -234,16 +235,18 @@ export default function Home() {
                 playClick();
                 navigate(s.to);
               }}
-              className="tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-5 text-center"
+              className="tile animate-pop-in group flex items-center gap-2.5 rounded-2xl px-3 py-3 text-left"
               style={{ '--i': i, '--tile-accent': s.accent } as CSSProperties}
             >
               <span
-                className="course-puck flex h-14 w-14 items-center justify-center rounded-full text-3xl transition-transform duration-150 group-active:scale-110"
+                className="course-puck flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl transition-transform duration-150 group-active:scale-110"
                 style={{ '--puck-accent': s.accent } as CSSProperties}
               >
                 <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">{s.emoji}</span>
               </span>
-              <span className="text-sm font-black leading-tight text-fairway-50">{s.title}</span>
+              <span className="min-w-0 text-sm font-black leading-tight text-fairway-50">
+                {s.title}
+              </span>
             </button>
           ))}
         </div>

@@ -30,7 +30,7 @@ export default function GolfHome() {
     <Screen>
       <TopBar title="Mini Golf" back="/" />
       <Content>
-        <p className="mb-4 text-center text-sm text-fairway-100/70">
+        <p className="mb-3 text-center text-sm text-fairway-100/70">
           {courses.length} {courses.length === 1 ? 'course' : 'courses'} · eighteen holes each
         </p>
 
@@ -72,11 +72,11 @@ export default function GolfHome() {
                   playClick();
                   navigate(`/golf/courses/${c.id}/map`);
                 }}
-                className="tile animate-pop-in group flex flex-col items-center justify-center gap-2.5 rounded-3xl px-3 py-4 text-center"
+                className="tile animate-pop-in group flex flex-col items-center justify-center gap-2 rounded-2xl px-3 py-3.5 text-center"
                 style={{ '--i': i, '--tile-accent': c.accent } as CSSProperties}
               >
                 <span
-                  className="course-puck flex h-14 w-14 items-center justify-center rounded-full text-3xl transition-transform duration-150 group-active:scale-110"
+                  className="course-puck flex h-12 w-12 items-center justify-center rounded-full text-2xl transition-transform duration-150 group-active:scale-110"
                   style={{ '--puck-accent': c.accent } as CSSProperties}
                 >
                   <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">

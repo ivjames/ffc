@@ -25,7 +25,7 @@ export default function MeHome() {
         {/* Identity card — signed-in profile or a sign-in call to action. */}
         <button
           onClick={() => navigate('/me/account')}
-          className="surface-1 mb-4 flex w-full items-center gap-3 rounded-2xl border border-fairway-800/60 px-4 py-3.5 text-left transition-transform active:translate-y-px"
+          className="surface-1 mb-3 flex w-full items-center gap-3 rounded-2xl border border-fairway-800/60 px-4 py-3.5 text-left transition-transform active:translate-y-px"
         >
           <span
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl"
