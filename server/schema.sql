@@ -404,6 +404,16 @@ create table if not exists app_user (
 -- liability, so it's gone (drop covers databases created with the column).
 alter table app_user drop column if exists phone;
 
+-- Account ownership of rounds ("sign in to keep your scores"). Added here, not
+-- on the round table above, because round is defined before app_user. Nullable
+-- and additive: the walk-up tag flow is unchanged — a round only gains an owner
+-- when a signed-in device syncs it, or when the device retroactively claims its
+-- rounds (routes/rounds.js /claim). Since tags collide by design, ownership is
+-- keyed off the device's own round client_ids, never the tag. SET NULL on
+-- account deletion so a removed account leaves the (still tag-attributed) round.
+alter table round add column if not exists app_user_id uuid references app_user(id) on delete set null;
+create index if not exists round_app_user_idx on round (app_user_id);
+
 -- Server-side player sessions (lib/userAuth.js) — the admin_session pattern:
 -- `id` is an opaque high-entropy token (the ffc_session cookie's value, looked
 -- up, never decoded). 30-day sliding TTL, refreshed on use.
