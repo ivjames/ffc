@@ -25,6 +25,7 @@ import { audit, orgScope, actorLabel } from "../../lib/adminAuth.js";
 import { UUID_RE } from "../../lib/validateLocation.js";
 import { validateSvgSticker } from "../../lib/svgSanitize.js";
 import { validatePng } from "../../lib/pngInfo.js";
+import { validateWebp } from "../../lib/webpInfo.js";
 
 export const router = Router();
 
@@ -136,8 +137,9 @@ router.post("/", express.json({ limit: "6mb" }), async (req, res) => {
     width = check.width;
     height = check.height;
   } else if (typeof body.imageBase64 === "string" && body.imageBase64.length > 0) {
-    if (body.mediaType !== "image/png") {
-      return res.status(400).json({ ok: false, error: "only PNG or SVG assets are supported" });
+    const mt = body.mediaType;
+    if (mt !== "image/png" && mt !== "image/webp") {
+      return res.status(400).json({ ok: false, error: "only PNG, WebP, or SVG assets are supported" });
     }
     let bytes;
     try {
@@ -145,14 +147,15 @@ router.post("/", express.json({ limit: "6mb" }), async (req, res) => {
     } catch {
       return res.status(400).json({ ok: false, error: "imageBase64 is not valid base64" });
     }
-    const check = validatePng(bytes);
+    const check = mt === "image/png" ? validatePng(bytes) : validateWebp(bytes);
     if (!check.ok) {
-      return res.status(400).json({ ok: false, error: `PNG rejected: ${check.reason}` });
+      const label = mt === "image/png" ? "PNG" : "WebP";
+      return res.status(400).json({ ok: false, error: `${label} rejected: ${check.reason}` });
     }
     payload = bytes;
     encoding = null; // raw buffer
-    ext = "png";
-    mediaType = "image/png";
+    ext = mt === "image/png" ? "png" : "webp";
+    mediaType = mt;
     width = check.width;
     height = check.height;
   } else {

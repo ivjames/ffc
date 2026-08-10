@@ -272,6 +272,75 @@ test("PNG assets upload, validate, store, and serve as image/png", async () => {
   assert.equal(huge.status, 400);
 });
 
+// A structurally-valid VP8X WebP: RIFF/WEBP + VP8X (canvas dims) + a VP8L frame
+// chunk (0x2f signature). Enough for validateWebp (which parses chunk
+// boundaries + frame signature, not pixel bytes). `withFrame:false` omits the
+// frame to exercise the "no image frame" rejection.
+function riffChunk(cc, data) {
+  const head = Buffer.alloc(8);
+  head.write(cc, 0, "latin1");
+  head.writeUInt32LE(data.length, 4);
+  const pad = data.length & 1 ? Buffer.from([0]) : Buffer.alloc(0);
+  return Buffer.concat([head, data, pad]);
+}
+function fakeWebp(w, h, withFrame = true) {
+  const vp8x = Buffer.alloc(10); // flags(1) + reserved(3) + w-1(3) + h-1(3)
+  const w1 = w - 1;
+  const h1 = h - 1;
+  vp8x[4] = w1 & 0xff;
+  vp8x[5] = (w1 >> 8) & 0xff;
+  vp8x[6] = (w1 >> 16) & 0xff;
+  vp8x[7] = h1 & 0xff;
+  vp8x[8] = (h1 >> 8) & 0xff;
+  vp8x[9] = (h1 >> 16) & 0xff;
+  const chunks = [riffChunk("VP8X", vp8x)];
+  if (withFrame) chunks.push(riffChunk("VP8L", Buffer.from([0x2f, 0x00, 0x00, 0x00, 0x00])));
+  const riff = Buffer.alloc(12);
+  riff.write("RIFF", 0, "latin1");
+  riff.write("WEBP", 8, "latin1");
+  const body = Buffer.concat([riff, ...chunks]);
+  body.writeUInt32LE(body.length - 8, 4); // RIFF size
+  return body;
+}
+
+test("WebP assets upload, validate, store, and serve as image/webp", async () => {
+  const webp = fakeWebp(300, 120);
+  const up = await adminUpload({
+    locationId,
+    kind: "frame",
+    imageBase64: webp.toString("base64"),
+    mediaType: "image/webp",
+  });
+  assert.equal(up.status, 200);
+  const body = await up.json();
+  assert.equal(body.mediaType, "image/webp");
+  assert.equal(body.width, 300);
+  assert.equal(body.height, 120);
+
+  const row = await testQuery(`select svg_path, media_type from booth_sticker where id = $1`, [body.id]);
+  assert.match(row.rows[0].svg_path, /\.webp$/);
+
+  const img = await fetch(`${baseUrl}/api/photos/stickers/${body.id}/image`);
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get("content-type"), "image/webp");
+
+  // Not a WebP -> rejected.
+  const bad = await adminUpload({
+    locationId,
+    imageBase64: Buffer.from("nope").toString("base64"),
+    mediaType: "image/webp",
+  });
+  assert.equal(bad.status, 400);
+
+  // VP8X header but no image frame -> rejected (undecodable).
+  const noFrame = await adminUpload({
+    locationId,
+    imageBase64: fakeWebp(300, 120, false).toString("base64"),
+    mediaType: "image/webp",
+  });
+  assert.equal(noFrame.status, 400);
+});
+
 test("player endpoints: list a venue's stickers and serve the SVG inert", async () => {
   const up = await adminUpload({ locationId, label: "Star", svg: GOOD_SVG });
   const { id } = await up.json();

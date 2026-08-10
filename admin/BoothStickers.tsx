@@ -54,40 +54,50 @@ function loadImageEl(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Re-encode an image to a PNG whose long edge is at most maxDim (preserving
- *  aspect + transparency). Null if canvas is unavailable. */
-function encodePngAt(img: HTMLImageElement, maxDim: number): Promise<Blob | null> {
-  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-  const w = Math.max(1, Math.round(img.naturalWidth * scale));
-  const h = Math.max(1, Math.round(img.naturalHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return Promise.resolve(null);
-  ctx.drawImage(img, 0, 0, w, h);
-  return new Promise((res) => canvas.toBlob(res, 'image/png'));
+/** Whether this browser can encode WebP from a canvas (needed to compress). */
+function canEncodeWebp(): boolean {
+  try {
+    return document.createElement('canvas').toDataURL('image/webp').startsWith('data:image/webp');
+  } catch {
+    return false;
+  }
 }
 
-/** Prepare a PNG for upload: pass it through untouched if it's already under
- *  the cap, otherwise downscale (in the browser — the server has no image libs)
- *  by stepping the long edge down until it fits. Returns base64 + whether it was
- *  resized. PNG is lossless, so size is driven by dimensions — stepping those
- *  down reliably shrinks a big logo while keeping transparency. */
-async function preparePng(file: File): Promise<{ base64: string; resized: boolean }> {
-  if (file.size <= MAX_PNG_BYTES) return { base64: await blobToBase64(file), resized: false };
+/** Re-encode an image to WebP at its NATIVE dimensions and a given quality
+ *  (lossy, alpha preserved). Null if canvas/WebP is unavailable. */
+function encodeWebp(img: HTMLImageElement, quality: number): Promise<Blob | null> {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return Promise.resolve(null);
+  ctx.drawImage(img, 0, 0);
+  return new Promise((res) => canvas.toBlob(res, 'image/webp', quality));
+}
+
+/** Prepare a raster (PNG) for upload. Under the cap -> upload the PNG as-is.
+ *  Over the cap -> COMPRESS it (not resize): re-encode to WebP at the ORIGINAL
+ *  dimensions, stepping quality down until it fits, so the resolution is
+ *  unchanged and transparency is kept. */
+async function prepareRaster(file: File): Promise<{ base64: string; mediaType: 'image/png' | 'image/webp'; compressed: boolean }> {
+  if (file.size <= MAX_PNG_BYTES) {
+    return { base64: await blobToBase64(file), mediaType: 'image/png', compressed: false };
+  }
+  if (!canEncodeWebp()) {
+    throw new Error(
+      'This image is over 4 MB and this browser can’t compress it — please compress the PNG first or use a newer browser.',
+    );
+  }
   const url = URL.createObjectURL(file);
   try {
     const img = await loadImageEl(url);
-    for (const maxDim of [2048, 1600, 1280, 1024, 800, 640]) {
-      const blob = await encodePngAt(img, maxDim);
-      if (blob && blob.size <= MAX_PNG_BYTES) return { base64: await blobToBase64(blob), resized: true };
+    for (const q of [0.92, 0.85, 0.75, 0.65, 0.5]) {
+      const blob = await encodeWebp(img, q);
+      if (blob && blob.size <= MAX_PNG_BYTES) {
+        return { base64: await blobToBase64(blob), mediaType: 'image/webp', compressed: true };
+      }
     }
-    // Even 640px didn't fit (extremely detailed) — send the smallest; the
-    // server returns a clear "too large" if it's still over.
-    const smallest = await encodePngAt(img, 512);
-    if (smallest) return { base64: await blobToBase64(smallest), resized: true };
-    throw new Error('Could not process that PNG.');
+    throw new Error('Couldn’t compress that image under 4 MB — try a simpler graphic.');
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -211,8 +221,8 @@ export default function BoothStickers() {
       setError('Please choose an SVG or PNG file.');
       return;
     }
-    // SVG can't be meaningfully downscaled (it's vector text); a huge one is
-    // pathological, so keep the hard cap. A big PNG is auto-resized below.
+    // SVG can't be meaningfully compressed (it's vector text); a huge one is
+    // pathological, so keep the hard cap. A big PNG is compressed below.
     if (isSvg && file.size > MAX_SVG_BYTES) {
       setError('That SVG is too large (max 512 KB).');
       return;
@@ -233,9 +243,12 @@ export default function BoothStickers() {
         corner: kind === 'watermark' ? corner : undefined,
       };
       if (isPng) {
-        const { base64, resized } = await preparePng(file);
-        await api.uploadBoothSticker({ ...common, imageBase64: base64, mediaType: 'image/png' });
-        if (resized) setNotice('That PNG was large, so it was automatically resized to fit.');
+        // Over the cap -> compressed to WebP at the same resolution (not resized).
+        const { base64, mediaType, compressed } = await prepareRaster(file);
+        await api.uploadBoothSticker({ ...common, imageBase64: base64, mediaType });
+        if (compressed) {
+          setNotice('That PNG was over 4 MB, so it was compressed (same resolution) to fit.');
+        }
       } else {
         await api.uploadBoothSticker({ ...common, svg: await file.text() });
       }
