@@ -9,8 +9,14 @@
 // closed. Times are 24h "HH:MM"; close may be "24:00" (midnight) and may be
 // earlier than open to mean an overnight close (e.g. open 20:00 close 02:00).
 //
-// This models the BASE WEEKLY pattern only. Date-specific overrides (holidays,
-// private events) are a deliberate follow-up, not represented here.
+// This models one BASE WEEKLY pattern only. Two known follow-ups, deliberately
+// not represented here (circling back later):
+//   - date-specific overrides (holidays, private-event closures/early-closes);
+//   - seasonal variation — real hours shift by season (e.g. summer vs
+//     school-year), so the single weekly pattern is a point-in-time snapshot.
+// A future model would carry an effective-date-ranged set of weekly patterns
+// plus per-date exceptions; until then, keep hours current by editing them in
+// Master Control (the bot re-reads them live each sweep).
 
 // Index matches JS Date.getDay() / Intl weekday: 0=Sun .. 6=Sat.
 export const WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
