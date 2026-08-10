@@ -484,7 +484,14 @@ function RewardsCard({
   // Only this device's own rewards land here (others are on their own
   // phones/cards). Nothing owned → nothing to show.
   const shown = rewards.filter((r) => owns(r.playerIndex));
-  if (shown.length === 0) return null;
+  // A reward whose card is already at its daily cap banks nothing, so it's
+  // hidden. Decide visibility on the POST-cap set: if every owned reward is
+  // capped, suppress the whole card rather than render an empty "Rewards
+  // earned" panel (which would reintroduce the blank-notification symptom).
+  const visible = shown.filter(
+    (r) => credited[`${r.playerIndex}:${r.achievement}`]?.status !== 'daily-cap',
+  );
+  if (visible.length === 0) return null;
 
   const subtitle = playerId
     ? 'Added to your rewards card as tickets.'
@@ -509,13 +516,8 @@ function RewardsCard({
       )}
 
       <div className="space-y-2">
-        {shown.map((r) => {
+        {visible.map((r) => {
           const key = `${r.playerIndex}:${r.achievement}`;
-          // Card already at its daily cap → nothing was banked and there's
-          // nothing to nag about. Drop the row entirely rather than leave a
-          // reward line with a blank value (same as the mini-game banner
-          // vanishing on a cap).
-          if (credited[key]?.status === 'daily-cap') return null;
           const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
           return (
             <div

@@ -91,7 +91,20 @@ function loadPersisted(state, stateFile) {
   }
   if (!data || typeof data !== 'object') return;
   if (Array.isArray(data.players)) {
-    state.players = new Map(data.players.map((p) => [p.id, p]));
+    // Overlay ONLY the mutable balances onto the current seed roster — never
+    // replace it. Otherwise an old snapshot would shadow the live seed forever:
+    // a later release's new demo card would 404 and updated card metadata would
+    // stay stale until a balance-destroying _reset. Cards no longer in the seed
+    // are simply dropped; new seed cards keep their seed balance.
+    const savedBalances = new Map(
+      data.players.filter((p) => p && p.id).map((p) => [p.id, p.balances]),
+    );
+    for (const [id, player] of state.players) {
+      const saved = savedBalances.get(id);
+      if (saved && typeof saved === 'object') {
+        player.balances = { ...player.balances, ...saved };
+      }
+    }
   }
   if (Array.isArray(data.transactions)) state.transactions = new Map(data.transactions);
   if (Array.isArray(data.rewardsByKey)) state.rewardsByKey = new Map(data.rewardsByKey);
