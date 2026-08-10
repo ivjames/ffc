@@ -161,6 +161,27 @@ test("normalizePos drops all-default caps entirely", () => {
   assert.equal(value.loyalty.gameRewardCaps, undefined);
 });
 
+test("normalizePos canonicalizes adoption bonuses and keeps only what's set", () => {
+  const { value } = normalizePos({
+    loyalty: {
+      vendor: "centeredge",
+      gameRewards: true,
+      adoptionBonus: { install: 100, signin: 0 },
+    },
+  });
+  assert.deepEqual(value.loyalty.adoptionBonus, { install: 100, signin: 0 });
+});
+
+test("normalizePos rejects adoption bonuses that misname, exceed the max, or ride without rewards", () => {
+  const withBonus = (adoptionBonus, gameRewards = true) =>
+    normalizePos({ loyalty: { vendor: "centeredge", gameRewards, adoptionBonus } });
+  assert.match(withBonus({ install: 50 }, false).error, /requires gameRewards/);
+  assert.match(withBonus({ referral: 50 }).error, /unknown milestone "referral"/);
+  assert.match(withBonus({ install: 1001 }).error, /adoptionBonus\.install/);
+  assert.match(withBonus({ signin: -1 }).error, /adoptionBonus\.signin/);
+  assert.match(withBonus({ install: 2.5 }).error, /adoptionBonus\.install/);
+});
+
 test("normalizePos rejects caps that loosen or misname", () => {
   const withCaps = (gameRewardCaps, gameRewards = true) =>
     normalizePos({ loyalty: { vendor: "centeredge", gameRewards, gameRewardCaps } });
