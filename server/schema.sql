@@ -643,6 +643,41 @@ alter table location add column if not exists ordering_url text;
 -- Vendor-specific credentials do NOT live here — they stay server-side.
 alter table location add column if not exists pos jsonb;
 
+-- Business hours. Per-venue weekly open/close, evaluated in the venue's own tz
+-- (location.tz). jsonb keyed by weekday (mon..sun); each day is
+-- {"open":"HH:MM","close":"HH:MM"} or "closed"; a missing day = closed; null =
+-- unset/unknown. Shape validated in lib/venueHours.js (normalizeHours) and
+-- shipped to players via /api/content like every other location field. Models
+-- the base weekly pattern only — date-specific holiday/event overrides are a
+-- later addition. The load bot gates synthetic play on isVenueOpen() so bot
+-- traffic mirrors real open hours. Seeded once below (guarded on `hours is
+-- null`) so a re-migrate never clobbers an operator's Master Control edits.
+alter table location add column if not exists hours jsonb;
+
+-- Seed the three venues' base weekly hours (Bullwinkle's Upland/Tukwila/
+-- Wilsonville, from bullwinkles.com/<city>/hours). Guarded on `hours is null`
+-- so this backfills once and never overwrites later Master Control edits (same
+-- pattern as the org_id backfill). Times are the venue-local base pattern;
+-- date-specific holiday/event exceptions are not modeled here.
+update location set hours = '{
+  "mon":{"open":"12:00","close":"21:00"},"tue":{"open":"12:00","close":"21:00"},
+  "wed":{"open":"12:00","close":"21:00"},"thu":{"open":"12:00","close":"21:00"},
+  "fri":{"open":"12:00","close":"23:00"},"sat":{"open":"11:00","close":"23:00"},
+  "sun":{"open":"11:00","close":"21:00"}}'::jsonb
+ where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' and hours is null;
+update location set hours = '{
+  "mon":{"open":"11:00","close":"21:00"},"tue":{"open":"11:00","close":"21:00"},
+  "wed":{"open":"11:00","close":"21:00"},"thu":{"open":"11:00","close":"21:00"},
+  "fri":{"open":"11:00","close":"23:00"},"sat":{"open":"11:00","close":"23:00"},
+  "sun":{"open":"11:00","close":"22:00"}}'::jsonb
+ where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' and hours is null;
+update location set hours = '{
+  "mon":{"open":"11:00","close":"22:00"},"tue":{"open":"11:00","close":"22:00"},
+  "wed":{"open":"11:00","close":"22:00"},"thu":{"open":"11:00","close":"22:00"},
+  "fri":{"open":"11:00","close":"23:00"},"sat":{"open":"11:00","close":"23:00"},
+  "sun":{"open":"11:00","close":"22:00"}}'::jsonb
+ where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' and hours is null;
+
 -- Rewards (punchlist #8 tier 1). One row per earned achievement, granted
 -- server-side when a completed round syncs; achievements pay out as tickets on
 -- the player's loyalty card (see the redeemed_* columns below). Keyed by
