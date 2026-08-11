@@ -854,6 +854,16 @@ button {
 :root[data-template='uv'] .tile:active {
   transform: translateY(1px);
 }
+/* Floating menus, sheets and the nav drawer can't ride the translucent
+   neon-glass fill the on-page cards use — they hover OVER other content, so a
+   near-transparent fill lets the page bleed through and the menu turns
+   unreadable. Back them with a solid version of the same dark-purple glass.
+   (Light mode already fills these surfaces with opaque #ffffff, so only dark
+   needs it.) */
+:root[data-template='uv'][data-theme='dark'] [role='menu'].surface-1,
+:root[data-template='uv'][data-theme='dark'] [role='dialog'].surface-1 {
+  background-color: color-mix(in srgb, #0a0616, #ffffff 6%);
+}
 
 /* ——— GLASSY — frosted translucent panels over an aurora ————————————————————— */
 :root[data-template='glass'][data-theme='dark'] body,
