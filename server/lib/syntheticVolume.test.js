@@ -48,7 +48,7 @@ test("projectVolume: gated uses each venue's weekly open hours", () => {
     fri: { open: "12:00", close: "23:00" },
     sat: { open: "10:00", close: "23:00" },
   };
-  const courses = Array.from({ length: 4 }, () => ({ hours }));
+  const courses = Array.from({ length: 4 }, () => ({ hours, tz: "America/Los_Angeles" }));
   const p = projectVolume({ courses, plays: 2, intervalMin: 60, maxPlayers: 4, ignoreHours: false });
 
   const wk = weeklyOpenHours(hours); // 71
@@ -61,10 +61,22 @@ test("projectVolume: gated uses each venue's weekly open hours", () => {
 });
 
 test("projectVolume: gated is 0 when venues have no hours", () => {
-  const courses = [{ hours: null }, { hours: {} }];
+  const courses = [{ hours: null, tz: "America/Los_Angeles" }, { hours: {}, tz: "America/Los_Angeles" }];
   const p = projectVolume({ courses, plays: 3, intervalMin: 60, maxPlayers: 4, ignoreHours: false });
   assert.equal(p.gated.roundsPerYear, 0);
   assert.equal(p.effective.roundsPerYear, 0);
+});
+
+test("projectVolume: a venue with hours but NO tz contributes 0 gated (fail-closed)", () => {
+  const hours = { mon: { open: "10:00", close: "22:00" } }; // 12h/wk if it counted
+  // No tz → isVenueOpen never plays it, so gated must be 0 even though hours exist.
+  const noTz = projectVolume({ courses: [{ hours, tz: null }], plays: 2, intervalMin: 60, maxPlayers: 4, ignoreHours: false });
+  assert.equal(noTz.gated.roundsPerYear, 0);
+  // Same venue WITH a tz does contribute.
+  const withTz = projectVolume({ courses: [{ hours, tz: "America/Los_Angeles" }], plays: 2, intervalMin: 60, maxPlayers: 4, ignoreHours: false });
+  assert.ok(withTz.gated.roundsPerYear > 0);
+  // 24/7 ceiling ignores hours/tz entirely — unaffected either way.
+  assert.equal(noTz.max.roundsPerYear, withTz.max.roundsPerYear);
 });
 
 test("projectVolume: intervalMin 0 yields no fixed annual rate", () => {

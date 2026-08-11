@@ -360,10 +360,15 @@ function preflight(a, courses, now = new Date()) {
   console.log(`  24/7 max   : ~${Math.round(maxHour)} rounds/hr · ~${Math.round(maxYear).toLocaleString()} rounds/yr · ~${Math.round(maxYear * avgPlayers).toLocaleString()} players/yr`);
   if (gating && a.intervalMin > 0) {
     // Each course only plays while its venue is open: expected sweeps/week that
-    // land in open hours ≈ weeklyOpenHours / intervalHours. Unknown hours → 0.
+    // land in open hours ≈ weeklyOpenHours / intervalHours. Unknown hours → 0;
+    // a venue with no tz → 0 too (isVenueOpen fails closed on a missing tz, so
+    // the bot never plays it — counting its hours here would overstate).
     const intervalHours = a.intervalMin / 60;
     let gatedYear = 0;
-    for (const c of courses) gatedYear += a.playsPerCourse * (weeklyOpenHours(c.hours) / intervalHours) * WEEKS_PER_YEAR;
+    for (const c of courses) {
+      const openHours = c.tz ? weeklyOpenHours(c.hours) : 0;
+      gatedYear += a.playsPerCourse * (openHours / intervalHours) * WEEKS_PER_YEAR;
+    }
     console.log(`  hours-gated: ~${Math.round(gatedYear).toLocaleString()} rounds/yr · ~${Math.round(gatedYear * avgPlayers).toLocaleString()} players/yr (only while venues are open)`);
   } else if (gating) {
     console.log(`  hours-gated: annual estimate needs --interval-min > 0`);
@@ -401,10 +406,29 @@ async function mapLimit(items, limit, fn) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// --- parent-death watchdog -------------------------------------------------
+// When launched by the Master Control control plane (which sets
+// FFC_EXIT_WITH_PARENT=1), stop the moment we're orphaned — i.e. our parent
+// (the API) has died and we've been reparented. Polling process.ppid catches
+// the cases a parent can't clean up after (its own SIGKILL / crash): on Linux
+// the ppid becomes 1, and on any platform it changes off the original parent.
+// The interval is unref'd so it never keeps the bot alive on its own.
+function watchParentOrExit() {
+  if (!process.env.FFC_EXIT_WITH_PARENT) return;
+  const initialPpid = process.ppid;
+  setInterval(() => {
+    if (process.ppid !== initialPpid || process.ppid === 1) {
+      console.error("course-bot: parent process gone — exiting to avoid an orphaned bot");
+      process.exit(143);
+    }
+  }, 3000).unref();
+}
+
 // --- main ------------------------------------------------------------------
 async function main() {
   const a = parseArgs(process.argv);
   if (a.genKey) genKeyAndExit(); // mint a key and stop — no discovery, no POST
+  watchParentOrExit();
   if (!a.dryRun && !a.key) {
     fail("no --key / SYNTHETIC_BOT_KEY set — the server will reject synthetic rounds. " +
       "Pass --dry-run to preview without posting.");

@@ -29,7 +29,8 @@ export function weeklyOpenHours(hours) {
 
 /**
  * Project annual synthetic volume for a cadence over a set of courses. Each
- * course carries `{ hours }` — its venue's hours object (or null).
+ * course carries `{ hours, tz }` — its venue's hours object (or null) and IANA
+ * timezone (or null).
  *
  *   plays        rounds per course per sweep
  *   intervalMin  minutes between sweeps (0 → no annual rate; treated as "as fast
@@ -49,12 +50,16 @@ export function projectVolume({ courses, plays, intervalMin, maxPlayers, ignoreH
   const maxRoundsPerYear = n * plays * sweepsPerHour * 24 * 365;
 
   // Gated: each course only plays while its venue is open, so its expected
-  // sweeps/year ≈ (weekly open hours ÷ interval hours) × weeks/year.
+  // sweeps/year ≈ (weekly open hours ÷ interval hours) × weeks/year. A venue
+  // with no timezone contributes ZERO — isVenueOpen fails closed on a missing
+  // tz and the bot never plays it, so counting its hours here would overstate
+  // the estimate against what actually runs.
   let gatedRoundsPerYear = 0;
   if (intervalMin > 0) {
     const intervalHours = intervalMin / 60;
     for (const c of courses) {
-      gatedRoundsPerYear += plays * (weeklyOpenHours(c.hours) / intervalHours) * WEEKS_PER_YEAR;
+      const openHours = c.tz ? weeklyOpenHours(c.hours) : 0;
+      gatedRoundsPerYear += plays * (openHours / intervalHours) * WEEKS_PER_YEAR;
     }
   }
 

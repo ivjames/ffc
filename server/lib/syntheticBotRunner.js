@@ -2,12 +2,20 @@
 // driven by the admin control plane (routes/admin/syntheticBot.js). At most ONE
 // bot runs per API process.
 //
-// LIFETIME: the child is spawned NON-detached, so it shares the API's lifetime.
-// An API restart (deploy, crash, `ffc restart`) takes the bot down with it and
-// status() then reads "stopped" — there is no orphan to reap and no bot that
-// outlives the operator's view of it. Persisting a bot across restarts is a
-// deliberate non-goal (that's what a standing pm2 process is for); this control
-// plane is for interactive, supervised runs.
+// LIFETIME: the bot must not outlive the API that manages it — otherwise a
+// restart would leave an orphan posting rounds while status() reports "stopped"
+// (a fresh module state), letting an operator start a second bot with no way to
+// stop the first. `detached: false` alone does NOT guarantee this: on a SIGKILL
+// or crash the child is reparented to init and keeps running. So death is
+// enforced from BOTH ends:
+//   - child side (the reliable one): the bot is spawned with
+//     FFC_EXIT_WITH_PARENT=1, so course-bot.mjs runs a watchdog that exits the
+//     moment it is reparented (its parent — this API — has died). This covers
+//     the SIGKILL/crash case the parent can't clean up after.
+//   - parent side (fast path): a synchronous 'exit' handler here kills the child
+//     on the API's own normal shutdown.
+// Persisting a bot across restarts is a deliberate non-goal (that's what a
+// standing pm2 process is for); this control plane is for supervised runs.
 //
 // SECRET HANDLING: the child needs SYNTHETIC_BOT_KEY; the browser must never see
 // it. The key is read from THIS process's env and injected into the child's env
@@ -50,6 +58,26 @@ export function isRunning() {
   return state.child !== null;
 }
 
+// Fast-path cleanup for the API's OWN normal shutdown: synchronously signal the
+// child on process 'exit'. Registered once, lazily, only after a bot is spawned.
+// This does NOT cover SIGKILL/crash (no handler runs then) — the child-side
+// watchdog is the backstop for those. We only touch 'exit' (not SIGINT/SIGTERM)
+// so we never override the API's own signal handling.
+let parentExitKillRegistered = false;
+function registerParentExitKill() {
+  if (parentExitKillRegistered) return;
+  parentExitKillRegistered = true;
+  process.once("exit", () => {
+    if (state.child) {
+      try {
+        state.child.kill("SIGTERM");
+      } catch {
+        /* already gone */
+      }
+    }
+  });
+}
+
 // argv for course-bot.mjs from already-validated params. --yes skips its
 // interactive confirm; --api points the bot back at THIS server over loopback
 // (no TLS/proxy hop, and it can't reach another host).
@@ -87,9 +115,12 @@ export function start(params, env = process.env) {
   const args = buildArgs(params, port);
   const child = spawn(process.execPath, args, {
     // Inject the key into the child only; inherit the rest of the API's env.
-    env: { ...env, SYNTHETIC_BOT_KEY: key },
+    // FFC_EXIT_WITH_PARENT arms the bot's own parent-death watchdog, so it stops
+    // itself if this API dies without a chance to kill it (SIGKILL / crash).
+    env: { ...env, SYNTHETIC_BOT_KEY: key, FFC_EXIT_WITH_PARENT: "1" },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  registerParentExitKill();
 
   state = {
     child,
