@@ -12,14 +12,16 @@ import { isVenueOpen, todaysHours, formatDayHours, type VenueHours } from './ven
 //   2026-08-14T08:00:00Z -> Fri 01:00 PT
 //   2026-08-14T10:00:00Z -> Fri 03:00 PT
 //   2026-08-15T06:00:00Z -> Fri 23:00 PT
+//   2026-08-15T08:00:00Z -> Sat 01:00 PT
 const TZ = 'America/Los_Angeles';
 const MON_NOON = new Date('2026-08-10T19:00:00Z');
 const MON_LATE = new Date('2026-08-11T05:00:00Z'); // 22:00, after close
 const TUE_NOON = new Date('2026-08-11T19:00:00Z');
 const WED_NOON = new Date('2026-08-12T19:00:00Z');
-const FRI_1AM = new Date('2026-08-14T08:00:00Z'); // overnight wrap, early-morning branch
+const FRI_1AM = new Date('2026-08-14T08:00:00Z'); // Fri's OWN early morning — belongs to Thu
 const FRI_3AM = new Date('2026-08-14T10:00:00Z'); // gap between close and open
-const FRI_11PM = new Date('2026-08-15T06:00:00Z'); // overnight wrap, evening branch
+const FRI_11PM = new Date('2026-08-15T06:00:00Z'); // overnight wrap, evening (today) side
+const SAT_1AM = new Date('2026-08-15T08:00:00Z'); // carryover from Fri's overnight window
 
 const HOURS: VenueHours = {
   mon: { open: '11:00', close: '21:00' },
@@ -45,12 +47,17 @@ describe('isVenueOpen', () => {
     expect(isVenueOpen(HOURS, TZ, WED_NOON)).toBe(false);
   });
 
-  it('is open across an overnight close, evening side', () => {
+  it('is open across an overnight close, evening (today) side', () => {
     expect(isVenueOpen(HOURS, TZ, FRI_11PM)).toBe(true);
   });
 
-  it('is open across an overnight close, early-morning side', () => {
-    expect(isVenueOpen(HOURS, TZ, FRI_1AM)).toBe(true);
+  it('is open on the previous day\'s overnight carryover (Sat 01:00 from Fri 20:00–02:00)', () => {
+    expect(isVenueOpen(HOURS, TZ, SAT_1AM)).toBe(true);
+  });
+
+  it('does NOT open a day\'s own early morning — Fri 01:00 belongs to a Thu window (P1)', () => {
+    // Fri has 20:00–02:00 but Thu is undefined, so Fri 01:00 is closed.
+    expect(isVenueOpen(HOURS, TZ, FRI_1AM)).toBe(false);
   });
 
   it('is closed in the gap between an overnight close and the next open', () => {

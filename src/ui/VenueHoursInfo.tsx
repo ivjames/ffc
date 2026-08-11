@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   currentWeekday,
   formatDayHours,
@@ -13,6 +14,19 @@ import {
 // AnnouncementBanner): renders nothing when the venue hasn't been given
 // hours/tz yet, so screens can mount it unconditionally.
 
+// Open/Closed is time-derived, so a mounted card would otherwise go stale when a
+// venue opens/closes while the screen is up. Tick every minute to recompute —
+// coarse enough to be cheap, fine enough that the flip lands within ~a minute of
+// the boundary.
+function useNow(intervalMs = 60_000): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
 /** Compact "● Open now · 12:00 PM – 9:00 PM today" line. */
 export function VenueOpenLine({
   hours,
@@ -23,9 +37,10 @@ export function VenueOpenLine({
   tz?: string | null;
   className?: string;
 }) {
+  const now = useNow();
   if (!hours || !tz) return null;
-  const open = isVenueOpen(hours, tz);
-  const today = todaysHours(hours, tz);
+  const open = isVenueOpen(hours, tz, now);
+  const today = todaysHours(hours, tz, now);
   return (
     <div className={`flex items-center gap-1.5 text-xs font-semibold ${className}`}>
       <span
@@ -56,8 +71,9 @@ export function VenueHoursCard({
   showStatus?: boolean;
   className?: string;
 }) {
+  const now = useNow();
   if (!hours || !tz) return null;
-  const today = currentWeekday(tz);
+  const today = currentWeekday(tz, now);
   return (
     <details className={`surface-1 rounded-2xl border border-fairway-800/60 ${className}`}>
       <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-2.5">

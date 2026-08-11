@@ -71,10 +71,11 @@ export function normalizeHours(value) {
   return { value: out };
 }
 
-// Weekday key + minutes-since-midnight for an instant, in a given IANA zone.
+// Weekday index (0=Sun..6=Sat, matching WEEKDAY_KEYS) + minutes-since-midnight
+// for an instant, in a given IANA zone. Caller guarantees a real `tz`.
 function tzParts(tz, at) {
   const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz || "America/Los_Angeles",
+    timeZone: tz,
     weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
@@ -88,21 +89,45 @@ function tzParts(tz, at) {
     else if (p.type === "hour") hour = Number(p.value) % 24; // "24" at midnight → 0
     else if (p.type === "minute") minute = Number(p.value);
   }
-  return { weekday, minutes: hour * 60 + minute };
+  return { index: WEEKDAY_KEYS.indexOf(weekday), minutes: hour * 60 + minute };
 }
 
 /**
  * Is the venue open at instant `at` (default now), evaluated in its own tz?
- * Unknown/unset hours (null) → false — callers that gate on this fail closed.
- * A missing or "closed" day → false. Handles same-day and overnight closes.
+ *   - Unknown/unset hours (null) → false; missing tz → false (callers that gate
+ *     on this fail closed — an unknown zone can't be evaluated).
+ *   - A missing or "closed" day → false.
+ *   - Same-day window: open <= t < close.
+ *   - Overnight window (close <= open): the PRE-midnight slice (t >= open)
+ *     belongs to today; the POST-midnight slice (t < close) belongs to the
+ *     PREVIOUS day's entry — so after midnight we check yesterday's window, not
+ *     today's. (Thu 01:00 is open only if WEDNESDAY has an overnight window
+ *     reaching 01:00, never because Thursday itself does.)
  */
 export function isVenueOpen(hours, tz, at = new Date()) {
   if (!hours || typeof hours !== "object") return false;
-  const { weekday, minutes } = tzParts(tz, at);
-  const day = hours[weekday];
-  if (!day || day === "closed") return false;
-  const open = toMinutes(day.open);
-  const close = toMinutes(day.close);
-  if (close > open) return minutes >= open && minutes < close; // same-day
-  return minutes >= open || minutes < close; // overnight wrap
+  if (!tz) return false;
+  const { index, minutes } = tzParts(tz, at);
+  if (index < 0) return false;
+
+  // Today's window: same-day, or the pre-midnight part of an overnight window.
+  const today = hours[WEEKDAY_KEYS[index]];
+  if (today && today !== "closed") {
+    const open = toMinutes(today.open);
+    const close = toMinutes(today.close);
+    if (close > open) {
+      if (minutes >= open && minutes < close) return true; // same-day
+    } else if (minutes >= open) {
+      return true; // overnight, pre-midnight (today, after open)
+    }
+  }
+
+  // Carryover: yesterday's overnight window spilling past midnight into today.
+  const prev = hours[WEEKDAY_KEYS[(index + 6) % 7]];
+  if (prev && prev !== "closed") {
+    const open = toMinutes(prev.open);
+    const close = toMinutes(prev.close);
+    if (close <= open && minutes < close) return true; // overnight, post-midnight
+  }
+  return false;
 }

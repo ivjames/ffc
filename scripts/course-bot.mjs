@@ -69,6 +69,7 @@ function parseArgs(argv) {
     maxPlayers: 4,
     concurrency: 4,
     ignoreHours: false,
+    fallbackTz: null,
     yes: false,
     dryRun: false,
   };
@@ -85,6 +86,7 @@ function parseArgs(argv) {
       case "--max-players": a.maxPlayers = Number(val()); break;
       case "--concurrency": a.concurrency = Number(val()); break;
       case "--ignore-hours": a.ignoreHours = true; break;
+      case "--fallback-tz": a.fallbackTz = val(); break;
       case "--yes": a.yes = true; break;
       case "--dry-run": a.dryRun = true; break;
       case "--help": case "-h": printHelpAndExit(); break;
@@ -95,6 +97,13 @@ function parseArgs(argv) {
   if (!(a.intervalMin >= 0)) fail("--interval-min must be >= 0");
   if (!(a.maxPlayers >= 1 && a.maxPlayers <= 4)) fail("--max-players must be 1..4");
   if (!(a.concurrency >= 1)) fail("--concurrency must be >= 1");
+  if (a.fallbackTz !== null) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: a.fallbackTz });
+    } catch {
+      fail(`--fallback-tz ${JSON.stringify(a.fallbackTz)} is not a valid IANA zone`);
+    }
+  }
   a.api = a.api.replace(/\/+$/, "");
   return a;
 }
@@ -168,7 +177,7 @@ function buildRound(course, runId, maxPlayers) {
 // fetch: courses (with pars), and each course's venue (tz + business hours) so
 // the bot can gate synthetic play on "is this venue open right now, in its own
 // timezone" — the same rows the app bundles and the same source of truth.
-async function discoverCourses(api, location) {
+async function discoverCourses(api, location, fallbackTz = null) {
   const url = `${api}/api/content`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`course discovery failed: GET ${url} → ${res.status}`);
@@ -178,7 +187,11 @@ async function discoverCourses(api, location) {
   for (const l of content.locations ?? []) {
     locsById.set(l.id, {
       name: l.name,
-      tz: l.tz || "America/Los_Angeles",
+      // Never assume a zone: the server's VENUE_TZ fallback is configurable and
+      // not necessarily Pacific, so guessing could play a venue while it's
+      // actually closed. Use an operator-supplied --fallback-tz if given, else
+      // leave null → isVenueOpen fails closed (venue skipped) rather than guess.
+      tz: l.tz || fallbackTz || null,
       hours: l.hours ?? null,
     });
   }
@@ -211,6 +224,13 @@ async function discoverCourses(api, location) {
     console.warn(
       `  ! hours unset for ${noHours}/${courses.length} course(s) — those venues are treated ` +
         `as CLOSED (fail-closed). Set location.hours, or pass --ignore-hours to play regardless.`
+    );
+  }
+  const noTz = courses.filter((c) => c.hours && !c.tz).length;
+  if (noTz > 0) {
+    console.warn(
+      `  ! ${noTz}/${courses.length} course(s) have hours but no timezone — treated as CLOSED ` +
+        `(the server's VENUE_TZ fallback isn't assumed). Set location.tz, or pass --fallback-tz <IANA>.`
     );
   }
   return courses;
@@ -387,7 +407,7 @@ async function main() {
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   let courses;
   try {
-    courses = await discoverCourses(a.api, a.location);
+    courses = await discoverCourses(a.api, a.location, a.fallbackTz);
   } catch (e) {
     fail(e.message);
   }
@@ -423,7 +443,7 @@ async function main() {
     // (edited in Master Control, or a re-fetch job) is honored with no restart.
     // If the refresh fails, keep the last-known set rather than dying.
     try {
-      courses = await discoverCourses(a.api, a.location);
+      courses = await discoverCourses(a.api, a.location, a.fallbackTz);
     } catch (e) {
       console.warn(`  ! ${label}: hours/course refresh failed (${e.message}); using last-known set`);
     }

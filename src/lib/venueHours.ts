@@ -36,10 +36,14 @@ function toMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
-// Weekday key + minutes-since-midnight for an instant, in a given IANA zone.
-function tzParts(tz: string | null | undefined, at: Date): { weekday: WeekdayKey; minutes: number } {
+// Weekday (key + 0=Sun..6=Sat index) + minutes-since-midnight for an instant,
+// in a given IANA zone. Callers that need real tz math guard `tz` first.
+function tzParts(
+  tz: string | null | undefined,
+  at: Date,
+): { weekday: WeekdayKey; index: number; minutes: number } {
   const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz || 'America/Los_Angeles',
+    timeZone: tz ?? undefined,
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
@@ -53,14 +57,16 @@ function tzParts(tz: string | null | undefined, at: Date): { weekday: WeekdayKey
     else if (p.type === 'hour') hour = Number(p.value) % 24; // "24" at midnight → 0
     else if (p.type === 'minute') minute = Number(p.value);
   }
-  return { weekday, minutes: hour * 60 + minute };
+  return { weekday, index: WEEKDAY_KEYS.indexOf(weekday), minutes: hour * 60 + minute };
 }
 
 /**
  * Is the venue open at instant `at` (default now), evaluated in its own tz?
- * Unknown/unset hours (null/undefined) or a missing tz → false — fail closed,
- * mirroring the server. A missing or "closed" day → false. Handles same-day
- * and overnight closes.
+ * Unknown/unset hours or a missing tz → false (fail closed, mirroring the
+ * server). A missing or "closed" day → false. For an overnight window
+ * (close <= open) the pre-midnight slice (t >= open) belongs to today and the
+ * post-midnight slice (t < close) belongs to the PREVIOUS day's entry — so
+ * after midnight we check yesterday's window, not today's.
  */
 export function isVenueOpen(
   hours: VenueHours | null | undefined,
@@ -69,13 +75,29 @@ export function isVenueOpen(
 ): boolean {
   if (!hours || typeof hours !== 'object') return false;
   if (!tz) return false;
-  const { weekday, minutes } = tzParts(tz, at);
-  const day = hours[weekday];
-  if (!day || day === 'closed') return false;
-  const open = toMinutes(day.open);
-  const close = toMinutes(day.close);
-  if (close > open) return minutes >= open && minutes < close; // same-day
-  return minutes >= open || minutes < close; // overnight wrap
+  const { index, minutes } = tzParts(tz, at);
+  if (index < 0) return false;
+
+  // Today's window: same-day, or the pre-midnight part of an overnight window.
+  const today = hours[WEEKDAY_KEYS[index]];
+  if (today && today !== 'closed') {
+    const open = toMinutes(today.open);
+    const close = toMinutes(today.close);
+    if (close > open) {
+      if (minutes >= open && minutes < close) return true; // same-day
+    } else if (minutes >= open) {
+      return true; // overnight, pre-midnight (today, after open)
+    }
+  }
+
+  // Carryover: yesterday's overnight window spilling past midnight into today.
+  const prev = hours[WEEKDAY_KEYS[(index + 6) % 7]];
+  if (prev && prev !== 'closed') {
+    const open = toMinutes(prev.open);
+    const close = toMinutes(prev.close);
+    if (close <= open && minutes < close) return true; // overnight, post-midnight
+  }
+  return false;
 }
 
 /**

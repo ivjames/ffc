@@ -66,6 +66,13 @@ test("isVenueOpen: unknown/unset hours → false (fail-closed)", () => {
   assert.equal(isVenueOpen({}, TZ, new Date("2026-08-12T20:00:00Z")), false);
 });
 
+test("isVenueOpen: missing tz → false (fail-closed, no assumed zone)", () => {
+  const at = new Date("2026-08-12T20:00:00Z");
+  assert.equal(isVenueOpen(upland, null, at), false);
+  assert.equal(isVenueOpen(upland, undefined, at), false);
+  assert.equal(isVenueOpen(upland, "", at), false);
+});
+
 test("isVenueOpen: 'closed' day → false", () => {
   assert.equal(
     isVenueOpen({ wed: "closed" }, TZ, new Date("2026-08-12T20:00:00Z")),
@@ -73,11 +80,22 @@ test("isVenueOpen: 'closed' day → false", () => {
   );
 });
 
-test("isVenueOpen: overnight close wraps past midnight", () => {
-  const bar = { wed: { open: "20:00", close: "02:00" } };
-  // Wed 23:00 PDT (2026-08-13T06:00Z) → open (after 20:00)
-  assert.equal(isVenueOpen(bar, TZ, new Date("2026-08-13T06:00:00Z")), true);
-  // Wed 12:00 PDT (19:00Z) → closed (before 20:00, and Wed's early-AM window
-  // belongs to Tue's overnight, which isn't defined here)
-  assert.equal(isVenueOpen(bar, TZ, new Date("2026-08-12T19:00:00Z")), false);
+test("isVenueOpen: overnight window — pre-midnight is today, post-midnight is yesterday's", () => {
+  const wedNight = { wed: { open: "20:00", close: "02:00" } }; // Wed 20:00 → Thu 02:00
+  // Wed 23:00 PDT (2026-08-13T06:00Z) → open (pre-midnight, today's window)
+  assert.equal(isVenueOpen(wedNight, TZ, new Date("2026-08-13T06:00:00Z")), true);
+  // Thu 01:00 PDT (2026-08-13T08:00Z) → open (carryover from Wed's overnight)
+  assert.equal(isVenueOpen(wedNight, TZ, new Date("2026-08-13T08:00:00Z")), true);
+  // Wed 01:00 PDT (2026-08-12T08:00Z) → closed (Wed opens 20:00; no prior-day
+  // overnight defined to carry into Wed morning)
+  assert.equal(isVenueOpen(wedNight, TZ, new Date("2026-08-12T08:00:00Z")), false);
+});
+
+test("isVenueOpen: an overnight window never opens its OWN early-morning hours (P1)", () => {
+  // Only Thursday has 20:00–02:00. Thu 01:00 must be CLOSED — the post-midnight
+  // slice belongs to a Wednesday window, which isn't defined here. (Regression
+  // for the bug where the current day's `close` was checked after midnight.)
+  const thuNight = { thu: { open: "20:00", close: "02:00" } };
+  assert.equal(isVenueOpen(thuNight, TZ, new Date("2026-08-13T08:00:00Z")), false); // Thu 01:00
+  assert.equal(isVenueOpen(thuNight, TZ, new Date("2026-08-14T05:00:00Z")), true); // Thu 22:00
 });
