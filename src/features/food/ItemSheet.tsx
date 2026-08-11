@@ -42,6 +42,9 @@ export default function ItemSheet({ item, onClose }: { item: MenuItem; onClose: 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/60" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={item.name}
         className="surface-1 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-fairway-800/60 p-4"
         style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
         onClick={(e) => e.stopPropagation()}
