@@ -119,7 +119,7 @@ test("rejects malformed requests", async () => {
   const cases = [
     [{ locationId: "nope", playerId: "PL-1", game: "skeeball", tickets: 5, sessionId: session() }, /locationId/],
     [{ locationId, playerId: "", game: "skeeball", tickets: 5, sessionId: session() }, /playerId/],
-    [{ locationId, playerId: "PL-1", game: "clawmachine", tickets: 5, sessionId: session() }, /unknown game/],
+    [{ locationId, playerId: "PL-1", game: "coinpusher", tickets: 5, sessionId: session() }, /unknown game/],
     [{ locationId, playerId: "PL-1", game: "skeeball", tickets: 0, sessionId: session() }, /tickets/],
     [{ locationId, playerId: "PL-1", game: "skeeball", tickets: 2.5, sessionId: session() }, /tickets/],
     [{ locationId, playerId: "PL-1", game: "skeeball", tickets: 10_001, sessionId: session() }, /tickets/],
@@ -302,5 +302,6 @@ test("admin usage rollup reports issuance and the daily-cap hits", async () => {
   const metaJson = await meta.json();
   assert.equal(metaJson.hardMaxPerRound, 100);
   assert.ok(metaJson.games.some((g) => g.key === "skeeball"));
-  assert.ok(!metaJson.games.some((g) => g.key === "clawmachine")); // chance games never earn
+  assert.ok(metaJson.games.some((g) => g.key === "clawmachine")); // skill grip now earns
+  assert.ok(!metaJson.games.some((g) => g.key === "coinpusher")); // pure chance never earns
 });

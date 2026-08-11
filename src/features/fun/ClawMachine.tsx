@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import {
   playStroke,
@@ -32,8 +33,10 @@ import {
 // §12 Claw Machine — a Fun Zone attraction mini-game. One-tap timing: the claw
 // trolley sweeps left↔right along its rail; tap to stop it, and the claw drops,
 // closes on whatever plush is beneath, then hoists and carries it to the prize
-// chute. Grip AND mid-carry slip odds both scale with how well-centered the
-// stop was (rare prizes are slipperier), so the carry home is the tense part.
+// chute. Grip and mid-carry slip are decided by a deterministic rubric on how
+// well-centered the stop was (rare prizes demand more center) — no dice, so the
+// carry home is a skill payoff, not a coin flip. A dead-center stop always
+// holds; an edge grip always fails; the band between grabs but slips mid-carry.
 // Five credits; common 5 / deluxe 10 / gold star 25. Canvas, offline.
 //
 // The pit is a real (tiny) physics scene: every plush is a circle body on a
@@ -91,10 +94,19 @@ const CLACK_CD = 90; // ms between prize-on-prize clacks
 
 type Rarity = 'common' | 'uncommon' | 'rare';
 const PTS: Record<Rarity, number> = { common: 5, uncommon: 10, rare: 25 };
-// Grip chance tops out at BASE (dead-center) and worsens off-center; slip
-// chance does the reverse. Rarer prizes are slightly slipperier both ways.
-const GRIP_BASE: Record<Rarity, number> = { common: 0.95, uncommon: 0.85, rare: 0.72 };
-const SLIP_BASE: Record<Rarity, number> = { common: 0.3, uncommon: 0.42, rare: 0.55 };
+// Grip is decided by a deterministic rubric on how centered the stop was — no
+// dice. `c` (computed at grab time) is 1 for a dead-center grip and falls to 0
+// toward the prize's edge. Each rarity sets two thresholds on `c`:
+//   c < hold          → the claw can't close on it (wriggles free)
+//   hold ≤ c < secure → it grabs but the grip is marginal (slips mid-carry)
+//   c ≥ secure        → a clean hold that survives the whole carry
+// Rarer prizes demand a more centered grip on both counts.
+type GripBand = { hold: number; secure: number };
+const GRIP_RUBRIC: Record<Rarity, GripBand> = {
+  common: { hold: 0.2, secure: 0.55 },
+  uncommon: { hold: 0.35, secure: 0.7 },
+  rare: { hold: 0.5, secure: 0.82 },
+};
 
 type Kind = 'teddy' | 'bunny' | 'star';
 type Prize = {
@@ -209,6 +221,7 @@ type GS = {
   theta: number; // hanging-prize pendulum angle
   target: Prize | null; // what the descent is aimed at
   targetY: number;
+  gripC: number; // grip centeredness (1 dead-center .. 0 edge), snapshotted at tap
   held: Prize | null;
   gripT: number; // jaw open/close timer
   carryT: number; // pendulum clock (hoist + carry)
@@ -236,6 +249,7 @@ function freshGS(now: number): GS {
     theta: 0,
     target: null,
     targetY: EMPTY_DROP_Y,
+    gripC: 0,
     held: null,
     gripT: 0,
     carryT: 0,
@@ -263,8 +277,11 @@ type Impacts = { floor: number; pair: number };
 
 /** One fixed physics substep for the plush pile: claw disturbance, gravity +
  *  boundary bounces, prize↔prize collisions (positional separation + impulse),
- *  then a rest/sleep pass so the settled pile goes fully still. */
-function stepPit(gs: GS, dt: number, impacts: Impacts): void {
+ *  then a rest/sleep pass so the settled pile goes fully still. Any body that
+ *  falls squarely into the chute mouth is pulled out of the pit and pushed onto
+ *  `delivered` for the frame loop to bank — a slipped plush that lands over the
+ *  hole drops through instead of bouncing off the housing. */
+function stepPit(gs: GS, dt: number, impacts: Impacts, delivered: Prize[]): void {
   const pit: Prize[] = [];
   for (const p of gs.prizes) if (p.inPit) pit.push(p);
 
@@ -323,11 +340,21 @@ function stepPit(gs: GS, dt: number, impacts: Impacts): void {
       p.x = WALL_R - p.r;
       if (p.vx > 0) p.vx = -p.vx * REST_WALL;
     }
-    // The chute housing is solid — plush bounce off its right wall instead of
-    // tumbling down the shaft.
-    if (p.y + p.r > CHUTE_RIM && p.x - p.r < CHUTE_R) {
-      p.x = CHUTE_R + p.r;
-      if (p.vx < 0) p.vx = -p.vx * REST_WALL;
+    // The chute. A plush whose center clears the rim while sitting over the
+    // mouth drops down the shaft and out the prize door — a lucky save that
+    // banks like any delivery, rather than perching on the housing. One that
+    // only grazes the housing to the right of the mouth still bounces off its
+    // wall and stays in the pit.
+    if (p.y + p.r > CHUTE_RIM) {
+      if (p.x > CHUTE_L && p.x < CHUTE_R) {
+        if (p.y >= CHUTE_SCORE_Y) {
+          p.inPit = false;
+          delivered.push(p);
+        }
+      } else if (p.x - p.r < CHUTE_R) {
+        p.x = CHUTE_R + p.r;
+        if (p.vx < 0) p.vx = -p.vx * REST_WALL;
+      }
     }
     // Pit floor: restitution only above a small threshold, so the floor never
     // feeds perpetual micro-bounces.
@@ -797,6 +824,8 @@ export default function ClawMachine() {
   const [credit, setCredit] = useState(0);
   const [score, setScore] = useState(0);
   const [note, setNote] = useState('');
+  // Fresh idempotency key per round for the ticket award (see start()).
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -905,12 +934,18 @@ export default function ClawMachine() {
         gs.gripT += dt;
         gs.jaw = Math.min(1, gs.gripT / GRAB_MS);
         if (gs.gripT >= GRAB_MS) {
-          // Resolve the grip: odds scale with how centered the stop was, and
-          // rarer prizes are harder to hold from the first squeeze.
+          // Resolve the grip against the rubric: purely how centered the stop
+          // was, judged against this rarity's thresholds. No randomness — the
+          // same stop on the same prize always resolves the same way.
           const t = gs.target;
           if (t) {
-            const c = Math.max(0, 1 - Math.abs(gs.clawX - t.x) / (t.r + GRAB_TOL));
-            if (Math.random() < GRIP_BASE[t.rarity] * (0.35 + 0.65 * c)) {
+            // Centeredness is the snapshot taken when the player tapped, not a
+            // fresh read: the pile keeps simulating during the descent, so `t.x`
+            // can drift, and the skill judgment must reflect where the claw
+            // actually stopped over the prize — what the player saw and aimed.
+            const c = gs.gripC;
+            const band = GRIP_RUBRIC[t.rarity];
+            if (c >= band.hold) {
               gs.held = t;
               t.inPit = false;
               // Wake the neighbors so the pile settles into the gap the
@@ -918,15 +953,22 @@ export default function ClawMachine() {
               for (const q of gs.prizes) {
                 if (q.inPit && Math.hypot(q.x - t.x, q.y - t.y) < q.r + t.r + 26) wake(q);
               }
-              const slipChance = SLIP_BASE[t.rarity] * (0.2 + 0.8 * (1 - c));
-              gs.slipAt = Math.random() < slipChance ? 0.15 + Math.random() * 0.7 : 2;
-              setNote('Got one — hold on!');
+              // A grip in the marginal band (below `secure`) slips mid-carry;
+              // the closer it is to just-barely-holding, the earlier it goes.
+              if (c >= band.secure) {
+                gs.slipAt = 2; // clean hold — carries all the way home
+                setNote('Solid grip — bring it home!');
+              } else {
+                const q = (c - band.hold) / (band.secure - band.hold); // 0..1 within the band
+                gs.slipAt = 0.2 + 0.65 * q;
+                setNote('Got it — but the grip feels loose…');
+              }
               // Rising ding, not playCup: the cup sound's descending plunks
               // read as a fail cue when they mark a successful grab.
               playDing();
               spawnBurst(fx.particles, gs.clawX, gs.clawY + 8, 10, 160, t.light);
             } else {
-              setNote('It wriggled free of the claw!');
+              setNote('Off-center — it wriggled free of the claw!');
               playBuzz();
               spawnFloater(fx.floaters, gs.clawX, gs.clawY - 24, 'NO GRIP', '#94a3b8', { size: 16 });
             }
@@ -972,7 +1014,10 @@ export default function ClawMachine() {
           // whatever it lands on — no scripted return to a home spot.
           p.x = hp.x;
           p.y = hp.y;
-          p.vx = -CARRY_V * 0.7 + (Math.random() * 2 - 1) * 0.06;
+          // Re-entry drift follows the pendulum's swing at the moment of release
+          // (deterministic — the whole outcome is), so the plush falls the way
+          // it was swinging rather than on a coin flip.
+          p.vx = -CARRY_V * 0.7 + Math.sin(gs.theta) * 0.06;
           p.vy = 0.02;
           p.rot = gs.theta;
           p.vrot = (gs.theta >= 0 ? 1 : -1) * 0.004;
@@ -1042,10 +1087,17 @@ export default function ClawMachine() {
       // clamped above so a stall never spirals. Impact maxima drain into soft,
       // rate-limited bump/clack sounds once per frame.
       const impacts: Impacts = { floor: 0, pair: 0 };
+      const delivered: Prize[] = [];
       acc += dt;
       while (acc >= FIXED) {
-        stepPit(gs, FIXED, impacts);
+        stepPit(gs, FIXED, impacts, delivered);
         acc -= FIXED;
+      }
+      // A plush that found its way into the chute (e.g. a slip that landed over
+      // the mouth) banks like a normal delivery.
+      for (const p of delivered) {
+        deliver(p);
+        setNote('It rolled into the chute — lucky save!');
       }
       gs.simT += dt;
       gs.bumpCd -= dt;
@@ -1084,6 +1136,10 @@ export default function ClawMachine() {
     }
     gs.target = best;
     gs.targetY = best ? best.y - best.r + 6 : EMPTY_DROP_Y;
+    // Snapshot how centered the stop was at the moment of the tap — this is the
+    // skill input, judged later by the grip rubric even if the prize drifts as
+    // the pile keeps settling during the descent.
+    gs.gripC = best ? Math.max(0, 1 - Math.abs(gs.clawX - best.x) / (best.r + GRAB_TOL)) : 0;
     gs.tickAcc = 0;
     gs.phase = 'descend';
     setPhase('descend');
@@ -1100,6 +1156,7 @@ export default function ClawMachine() {
     setCredit(0);
     setScore(0);
     setNote('');
+    setSessionId(crypto.randomUUID()); // new round → new award idempotency key
   }, []);
 
   if (phase === 'done') {
@@ -1118,8 +1175,10 @@ export default function ClawMachine() {
               {gs.won} prize{gs.won === 1 ? '' : 's'} across {CREDITS} credits
             </p>
           </div>
-          {/* No ticket earning: the claw's grip/slip is a chance roll, and only
-              skill-based games earn tickets. */}
+          {/* POS add-on: now that the grip is a deterministic skill rubric, the
+              claw earns tickets like the other skill games — 1 per prize point
+              (a perfect five-grab run tops out at 80, under the server cap). */}
+          <GameTicketAward game="clawmachine" tickets={Math.min(100, score)} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
@@ -1132,7 +1191,7 @@ export default function ClawMachine() {
 
   const hint =
     phase === 'ready'
-      ? 'Tap to stop the claw over a prize — then hope the grip holds.'
+      ? 'Tap to stop the claw dead-center over a prize — the closer to center, the firmer the grip.'
       : phase === 'sweep'
         ? `Tap to drop the claw! Credit ${credit + 1} of ${CREDITS}.`
         : phase === 'descend' || phase === 'grab'
