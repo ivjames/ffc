@@ -17,9 +17,9 @@ type Tile = {
   accent: string;
   // Games that credit tickets on the linked card — mirrors the server's
   // GAME_REWARD_GAMES registry (server/lib/gameRewards.js), i.e. the tiles whose
-  // screen mounts <GameTicketAward>. Chance games (claw, coin pusher), Arcade
-  // Putt, and Fun Facts don't earn, so they carry no flag. Drives the 🎟️ hint,
-  // shown only where the venue actually sells game rewards.
+  // screen mounts <GameTicketAward>. The coin pusher (pure chance), Arcade Putt,
+  // and Fun Facts don't earn, so they carry no flag. Drives the 🎟️ hint, shown
+  // only where the venue actually sells game rewards.
   earns?: boolean;
 };
 
@@ -146,8 +146,9 @@ const TILES: Tile[] = [
     to: '/arcade/claw',
     emoji: '🧸',
     title: 'Claw Machine',
-    blurb: 'Five credits — line it up, pray it grips.',
+    blurb: 'Five credits — center the grip, carry it home.',
     accent: '#ec4899',
+    earns: true,
   },
   {
     to: '/arcade/striker',

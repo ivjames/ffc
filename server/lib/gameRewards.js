@@ -11,8 +11,10 @@
 // Every mini-game key that may earn tickets, with its Master Control label.
 // Mirrors the `game=` props under src/features/fun/ — a key missing here makes
 // that game's awards 400 server-side, so keep the two in sync when adding a
-// game. Chance-based games (clawmachine, coinpusher) are deliberately absent:
-// they never earn (see the skill-only decision, PR #140).
+// game. The coin pusher is deliberately absent: it's pure chance, so it never
+// earns (the skill-only decision, PR #140). The claw machine used to sit beside
+// it, but its grip is now a deterministic skill rubric, so it earns like the
+// rest.
 export const GAME_REWARD_GAMES = [
   { key: "airhockey", label: "Air Hockey" },
   { key: "axethrow", label: "Axe Throw" },
@@ -20,6 +22,7 @@ export const GAME_REWARD_GAMES = [
   { key: "bowling", label: "Bowling" },
   { key: "bumperboats", label: "Bumper Boats" },
   { key: "bumpercars", label: "Bumper Cars" },
+  { key: "clawmachine", label: "Claw Machine" },
   { key: "darts", label: "Darts" },
   { key: "gokarts", label: "Go-Karts" },
   { key: "highstriker", label: "High Striker" },

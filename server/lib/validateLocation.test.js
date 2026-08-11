@@ -191,7 +191,7 @@ test("normalizePos rejects caps that loosen or misname", () => {
   assert.match(withCaps({ perGame: { skeeball: 101 } }).error, /perGame\.skeeball/);
   assert.match(withCaps({ perGame: { skeeball: 0 } }).error, /perGame\.skeeball/);
   // unknown game keys fail loudly instead of silently never applying
-  assert.match(withCaps({ perGame: { clawmachine: 10 } }).error, /unknown game "clawmachine"/);
+  assert.match(withCaps({ perGame: { coinpusher: 10 } }).error, /unknown game "coinpusher"/);
   // daily cap bounds
   assert.match(withCaps({ dailyPerCard: 0 }).error, /dailyPerCard/);
   assert.match(withCaps({ dailyPerCard: 10_001 }).error, /dailyPerCard/);

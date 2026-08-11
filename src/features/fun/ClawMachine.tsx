@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
 import {
   playStroke,
@@ -274,8 +275,11 @@ type Impacts = { floor: number; pair: number };
 
 /** One fixed physics substep for the plush pile: claw disturbance, gravity +
  *  boundary bounces, prize↔prize collisions (positional separation + impulse),
- *  then a rest/sleep pass so the settled pile goes fully still. */
-function stepPit(gs: GS, dt: number, impacts: Impacts): void {
+ *  then a rest/sleep pass so the settled pile goes fully still. Any body that
+ *  falls squarely into the chute mouth is pulled out of the pit and pushed onto
+ *  `delivered` for the frame loop to bank — a slipped plush that lands over the
+ *  hole drops through instead of bouncing off the housing. */
+function stepPit(gs: GS, dt: number, impacts: Impacts, delivered: Prize[]): void {
   const pit: Prize[] = [];
   for (const p of gs.prizes) if (p.inPit) pit.push(p);
 
@@ -334,11 +338,21 @@ function stepPit(gs: GS, dt: number, impacts: Impacts): void {
       p.x = WALL_R - p.r;
       if (p.vx > 0) p.vx = -p.vx * REST_WALL;
     }
-    // The chute housing is solid — plush bounce off its right wall instead of
-    // tumbling down the shaft.
-    if (p.y + p.r > CHUTE_RIM && p.x - p.r < CHUTE_R) {
-      p.x = CHUTE_R + p.r;
-      if (p.vx < 0) p.vx = -p.vx * REST_WALL;
+    // The chute. A plush whose center clears the rim while sitting over the
+    // mouth drops down the shaft and out the prize door — a lucky save that
+    // banks like any delivery, rather than perching on the housing. One that
+    // only grazes the housing to the right of the mouth still bounces off its
+    // wall and stays in the pit.
+    if (p.y + p.r > CHUTE_RIM) {
+      if (p.x > CHUTE_L && p.x < CHUTE_R) {
+        if (p.y >= CHUTE_SCORE_Y) {
+          p.inPit = false;
+          delivered.push(p);
+        }
+      } else if (p.x - p.r < CHUTE_R) {
+        p.x = CHUTE_R + p.r;
+        if (p.vx < 0) p.vx = -p.vx * REST_WALL;
+      }
     }
     // Pit floor: restitution only above a small threshold, so the floor never
     // feeds perpetual micro-bounces.
@@ -808,6 +822,8 @@ export default function ClawMachine() {
   const [credit, setCredit] = useState(0);
   const [score, setScore] = useState(0);
   const [note, setNote] = useState('');
+  // Fresh idempotency key per round for the ticket award (see start()).
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
 
   const active = phase !== 'done';
   useFitCanvas(canvasRef, W, H, active);
@@ -1065,10 +1081,17 @@ export default function ClawMachine() {
       // clamped above so a stall never spirals. Impact maxima drain into soft,
       // rate-limited bump/clack sounds once per frame.
       const impacts: Impacts = { floor: 0, pair: 0 };
+      const delivered: Prize[] = [];
       acc += dt;
       while (acc >= FIXED) {
-        stepPit(gs, FIXED, impacts);
+        stepPit(gs, FIXED, impacts, delivered);
         acc -= FIXED;
+      }
+      // A plush that found its way into the chute (e.g. a slip that landed over
+      // the mouth) banks like a normal delivery.
+      for (const p of delivered) {
+        deliver(p);
+        setNote('It rolled into the chute — lucky save!');
       }
       gs.simT += dt;
       gs.bumpCd -= dt;
@@ -1123,6 +1146,7 @@ export default function ClawMachine() {
     setCredit(0);
     setScore(0);
     setNote('');
+    setSessionId(crypto.randomUUID()); // new round → new award idempotency key
   }, []);
 
   if (phase === 'done') {
@@ -1141,8 +1165,10 @@ export default function ClawMachine() {
               {gs.won} prize{gs.won === 1 ? '' : 's'} across {CREDITS} credits
             </p>
           </div>
-          {/* No ticket earning: the claw stays a Fun Zone attraction, outside
-              the ticket economy — its score is just for bragging rights. */}
+          {/* POS add-on: now that the grip is a deterministic skill rubric, the
+              claw earns tickets like the other skill games — 1 per prize point
+              (a perfect five-grab run tops out at 80, under the server cap). */}
+          <GameTicketAward game="clawmachine" tickets={Math.min(100, score)} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
@@ -1155,7 +1181,7 @@ export default function ClawMachine() {
 
   const hint =
     phase === 'ready'
-      ? 'Tap to stop the claw over a prize — then hope the grip holds.'
+      ? 'Tap to stop the claw dead-center over a prize — the closer to center, the firmer the grip.'
       : phase === 'sweep'
         ? `Tap to drop the claw! Credit ${credit + 1} of ${CREDITS}.`
         : phase === 'descend' || phase === 'grab'
