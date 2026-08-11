@@ -42,6 +42,8 @@
 //   --max-players N       cap players per round, 1..4 (default 4; each round is 1..cap)
 //   --concurrency N       in-flight requests per sweep (default 4)
 //   --ignore-hours        play 24/7, ignore venue business hours (load testing)
+//   --gen-key             mint a fresh SYNTHETIC_BOT_KEY (256-bit hex) and exit —
+//                         prints the server/.env line + matching bot export, no discovery/POST
 //   --yes                 skip the pre-flight confirmation prompt
 //   --dry-run             discover + estimate + print sample payloads, POST nothing
 //
@@ -52,7 +54,7 @@
 // there is no per-token model cost — the only spend is API/DB load, metered here
 // as request count + latency.
 
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { isValidTag } from "../server/lib/sanitize.js";
 import { isVenueOpen, WEEKDAY_KEYS } from "../server/lib/venueHours.js";
@@ -72,6 +74,7 @@ function parseArgs(argv) {
     fallbackTz: null,
     yes: false,
     dryRun: false,
+    genKey: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const k = argv[i];
@@ -86,6 +89,7 @@ function parseArgs(argv) {
       case "--max-players": a.maxPlayers = Number(val()); break;
       case "--concurrency": a.concurrency = Number(val()); break;
       case "--ignore-hours": a.ignoreHours = true; break;
+      case "--gen-key": a.genKey = true; break;
       case "--fallback-tz": a.fallbackTz = val(); break;
       case "--yes": a.yes = true; break;
       case "--dry-run": a.dryRun = true; break;
@@ -117,8 +121,25 @@ function printHelpAndExit() {
   console.log(
     "node scripts/course-bot.mjs --api URL --key KEY [--plays-per-course N] " +
       "[--interval-min M] [--sweeps N] [--location UUID] [--max-players N] " +
-      "[--concurrency N] [--ignore-hours] [--yes] [--dry-run]\nSee the header of this file for full docs."
+      "[--concurrency N] [--ignore-hours] [--gen-key] [--yes] [--dry-run]\nSee the header of this file for full docs."
   );
+  process.exit(0);
+}
+
+// --- key generation --------------------------------------------------------
+// Mint a fresh SYNTHETIC_BOT_KEY inline (no openssl needed) and print the two
+// places the SAME value must land, matching, for synthetic rounds to be
+// accepted: server/.env (the gate — feature is OFF until this is set + the API
+// restarts) and the bot's own env. 32 bytes → 256 bits, hex-encoded.
+function genKeyAndExit() {
+  const key = randomBytes(32).toString("hex");
+  console.log("# Fresh SYNTHETIC_BOT_KEY (256-bit). Same value goes in BOTH places, matching.");
+  console.log("#");
+  console.log("# 1) On the server — add to server/.env, then `ffc restart` (feature is OFF until then):");
+  console.log(`SYNTHETIC_BOT_KEY=${key}`);
+  console.log("#");
+  console.log("# 2) Where you launch the bot — export it, or pass it as --key:");
+  console.log(`export SYNTHETIC_BOT_KEY=${key}`);
   process.exit(0);
 }
 
@@ -400,6 +421,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // --- main ------------------------------------------------------------------
 async function main() {
   const a = parseArgs(process.argv);
+  if (a.genKey) genKeyAndExit(); // mint a key and stop — no discovery, no POST
   if (!a.dryRun && !a.key) {
     fail("no --key / SYNTHETIC_BOT_KEY set — the server will reject synthetic rounds. " +
       "Pass --dry-run to preview without posting.");
