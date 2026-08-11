@@ -1,6 +1,7 @@
 // Shared domain types.
 
 import type { PosConfig } from './lib/pos/types';
+import type { VenueHours } from './lib/venueHours';
 
 export type SyncState = 'active' | 'pending' | 'synced';
 
@@ -64,6 +65,14 @@ export type LocationSeed = {
   lng: number;
   geofenceKm?: number; // detection radius; falls back to DEFAULT_GEOFENCE_KM
   sortOrder?: number;
+  // IANA zone hours.* is evaluated in (e.g. "America/Los_Angeles"). Needed
+  // alongside `hours` to compute "open now" client-side; unset when the venue
+  // hasn't been given a zone yet.
+  tz?: string | null;
+  // Weekly business hours, set per venue in Master Control. Unset/null = not
+  // configured — surfaces should hide the open/closed status rather than
+  // guess. See src/lib/venueHours.ts for the shape + open/closed logic.
+  hours?: VenueHours | null;
   // Food & drink deep links (punchlist #7 tier 1) — set per venue in Master
   // Control; the Food & Drink card hides itself when neither is set.
   menuUrl?: string;

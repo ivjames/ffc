@@ -29,6 +29,7 @@ const SAVED_LOCATION: Location = {
   menuUrl: null,
   orderingUrl: null,
   pos: null,
+  hours: null,
   sortOrder: 0,
   orgId: null,
   archivedAt: null,

@@ -4,6 +4,7 @@ import { coursesByLocation, locationById } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
 import { coursePar } from '../../lib/scoring';
 import { themeEmoji } from '../../lib/theme';
+import { VenueOpenLine } from '../../ui/VenueHoursInfo';
 
 // §5.1 step 1 — pick a course at the current location (one round = one course).
 export default function CoursePicker() {
@@ -21,8 +22,11 @@ export default function CoursePicker() {
           to="/locations?next=/golf/new"
           className="surface-1 mb-3 flex items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-2.5 text-sm transition-transform active:translate-y-px"
         >
-          <span className="text-fairway-100/70">
-            📍 <span className="font-semibold text-fairway-100">{location?.name}</span>
+          <span>
+            <span className="text-fairway-100/70">
+              📍 <span className="font-semibold text-fairway-100">{location?.name}</span>
+            </span>
+            <VenueOpenLine hours={location?.hours} tz={location?.tz} className="mt-1" />
           </span>
           <span className="font-semibold text-fairway-400">Change</span>
         </Link>

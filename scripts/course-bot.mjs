@@ -2,13 +2,21 @@
 // course-bot — synthetic player traffic for the FFC mini-golf API.
 //
 // WHAT IT DOES
-//   Plays every live course a few times, on a repeating interval, by POSTing
+//   Plays every OPEN course a few times, on a repeating interval, by POSTing
 //   real rounds to /api/rounds with `synthetic: true` (and the x-synthetic-key
 //   header). Each round travels the exact production path — insert, rewards,
 //   leaderboards — so this doubles as a load/soak test, an end-to-end smoke
 //   test, and a demo-data seeder. Whether synthetic rounds also count on boards
 //   / mint reward tickets is a SERVER policy (SYNTHETIC_COUNT_ON_BOARD,
 //   SYNTHETIC_MINT_REWARDS), not something this bot decides.
+//
+// BUSINESS HOURS
+//   By default the bot only plays a venue while it is OPEN, evaluated in the
+//   venue's own timezone from location.hours (served by /api/content). It
+//   re-reads hours at the top of every sweep, so a schedule change (edited in
+//   Master Control) is honored with no restart — venues that just closed drop
+//   out, venues that just opened join. Unknown/unset hours → treated CLOSED
+//   (fail-closed). Pass --ignore-hours to play 24/7 (pure load testing).
 //
 // SAFETY / ISOLATION
 //   * The server rejects `synthetic: true` unless SYNTHETIC_BOT_KEY is set there
@@ -33,6 +41,7 @@
 //   --sweeps N            stop after N sweeps (default: run forever until Ctrl-C)
 //   --max-players N       cap players per round, 1..4 (default 4; each round is 1..cap)
 //   --concurrency N       in-flight requests per sweep (default 4)
+//   --ignore-hours        play 24/7, ignore venue business hours (load testing)
 //   --yes                 skip the pre-flight confirmation prompt
 //   --dry-run             discover + estimate + print sample payloads, POST nothing
 //
@@ -46,6 +55,7 @@
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { isValidTag } from "../server/lib/sanitize.js";
+import { isVenueOpen, WEEKDAY_KEYS } from "../server/lib/venueHours.js";
 
 // --- args ------------------------------------------------------------------
 function parseArgs(argv) {
@@ -58,6 +68,8 @@ function parseArgs(argv) {
     sweeps: Infinity,
     maxPlayers: 4,
     concurrency: 4,
+    ignoreHours: false,
+    fallbackTz: null,
     yes: false,
     dryRun: false,
   };
@@ -73,6 +85,8 @@ function parseArgs(argv) {
       case "--sweeps": a.sweeps = Number(val()); break;
       case "--max-players": a.maxPlayers = Number(val()); break;
       case "--concurrency": a.concurrency = Number(val()); break;
+      case "--ignore-hours": a.ignoreHours = true; break;
+      case "--fallback-tz": a.fallbackTz = val(); break;
       case "--yes": a.yes = true; break;
       case "--dry-run": a.dryRun = true; break;
       case "--help": case "-h": printHelpAndExit(); break;
@@ -83,6 +97,13 @@ function parseArgs(argv) {
   if (!(a.intervalMin >= 0)) fail("--interval-min must be >= 0");
   if (!(a.maxPlayers >= 1 && a.maxPlayers <= 4)) fail("--max-players must be 1..4");
   if (!(a.concurrency >= 1)) fail("--concurrency must be >= 1");
+  if (a.fallbackTz !== null) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: a.fallbackTz });
+    } catch {
+      fail(`--fallback-tz ${JSON.stringify(a.fallbackTz)} is not a valid IANA zone`);
+    }
+  }
   a.api = a.api.replace(/\/+$/, "");
   return a;
 }
@@ -96,7 +117,7 @@ function printHelpAndExit() {
   console.log(
     "node scripts/course-bot.mjs --api URL --key KEY [--plays-per-course N] " +
       "[--interval-min M] [--sweeps N] [--location UUID] [--max-players N] " +
-      "[--concurrency N] [--yes] [--dry-run]\nSee the header of this file for full docs."
+      "[--concurrency N] [--ignore-hours] [--yes] [--dry-run]\nSee the header of this file for full docs."
   );
   process.exit(0);
 }
@@ -152,46 +173,83 @@ function buildRound(course, runId, maxPlayers) {
 }
 
 // --- API -------------------------------------------------------------------
-async function discoverCourses(api, location) {
-  const url = `${api}/api/leaderboard/courses${location ? `?locationId=${location}` : ""}`;
+// Everything comes from the open content catalog (GET /api/content) in one
+// fetch: courses (with pars), and each course's venue (tz + business hours) so
+// the bot can gate synthetic play on "is this venue open right now, in its own
+// timezone" — the same rows the app bundles and the same source of truth.
+async function discoverCourses(api, location, fallbackTz = null) {
+  const url = `${api}/api/content`;
   const res = await fetch(url);
-  if (!res.ok) fail(`course discovery failed: GET ${url} → ${res.status}`);
-  const body = await res.json();
-  const boardCourses = body.courses ?? [];
-  if (boardCourses.length === 0) fail("no live courses found to play");
+  if (!res.ok) throw new Error(`course discovery failed: GET ${url} → ${res.status}`);
+  const content = await res.json();
 
-  // The board list omits pars, so scores would otherwise be a flat par-3. Pars
-  // live in the open content catalog (GET /api/content — same rows the app
-  // bundles); pull them so each course's scores are course-relative (real
-  // par 2..4 per hole → correct under-par frequency + demo standings). Only if
-  // a course's pars can't be reached do we fall back to flat par-3.
-  const parsById = new Map();
-  try {
-    const cRes = await fetch(`${api}/api/content`);
-    if (cRes.ok) {
-      const content = await cRes.json();
-      for (const c of content.courses ?? []) {
-        if (Array.isArray(c.pars) && c.pars.length > 0) parsById.set(c.id, c.pars);
-      }
-    }
-  } catch {
-    /* leave parsById empty → flat-par fallback below */
+  const locsById = new Map();
+  for (const l of content.locations ?? []) {
+    locsById.set(l.id, {
+      name: l.name,
+      // Never assume a zone: the server's VENUE_TZ fallback is configurable and
+      // not necessarily Pacific, so guessing could play a venue while it's
+      // actually closed. Use an operator-supplied --fallback-tz if given, else
+      // leave null → isVenueOpen fails closed (venue skipped) rather than guess.
+      tz: l.tz || fallbackTz || null,
+      hours: l.hours ?? null,
+    });
   }
 
-  const courses = boardCourses.map((c) => ({
-    courseId: c.courseId,
-    courseName: c.courseName,
-    locationName: c.locationName,
-    pars: parsById.get(c.courseId) ?? null,
-  }));
-  const missing = courses.filter((c) => !c.pars).length;
-  if (missing > 0) {
+  const courses = [];
+  for (const c of content.courses ?? []) {
+    if (location && c.locationId !== location) continue;
+    const venue = locsById.get(c.locationId);
+    if (!venue) continue; // course whose venue is archived/absent — skip
+    courses.push({
+      courseId: c.id,
+      courseName: c.name,
+      locationId: c.locationId,
+      locationName: venue.name,
+      tz: venue.tz,
+      hours: venue.hours,
+      pars: Array.isArray(c.pars) && c.pars.length > 0 ? c.pars : null,
+    });
+  }
+  if (courses.length === 0) {
+    throw new Error(location ? `no live courses at location ${location}` : "no live courses found to play");
+  }
+
+  const noPars = courses.filter((c) => !c.pars).length;
+  if (noPars > 0) {
+    console.warn(`  ! pars unavailable for ${noPars}/${courses.length} course(s) — using flat par-3 for those`);
+  }
+  const noHours = courses.filter((c) => !c.hours).length;
+  if (noHours > 0) {
     console.warn(
-      `  ! pars unavailable for ${missing}/${courses.length} course(s) via /api/content — ` +
-        `using flat par-3 for those`
+      `  ! hours unset for ${noHours}/${courses.length} course(s) — those venues are treated ` +
+        `as CLOSED (fail-closed). Set location.hours, or pass --ignore-hours to play regardless.`
+    );
+  }
+  const noTz = courses.filter((c) => c.hours && !c.tz).length;
+  if (noTz > 0) {
+    console.warn(
+      `  ! ${noTz}/${courses.length} course(s) have hours but no timezone — treated as CLOSED ` +
+        `(the server's VENUE_TZ fallback isn't assumed). Set location.tz, or pass --fallback-tz <IANA>.`
     );
   }
   return courses;
+}
+
+// Total open hours per week for a venue's hours object (for the gated volume
+// projection). Unknown/unset → 0 (fail-closed).
+function weeklyOpenHours(hours) {
+  if (!hours || typeof hours !== "object") return 0;
+  let mins = 0;
+  for (const key of WEEKDAY_KEYS) {
+    const d = hours[key];
+    if (!d || d === "closed") continue;
+    const to = (s) => (s === "24:00" ? 1440 : Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)));
+    const o = to(d.open);
+    const c = to(d.close);
+    mins += c > o ? c - o : 1440 - o + c; // same-day or overnight wrap
+  }
+  return mins / 60;
 }
 
 async function postRound(api, key, body) {
@@ -258,30 +316,56 @@ function printSweep(label, s, avgPlayers) {
 }
 
 // --- pre-flight estimate ---------------------------------------------------
-function preflight(a, courses) {
-  const roundsPerSweep = courses.length * a.playsPerCourse;
+const WEEKS_PER_YEAR = 52.142857;
+
+function preflight(a, courses, now = new Date()) {
   const avgPlayers = (1 + a.maxPlayers) / 2; // uniform 1..cap
-  const sweepsPerHour = a.intervalMin > 0 ? 60 / a.intervalMin : roundsPerSweep; // 0 = as fast as possible (rough)
-  const roundsPerHour = roundsPerSweep * sweepsPerHour;
-  const roundsPerDay = roundsPerHour * 24;
-  const roundsPerYear = roundsPerDay * 365;
-  const finiteSweeps = Number.isFinite(a.sweeps);
+  const roundsPerSweep = courses.length * a.playsPerCourse;
+  const sweepsPerHour = a.intervalMin > 0 ? 60 / a.intervalMin : roundsPerSweep; // 0 = as fast as possible
+  const gating = !a.ignoreHours;
+
+  // Dedup venues (courses share one) for the status + open-hours display.
+  const venues = new Map();
+  for (const c of courses) {
+    if (!venues.has(c.locationId)) {
+      venues.set(c.locationId, { name: c.locationName, tz: c.tz, hours: c.hours, courses: 0 });
+    }
+    venues.get(c.locationId).courses += 1;
+  }
+
   console.log("── course-bot pre-flight ─────────────────────────────────────");
   console.log(`  API                : ${a.api}`);
-  console.log(`  courses discovered : ${courses.length}`);
-  for (const c of courses) {
-    console.log(`     • ${c.courseName}${c.locationName ? ` @ ${c.locationName}` : ""} (${c.courseId})`);
+  console.log(`  gating             : ${gating ? "business-hours-only (skip venues that are closed now)" : "OFF — --ignore-hours (play 24/7)"}`);
+  console.log(`  venues / courses   : ${venues.size} / ${courses.length}`);
+  for (const v of venues.values()) {
+    let status;
+    if (!gating) status = "gating off";
+    else if (!v.hours) status = "hours unset → treated CLOSED";
+    else status = isVenueOpen(v.hours, v.tz, now) ? "OPEN now" : "closed now";
+    const wk = gating && v.hours ? ` · ${weeklyOpenHours(v.hours).toFixed(0)}h/wk open` : "";
+    console.log(`     • ${v.name} (${v.courses} course${v.courses > 1 ? "s" : ""}, ${v.tz}) — ${status}${wk}`);
   }
   console.log(`  plays/course/sweep : ${a.playsPerCourse}`);
   console.log(`  players/round      : 1..${a.maxPlayers} (avg ${avgPlayers.toFixed(1)})`);
-  console.log(`  rounds per sweep   : ${roundsPerSweep}`);
   console.log(`  interval           : ${a.intervalMin} min  (${sweepsPerHour.toFixed(2)} sweeps/hr)`);
-  console.log(`  sweeps to run      : ${finiteSweeps ? a.sweeps : "∞ (until Ctrl-C)"}`);
-  console.log("  ── projected steady-state volume ──");
-  console.log(`  rounds : ~${Math.round(roundsPerHour)}/hr · ~${Math.round(roundsPerDay)}/day · ~${Math.round(roundsPerYear).toLocaleString()}/yr`);
-  console.log(`  players: ~${Math.round(roundsPerDay * avgPlayers)}/day · ~${Math.round(roundsPerYear * avgPlayers).toLocaleString()}/yr (round×avg players)`);
-  if (finiteSweeps) {
-    console.log(`  this run   : ${roundsPerSweep * a.sweeps} rounds total across ${a.sweeps} sweeps`);
+  console.log(`  sweeps to run      : ${Number.isFinite(a.sweeps) ? a.sweeps : "∞ (until Ctrl-C)"}`);
+
+  console.log("  ── projected volume ──");
+  const maxHour = roundsPerSweep * sweepsPerHour;
+  const maxYear = maxHour * 24 * 365;
+  console.log(`  24/7 max   : ~${Math.round(maxHour)} rounds/hr · ~${Math.round(maxYear).toLocaleString()} rounds/yr · ~${Math.round(maxYear * avgPlayers).toLocaleString()} players/yr`);
+  if (gating && a.intervalMin > 0) {
+    // Each course only plays while its venue is open: expected sweeps/week that
+    // land in open hours ≈ weeklyOpenHours / intervalHours. Unknown hours → 0.
+    const intervalHours = a.intervalMin / 60;
+    let gatedYear = 0;
+    for (const c of courses) gatedYear += a.playsPerCourse * (weeklyOpenHours(c.hours) / intervalHours) * WEEKS_PER_YEAR;
+    console.log(`  hours-gated: ~${Math.round(gatedYear).toLocaleString()} rounds/yr · ~${Math.round(gatedYear * avgPlayers).toLocaleString()} players/yr (only while venues are open)`);
+  } else if (gating) {
+    console.log(`  hours-gated: annual estimate needs --interval-min > 0`);
+  }
+  if (Number.isFinite(a.sweeps)) {
+    console.log(`  this run   : up to ${roundsPerSweep * a.sweeps} rounds across ${a.sweeps} sweeps (fewer when venues are closed)`);
   }
   console.log("──────────────────────────────────────────────────────────────");
   return { roundsPerSweep, avgPlayers };
@@ -321,7 +405,12 @@ async function main() {
       "Pass --dry-run to preview without posting.");
   }
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
-  const courses = await discoverCourses(a.api, a.location);
+  let courses;
+  try {
+    courses = await discoverCourses(a.api, a.location, a.fallbackTz);
+  } catch (e) {
+    fail(e.message);
+  }
   const { roundsPerSweep, avgPlayers } = preflight(a, courses);
 
   if (a.dryRun) {
@@ -348,19 +437,44 @@ async function main() {
 
   while (sweepNo < a.sweeps && !stopping) {
     sweepNo++;
-    // Build this sweep's work: each course played playsPerCourse times.
-    const jobs = [];
-    for (const c of courses) {
-      for (let n = 0; n < a.playsPerCourse; n++) jobs.push(c);
+    const label = `sweep ${sweepNo}${Number.isFinite(a.sweeps) ? `/${a.sweeps}` : ""}`;
+
+    // Refresh courses + venue hours live each sweep, so a schedule change
+    // (edited in Master Control, or a re-fetch job) is honored with no restart.
+    // If the refresh fails, keep the last-known set rather than dying.
+    try {
+      courses = await discoverCourses(a.api, a.location, a.fallbackTz);
+    } catch (e) {
+      console.warn(`  ! ${label}: hours/course refresh failed (${e.message}); using last-known set`);
     }
-    const t0 = performance.now();
-    const results = await mapLimit(jobs, a.concurrency, (course) =>
-      postRound(a.api, a.key, buildRound(course, runId, a.maxPlayers))
+
+    // Gate on business hours (unless --ignore-hours): only play venues open now,
+    // in their own tz. Unknown/unset hours → closed (fail-closed).
+    const now = new Date();
+    const playable = a.ignoreHours ? courses : courses.filter((c) => isVenueOpen(c.hours, c.tz, now));
+    const skippedVenues = new Set(
+      courses.filter((c) => !playable.includes(c)).map((c) => c.locationName)
     );
-    const wall = performance.now() - t0;
-    cumulative.push(...results);
-    printSweep(`sweep ${sweepNo}${Number.isFinite(a.sweeps) ? `/${a.sweeps}` : ""}`,
-      summarize(results, wall), avgPlayers);
+
+    if (playable.length === 0) {
+      console.log(`${label}: all venues closed — 0 rounds (skipped: ${[...skippedVenues].join(", ") || "—"})`);
+    } else {
+      // Each playable course played playsPerCourse times.
+      const jobs = [];
+      for (const c of playable) {
+        for (let n = 0; n < a.playsPerCourse; n++) jobs.push(c);
+      }
+      const t0 = performance.now();
+      const results = await mapLimit(jobs, a.concurrency, (course) =>
+        postRound(a.api, a.key, buildRound(course, runId, a.maxPlayers))
+      );
+      const wall = performance.now() - t0;
+      cumulative.push(...results);
+      const skipNote = skippedVenues.size ? ` · closed: ${[...skippedVenues].join(", ")}` : "";
+      printSweep(`${label} (${playable.length}/${courses.length} courses open)`,
+        summarize(results, wall), avgPlayers);
+      if (skipNote) console.log(`   ${skipNote.trim()}`);
+    }
 
     if (sweepNo >= a.sweeps || stopping) break;
     if (a.intervalMin > 0) {

@@ -119,11 +119,19 @@ Real rounds are never affected by either flag. The bot prints a pre-flight
 projection (rounds & players per hour/day/year for the chosen cadence) plus
 per-sweep and cumulative stats (OK/failed, latency p50/p95/max, throughput,
 bytes) — no third-party model calls are made, so there's no per-token cost, only
-API/DB load. Example:
+API/DB load.
+
+**Business-hours gating.** By default the bot only plays a venue while it is
+open, evaluated in the venue's own tz from `location.hours` (served by
+`/api/content`; see `lib/venueHours.js`). It re-reads hours at the top of every
+sweep, so a schedule change (edited in Master Control) is honored with no
+restart. Unknown/unset hours → treated closed (fail-closed). `--ignore-hours`
+plays 24/7 for pure load testing. The pre-flight shows each venue's open/closed
+status and an hours-gated annual projection alongside the 24/7 max. Example:
 ```
 node scripts/course-bot.mjs --api https://ffc.example.com \
   --key "$SYNTHETIC_BOT_KEY" --plays-per-course 2 --interval-min 60
-# 2 plays × 4 courses, hourly ≈ 8 rounds/hr ≈ 192/day ≈ 70,080 rounds/year
+# 3 venues / 9 courses, hourly, gated to real Bullwinkle's hours ≈ 69k rounds/year
 ```
 
 ### `GET /api/leaderboard?period=day|week|month|all&by=player|team`
@@ -297,7 +305,10 @@ optional `orgId` field ties a venue to its org.
 Open read. The live player-facing catalog — `{ locations: [...], courses: [...] }`,
 archived rows excluded — used by the build-time exporter
 (`scripts/export-content.mjs`) to regenerate `src/data/content.generated.ts`. The
-DB is the source of truth; a site rebuild publishes changes to players.
+DB is the source of truth; a site rebuild publishes changes to players. Each
+location includes `hours` (per-weekday `{open,close}`/`"closed"`, or `null` when
+unset; evaluated in the location's `tz`) — see `lib/venueHours.js`; the player
+app renders "open now / today's hours" from it and the load bot gates on it.
 
 ### `GET /api/announcements?locationId=<uuid>`
 Open read — the live promo/update feed for the player app and TV board

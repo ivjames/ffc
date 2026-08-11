@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
 import HeaderControls from '../../ui/HeaderControls';
 import AnnouncementBanner from '../../ui/AnnouncementBanner';
+import { VenueOpenLine } from '../../ui/VenueHoursInfo';
 import { getActiveRound } from '../../db';
 import { courseById, locationById, coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId, setCurrentLocationId, isLocationPinned } from '../../lib/location';
@@ -155,6 +156,11 @@ export default function Home() {
             {location?.name ?? 'Family Fun Center'}
           </h1>
           <p className="mt-0.5 text-sm text-fairway-100/70">What do you want to do?</p>
+          <VenueOpenLine
+            hours={location?.hours}
+            tz={location?.tz}
+            className="mt-1.5 justify-center"
+          />
         </div>
 
         {/* Venue specials / updates — live from Master Control, cached for

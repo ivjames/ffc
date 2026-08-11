@@ -81,9 +81,18 @@ export type Location = {
   menuUrl: string | null;
   orderingUrl: string | null;
   pos: PosConfig | null;
+  hours: VenueHours | null;
   orgId: string | null;
   archivedAt: string | null;
 };
+
+// Weekly business hours (mirrors server/lib/venueHours.js normalizeHours).
+// Keys are any subset of the 7 weekday keys; a day missing from the object is
+// treated as closed by the server. `hours` itself is null when unset.
+export const HOURS_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+export type HoursDayKey = (typeof HOURS_DAY_KEYS)[number];
+export type DayHours = { open: string; close: string } | 'closed';
+export type VenueHours = Partial<Record<HoursDayKey, DayHours>>;
 
 // POS integration add-on config (mirrors server normalizePos). Capabilities
 // are decoupled — each names its own vendor. At least one block must be

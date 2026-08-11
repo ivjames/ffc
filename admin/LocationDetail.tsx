@@ -1,7 +1,136 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { api, type Course, type GameRewardsMeta, type Location } from './api';
+import {
+  api,
+  HOURS_DAY_KEYS,
+  type Course,
+  type DayHours,
+  type GameRewardsMeta,
+  type HoursDayKey,
+  type Location,
+  type VenueHours,
+} from './api';
 import { Button, Card, Field, Input, Banner, Spinner, Pill, useAsync, fmtDateTime } from './ui';
+
+const HOURS_DAY_LABELS: Record<HoursDayKey, string> = {
+  mon: 'Mon',
+  tue: 'Tue',
+  wed: 'Wed',
+  thu: 'Thu',
+  fri: 'Fri',
+  sat: 'Sat',
+  sun: 'Sun',
+};
+
+// Editor-local state for one weekday: `closed` toggles the row; `open`/`close`
+// only matter (and are only sent) when it isn't. Blank strings for a fresh,
+// never-set day.
+type DayState = { closed: boolean; open: string; close: string };
+type HoursState = Record<HoursDayKey, DayState>;
+
+// A day missing from a non-null hours object is server-treated as closed
+// (see venueHours.js), so it's fine to fold that case in with an explicit
+// "closed" here — both render as a checked "Closed" row.
+function hoursToState(hours: VenueHours | null): HoursState {
+  const state = {} as HoursState;
+  for (const key of HOURS_DAY_KEYS) {
+    const d = hours?.[key];
+    state[key] = d && d !== 'closed' ? { closed: false, open: d.open, close: d.close } : { closed: true, open: '', close: '' };
+  }
+  return state;
+}
+
+// Serializes the editor into the `hours` payload the server expects. Disabled
+// (the "Set business hours" checkbox off) always sends `null` — that's how an
+// operator clears hours back to unset. Enabled sends all 7 days explicitly,
+// each either "closed" or {open,close}.
+export function buildHoursPayload(enabled: boolean, state: HoursState): VenueHours | null {
+  if (!enabled) return null;
+  const out: VenueHours = {};
+  for (const key of HOURS_DAY_KEYS) {
+    const d = state[key];
+    out[key] = d.closed ? 'closed' : ({ open: d.open, close: d.close } as DayHours);
+  }
+  return out;
+}
+
+// Light client-side check only — the server is the source of truth on time
+// formats (see normalizeHours) and its 400 message surfaces via the form's
+// existing error banner either way.
+export function hoursValidationError(enabled: boolean, state: HoursState): string | null {
+  if (!enabled) return null;
+  for (const key of HOURS_DAY_KEYS) {
+    const d = state[key];
+    if (!d.closed && (!d.open.trim() || !d.close.trim())) {
+      return `Set both open and close time for ${HOURS_DAY_LABELS[key]}, or mark it closed.`;
+    }
+  }
+  return null;
+}
+
+function HoursEditor({
+  enabled,
+  onEnabledChange,
+  state,
+  onDayChange,
+}: {
+  enabled: boolean;
+  onEnabledChange: (v: boolean) => void;
+  state: HoursState;
+  onDayChange: (day: HoursDayKey, next: DayState) => void;
+}) {
+  return (
+    <div className="mt-3 border-t border-slate-200 pt-3">
+      <label className="flex items-center gap-1.5 text-sm text-slate-700">
+        <input type="checkbox" checked={enabled} onChange={(e) => onEnabledChange(e.target.checked)} />
+        Set business hours
+      </label>
+      {!enabled ? (
+        <p className="mt-1 text-xs text-slate-500">
+          No hours set — the app treats this venue as having unknown hours.
+        </p>
+      ) : (
+        <div className="mt-2 space-y-1">
+          {HOURS_DAY_KEYS.map((key) => {
+            const d = state[key];
+            return (
+              <div key={key} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="w-9 shrink-0 font-medium text-slate-600">{HOURS_DAY_LABELS[key]}</span>
+                <label className="flex items-center gap-1 text-xs text-slate-500">
+                  <input
+                    type="checkbox"
+                    checked={d.closed}
+                    onChange={(e) => onDayChange(key, { ...d, closed: e.target.checked })}
+                  />
+                  Closed
+                </label>
+                {!d.closed && (
+                  <>
+                    <input
+                      value={d.open}
+                      onChange={(e) => onDayChange(key, { ...d, open: e.target.value })}
+                      placeholder="09:00"
+                      inputMode="numeric"
+                      className="w-20 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                    />
+                    <span className="text-slate-400">–</span>
+                    <input
+                      value={d.close}
+                      onChange={(e) => onDayChange(key, { ...d, close: e.target.value })}
+                      placeholder="21:00 (or 24:00)"
+                      inputMode="numeric"
+                      className="w-28 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                    />
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ParsGrid({ pars, onChange }: { pars: number[]; onChange: (p: number[]) => void }) {
   return (
@@ -217,6 +346,8 @@ function LocationForm({
   const [perGameCaps, setPerGameCaps] = useState<Record<string, string>>(() =>
     Object.fromEntries(Object.entries(storedCaps?.perGame ?? {}).map(([k, v]) => [k, String(v)]))
   );
+  const [hoursEnabled, setHoursEnabled] = useState(location.hours != null);
+  const [hoursState, setHoursState] = useState<HoursState>(() => hoursToState(location.hours));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -240,6 +371,11 @@ function LocationForm({
       setErr('Latitude and longitude must be provided together.');
       return;
     }
+    const hoursErr = hoursValidationError(hoursEnabled, hoursState);
+    if (hoursErr) {
+      setErr(hoursErr);
+      return;
+    }
     setBusy(true);
     try {
       await api.saveLocation({
@@ -252,6 +388,7 @@ function LocationForm({
         geofenceKm: geofence.trim() ? Number(geofence) : null,
         menuUrl: menuUrl.trim() || null,
         orderingUrl: orderingUrl.trim() || null,
+        hours: buildHoursPayload(hoursEnabled, hoursState),
         pos:
           ordVendor === '' && loyVendor === ''
             ? null
@@ -308,6 +445,13 @@ function LocationForm({
           <Input value={orderingUrl} onChange={(e) => setOrderingUrl(e.target.value)} placeholder="https://order.…" inputMode="url" />
         </Field>
       </div>
+
+      <HoursEditor
+        enabled={hoursEnabled}
+        onEnabledChange={setHoursEnabled}
+        state={hoursState}
+        onDayChange={(day, next) => setHoursState({ ...hoursState, [day]: next })}
+      />
 
       {/* POS integration add-ons — per-venue paid capabilities, each with its
           own vendor (a venue can mix, e.g. CenterEdge loyalty next to another
