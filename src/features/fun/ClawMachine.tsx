@@ -221,6 +221,7 @@ type GS = {
   theta: number; // hanging-prize pendulum angle
   target: Prize | null; // what the descent is aimed at
   targetY: number;
+  gripC: number; // grip centeredness (1 dead-center .. 0 edge), snapshotted at tap
   held: Prize | null;
   gripT: number; // jaw open/close timer
   carryT: number; // pendulum clock (hoist + carry)
@@ -248,6 +249,7 @@ function freshGS(now: number): GS {
     theta: 0,
     target: null,
     targetY: EMPTY_DROP_Y,
+    gripC: 0,
     held: null,
     gripT: 0,
     carryT: 0,
@@ -937,7 +939,11 @@ export default function ClawMachine() {
           // same stop on the same prize always resolves the same way.
           const t = gs.target;
           if (t) {
-            const c = Math.max(0, 1 - Math.abs(gs.clawX - t.x) / (t.r + GRAB_TOL));
+            // Centeredness is the snapshot taken when the player tapped, not a
+            // fresh read: the pile keeps simulating during the descent, so `t.x`
+            // can drift, and the skill judgment must reflect where the claw
+            // actually stopped over the prize — what the player saw and aimed.
+            const c = gs.gripC;
             const band = GRIP_RUBRIC[t.rarity];
             if (c >= band.hold) {
               gs.held = t;
@@ -1130,6 +1136,10 @@ export default function ClawMachine() {
     }
     gs.target = best;
     gs.targetY = best ? best.y - best.r + 6 : EMPTY_DROP_Y;
+    // Snapshot how centered the stop was at the moment of the tap — this is the
+    // skill input, judged later by the grip rubric even if the prize drifts as
+    // the pile keeps settling during the descent.
+    gs.gripC = best ? Math.max(0, 1 - Math.abs(gs.clawX - best.x) / (best.r + GRAB_TOL)) : 0;
     gs.tickAcc = 0;
     gs.phase = 'descend';
     setPhase('descend');
