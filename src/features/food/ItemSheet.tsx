@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../ui/components';
 import { formatCents } from '../../lib/pos/pricing';
 import type { MenuItem } from '../../lib/pos/types';
@@ -13,6 +13,55 @@ import { playClick } from '../../lib/sound';
 export default function ItemSheet({ item, onClose }: { item: MenuItem; onClose: () => void }) {
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [quantity, setQuantity] = useState(1);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // onClose is passed as a fresh inline arrow each render, so keep it in a ref
+  // and run the focus effect mount-only — otherwise it would re-fire on every
+  // render and yank focus back to the top of the sheet mid-interaction.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // The sheet declares itself a modal (role="dialog" + aria-modal), so it must
+  // actually behave like one for keyboard/screen-reader users: move focus into
+  // the sheet on open, trap Tab within it (the background is inert), close on
+  // Escape, and hand focus back to the trigger on close.
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    panel.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusables = panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || active === panel)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    panel.addEventListener('keydown', onKeyDown);
+    return () => {
+      panel.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus?.();
+    };
+  }, []);
 
   function toggle(groupId: string, optionId: string) {
     playClick();
@@ -42,10 +91,12 @@ export default function ItemSheet({ item, onClose }: { item: MenuItem; onClose: 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/60" onClick={onClose}>
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={item.name}
-        className="surface-1 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-fairway-800/60 p-4"
+        tabIndex={-1}
+        className="surface-1 max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-fairway-800/60 p-4 outline-none"
         style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
         onClick={(e) => e.stopPropagation()}
       >
