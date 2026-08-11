@@ -15,6 +15,7 @@ import BoothPhotos from './BoothPhotos';
 import BoothStickers from './BoothStickers';
 import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
+import SyntheticBot from './SyntheticBot';
 
 export function SignInGate({ onUnlock }: { onUnlock: (user: CurrentUser | null) => void }) {
   const [mode, setMode] = useState<'token' | 'login'>('token');
@@ -164,6 +165,12 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <NavLink to="/archived" className={linkCls}>
               Archived
             </NavLink>
+            {/* Load/soak bot — a platform tool, so super_admin only. */}
+            {isSuperAdmin && (
+              <NavLink to="/synthetic" className={linkCls}>
+                Synthetic
+              </NavLink>
+            )}
           </nav>
           <div className="ml-auto flex items-center gap-3">
             {user && (
@@ -197,6 +204,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
           <Route path="/booth" element={<BoothPhotos />} />
           <Route path="/booth-stickers" element={<BoothStickers />} />
           <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
+          {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
           <Route path="*" element={<Overview />} />
         </Routes>
       </main>

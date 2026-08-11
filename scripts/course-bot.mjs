@@ -57,7 +57,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { isValidTag } from "../server/lib/sanitize.js";
-import { isVenueOpen, WEEKDAY_KEYS } from "../server/lib/venueHours.js";
+import { isVenueOpen } from "../server/lib/venueHours.js";
+import { weeklyOpenHours, WEEKS_PER_YEAR } from "../server/lib/syntheticVolume.js";
 
 // --- args ------------------------------------------------------------------
 function parseArgs(argv) {
@@ -257,22 +258,6 @@ async function discoverCourses(api, location, fallbackTz = null) {
   return courses;
 }
 
-// Total open hours per week for a venue's hours object (for the gated volume
-// projection). Unknown/unset → 0 (fail-closed).
-function weeklyOpenHours(hours) {
-  if (!hours || typeof hours !== "object") return 0;
-  let mins = 0;
-  for (const key of WEEKDAY_KEYS) {
-    const d = hours[key];
-    if (!d || d === "closed") continue;
-    const to = (s) => (s === "24:00" ? 1440 : Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)));
-    const o = to(d.open);
-    const c = to(d.close);
-    mins += c > o ? c - o : 1440 - o + c; // same-day or overnight wrap
-  }
-  return mins / 60;
-}
-
 async function postRound(api, key, body) {
   const payload = JSON.stringify(body);
   const t0 = performance.now();
@@ -337,8 +322,6 @@ function printSweep(label, s, avgPlayers) {
 }
 
 // --- pre-flight estimate ---------------------------------------------------
-const WEEKS_PER_YEAR = 52.142857;
-
 function preflight(a, courses, now = new Date()) {
   const avgPlayers = (1 + a.maxPlayers) / 2; // uniform 1..cap
   const roundsPerSweep = courses.length * a.playsPerCourse;
