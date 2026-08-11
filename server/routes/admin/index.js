@@ -24,6 +24,7 @@ import { router as announcementsRouter } from "./announcements.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as gameRewardsAdminRouter } from "./gameRewards.js";
 import { router as exportRouter } from "./export.js";
+import { router as syntheticBotRouter } from "./syntheticBot.js";
 import {
   router as visionBakeoffRouter,
   publicRouter as visionBakeoffPublicRouter,
@@ -54,6 +55,9 @@ router.use("/rewards", rewardsRouter);
 // Game ticket economy — caps metadata + app-issued ticket rollup.
 router.use("/game-rewards", gameRewardsAdminRouter);
 router.use("/export", exportRouter);
+// Synthetic load/soak bot control plane (super_admin drives start/stop) — a
+// fixed script spawned with validated args; the key stays server-side.
+router.use("/synthetic-bot", syntheticBotRouter);
 // Vision vetting bench (super_admin only) — sources/labels/verifies zone
 // images against the production judge and the selected describe model.
 // UI: log in to Master Control, then open /api/admin/vision-bakeoff/ui.

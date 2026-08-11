@@ -307,6 +307,59 @@ export type Overview = {
   perLocation: { id: string; name: string; slug: string; courses: number; rounds30d: number }[];
 };
 
+// --- Synthetic load bot (Master Control → Synthetic) ------------------------
+// A live course as the bot sees it, plus its venue's open-now / weekly-open
+// state (mirrors server/routes/admin/syntheticBot.js loadCourses).
+export type SyntheticCourse = {
+  courseId: string;
+  courseName: string;
+  locationId: string;
+  locationName: string;
+  tz: string | null;
+  hours: VenueHours | null;
+  parsKnown: boolean;
+  openNow: boolean;
+  weeklyOpenHours: number;
+};
+
+// The cadence knobs — shared by the projection preview and the actual launch.
+export type SyntheticBotParams = {
+  playsPerCourse: number;
+  intervalMin: number;
+  maxPlayers: number;
+  concurrency?: number;
+  locationId?: string | null;
+  ignoreHours?: boolean;
+};
+
+export type SyntheticRunner = {
+  running: boolean;
+  pid: number | null;
+  startedAt: string | null;
+  params: Required<SyntheticBotParams> | null;
+  lastExit: { at: string; code: number | null; signal: string | null } | null;
+  logs: { at: string; line: string }[];
+};
+
+export type SyntheticStatus = {
+  keySet: boolean;
+  /** true only for super_admins — start/stop are hidden otherwise. */
+  canControl: boolean;
+  policy: { countsOnBoard: boolean; mintsRewards: boolean };
+  courses: SyntheticCourse[];
+  syntheticRounds: { total: number; last24h: number };
+  runner: SyntheticRunner;
+};
+
+type VolumePair = { roundsPerYear: number; playersPerYear: number };
+export type SyntheticProjection = {
+  courseCount: number;
+  avgPlayers: number;
+  max: VolumePair; // 24/7 ceiling
+  gated: VolumePair; // realistic, only-while-open
+  effective: VolumePair; // whichever the ignoreHours flag selects
+};
+
 export type CurrentUser = {
   id: string | null;
   email: string | null;
@@ -524,4 +577,14 @@ export const api = {
       'GET',
       `/game-rewards/usage?days=${days}`
     ),
+
+  // Synthetic load/soak bot control plane. status + projection are readable by
+  // any admin (org-scoped); start + stop are super_admin only (the server
+  // enforces this too — the UI just hides the controls when canControl:false).
+  syntheticStatus: () => req<SyntheticStatus>('GET', '/synthetic-bot/status'),
+  syntheticProjection: (params: SyntheticBotParams) =>
+    req<SyntheticProjection>('POST', '/synthetic-bot/projection', params),
+  syntheticStart: (params: SyntheticBotParams) =>
+    req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/start', params),
+  syntheticStop: () => req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/stop'),
 };
