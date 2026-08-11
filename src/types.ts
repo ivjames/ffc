@@ -1,7 +1,7 @@
 // Shared domain types.
 
 import type { PosConfig } from './lib/pos/types';
-import type { VenueHours } from './lib/venueHours';
+import type { VenueHours, HoursOverrides, HoursSeason } from './lib/venueHours';
 
 export type SyncState = 'active' | 'pending' | 'synced';
 
@@ -73,6 +73,10 @@ export type LocationSeed = {
   // configured — surfaces should hide the open/closed status rather than
   // guess. See src/lib/venueHours.ts for the shape + open/closed logic.
   hours?: VenueHours | null;
+  // Per-date overrides + date-ranged seasons layered over `hours` (override →
+  // season → weekly). Populated from the venue calendar; see venueHours.ts.
+  hoursOverrides?: HoursOverrides | null;
+  hoursSeasons?: HoursSeason[] | null;
   // Food & drink deep links (punchlist #7 tier 1) — set per venue in Master
   // Control; the Food & Drink card hides itself when neither is set.
   menuUrl?: string;

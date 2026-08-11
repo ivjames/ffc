@@ -654,6 +654,19 @@ alter table location add column if not exists pos jsonb;
 -- null`) so a re-migrate never clobbers an operator's Master Control edits.
 alter table location add column if not exists hours jsonb;
 
+-- Date-specific hours layered over the base weekly `hours` (lib/venueHours.js):
+--   hours_overrides — per-date exceptions: { "2026-08-18": "closed",
+--                     "2026-08-28": {"open":"11:00","close":"19:00"} }
+--   hours_seasons   — date-ranged weekly patterns (holiday/seasonal shifts):
+--                     [{ "from":"2026-09-09","to":"2026-12-31","weekly":{...},
+--                        "label":"Fall" }]
+-- Resolution for any date: override → season (later match wins) → base weekly.
+-- Populated/refreshed from each venue's published calendar by
+-- scripts/fetch-venue-hours.mjs (and hand-editable in Master Control); NOT seeded
+-- here because the calendar is volatile and only extends a few months out.
+alter table location add column if not exists hours_overrides jsonb;
+alter table location add column if not exists hours_seasons   jsonb;
+
 -- Seed the three venues' base weekly hours (Bullwinkle's Upland/Tukwila/
 -- Wilsonville, from bullwinkles.com/<city>/hours). Guarded on `hours is null`
 -- so this backfills once and never overwrites later Master Control edits (same

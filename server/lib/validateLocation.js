@@ -2,7 +2,7 @@
 // routes/locations.js so both the public POST /api/locations and the admin
 // router (POST /api/admin/locations) validate identically.
 import { tzFromCoords, isValidTz, friendlyTzLabel } from "./timezone.js";
-import { normalizeHours } from "./venueHours.js";
+import { normalizeHours, normalizeHoursOverrides, normalizeHoursSeasons } from "./venueHours.js";
 import {
   isKnownGame,
   HARD_MAX_PER_ROUND,
@@ -25,6 +25,7 @@ function isFiniteNum(n) {
 export const LOCATION_RETURN_COLS = `id, name, slug, lat, lng,
   geofence_km as "geofenceKm", tz, sort_order as "sortOrder",
   menu_url as "menuUrl", ordering_url as "orderingUrl", pos, hours,
+  hours_overrides as "hoursOverrides", hours_seasons as "hoursSeasons",
   org_id as "orgId", archived_at as "archivedAt"`;
 
 // POS vendors the platform has an adapter for. Onboarding a new vendor means
@@ -284,9 +285,14 @@ export function normalizeLocation(body) {
   const pos = normalizePos(body.pos);
   if (pos.error) return { error: pos.error, status: 400 };
 
-  // Business hours (see lib/venueHours.js). Omitted/null clears it.
+  // Business hours (see lib/venueHours.js): base weekly + optional per-date
+  // overrides and date-ranged seasons. Omitted/null clears each.
   const hours = normalizeHours(body.hours);
   if (hours.error) return { error: hours.error, status: 400 };
+  const hoursOverrides = normalizeHoursOverrides(body.hoursOverrides);
+  if (hoursOverrides.error) return { error: hoursOverrides.error, status: 400 };
+  const hoursSeasons = normalizeHoursSeasons(body.hoursSeasons);
+  if (hoursSeasons.error) return { error: hoursSeasons.error, status: 400 };
 
   // Resolve the timezone. Explicit `tz` wins (validated); otherwise derive from
   // coordinates; otherwise leave null and let the leaderboard fall back to
@@ -323,6 +329,8 @@ export function normalizeLocation(body) {
       orderingUrl: orderingUrl.value,
       pos: pos.value,
       hours: hours.value,
+      hoursOverrides: hoursOverrides.value,
+      hoursSeasons: hoursSeasons.value,
       orgId: orgId ?? null,
     },
   };

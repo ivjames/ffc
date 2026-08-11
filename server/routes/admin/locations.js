@@ -138,31 +138,33 @@ router.post("/", async (req, res) => {
     let db;
     if (row.id) {
       db = await pool.query(
-        `insert into location (id, name, slug, lat, lng, geofence_km, tz, sort_order, menu_url, ordering_url, pos, hours, org_id)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `insert into location (id, name, slug, lat, lng, geofence_km, tz, sort_order, menu_url, ordering_url, pos, hours, hours_overrides, hours_seasons, org_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          on conflict (id) do update set
            name = excluded.name, slug = excluded.slug, lat = excluded.lat,
            lng = excluded.lng, geofence_km = excluded.geofence_km,
            tz = excluded.tz, sort_order = excluded.sort_order,
            menu_url = excluded.menu_url, ordering_url = excluded.ordering_url,
            pos = excluded.pos, hours = excluded.hours,
+           hours_overrides = excluded.hours_overrides, hours_seasons = excluded.hours_seasons,
            org_id = coalesce(excluded.org_id, location.org_id)
          returning ${LOCATION_RETURN_COLS}`,
-        [row.id, row.name, row.slug, row.lat, row.lng, row.geofenceKm, row.tz, row.sortOrder, row.menuUrl, row.orderingUrl, row.pos, row.hours, row.orgId]
+        [row.id, row.name, row.slug, row.lat, row.lng, row.geofenceKm, row.tz, row.sortOrder, row.menuUrl, row.orderingUrl, row.pos, row.hours, row.hoursOverrides, row.hoursSeasons, row.orgId]
       );
     } else {
       db = await pool.query(
-        `insert into location (name, slug, lat, lng, geofence_km, tz, sort_order, menu_url, ordering_url, pos, hours, org_id)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `insert into location (name, slug, lat, lng, geofence_km, tz, sort_order, menu_url, ordering_url, pos, hours, hours_overrides, hours_seasons, org_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          on conflict (slug) do update set
            name = excluded.name, lat = excluded.lat, lng = excluded.lng,
            geofence_km = excluded.geofence_km, tz = excluded.tz,
            sort_order = excluded.sort_order,
            menu_url = excluded.menu_url, ordering_url = excluded.ordering_url,
            pos = excluded.pos, hours = excluded.hours,
+           hours_overrides = excluded.hours_overrides, hours_seasons = excluded.hours_seasons,
            org_id = coalesce(excluded.org_id, location.org_id)
          returning ${LOCATION_RETURN_COLS}`,
-        [row.name, row.slug, row.lat, row.lng, row.geofenceKm, row.tz, row.sortOrder, row.menuUrl, row.orderingUrl, row.pos, row.hours, row.orgId]
+        [row.name, row.slug, row.lat, row.lng, row.geofenceKm, row.tz, row.sortOrder, row.menuUrl, row.orderingUrl, row.pos, row.hours, row.hoursOverrides, row.hoursSeasons, row.orgId]
       );
     }
     await audit({

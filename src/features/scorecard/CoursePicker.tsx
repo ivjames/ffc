@@ -26,7 +26,13 @@ export default function CoursePicker() {
             <span className="text-fairway-100/70">
               📍 <span className="font-semibold text-fairway-100">{location?.name}</span>
             </span>
-            <VenueOpenLine hours={location?.hours} tz={location?.tz} className="mt-1" />
+            <VenueOpenLine
+              hours={location?.hours}
+              hoursOverrides={location?.hoursOverrides}
+              hoursSeasons={location?.hoursSeasons}
+              tz={location?.tz}
+              className="mt-1"
+            />
           </span>
           <span className="font-semibold text-fairway-400">Change</span>
         </Link>

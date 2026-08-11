@@ -128,6 +128,8 @@ function buildLocations(raw: GeneratedLocation[]): LocationSeed[] {
     sortOrder: l.sortOrder,
     tz: l.tz ?? undefined,
     hours: l.hours ?? undefined,
+    hoursOverrides: l.hoursOverrides ?? undefined,
+    hoursSeasons: l.hoursSeasons ?? undefined,
     menuUrl: l.menuUrl ?? undefined,
     orderingUrl: l.orderingUrl ?? undefined,
     pos: l.pos ?? undefined,

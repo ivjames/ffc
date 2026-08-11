@@ -13,6 +13,10 @@ export type VenueHoursDay = { open: string; close: string } | 'closed';
 export type VenueHours = Partial<
   Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', VenueHoursDay>
 >;
+// Per-date overrides (keyed "YYYY-MM-DD") and date-ranged seasonal weekly
+// patterns layered over `hours`. Resolution: override → season → base weekly.
+export type VenueHoursOverrides = Record<string, VenueHoursDay>;
+export type VenueHoursSeason = { from: string; to: string; weekly: VenueHours; label?: string };
 
 export type GeneratedLocation = {
   id: string;
@@ -26,6 +30,9 @@ export type GeneratedLocation = {
   menuUrl: string | null;
   orderingUrl: string | null;
   hours: VenueHours | null;
+  // Optional: absent in the bundled fallback, filled by live /api/content.
+  hoursOverrides?: VenueHoursOverrides | null;
+  hoursSeasons?: VenueHoursSeason[] | null;
   // POS integration add-on (per-venue, set in Master Control). Structurally
   // matches PosConfig in src/lib/pos/types.ts (capabilities decoupled — each
   // names its own vendor); kept inline so this generated file stays

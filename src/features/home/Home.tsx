@@ -158,6 +158,8 @@ export default function Home() {
           <p className="mt-0.5 text-sm text-fairway-100/70">What do you want to do?</p>
           <VenueOpenLine
             hours={location?.hours}
+            hoursOverrides={location?.hoursOverrides}
+            hoursSeasons={location?.hoursSeasons}
             tz={location?.tz}
             className="mt-1.5 justify-center"
           />

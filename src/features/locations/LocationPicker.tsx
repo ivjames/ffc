@@ -68,7 +68,13 @@ export default function LocationPicker() {
                     <span className="block text-sm text-fairway-100/70">
                       {count} {count === 1 ? 'course' : 'courses'}
                     </span>
-                    <VenueOpenLine hours={loc.hours} tz={loc.tz} className="mt-1" />
+                    <VenueOpenLine
+                      hours={loc.hours}
+                      hoursOverrides={loc.hoursOverrides}
+                      hoursSeasons={loc.hoursSeasons}
+                      tz={loc.tz}
+                      className="mt-1"
+                    />
                   </span>
                   {selected ? (
                     <span className="text-sm font-semibold text-fairway-400">Current</span>
@@ -81,6 +87,8 @@ export default function LocationPicker() {
                     <button>). */}
                 <VenueHoursCard
                   hours={loc.hours}
+                  hoursOverrides={loc.hoursOverrides}
+                  hoursSeasons={loc.hoursSeasons}
                   tz={loc.tz}
                   showStatus={false}
                   className="mt-1.5"

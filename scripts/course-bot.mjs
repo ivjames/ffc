@@ -12,11 +12,15 @@
 //
 // BUSINESS HOURS
 //   By default the bot only plays a venue while it is OPEN, evaluated in the
-//   venue's own timezone from location.hours (served by /api/content). It
-//   re-reads hours at the top of every sweep, so a schedule change (edited in
-//   Master Control) is honored with no restart — venues that just closed drop
-//   out, venues that just opened join. Unknown/unset hours → treated CLOSED
-//   (fail-closed). Pass --ignore-hours to play 24/7 (pure load testing).
+//   venue's own timezone from its full schedule — base weekly hours + per-date
+//   overrides + date-ranged seasons (location.hours / hours_overrides /
+//   hours_seasons, served by /api/content; resolution in lib/venueHours.js). It
+//   re-reads the schedule at the top of every sweep, so a change (edited in
+//   Master Control, or refreshed from the venue calendar) is honored with no
+//   restart. Unknown/unset schedule or missing tz → treated CLOSED (fail-closed).
+//   Pass --ignore-hours to play 24/7 (pure load testing). Note: the pre-flight's
+//   "h/wk open" + hours-gated projection use the BASE WEEKLY pattern only (a
+//   rough estimate); actual play still respects overrides/seasons exactly.
 //
 // SAFETY / ISOLATION
 //   * The server rejects `synthetic: true` unless SYNTHETIC_BOT_KEY is set there
@@ -192,7 +196,12 @@ async function discoverCourses(api, location, fallbackTz = null) {
       // actually closed. Use an operator-supplied --fallback-tz if given, else
       // leave null → isVenueOpen fails closed (venue skipped) rather than guess.
       tz: l.tz || fallbackTz || null,
-      hours: l.hours ?? null,
+      // Full schedule: base weekly + per-date overrides + date-ranged seasons.
+      schedule: {
+        weekly: l.hours ?? null,
+        overrides: l.hoursOverrides ?? null,
+        seasons: l.hoursSeasons ?? null,
+      },
     });
   }
 
@@ -201,13 +210,17 @@ async function discoverCourses(api, location, fallbackTz = null) {
     if (location && c.locationId !== location) continue;
     const venue = locsById.get(c.locationId);
     if (!venue) continue; // course whose venue is archived/absent — skip
+    const s = venue.schedule;
     courses.push({
       courseId: c.id,
       courseName: c.name,
       locationId: c.locationId,
       locationName: venue.name,
       tz: venue.tz,
-      hours: venue.hours,
+      schedule: s,
+      // `hours` (base weekly) kept for the "hours unset" check + the weekly
+      // open-hours estimate in the pre-flight projection.
+      hours: s.weekly,
       pars: Array.isArray(c.pars) && c.pars.length > 0 ? c.pars : null,
     });
   }
@@ -219,14 +232,15 @@ async function discoverCourses(api, location, fallbackTz = null) {
   if (noPars > 0) {
     console.warn(`  ! pars unavailable for ${noPars}/${courses.length} course(s) — using flat par-3 for those`);
   }
-  const noHours = courses.filter((c) => !c.hours).length;
+  const hasSchedule = (c) => c.hours || c.schedule.overrides || c.schedule.seasons;
+  const noHours = courses.filter((c) => !hasSchedule(c)).length;
   if (noHours > 0) {
     console.warn(
       `  ! hours unset for ${noHours}/${courses.length} course(s) — those venues are treated ` +
         `as CLOSED (fail-closed). Set location.hours, or pass --ignore-hours to play regardless.`
     );
   }
-  const noTz = courses.filter((c) => c.hours && !c.tz).length;
+  const noTz = courses.filter((c) => hasSchedule(c) && !c.tz).length;
   if (noTz > 0) {
     console.warn(
       `  ! ${noTz}/${courses.length} course(s) have hours but no timezone — treated as CLOSED ` +
@@ -328,7 +342,7 @@ function preflight(a, courses, now = new Date()) {
   const venues = new Map();
   for (const c of courses) {
     if (!venues.has(c.locationId)) {
-      venues.set(c.locationId, { name: c.locationName, tz: c.tz, hours: c.hours, courses: 0 });
+      venues.set(c.locationId, { name: c.locationName, tz: c.tz, hours: c.hours, schedule: c.schedule, courses: 0 });
     }
     venues.get(c.locationId).courses += 1;
   }
@@ -341,7 +355,7 @@ function preflight(a, courses, now = new Date()) {
     let status;
     if (!gating) status = "gating off";
     else if (!v.hours) status = "hours unset → treated CLOSED";
-    else status = isVenueOpen(v.hours, v.tz, now) ? "OPEN now" : "closed now";
+    else status = isVenueOpen(v.schedule, v.tz, now) ? "OPEN now" : "closed now";
     const wk = gating && v.hours ? ` · ${weeklyOpenHours(v.hours).toFixed(0)}h/wk open` : "";
     console.log(`     • ${v.name} (${v.courses} course${v.courses > 1 ? "s" : ""}, ${v.tz}) — ${status}${wk}`);
   }
@@ -451,7 +465,7 @@ async function main() {
     // Gate on business hours (unless --ignore-hours): only play venues open now,
     // in their own tz. Unknown/unset hours → closed (fail-closed).
     const now = new Date();
-    const playable = a.ignoreHours ? courses : courses.filter((c) => isVenueOpen(c.hours, c.tz, now));
+    const playable = a.ignoreHours ? courses : courses.filter((c) => isVenueOpen(c.schedule, c.tz, now));
     const skippedVenues = new Set(
       courses.filter((c) => !playable.includes(c)).map((c) => c.locationName)
     );

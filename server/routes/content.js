@@ -17,7 +17,9 @@ router.get("/", async (_req, res) => {
         `select id, name, slug, lat, lng, geofence_km as "geofenceKm",
                 tz, sort_order as "sortOrder",
                 menu_url as "menuUrl", ordering_url as "orderingUrl",
-                pos, hours, org_id as "orgId"
+                pos, hours,
+                hours_overrides as "hoursOverrides", hours_seasons as "hoursSeasons",
+                org_id as "orgId"
            from location
           where archived_at is null
           order by sort_order, name`
