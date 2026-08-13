@@ -24,6 +24,9 @@ server/data/
 # ffc backups + CenterEdge mock persisted state (bin/ffc, MOCK_STATE_FILE)
 data/
 
+# previously-deployed commit, recorded by `ffc deploy` for `ffc rollback`
+.ffc-prev-sha
+
 # editor / os
 .DS_Store
 .vscode/

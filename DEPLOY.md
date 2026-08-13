@@ -117,8 +117,17 @@ Two features lean on infrastructure beyond the code:
 ## Routine redeploys
 
 ```bash
-ffc deploy      # pull main -> migrate DB -> build into releases/<ts> -> swap current -> restart API
+ffc deploy      # pull main -> TEST GATE -> build into releases/<ts> -> migrate DB -> swap current -> restart API -> health check
 ```
+
+**The test gate.** There is no CI on this project, so the deploy is the gate:
+after pulling, `ffc deploy` runs the full server suite (`server/*.test.js`,
+node:test) against a scratch database (`<dbname>_test` on the same Postgres,
+created automatically; `FFC_TEST_DATABASE_URL` overrides) **before anything
+ships** — a red suite aborts with production untouched (no build swap, no
+migrate, no restart). Because the suite applies `schema.sql` to the scratch DB,
+a broken migration fails here too, not against the live database. Emergency
+bypass (a true fire only): `FFC_SKIP_TESTS=1 ffc deploy`.
 
 `ffc deploy` applies `schema.sql` on every deploy (all DDL is idempotent), so new
 tables and columns reach production automatically — no manual migrate step. Run
@@ -129,13 +138,55 @@ just reloads.
 
 `ffc deploy` pulls `main`, then **re-execs the freshly-pulled copy of itself** so
 changes to the deploy logic take effect on the same run (no more "lands one
-deploy late"). It ends by printing the client vs API build hash and whether they
-match (also available standalone as `ffc version`) — the client hash comes from
-the served `/version.json`, the API hash from `/api/health`.
+deploy late"). After restarting the API it **polls `/api/health` (~30 s)** and
+fails the deploy loudly — with recent pm2 logs — if the API doesn't come up:
+pm2 "restarted" alone proves nothing when the process crash-loops. It ends by
+printing the client vs API build hash and whether they match (also available
+standalone as `ffc version`).
+
+**Rolling back.** Every deploy records the outgoing commit in `.ffc-prev-sha`;
+if a deploy goes bad:
+
+```bash
+ffc rollback            # return to the previously-deployed commit
+ffc rollback <sha>      # or an explicit one
+```
+
+Rollback is **code only** — `schema.sql` is forward-only and applied DDL stays
+applied (the house rule of additive-only migrations is what keeps old code
+compatible; a migration that drops/renames something old code reads makes that
+deploy a point of no return, so treat destructive DDL as its own decision).
+Rollback rebuilds, restarts, health-checks, and skips both the test gate and
+migrate. The next `ffc deploy` ships the `main` tip again.
 
 Other operate commands: `ffc restart`, `ffc logs`, `ffc version` (build sync
-check), `ffc backup` (pg_dump into `data/`), `ffc seed` (re-load courses),
-`ffc vhost` (rewrite vhost + re-cert).
+check), `ffc seed` (re-load courses), `ffc vhost` (rewrite vhost + re-cert).
+
+## Backups (do this — the droplet is the only copy)
+
+Postgres, its dumps, and every uploaded photo live on the **same droplet**; a
+local dump is a convenience, not a backup. `ffc backup` dumps to
+`data/backups/` (gzipped, newest `FFC_BACKUP_KEEP`, default 14, kept) and then
+pushes **offsite** to `FFC_BACKUP_REMOTE`, which is either
+
+- an **rclone remote** path, e.g. `spaces:ffc-backups` (DO Spaces — run
+  `rclone config` once with a Spaces key), or
+- an **scp target**, e.g. `user@host:/backups/ffc`.
+
+One-time setup on the droplet:
+
+```bash
+echo 'FFC_BACKUP_REMOTE=spaces:ffc-backups' >> /var/www/ffc/.env   # or an scp target
+ffc backup          # verify one full dump + offsite push works
+ffc backup-cron     # install the nightly cron (/etc/cron.d/ffc-backup, 04:10)
+```
+
+Without `FFC_BACKUP_REMOTE` set, `ffc backup` still dumps locally but WARNS
+loudly — droplet loss is then total data loss. Restore into a **fresh**
+database with `gunzip -c ffc-<ts>.sql.gz | psql "$DATABASE_URL"`. Note the
+dump covers Postgres only: uploaded photos (`server/data/*`) and the
+CenterEdge mock's state file ride in `data/`/`server/data/` on disk — rsync
+those separately if they matter to you.
 
 ## Seeding the four courses
 
