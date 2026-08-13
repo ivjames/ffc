@@ -160,7 +160,22 @@ export default function Scorecard() {
         bump(p, +1); // real "+": plays the stroke sound, pops, persists
         return;
       }
-      // Every player has reached their score → tap through to the next hole.
+      // Advance guard — mirror the manual "Next" button's `currentHoleScored`
+      // check (it's `disabled` until every player is scored) so the auto-player
+      // can NEVER skip past a half-scored hole. The random-target check above
+      // *should* already tap every blank cell (null reads as 0, below any goal),
+      // but that couples "advance" to the target math and to `prev` being a
+      // fully-settled snapshot; on shared rounds (async persistence) or a
+      // coalesced re-render it can read "all at target" while a cell is still
+      // blank. Re-check the actual scores from the same snapshot and tap the
+      // still-blank player instead of advancing — the reported "fast-forward
+      // sometimes moves on without clipping every button" bug.
+      const blank = prev.playerTags.findIndex((_t, i) => prev.scores[i]?.[hole] == null);
+      if (blank !== -1) {
+        bump(blank, +1);
+        return;
+      }
+      // Every player is scored → tap through to the next hole.
       if (hole < HOLE_COUNT - 1) {
         goNext(); // real "Next": plays the cup sound and advances
       } else {
