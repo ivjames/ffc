@@ -18,6 +18,7 @@
 import { Router } from "express";
 import express from "express";
 import { isSuperAdmin } from "../../lib/adminAuth.js";
+import { isScreeningConfigured, screenItemImage } from "../../lib/itemImageScreen.js";
 import {
   PROVIDERS,
   MEDIA_TYPES,
@@ -92,18 +93,54 @@ const smallJson = express.json({ limit: "1mb" });
 
 router.get("/dataset", (req, res) => res.json({ images: listDataset() }));
 
-router.post("/dataset", express.json({ limit: "16mb" }), (req, res) => {
+// Every image entering the dataset is people-screened HERE, server-side,
+// before it is stored (same seam as hunt-item vetting uploads —
+// routes/admin/huntItems.js): the CLAUDE.md test-data policy says bench
+// images must not contain people because they get sent to third-party
+// providers, and the page's client-side filters are a UX nicety, not the
+// enforcement. Anyone visible → nothing stored. Because /prescan and
+// /describe below only accept dataset ids, this is the single choke point
+// through which all bench bytes reach a provider. The screen's billed
+// tokens + cost ride back on the response (`scan`) per the operator policy.
+router.post("/dataset", express.json({ limit: "16mb" }), async (req, res) => {
   if (!ALLOWED_MEDIA_TYPES.has(req.body?.mediaType))
     return res.status(400).json({ error: "unsupported media type" });
   if (typeof req.body.imageBase64 !== "string" || !req.body.imageBase64)
     return res.status(400).json({ error: "missing image" });
+  // No screen, no add — refuse rather than store unscreened test data.
+  if (!isScreeningConfigured())
+    return res.status(503).json({
+      error: "image screening is not configured on the server (no vision API key)",
+    });
+  let scan;
+  try {
+    scan = await screenItemImage({
+      imageBase64: req.body.imageBase64,
+      mediaType: req.body.mediaType,
+    });
+  } catch (err) {
+    return res.status(502).json({ error: String(err.message || err) });
+  }
+  const scanOut = {
+    provider: scan.provider,
+    inputTokens: scan.inputTokens,
+    outputTokens: scan.outputTokens,
+    cost: scan.cost,
+  };
+  if (scan.peoplePresent) {
+    return res.status(400).json({
+      error: "people are visible in this image — bench images must be people-free",
+      peoplePresent: true,
+      scan: scanOut,
+    });
+  }
   const entry = addDatasetImage({
     name: req.body.name,
     subject: req.body.subject,
     mediaType: req.body.mediaType,
     base64: req.body.imageBase64,
   });
-  return res.json(entry);
+  return res.json({ ...entry, scan: scanOut });
 });
 
 // Source people-free web images (Picsum + Haiku subject/people scan).
@@ -157,40 +194,59 @@ router.delete("/runs", (req, res) => {
   return res.json({ ok: true });
 });
 
+// Only screened bytes leave the building: /prescan and /describe refuse raw
+// image payloads and take a dataset `imageId` instead, reading the STORED
+// bytes for the provider call. Ingestion (POST /dataset above, or the
+// sourcing flow's own scan) is where screening happened, so a request can
+// only ship what already passed it — a modified client posting its own
+// base64 gets a 400, not a provider call. (The local CLI bench keeps the
+// raw-bytes contract for operator-local files; this guard is the admin
+// mount's, where the invariant lives.)
+function datasetImageOr400(req, res) {
+  const id = req.body?.imageId;
+  const found = typeof id === "string" && id ? getDatasetImage(id) : null;
+  if (!found) {
+    res.status(400).json({
+      error:
+        "imageId of a stored dataset image is required — raw image bytes are not accepted here; add the image to the dataset (people-screened) first",
+    });
+    return null;
+  }
+  return found;
+}
+
 // Hunt-mode pre-scan: one Haiku call that names the likely hunt target so
 // the UI can pre-fill each image's subject field.
-router.post("/prescan", express.json({ limit: "16mb" }), async (req, res) => {
-  if (!ALLOWED_MEDIA_TYPES.has(req.body?.mediaType))
-    return res.status(400).json({ error: "unsupported media type" });
-  if (typeof req.body.imageBase64 !== "string" || !req.body.imageBase64)
-    return res.status(400).json({ error: "missing image" });
+router.post("/prescan", smallJson, async (req, res) => {
+  const found = datasetImageOr400(req, res);
+  if (!found) return;
+  const base64 = found.bytes.toString("base64");
   // Content-hash cache: an image ever scanned before costs nothing again.
   // Token fields stay null on a hit so the client's burn ticker skips it.
-  const hit = prescanCacheGet(req.body.imageBase64);
+  const hit = prescanCacheGet(base64);
   if (hit) return res.json({ subject: hit.subject, cached: true });
   try {
     const result = await prescanSubject({
-      base64: req.body.imageBase64,
-      mediaType: req.body.mediaType,
+      base64,
+      mediaType: found.entry.mediaType,
     });
-    prescanCachePut(req.body.imageBase64, result.subject);
+    prescanCachePut(base64, result.subject);
     return res.json(result);
   } catch (err) {
     return res.status(502).json({ error: String(err.message || err) });
   }
 });
 
-// Own parser: photos arrive as base64 JSON well past the app-wide 256kb cap
-// (app.js skips this router's paths, same arrangement as /api/hunt/verify).
-router.post("/describe", express.json({ limit: "16mb" }), async (req, res) => {
+// Dataset-id only, like /prescan — the stored (screened) bytes are what the
+// provider sees, so the page's client-side downscale toggle doesn't apply on
+// this mount (the UI disables it in admin mode; images go full-size).
+router.post("/describe", smallJson, async (req, res) => {
   const provider = PROVIDERS.find((p) => p.name === req.body?.provider);
   if (!provider) return res.status(400).json({ error: "unknown provider" });
   if (!isConfigured(provider))
     return res.status(400).json({ error: `${provider.keyEnv} not set` });
-  if (!ALLOWED_MEDIA_TYPES.has(req.body.mediaType))
-    return res.status(400).json({ error: "unsupported media type" });
-  if (typeof req.body.imageBase64 !== "string" || !req.body.imageBase64)
-    return res.status(400).json({ error: "missing image" });
+  const found = datasetImageOr400(req, res);
+  if (!found) return;
 
   const prompt =
     typeof req.body.prompt === "string" && req.body.prompt.trim()
@@ -199,7 +255,7 @@ router.post("/describe", express.json({ limit: "16mb" }), async (req, res) => {
   try {
     const result = await describeImage(
       provider,
-      { base64: req.body.imageBase64, mediaType: req.body.mediaType },
+      { base64: found.bytes.toString("base64"), mediaType: found.entry.mediaType },
       prompt,
       { json: req.body.json === true },
     );
