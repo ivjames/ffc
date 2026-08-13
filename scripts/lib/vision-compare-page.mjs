@@ -363,8 +363,13 @@ fetch(API_BASE + "/providers", { headers: apiHeaders() }).then(function (r) {
 // --- persistent dataset + run history ------------------------------------
 // The server keeps the image set and every model call's result on disk;
 // the page loads both on open and clears either on demand.
+// Persist an image into the server dataset. The admin server people-screens
+// it before storing (test-data policy — no people in bench images) and can
+// REJECT it: a rejected image stays visible as a struck-out thumb but never
+// joins a run, since /prescan and /describe only accept stored dataset ids.
+// Returns a promise resolving true when the image was stored.
 function persistImage(img) {
-  fetch(API_BASE + "/dataset", {
+  return fetch(API_BASE + "/dataset", {
     method: "POST",
     headers: apiHeaders({ "content-type": "application/json" }),
     body: JSON.stringify({
@@ -374,9 +379,19 @@ function persistImage(img) {
       imageBase64: img.base64,
     }),
   })
-    .then(function (r) { return r.json(); })
-    .then(function (j) { if (j.id) img.id = j.id; })
-    .catch(function () {});
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) {
+      // The ingest screen is a billed model call — count it in the ticker.
+      if (res.j && res.j.scan) addBurn(res.j.scan);
+      if (res.ok && res.j.id) { img.id = res.j.id; return true; }
+      img.rejected = res.j && res.j.peoplePresent
+        ? "people visible \\u2014 not stored (test-data policy)"
+        : ((res.j && res.j.error) || "not stored");
+      renderThumbs();
+      updateRunButton();
+      return false;
+    })
+    .catch(function () { return false; });
 }
 
 function persistSubject(img) {
@@ -802,6 +817,13 @@ refreshAllTime();
 var ADMIN_PHOTOS = API_BASE.replace(/\\/vision-bakeoff$/, "") + "/photos";
 if (AUTH_MODE === "admin") {
   document.getElementById("storedWrap").hidden = false;
+  // The admin mount sends the STORED (people-screened) bytes for every
+  // provider call — it refuses raw uploads — so the client-side 768px
+  // downscale can't apply here. Pin the selector to full size.
+  var opt768 = document.querySelector('#sendSize option[value="768"]');
+  opt768.disabled = true;
+  opt768.textContent = "768px (local bench only)";
+  document.getElementById("sendSize").value = "full";
 }
 
 document.getElementById("loadStored").addEventListener("click", function () {
@@ -924,13 +946,21 @@ function addFiles(files) {
       state.images.push(img);
       renderThumbs();
       updateRunButton();
-      persistImage(img);
-      // Label every upload up front (one cheap descriptor call) — the subject
-      // shows beside the file name in every mode, and hunt mode uses it.
-      prescan(img);
+      // Persist first — the admin mount's /prescan works off the stored
+      // dataset id (bytes never re-uploaded), and a people-rejected image
+      // must not be scanned at all. Then label the upload up front (one
+      // cheap descriptor call) — the subject shows beside the file name in
+      // every mode, and hunt mode uses it.
+      persistImage(img).then(function (stored) { if (stored) prescan(img); });
     };
     reader.readAsDataURL(f);
   });
+}
+
+// The images a run may send: server-stored (or local-mode) entries only —
+// never one the ingest screen rejected.
+function benchImages() {
+  return state.images.filter(function (im) { return !im.rejected; });
 }
 
 function renderThumbs() {
@@ -967,6 +997,9 @@ function renderThumbs() {
       renderThumbs();
     });
     t.appendChild(subj);
+    if (img.rejected) {
+      t.appendChild(el("div", "mismatch", "\\u2717 " + img.rejected));
+    }
     if (img.expected === false) {
       var mm = el("div", "mismatch", "\\u2717 mismatched");
       mm.title = "truth: " + (img.truth || "?");
@@ -987,10 +1020,15 @@ function renderThumbs() {
 function prescan(img) {
   img.scanning = true;
   renderThumbs();
+  // Admin mount: reference the stored (people-screened) dataset entry — the
+  // server refuses raw bytes there. The local CLI bench keeps the raw-bytes
+  // contract for operator-local files.
   fetch(API_BASE + "/prescan", {
     method: "POST",
     headers: apiHeaders({ "content-type": "application/json" }),
-    body: JSON.stringify({ imageBase64: img.base64, mediaType: img.mediaType }),
+    body: JSON.stringify(AUTH_MODE === "admin"
+      ? { imageId: img.id }
+      : { imageBase64: img.base64, mediaType: img.mediaType }),
   })
     .then(function (r) { return r.json(); })
     .then(function (j) {
@@ -1028,19 +1066,19 @@ function selectedProviders() {
 
 function updateRunButton() {
   var provs = selectedProviders();
-  document.getElementById("run").disabled =
-    state.images.length === 0 || provs.length === 0;
+  var count = benchImages().length;
+  document.getElementById("run").disabled = count === 0 || provs.length === 0;
   // Pre-flight estimate: calls and rough cost (assumes ~1,400 in / 300 out
   // tokens per call — the ticker shows exact billed numbers as they land).
   var status = document.getElementById("status");
-  if (state.images.length && provs.length) {
+  if (count && provs.length) {
     var est = 0;
     provs.forEach(function (name) {
       var p = state.providers.find(function (x) { return x.name === name; });
-      if (p) est += state.images.length * (1400 * p.priceIn + 300 * p.priceOut) / 1e6;
+      if (p) est += count * (1400 * p.priceIn + 300 * p.priceOut) / 1e6;
     });
-    status.textContent = "next run: " + state.images.length + " \\u00d7 " +
-      provs.length + " = " + state.images.length * provs.length +
+    status.textContent = "next run: " + count + " \\u00d7 " +
+      provs.length + " = " + count * provs.length +
       " calls, est ~$" + est.toFixed(4);
   } else {
     status.textContent = "";
@@ -1054,7 +1092,7 @@ function onModeChange() {
   if (huntMode()) {
     state.describePrompt = ta.value || state.describePrompt;
     ta.value = state.huntPrompt;
-    state.images.forEach(function (img) {
+    benchImages().forEach(function (img) {
       if (!img.subject && !img.scanning) prescan(img);
     });
   } else {
@@ -1079,9 +1117,10 @@ try {
 } catch (e) {}
 onModeChange();
 
-// Send size survives reloads too (same silent-reset lesson).
+// Send size survives reloads too (same silent-reset lesson) — except on the
+// admin mount, where full-size stored bytes are the only option.
 try {
-  if (localStorage.getItem("ffc_bakeoff_size") === "768") {
+  if (AUTH_MODE !== "admin" && localStorage.getItem("ffc_bakeoff_size") === "768") {
     document.getElementById("sendSize").value = "768";
   }
 } catch (e) {}
@@ -1129,6 +1168,7 @@ var blindLabels = "ABCDEFGHIJ";
 
 document.getElementById("run").addEventListener("click", function () {
   var provs = selectedProviders();
+  var images = benchImages(); // rejected (unscreened) images never run
   var promptTemplate = document.getElementById("prompt").value;
   var hunt = huntMode();
   var blind = document.getElementById("blind").checked;
@@ -1155,7 +1195,7 @@ document.getElementById("run").addEventListener("click", function () {
   resultsBox.textContent = "";
   document.getElementById("summary").textContent = "";
 
-  var pending = state.images.length * provs.length;
+  var pending = images.length * provs.length;
   var status = document.getElementById("status");
   status.textContent = pending + " calls in flight\\u2026";
 
@@ -1164,13 +1204,13 @@ document.getElementById("run").addEventListener("click", function () {
   // is flagged as an outlier (error styling + outlier:true in the history).
   // Run rows are buffered until their image completes so the flag lands in
   // the log. Errors and invalid JSON never vote.
-  var rowTrack = state.images.map(function () {
+  var rowTrack = images.map(function () {
     return { done: 0, entries: [] };
   });
 
   function rowComplete(imgIdx) {
     var entries = rowTrack[imgIdx].entries;
-    var expected = state.images[imgIdx] ? state.images[imgIdx].expected : null;
+    var expected = images[imgIdx] ? images[imgIdx].expected : null;
     // Ground truth beats consensus: on a scrambled/sourced dataset each
     // verdict is graded directly against what the subject-vs-image pairing
     // should yield.
@@ -1240,7 +1280,7 @@ document.getElementById("run").addEventListener("click", function () {
   resultsBox.appendChild(el("p", "meta", (hunt
     ? "Hunt verify \\u2014 \\u2713/\\u2717 verdicts against each image's subject"
     : "Describe \\u2014 open descriptions") +
-    " \\u00b7 " + state.images.length + " images \\u00d7 " + provs.length + " providers" +
+    " \\u00b7 " + images.length + " images \\u00d7 " + provs.length + " providers" +
     (send768 ? " \\u00b7 sent at 768px" : "")));
   var wrap = el("div", "runtablewrap");
   var table = el("table", "runtable");
@@ -1287,7 +1327,7 @@ document.getElementById("run").addEventListener("click", function () {
       "target itself is visible.\\n\\n";
   }
 
-  state.images.forEach(function (img, imgIdx) {
+  images.forEach(function (img, imgIdx) {
     var prompt = hunt
       ? promptTemplate
           .replace(/__SUBJECT__/g, img.subject || "the target item")
@@ -1329,16 +1369,22 @@ document.getElementById("run").addEventListener("click", function () {
       fetch(API_BASE + "/describe", {
         method: "POST",
         headers: apiHeaders({ "content-type": "application/json" }),
-        body: JSON.stringify({
-          provider: name,
-          imageBase64: send.base64,
-          mediaType: send.mediaType,
-          prompt: prompt,
-          // Hunt runs engage each provider's native JSON mode on top of the
-          // hardened prompt (Anthropic schema / Gemini responseSchema /
-          // OpenAI-compatible response_format).
-          json: hunt,
-        }),
+        // Admin mount: dataset id only — the server reads the STORED
+        // (people-screened) bytes, so nothing unscreened can reach a
+        // provider and the request stays tiny. Local CLI bench: raw bytes
+        // as before (possibly the 768px downscale).
+        body: JSON.stringify(AUTH_MODE === "admin"
+          ? { provider: name, imageId: img.id, prompt: prompt, json: hunt }
+          : {
+              provider: name,
+              imageBase64: send.base64,
+              mediaType: send.mediaType,
+              prompt: prompt,
+              // Hunt runs engage each provider's native JSON mode on top of
+              // the hardened prompt (Anthropic schema / Gemini
+              // responseSchema / OpenAI-compatible response_format).
+              json: hunt,
+            }),
       })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (r) {
