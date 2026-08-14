@@ -203,17 +203,18 @@ def _seg(nn, on=False, n=None):
 def _tagrow(i, err=False, n=None, glyph=None, ph="ABC"):
     bd = "1px solid #c98" if err else "1px solid var(--ln2)"
     lead = (f'<span style="width:24px;text-align:right;font-family:monospace;font-size:14px;color:var(--mut)">{glyph if glyph else i}</span>')
+    # An invalid tag's error renders inside the row, to the RIGHT of the input.
+    trail = (f'<span style="margin-left:12px;font-size:13px;color:#b55">inline error</span>' if err else '')
     return el(lead +
-              el(sp(ph,24,700,"var(--mut)",ls=".12em"), cls="ctr", n=n, w=128, h=44, r=12, background="var(--f2)", border=bd, margin_left="12px", box_shadow="inset 0 2px 3px rgba(0,0,0,.07)"),
+              el(sp(ph,24,700,"var(--mut)",ls=".12em"), cls="ctr", n=n, w=128, h=44, r=12, background="var(--f2)", border=bd, margin_left="12px", box_shadow="inset 0 2px 3px rgba(0,0,0,.07)") +
+              trail,
               cls="rowc", mt=(0 if i==1 else 12), border="none")
 screen(id="setup", name="Player Setup",
  body=dev(bar("Course name") + content(
    el(lab("Players",14), border="none") +
    el(_seg("1",n=1)+_seg("2",on=True)+_seg("3")+_seg("4"), cls="rowc", mt=8, gap="8px", border="none") +
    el(lab("Tags (3 letters/numbers, arcade)",14), mt=20, border="none") +
-   el(_tagrow(1,n=2)+_tagrow(2,err=True,n=3)+
-      el(lab("inline error message",13), mt=6, border="none")+
-      _tagrow(3)+_tagrow(4), cls="", mt=8, border="none") +
+   el(_tagrow(1,n=2)+_tagrow(2,err=True,n=3)+_tagrow(3)+_tagrow(4), cls="", mt=8, border="none") +
    el(lab("Team tag (optional)",14), mt=20, border="none") +
    el(_tagrow(1,glyph="🏅",ph="TEA",n=4), mt=8, border="none") +
    btn("Start round", primary=True, n=5, mt=20) +
@@ -234,8 +235,10 @@ screen(id="map", name="Course Map",
 # horizontally-scrolling grid of hole columns (current column tinted) in the
 # middle, and a pinned + rail on the right. One row per player.
 def _scorecard():
+    # Real sizes: hole tabs are 36 tall × 48 wide (h-9 w-12); score cells 48×48
+    # (h-12 w-12); ± keys 36×36 centered in the 48-tall rows.
     tabs = "".join(
-        el(sp(str(v),13,700,"var(--mut)"), cls="ctr", grow=True, h=30, r=8,
+        el(sp(str(v),13,700,"var(--mut)"), cls="ctr", grow=True, h=36, r=8,
            background=("var(--f2)" if k==2 else "var(--f1)" if k<2 else "#fff"),
            border=("1px solid var(--ln)" if k<=2 else "1px dashed var(--ln2)"),
            margin_left=("0" if k==0 else "6px"))
@@ -243,7 +246,7 @@ def _scorecard():
     def cellrow(vals):
         cells = "".join(
             el(sp(str(v),18,900,("var(--ink)" if v!="·" else "var(--mut)")),
-               cls=("sunk ctr" if k==2 else "ctr"), grow=True, h=36, r=8,
+               cls=("sunk ctr" if k==2 else "ctr"), grow=True, h=48, r=8,
                background=("var(--f2)" if k==2 else "#fff"),
                border=("1px solid var(--ln)" if k==2 else "1px solid var(--ln2)"),
                margin_left=("0" if k==0 else "6px"))
@@ -253,11 +256,11 @@ def _scorecard():
                 cellrow(["2","3","3","·","·"]) + cellrow(["2","2","4","·","·"]) +
                 cellrow(["3","2","2","·","·"]) + cellrow(["2","4","3","·","·"]),
                 cls="", grow=True, border="none", background="none", overflow="hidden")
-    spacer = '<div style="height:30px"></div>'
-    tags = el(spacer + "".join(el(tag("AVA",size=15,h=36), mt=8, border="none", background="none") for _ in range(4)),
+    spacer = '<div style="height:36px"></div>'
+    tags = el(spacer + "".join(el(tag("AVA",size=15,h=36), mt=(14 if i==0 else 20), border="none", background="none") for i in range(4)),
               cls="col ai-start", border="none", background="none")
     def keycol(g):
-        return el(spacer + "".join(el(sp(g,22,700,"var(--mut)"), cls="keycap ctr", mt=8, w=34, h=36, r=8) for _ in range(4)),
+        return el(spacer + "".join(el(sp(g,22,700,"var(--mut)"), cls="keycap ctr", mt=(14 if i==0 else 20), w=36, h=36, r=8) for i in range(4)),
                   cls="col", border="none", background="none")
     return el(tags +
               el(keycol("−"), margin_left="8px", border="none", background="none") +
@@ -401,7 +404,9 @@ screen(id="putt", name="Arcade Putt",
    el(sp("Hole n / 9",14,700) + f'<span style="margin-left:auto">{lab("Par · Strokes",14)}</span>', cls="rowc", n=2, pad="12px 16px 8px", border="none", flexnone=True) +
    el(lab("Canvas playfield — drag-to-aim slingshot; ball, cup+flag, bumpers, greens, hazards, splash.",12), cls="fill", n=3, grow=True, margin="0 16px", r=16) +
    el(lab("hint line",13), cls="ctr", h=40, border="none", flexnone=True) +
-   el(btn("Next hole →", primary=True, mt=0) + '<span style="width:12px"></span>' + btn("Reset / End run", n=4, mt=0), cls="rowc", pad="4px 16px 16px", border="none", flexnone=True),
+   el(btn("Next hole → / See scorecard → (after sinking)", primary=True, mt=0) +
+      btn("Reset hole · + End run in endless (before sinking)", n=4, mt=8),
+      cls="", pad="4px 16px 16px", border="none", flexnone=True),
    fill=True)),
 
 # ════════════════════════════════════════════════════════════ 16. MINIGAME SHELL (fills)
@@ -547,7 +552,7 @@ screen(id="photos", name="Photo Booth",
    el(el("", cls="fill", grow=True, h=104, r=12) + el("", cls="fill", grow=True, h=104, r=12) + el("", cls="fill", grow=True, h=104, r=12),
       cls="rowc", n=2, mt=8, gap="8px", border="none") +
    el(lab("EDITOR: base photo + draggable stickers + frame + forced venue watermark",12), cls="fill", n=3, mt=16, h=120, r=12) +
-   el("".join(el(sp(g,18,700,"var(--mut)"), cls="keycap ctr", w=44, h=40, r=10, margin_left=("0" if i==0 else "8px")) for i,g in enumerate(["−","+","↺","↻","🗑️"])),
+   el("".join(el(sp(g,18,700,"var(--mut)"), cls="keycap ctr", w=40, h=40, r=10, margin_left=("0" if i==0 else "8px")) for i,g in enumerate(["−","+","↺","↻","🗑️"])),
       cls="rowc", n=4, mt=12, border="none") +
    el(lab("frames strip · sticker sheet (venue SVGs + emoji)",12), cls="s1", mt=12, r=12, pad="10px 12px")
  ))),
