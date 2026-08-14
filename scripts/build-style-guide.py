@@ -622,6 +622,55 @@ screen(id="wall", name="TV Wall (venue display)", route="/tv/wall",
   (3,"Leaderboard row","rank · tag · total","3-column row","rise-in animated; totals in the course accent","--accent (total)","the row surface + the arcade type face"),
  ]),
 
+# ============================================================ 29. CHALLENGE SPINNER
+screen(id="spinner", name="Challenge Spinner", route="/golf/spinner",
+ purpose="Mid-round dare wheel opened from the scorecard — spin for a next-shot twist or a just-for-fun challenge. Offline, bundled content; themed to the round's course when opened mid-round.",
+ body="".join([
+   topbar("Challenge Spinner", right=MENU()),
+   box("course caption — “COURSE NAME CHALLENGES” (only when opened from a round)","wide small cond",n=1),
+   img("Wheel — one wedge per challenge (pie sector + upright emoji at 66% radius); 🔻 pointer fixed at top-center over the wheel; hub cap disc. Wedge count scales to the themed challenge set.", n=2),
+   box("Result card — kind badge pill IN-CARD (“⛳️ Next-shot twist” / “🎉 Just for fun”) · challenge emoji · challenge text","wide tall cond","card",n=3),
+   txt("hint line — “Tap spin for a challenge…” / “Round and round…” (shown only when no result)","center muted",n=4),
+   btn("Spin the wheel","primary",n=5),
+ ]),
+ specs=[
+  (1,"Course caption","Uppercase “<course> challenges” line","text eyebrow","only when nav state carries the round's course; absent from direct entry","course ink","—"),
+  (2,"Wheel","The spinner — SVG pie of challenge wedges","~max-w-xs disc; emoji at 66% radius, counter-rotated upright","spins on the button only (wheel itself isn't tappable); wedge count = challenge-set size","wedge fills keyed by challenge kind","wedge palette per kind + the pointer + hub-cap treatment"),
+  (3,"Result card","Landed challenge — badge, emoji, and text all in one card","full-width card, radius 16","exactly one of result card / hint line renders; swell-in on land; the kind badge renders INSIDE the card as its first child","kind palette (twist vs fun)","the card surface + the two kind-badge treatments"),
+  (4,"Hint line","Idle / spinning prompt","bare centered text (no card)","“Round and round…” while spinning, else the tap prompt","muted","—"),
+  (5,"Spin button","The only control","full-width, ~52 tall","labels: “Spin the wheel” → “Spinning…” (disabled) → “Spin again”","--accent","the primary surface"),
+ ]),
+
+# ============================================================ 30. TEAM DETAIL
+screen(id="teamdetail", name="Team detail", route="/me/teams/:id",
+ purpose="One team's roster and management. Members see the roster; owners also invite by email, rename, and archive. Signed-out visitors are bounced to Teams.",
+ body="".join([
+   topbar("Team name", right=MENU()),
+   txt("label: Members"),
+   row(box("tag","tagb",n=1), box("name (you) · Owner — no action on own row","grow"), cls="lrow"),
+   row(box("tag","tagb"), box("name · Member","grow"), box("Remove","trail",n=2), cls="lrow"),
+   txt("OWNER ONLY ↓","eyebrow",n=3),
+   box("Invited (pending) — bare email lines (only when any)","wide small cond",n=4),
+   txt("label: Invite by email"),
+   box("email field — “friend@example.com” · inline error below","wide",n=5),
+   btn("Send invite","primary"),
+   txt("label: Team name"),
+   box("name field","wide",n=6),
+   btn("Rename","ghost"),
+   btn("Archive team","ghost",n=7),
+   box("footer error / notice lines — bottom of the page, not by the control","wide small cond",n=8),
+ ]),
+ specs=[
+  (1,"Member row","One card per member (unbounded, no 1–4 cap)","full-width, radius 16","leading TagChip only when the member has a tag; name + “ (you)” marker; Owner/Member caption","--tag-accent","the row surface"),
+  (2,"Row action","Trailing red text button","text button","“Leave” on your own row, “Remove” on others (owner); an owner's own row has none","(danger emphasis)","—"),
+  (3,"Owner gating","Everything below the roster","—","rendered only for role=owner; members see just the roster + footer messages","—","—"),
+  (4,"Pending invites","“Invited (pending)” email lines","bare truncated text lines (no cards)","only when invites are outstanding","muted","—"),
+  (5,"Invite field + send","Email input → Send invite","full-width input + button","inline validation error directly under the input; button disabled on empty/invalid/busy","(error emphasis)","the field surface"),
+  (6,"Rename field","Team-name input","full-width input, maxlength 40","Rename disabled while unchanged/empty/busy","—","the field surface"),
+  (7,"Rename / Archive","Stacked column — Rename (ghost) · Archive team (danger)","full-width, stacked","Archive confirms (“Members will lose access.”) then navigates away; one shared busy flag dims all controls","(danger emphasis on Archive)","ghost + danger surfaces"),
+  (8,"Footer messages","Error and notice lines at the very bottom of the content","bare text, page footer","conditional; can both show; note they render far from the control that triggered them; separate Loading / “Team not found” states","(error emphasis)","—"),
+ ]),
+
 # screens whose layout grows by one row/chip per player (1–4)
 for _s in SCREENS:
     if _s["id"] in ("setup","play","sum","hunt"): _s["scales"] = True
@@ -766,7 +815,7 @@ cover = """<div class="page cover">
  <h1>Screen &amp; Element Guide</h1>
  <p class="tag">A structural wireframe of every screen — the element inventory and rough arrangement — with each interface element numbered and spec'd (including current dimensions). It tells you <b>what each screen contains and what art each element needs</b>, so nothing is missed when you theme the app.</p>
  <div style="margin-top:16px">
-  <span class="chip">28 screens</span><span class="chip">5 sections</span><span class="chip">Wireframe layout</span><span class="chip">Numbered on-element markers</span><span class="chip">Dimensions + specs</span>
+  <span class="chip">30 screens</span><span class="chip">5 sections</span><span class="chip">Wireframe layout</span><span class="chip">Numbered on-element markers</span><span class="chip">Dimensions + specs</span>
  </div>
  <div class="note"><b>These wireframes are not the design.</b> They show structure only — no colors, type, icons, or materials are implied, and the current app art is <b>not</b> a reference to match (much of it is placeholder and wrong). Dimensions are the <b>current</b> values for scale, not fixed targets — only tap-target sizes, safe areas, and contrast are constraints. Boxes and positions are schematic. You define the actual look; mark up anything here that's wrong.</div>
  <div class="how">

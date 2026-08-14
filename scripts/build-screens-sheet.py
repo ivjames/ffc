@@ -584,6 +584,46 @@ screen(id="wall", name="TV Wall (venue display)",
       f'{el(_wallcol(n=1)+_wallcol()+_wallcol(), cls="rowc", pad="10px", gap="8px", border="none", align_items="stretch")}'
       f'</div>'),
 
+# ════════════════════════════════════════════════════════════ 29. CHALLENGE SPINNER
+screen(id="spinner", name="Challenge Spinner",
+ body=dev(bar("Challenge Spinner") + content(
+   el(lab("COURSE NAME CHALLENGES (only when opened from a round)",12), cls="ctr", n=1, r=12, pad="8px 12px", background="var(--f0)", border=DASH) +
+   el(f'<div style="text-align:center;font-size:20px;line-height:1">🔻</div>' +
+      el(lab("wheel — one wedge per challenge; emoji upright at 66% radius; hub cap",12),
+         cls="fill ctr", w=280, h=280, r=999, margin="4px auto 0", pad="0 32px"),
+      cls="", n=2, mt=16, border="none") +
+   el(f'<div style="text-align:center"><span style="display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:var(--f2);border:1px solid var(--ln);font-size:11px;font-weight:700;color:var(--mut)">⛳️ Next-shot twist / 🎉 Just for fun</span></div>'
+      f'<div style="margin-top:10px;text-align:center">{sp("🎲",34)}</div>'
+      f'<div style="margin-top:6px;text-align:center">{sp("challenge text",16,600)}</div>',
+      cls="s1", n=3, mt=16, r=16, pad="16px", border=DASH) +
+   el(f'<div style="text-align:center">{lab("hint line — “Tap spin for a challenge…” (only when no result)",12)}</div>', n=4, mt=10, border="none") +
+   btn("Spin the wheel", primary=True, n=5, mt=12)
+ ))),
+
+# ════════════════════════════════════════════════════════════ 30. TEAM DETAIL
+def _memberrow(action, you=False, first=False):
+    who = "Player name (you)" if you else "Player name"
+    cap = "Owner" if you else "Member"
+    act = f'<span style="margin-left:8px;font-size:13px;font-weight:600;color:#b55">{action}</span>' if action else ''
+    return el(tag("AVA",size=13,h=24) +
+              el(sp(who,15,700) + f'<div>{lab(cap,12)}</div>', cls="col ai-start", grow=True, border="none", background="none", margin_left="12px") + act,
+              cls="s1 rowc", r=16, pad="10px 16px", mt=(0 if first else 8))
+screen(id="teamdetail", name="Team detail",
+ body=dev(bar("Team name") + content(
+   el(lab("Members",14), border="none") +
+   el(_memberrow(None, you=True, first=True) + _memberrow("Remove") + _memberrow("Remove"), n=1, mt=8, border="none") +
+   el(lab("OWNER ONLY ↓",11), n=3, mt=16, border="none") +
+   el(lab("Invited (pending) — friend@example.com",12), cls="s1", n=4, mt=8, r=12, pad="8px 12px", background="var(--f0)", border=DASH) +
+   el(lab("Invite by email",14), mt=14, border="none") +
+   el(lab("friend@example.com",14), cls="s1", n=5, mt=8, h=44, r=12, pad="0 12px") +
+   btn("Send invite", primary=True, mt=10, h=44) +
+   el(lab("Team name",14), mt=16, border="none") +
+   el(lab("The Putters",14), cls="s1", n=6, mt=8, h=44, r=12, pad="0 12px") +
+   btn("Rename", mt=10, h=44) +
+   el(sp("Archive team",16,700,"#b55"), cls="ctr", n=7, mt=8, h=44, r=16, background="var(--f1)", border="1px solid #c98") +
+   el(lab("footer error / notice lines — bottom of the page",12), cls="ctr jc-start", n=8, mt=12, r=12, pad="8px 12px", background="var(--f0)", border=DASH)
+ ))),
+
 # screens whose layout grows by one row/chip per player (1–4)
 for _s in SCREENS:
     if _s["id"] in ("setup","play","sum","hunt"): _s["scales"] = True
@@ -687,7 +727,7 @@ def render_cell(sc, idx):
 
 sheet_head = """<div class="sheethead">
  <h1>Mini Golf — Screens (to scale)</h1>
- <p>Every screen's element layout drawn to scale on a 390px phone artboard — the overlay/trace layer. On screen these are true size; open a screen at 390px and design your art over the matching board. Companion to the full <b>Screen &amp; Element Guide</b> (dimensions, states, theming hooks, and the art needed per element). 28 screens across five sections; each screen's top-right pill is the menu button that opens the global navigation drawer.</p>
+ <p>Every screen's element layout drawn to scale on a 390px phone artboard — the overlay/trace layer. On screen these are true size; open a screen at 390px and design your art over the matching board. Companion to the full <b>Screen &amp; Element Guide</b> (dimensions, states, theming hooks, and the art needed per element). 30 screens across five sections; each screen's top-right pill is the menu button that opens the global navigation drawer.</p>
  <div class="note"><b>A template, not the design.</b> Neutral fills so your art reads over them. A <b>dashed</b> card appears only when populated (a live round, a pending order, venue specials); a <b>solid</b> card is always present. Player-scaled screens are drawn at 4 players; the Course Map and game playfields fill the device below the bar.</div>
 </div>"""
 cells = "".join(render_cell(sc, i+1) for i, sc in enumerate(SCREENS))
