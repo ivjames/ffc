@@ -224,32 +224,55 @@ screen(id="map", name="Course Map",
       cls="fill", n=1, grow=True),
    fill=True)),
 
-# ════════════════════════════════════════════════════════════ 8. SCORECARD (scrolling sheet)
-def _jumptab(state, i):
-    bg = {"cur":"var(--f2)","done":"var(--f1)","todo":"#fff"}[state]
-    bd = "1px solid var(--ln)" if state!="todo" else "1px dashed var(--ln2)"
-    return el(sp(str(i),13,700,"var(--mut)"), cls="ctr", h=30, r=12, grow=True, background=bg, border=bd)
-def _scorerow(badges=False, mt=12):
-    return el(el(tag("AVA",size=16,h=36), cls="", n=(4 if badges else None), border="none", background="none") +
-              el(sp("−",22,700,"var(--mut)"), cls="keycap ctr", n=(6 if badges else None), w=36, h=36, r=8, margin_left="10px") +
-              el(sp("3",26,900), cls="sunk ctr", n=(5 if badges else None), grow=True, h=36, r=8, margin_left="10px") +
-              el(sp("+",22,700,"var(--mut)"), cls="keycap ctr", w=36, h=36, r=8, margin_left="10px"),
-              cls="rowc", mt=mt, border="none")
+# ════════════════════════════════════════════════════════════ 8. SCORECARD (scrolling matrix)
+# The play screen is a paper-style scorecard: pinned tag + − rails on the left, a
+# horizontally-scrolling grid of hole columns (current column tinted) in the
+# middle, and a pinned + rail on the right. One row per player.
+def _scorecard():
+    tabs = "".join(
+        el(sp(str(v),13,700,"var(--mut)"), cls="ctr", grow=True, h=30, r=8,
+           background=("var(--f2)" if k==2 else "var(--f1)" if k<2 else "#fff"),
+           border=("1px solid var(--ln)" if k<=2 else "1px dashed var(--ln2)"),
+           margin_left=("0" if k==0 else "6px"))
+        for k, v in enumerate([2,3,4,5,6]))
+    def cellrow(vals):
+        cells = "".join(
+            el(sp(str(v),18,900,("var(--ink)" if v!="·" else "var(--mut)")),
+               cls=("sunk ctr" if k==2 else "ctr"), grow=True, h=36, r=8,
+               background=("var(--f2)" if k==2 else "#fff"),
+               border=("1px solid var(--ln)" if k==2 else "1px solid var(--ln2)"),
+               margin_left=("0" if k==0 else "6px"))
+            for k, v in enumerate(vals))
+        return el(cells, cls="rowc", mt=8, border="none")
+    scroll = el(el(tabs, cls="rowc", border="none") +
+                cellrow(["2","3","3","·","·"]) + cellrow(["2","2","4","·","·"]) +
+                cellrow(["3","2","2","·","·"]) + cellrow(["2","4","3","·","·"]),
+                cls="", grow=True, border="none", background="none", overflow="hidden")
+    spacer = '<div style="height:30px"></div>'
+    tags = el(spacer + "".join(el(tag("AVA",size=15,h=36), mt=8, border="none", background="none") for _ in range(4)),
+              cls="col ai-start", border="none", background="none")
+    def keycol(g):
+        return el(spacer + "".join(el(sp(g,22,700,"var(--mut)"), cls="keycap ctr", mt=8, w=34, h=36, r=8) for _ in range(4)),
+                  cls="col", border="none", background="none")
+    return el(tags +
+              el(keycol("−"), margin_left="8px", border="none", background="none") +
+              el(scroll, grow=True, margin_left="8px", border="none", background="none") +
+              el(keycol("+"), margin_left="8px", border="none", background="none"),
+              cls="rowc ai-start", mt=14, border="none")
 screen(id="play", name="Scorecard (play screen)",
  body=dev(
    f'<div class="bar"><div class="key40">‹</div><div class="title">Course</div>'
-   f'<div class="ctrls" style="position:relative">{cn(1)}'
-   f'<div style="height:24px;padding:0 8px;border:1px solid var(--ln2);border-radius:999px;display:flex;align-items:center;font-size:11px;color:var(--mut)">Live</div>'
+   f'<div class="ctrls" style="position:relative">'
+   f'<div style="height:24px;padding:0 8px;border:1px solid var(--ln2);border-radius:999px;display:flex;align-items:center;font-size:11px;color:var(--mut)">● Live</div>'
    f'<div class="pill" style="border-radius:8px"></div><div class="pill" style="border-radius:8px"></div>'
    f'<div class="pill"></div></div></div>' +
    content(
    el(el(f'{lab("HOLE 4",11)}<div>{sp("hole name",24,900)}</div>', cls="col ai-start", grow=True, border="none", background="none") +
-      el(f'<div style="text-align:center">{lab("Par",11)}</div>' + el(sp("3",24,900,"var(--mut)"), cls="s1 ctr", n=2, w=48, h=48, r=999), cls="col", border="none", background="none"),
+      el(f'<div style="text-align:center">{lab("Par",11)}</div>' + el(sp("3",24,900,"var(--mut)"), cls="s1 ctr", w=48, h=48, r=999), cls="col", border="none", background="none"),
       cls="rowc ai-end", border="none") +
-   el("".join(_jumptab("done" if i<2 else "cur" if i==2 else "todo", i+1) for i in range(6)), cls="rowc", n=3, mt=14, gap="6px", border="none") +
-   el(_scorerow(badges=True, mt=14)+_scorerow(mt=12)+_scorerow(mt=12)+_scorerow(mt=12), cls="", border="none") +
-   btn("Next › / Finish", primary=True, n=7, mt=24) +
-   el(lab("Score every player to continue · Max 6 strokes per hole",12), mt=12, border="none")
+   _scorecard() +
+   btn("Next › / Finish", primary=True, mt=24) +
+   el(lab("Score every player to continue · Max 6 strokes per hole",12), mt=16, border="none")
  ))),
 
 # ════════════════════════════════════════════════════════════ 9. SUMMARY

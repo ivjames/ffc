@@ -201,11 +201,12 @@ screen(id="play", name="Scorecard (play screen)", route="/golf/play/:clientId",
    (lambda cluster: f'<div class="wf-top">{icon("‹")}<span class="wf-ttl">Course</span><span class="wf-sp"></span>{cluster}{MENU()}</div>')(
        group('<span class="wf-mini">Live</span>'+icon()+icon(), 1)),
    row(txt("HOLE n · hole name","inline"), box("par","med",n=2), cls="hud"),
-   box("hole tablist — role=tablist, one tab per hole; current tab tinted","wide small",n=3),
-   row(box("tag","tagb",n=4), box("−","key",n=6), box("score cell","well",n=5), box("+","key"), cls="prow"),
-   row(box("tag","tagb"), box("−","key"), box("score cell","well"), box("+","key"), cls="prow"),
-   row(box("tag","tagb"), box("−","key"), box("score cell","well"), box("+","key"), cls="prow"),
-   row(box("tag","tagb"), box("−","key"), box("score cell","well"), box("+","key"), cls="prow"),
+   txt("scorecard grid — pinned tag &amp; ± rails; the hole columns scroll ↔ (current tinted)","muted",n=3),
+   row(box("","tagb ghost"), box("","key ghost"), box("holes  2  3  4  5  6  →","well hgrid"), box("","key ghost"), cls="prow"),
+   row(box("tag","tagb",n=4), box("−","key",n=6), box("2  3  4  ·  →","well",n=5), box("+","key"), cls="prow"),
+   row(box("tag","tagb"), box("−","key"), box("2  3  4  ·  →","well"), box("+","key"), cls="prow"),
+   row(box("tag","tagb"), box("−","key"), box("2  3  4  ·  →","well"), box("+","key"), cls="prow"),
+   row(box("tag","tagb"), box("−","key"), box("2  3  4  ·  →","well"), box("+","key"), cls="prow"),
    btn("Next › / Finish","primary",n=7),
    txt("helper — “Score every player to continue” · stroke-cap footer","muted"),
  ]), scales=True,
@@ -710,6 +711,8 @@ tr{break-inside:avoid}
 .wf-box.tagb.sel{border-color:var(--wire);border-width:2px} .wf-box.tagb.dim{opacity:.5}
 .wf-box.inp{font-family:"SF Mono",monospace;letter-spacing:.15em;flex:0 0 128px;justify-content:center;background:var(--fill2);box-shadow:inset 0 2px 3px rgba(0,0,0,.07)}
 .wf-box.line{flex:1;min-height:0;padding:5px 8px}
+.wf-box.ghost{border-color:transparent;background:none;box-shadow:none;min-height:0}
+.wf-box.hgrid{justify-content:flex-start;letter-spacing:.12em;font-weight:700;color:var(--muted)}
 .wf-box.tk{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;min-height:0;padding:0}
 .wf-centered{display:flex;justify-content:center}
 .wf-btn{position:relative;border:1px solid var(--wireln);border-radius:10px;background:var(--fill);margin:6px 9px;padding:9px;text-align:center;font-weight:700;font-size:9.5px;color:#3b4653;display:flex;align-items:center;justify-content:center}
