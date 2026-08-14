@@ -200,7 +200,12 @@ run_server_tests(){
     || die "cannot reach test database $test_url — create it as the postgres superuser (create database ${name}_test owner <app-role>; then in it: create extension pgcrypto), or set FFC_TEST_DATABASE_URL (FFC_SKIP_TESTS=1 to bypass)"
   log "Test gate: running server suite against ${test_url##*/} (red aborts the deploy)"
   npm_install "$APP_DIR/server" --omit=dev
-  ( cd "$APP_DIR/server" && TEST_DATABASE_URL="$test_url" npm test ) \
+  # DOTENV_CONFIG_PATH=/dev/null: app.js/db.js `import "dotenv/config"`, and
+  # on the droplet server/.env is PRODUCTION config — real API keys and
+  # testing toggles that break tests written for a clean environment (e.g.
+  # "vision unconfigured -> 503" with ANTHROPIC_API_KEY set). The suite is
+  # hermetic: every var a test needs, it sets itself.
+  ( cd "$APP_DIR/server" && DOTENV_CONFIG_PATH=/dev/null TEST_DATABASE_URL="$test_url" npm test ) \
     || die "server tests FAILED — deploy aborted before build/migrate/restart. Fix forward, or FFC_SKIP_TESTS=1 for a true emergency."
   log "Test gate green."
 }
