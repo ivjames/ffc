@@ -295,28 +295,39 @@ screen(id="sum", name="Summary (final scorecard)",
       cls="s1 rowc", n=1, mt=8, r=24, pad="20px") +
    el(_standing(n=2, mt=0) + _standing(mt=8), cls="", mt=16, border="none") +
    btn("📋 View scorecard", n=3, mt=16) +
+   el(lab("Saved to leaderboard ✓",12), n=4, mt=16, border="none") +
    el(f'{lab("🎟️  REWARDS EARNED",11)}<div style="margin-top:8px">{lab("• reward · player tag         +N 🎟️",13)}</div><div style="margin-top:6px">{lab("🎟️ Link rewards card",13)}</div>',
-      cls="s1", n=4, mt=16, r=16, pad="14px", border=DASH) +
-   el(lab("Saved to leaderboard ✓",12), n=5, mt=16, border="none") +
-   el(btn("📸 Share this round", mt=0) + '<span style="width:12px"></span>' + btn("🏆 View leaderboard", mt=0), cls="rowc", mt=12, border="none") +
+      cls="s1", n=5, mt=12, r=16, pad="14px", border=DASH) +
+   btn("📸 Share this round", mt=16) +
+   btn("🏆 View leaderboard", mt=8) +
    btn("Done", primary=True, n=6, mt=8)
  ))),
 
 # ════════════════════════════════════════════════════════════ 10. HUNT
-def _itemcard(n=None, snap_n=None, mt=12):
-    return el(el(f'{sp("item name",16,700)}  {lab("💡 Hint · ×N/✓",12)}'
-                 f'<div style="margin-top:6px;display:flex;gap:6px">{lab("Found by:",11)}{tag("AVA",size=12,h=22)}{lab("📤 share",11)}</div>',
-                 cls="col ai-start", grow=True, border="none", background="none") +
-              el(sp("📷 Snap",14,600,"var(--mut)"), cls="ctr", n=snap_n, w=96, h=40, r=12, background="var(--f2)", border="1px solid var(--ln)"),
-              cls="s1 rowc ai-start", n=n, r=16, pad="16px", mt=mt)
+def _itemcard(n=None, snap_n=None, result=False, mt=12):
+    # Identity column left, snap button top-right; the verify result renders
+    # IN-CARD as the card's last, full-width element — there is no standalone
+    # result banner below the list.
+    toprow = el(
+        el(f'{sp("item name",16,700)}  {lab("×N / ✓",12)}'
+           f'<div style="margin-top:4px">{lab("💡 Hint",12)}</div>'
+           f'<div style="margin-top:6px;display:flex;gap:6px;align-items:center">{lab("FOUND BY",10)}{tag("AVA",size=12,h=22)}</div>'
+           f'<div style="margin-top:6px">{lab("📤 AVA’s photo",11)}</div>',
+           cls="col ai-start", grow=True, border="none", background="none") +
+        el(sp("📷 Snap",14,600,"var(--mut)"), cls="ctr", n=snap_n, w=96, h=40, r=12, background="var(--f2)", border="1px solid var(--ln)"),
+        cls="rowc ai-start", border="none")
+    res = (el(lab("in-card result — verified / flagged / rejected",12),
+              cls="ctr jc-start", n=(4 if result else None), mt=12, r=8, pad="8px 12px",
+              background="var(--f0)", border=DASH) if result else "")
+    return el(toprow + res, cls="s1", n=n, r=16, pad="16px", mt=mt)
 screen(id="hunt", name="Scavenger Hunt",
  body=dev(bar("Scavenger hunt") + content(
-   el(lab("Things to find on <course>. Snap a photo of each.",14), border="none") +
+   el(lab("Things to find on &lt;course&gt;. Snap a photo of each.",14), border="none") +
    el(lab("Photos are AI-checked & stored · How photos are handled",12), cls="s1", n=6, mt=12, r=12, pad="10px 12px", background="var(--f0)") +
    el(f'{lab("PLAYING AS",11)}<div style="margin-top:8px;display:flex;gap:8px">{tag("AVA",sel=True)}{tag("JZ",dim=True)}{tag("KO",dim=True)}</div>',
       n=1, mt=16, border="none") +
-   el(_itemcard(n=2, snap_n=3, mt=0) + _itemcard(n=5), cls="", mt=16, border="none") +
-   el(lab("result banner (verified / flagged / rejected)",12), cls="s1", n=4, mt=12, r=12, pad="10px 12px", background="var(--f0)", border=DASH)
+   el(lab("load-error banner (only if the list fails to load)",12), cls="s1", mt=12, r=12, pad="10px 12px", background="var(--f0)", border=DASH) +
+   el(_itemcard(n=2, snap_n=3, result=True, mt=0) + _itemcard(n=5), cls="", mt=12, border="none")
  ))),
 
 # ════════════════════════════════════════════════════════════ 11. RULES
