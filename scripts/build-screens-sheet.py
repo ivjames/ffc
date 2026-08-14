@@ -339,7 +339,7 @@ screen(id="tv", name="TV Leaderboard", route="/tv",
  )),
  specs=[
   (1,"Period tabs","Day / Week / Month / All (Day is the default)","4-col grid, radius 12","active (filled) vs inactive (outline)","—","tab states"),
-  (2,"Rank / tag","Row identity","rank 14px mono · tag 24px arcade","—","neutral ramp — the leaderboard is not course-tinted","the arcade type face"),
+  (2,"Rank / tag","Row identity","rank 14px mono · tag 24px arcade","—","neutral ramp","the arcade type face"),
   (3,"“You” pill + row highlight","Marks your rows","pill (rounded-full)","only on your rows; polls every 5s","a highlight/ring accent","the pill + row-highlight treatment"),
   (4,"Standings row","One per score","full-width, radius 16","entrance stagger; error / empty / loading states","—","the row surface"),
  ]),
