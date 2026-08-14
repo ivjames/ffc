@@ -39,6 +39,14 @@ mock.module("../lib/vision.js", {
   },
 });
 
+// Load dotenv BEFORE app.js so any real server/.env (the deploy test gate
+// runs on the droplet, where that file carries production toggles) is
+// applied NOW — then scrub the bypass flag before routes/hunt.js resolves
+// it at import time. app.js's own dotenv import is a cached no-op after
+// this, so the flag stays cleared and the anti-cheat stays ON.
+await import("dotenv/config");
+delete process.env.HUNT_ALLOW_PHOTO_OF_PHOTO;
+
 const { app } = await import("../app.js");
 
 let baseUrl;

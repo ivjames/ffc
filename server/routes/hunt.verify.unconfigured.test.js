@@ -5,9 +5,13 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { listenEphemeral } from "../test-support/testDb.js";
 
-delete process.env.ANTHROPIC_API_KEY;
-
 const { app } = await import("../app.js");
+
+// AFTER the app import, not before: app.js pulls in dotenv, which re-sets
+// the key from any real server/.env (e.g. the droplet's, under the deploy
+// test gate). isVisionConfigured() reads process.env per call, so deleting
+// here reliably simulates "unconfigured" regardless of ambient config.
+delete process.env.ANTHROPIC_API_KEY;
 
 let baseUrl;
 let close;
