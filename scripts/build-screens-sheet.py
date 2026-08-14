@@ -33,6 +33,11 @@ def screen(**kw): SCREENS.append(kw)
 # ————————————————————————————————————————————————————————————————————————————
 INNER = 358
 
+# Cards that appear only when populated (a live round, a pending order, venue
+# specials) get a DASHED outline so they read as conditional, vs. the solid
+# outline of an always-present card.
+DASH = "1px dashed var(--ln)"
+
 def cn(n): return f'<i class="cn">{n}</i>' if n is not None else ''
 
 def _s(d):  # dict → inline style
@@ -110,14 +115,14 @@ screen(id="home", name="Home (venue dashboard)",
    el(sp("🎡",40) + f'<div style="margin-top:6px">{sp("Family Fun Center",24,900)}</div>' +
       f'<div style="margin-top:2px">{lab("What do you want to do? · open ‘til 9",13)}</div>',
       cls="col", n=2, mt=6, border="none", background="none") +
-   el(lab("Announcement banner — venue specials (hidden when none)",12), cls="s1", n=3, mt=12, r=16, pad="12px 14px") +
-   el(lab("Adoption nudge — install / sign-in (dismissible)",12), cls="s1", n=4, mt=10, r=16, pad="12px 14px") +
+   el(lab("Announcement banner — venue specials (hidden when none)",12), cls="s1", n=3, mt=12, r=16, pad="12px 14px", border=DASH) +
+   el(lab("Adoption nudge — install / sign-in (dismissible)",12), cls="s1", n=4, mt=10, r=16, pad="12px 14px", border=DASH) +
    el(f'{lab("RESUME ROUND",11)}<div style="margin-top:6px;display:flex;align-items:center">{sp("Course name",18,700)}<span style="margin-left:auto;display:flex;gap:4px">{tag("AVA",size=14,h=26)}{tag("JZ",size=14,h=26)}</span></div>',
-      cls="s1", n=5, mt=10, r=16, pad="14px", border="1px solid var(--ln)") +
-   el(lab("Active-orders card — an in-kitchen order (self-gating)",12), cls="s1", n=6, mt=10, r=16, pad="12px 14px") +
+      cls="s1", n=5, mt=10, r=16, pad="14px", border=DASH) +
+   el(lab("Active-orders card — an in-kitchen order (self-gating)",12), cls="s1", n=6, mt=10, r=16, pad="12px 14px", border=DASH) +
    el(_sectiontile(n=7)+_sectiontile()+_sectiontile()+_sectiontile(), cls="grid2", mt=12) +
    el(f'{lab("🌭  Food & Drink",13)}<div style="margin-top:8px;display:flex;gap:8px">{el(sp("See the menu",13,700),cls="ctr",grow=True,h=36,r=12,background="var(--f2)",border="1px solid var(--ln)")}{el(sp("🛒 Order food",13,700),cls="ctr",grow=True,h=36,r=12,background="var(--f2)",border="1px solid var(--ln)")}</div>',
-      cls="s1", n=8, mt=12, r=16, pad="14px") +
+      cls="s1", n=8, mt=12, r=16, pad="14px", border=DASH) +
    btn("👤  Sign in / register", n=9, mt=12)
  ))),
 
@@ -174,7 +179,7 @@ screen(id="golf", name="Mini Golf hub",
  body=dev(bar("Mini Golf") + content(
    el(f'<div style="text-align:center">{lab("4 courses · eighteen holes each",13)}</div>', border="none") +
    el(f'{lab("RESUME ROUND",11)}<div style="margin-top:6px;display:flex;align-items:center">{sp("Course name",18,700)}<span style="margin-left:auto;display:flex;gap:4px">{tag("AVA",size=14,h=26)}{tag("JZ",size=14,h=26)}</span></div>',
-      cls="s1", n=1, mt=12, r=16, pad="14px", border="1px solid var(--ln)") +
+      cls="s1", n=1, mt=12, r=16, pad="14px", border=DASH) +
    el(_tile(n=2)+_tile()+_tile()+_tile(), cls="grid2", mt=12) +
    btn("📲  Join a friend’s game", n=3, mt=16) + btn("🏆  Leaderboard") + btn("🔍  Scavenger hunt") + btn("📖  Rules")
  ))),
@@ -291,7 +296,7 @@ screen(id="sum", name="Summary (final scorecard)",
    el(_standing(n=2, mt=0) + _standing(mt=8), cls="", mt=16, border="none") +
    btn("📋 View scorecard", n=3, mt=16) +
    el(f'{lab("🎟️  REWARDS EARNED",11)}<div style="margin-top:8px">{lab("• reward · player tag         +N 🎟️",13)}</div><div style="margin-top:6px">{lab("🎟️ Link rewards card",13)}</div>',
-      cls="s1", n=4, mt=16, r=16, pad="14px") +
+      cls="s1", n=4, mt=16, r=16, pad="14px", border=DASH) +
    el(lab("Saved to leaderboard ✓",12), n=5, mt=16, border="none") +
    el(btn("📸 Share this round", mt=0) + '<span style="width:12px"></span>' + btn("🏆 View leaderboard", mt=0), cls="rowc", mt=12, border="none") +
    btn("Done", primary=True, n=6, mt=8)
@@ -311,7 +316,7 @@ screen(id="hunt", name="Scavenger Hunt",
    el(f'{lab("PLAYING AS",11)}<div style="margin-top:8px;display:flex;gap:8px">{tag("AVA",sel=True)}{tag("JZ",dim=True)}{tag("KO",dim=True)}</div>',
       n=1, mt=16, border="none") +
    el(_itemcard(n=2, snap_n=3, mt=0) + _itemcard(n=5), cls="", mt=16, border="none") +
-   el(lab("result banner (verified / flagged / rejected)",12), cls="s1", n=4, mt=12, r=12, pad="10px 12px", background="var(--f0)")
+   el(lab("result banner (verified / flagged / rejected)",12), cls="s1", n=4, mt=12, r=12, pad="10px 12px", background="var(--f0)", border=DASH)
  ))),
 
 # ════════════════════════════════════════════════════════════ 11. RULES
@@ -328,7 +333,7 @@ screen(id="rules", name="Rules",
    el(f'{lab("◇  Course name",18)}'
       f'<div style="margin-top:8px">{lab("•  course note",14)}</div>'
       f'<div style="margin-top:4px">{lab("•  course note",14)}</div>',
-      cls="s1 tint", n=3, mt=12, r=16, pad="16px")
+      cls="s1 tint", n=3, mt=12, r=16, pad="16px", border=DASH)
  ))),
 
 # ════════════════════════════════════════════════════════════ 12. LEADERBOARD
@@ -344,7 +349,7 @@ screen(id="tv", name="Leaderboard",
  body=dev(bar("Leaderboard") + content(
    el(_seg("Players",on=True,n=1)+_seg("🏅 Teams"), cls="rowc", gap="8px", border="none") +
    el(_seg("Day",on=True,n=2)+_seg("Week")+_seg("Month")+_seg("All"), cls="rowc", mt=8, gap="8px", border="none") +
-   el(lab("announcement banner (hidden when none)",12), cls="s1", n=6, mt=12, r=12, pad="10px 12px", background="var(--f0)") +
+   el(lab("announcement banner (hidden when none)",12), cls="s1", n=6, mt=12, r=12, pad="10px 12px", background="var(--f0)", border=DASH) +
    el(f'{lab("YOUR LAST ROUND",11)}', n=3, mt=14, border="none") +
    el(_lbrow(you=True, n=4, mt=8), cls="", border="none") +
    el(_lbrow(n=5) + _lbrow(), cls="", mt=12, border="none")
@@ -413,7 +418,7 @@ def _fooditem(n=None, mt=12):
               cls="s1 rowc", n=n, r=16, pad="14px 16px", mt=mt)
 screen(id="food", name="Food & Drink menu",
  body=dev(bar("Food & Drink") + content(
-   el(lab("Active-orders card — an in-kitchen order (self-gating)",12), cls="s1", n=1, r=16, pad="12px 14px") +
+   el(lab("Active-orders card — an in-kitchen order (self-gating)",12), cls="s1", n=1, r=16, pad="12px 14px", border=DASH) +
    el(f'<span style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)">Category name</span>', n=2, mt=16, border="none") +
    el(_fooditem(n=3, mt=8) + _fooditem(), cls="", border="none") +
    el(lab("…more categories",12), mt=14, border="none") +
@@ -445,7 +450,7 @@ screen(id="order", name="Order status",
  body=dev(bar("Order status") + content(
    el(f'<div style="text-align:center">{lab("ORDER NUMBER",11)}<div style="margin-top:2px">{sp("#123",30,900)}</div><div style="margin-top:4px">{lab("Estimated ready in ~8 min",13)}</div></div>', n=1, border="none") +
    el(f'<div style="text-align:center">{lab("SHOW THIS AT THE COUNTER",11)}<div style="margin-top:6px">{sp("PICKUP",30,900)}</div><div style="margin-top:6px">{lab("Your order is ready — grab it at the counter.",13)}</div></div>' + btn("I’ve picked it up", primary=True, mt=12),
-      cls="s1", n=2, mt=16, r=16, pad="16px", border="1px solid var(--ln)") +
+      cls="s1", n=2, mt=16, r=16, pad="16px", border=DASH) +
    el(sp("🔔  Notify me when it’s ready",14,600,"var(--ink)"), cls="ctr", n=3, mt=12, h=44, r=12, background="var(--f1)", border="1px solid var(--ln2)") +
    el(_stepr("✓","Order received",mt=0)+_stepr("•","Sent to the kitchen")+_stepr("•","Being prepared")+_stepr("•","Ready for pickup!"),
       n=4, mt=16, border="none") +
@@ -672,7 +677,7 @@ def render_cell(sc, idx):
 sheet_head = """<div class="sheethead">
  <h1>Mini Golf — Screens (to scale)</h1>
  <p>Every screen's element layout drawn to scale on a 390px phone artboard — the overlay/trace layer. On screen these are true size; open a screen at 390px and design your art over the matching board. Companion to the full <b>Screen &amp; Element Guide</b> (dimensions, states, theming hooks, and the art needed per element). 28 screens across five sections; each screen's top-right pill is the menu button that opens the global navigation drawer.</p>
- <div class="note"><b>A template, not the design.</b> Neutral fills so your art reads over them. Player-scaled screens are drawn at 4 players; the Course Map and game playfields fill the device below the bar.</div>
+ <div class="note"><b>A template, not the design.</b> Neutral fills so your art reads over them. A <b>dashed</b> card appears only when populated (a live round, a pending order, venue specials); a <b>solid</b> card is always present. Player-scaled screens are drawn at 4 players; the Course Map and game playfields fill the device below the bar.</div>
 </div>"""
 cells = "".join(render_cell(sc, i+1) for i, sc in enumerate(SCREENS))
 html2 = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">

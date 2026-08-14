@@ -54,12 +54,12 @@ screen(id="home", name="Home (venue dashboard)", route="/",
    f'<div class="wf-top nob"><span class="wf-sp"></span>{MENU(1)}</div>',
    f'<div class="wf-hero">{icon("hero", n=2)}</div>',
    txt("venue name · “What do you want to do?” · open/closed line","center",n=3),
-   box("Announcement banner — venue specials (hidden when none)","wide small",n=4),
-   box("Adoption nudge — install / sign-in (dismissible, self-gating)","wide small",n=5),
-   box("Resume-round card — course name · player tags (only mid-round)","wide tall","card",n=6),
-   box("Active-orders card — a live food order (self-gating)","wide small",n=7),
+   box("Announcement banner — venue specials (hidden when none)","wide small cond",n=4),
+   box("Adoption nudge — install / sign-in (dismissible, self-gating)","wide small cond",n=5),
+   box("Resume-round card — course name · player tags (only mid-round)","wide tall cond","card",n=6),
+   box("Active-orders card — a live food order (self-gating)","wide small cond",n=7),
    row(box("section tile","tile",n=8),box("section tile","tile"),box("section tile","tile"),box("section tile","tile"),cls="ftiles"),
-   box("Food & Drink card — menu / order deep links (non-POS venues)","wide",n=9),
+   box("Food & Drink card — menu / order deep links (non-POS venues)","wide cond",n=9),
    btn("👤 Sign in / register — or your name when signed in","ghost",n=10),
  ]),
  specs=[
@@ -126,7 +126,7 @@ screen(id="golf", name="Mini Golf hub", route="/golf",
  body="".join([
    topbar("Mini Golf", right=MENU()),
    txt("“N courses · eighteen holes each”","center muted"),
-   box("Resume-round card — course name · player tags (only mid-round)","wide tall","card",n=1),
+   box("Resume-round card — course name · player tags (only mid-round)","wide tall cond","card",n=1),
    row(box("course tile","tile",n=2),box("course tile","tile"),box("course tile","tile"),box("course tile","tile"),cls="ftiles"),
    btn("📲 Join a friend’s game","ghost",n=3), btn("🏆 Leaderboard","ghost"), btn("🔍 Scavenger hunt","ghost"), btn("📖 Rules","ghost"),
  ]),
@@ -229,7 +229,7 @@ screen(id="sum", name="Summary (final scorecard)", route="/golf/play/:clientId/s
    box("Winner hero — trophy · “Winner / Tied for the win” · winner tag(s) · total / over-under","wide tall","card",n=1),
    box("Standings row — rank · tag · total (one per non-winner)","wide","row",n=2),
    btn("📋 View scorecard — reveals the front/back nine grids","ghost",n=3),
-   box("Rewards-ticket card — earned tickets + “Link rewards card” (conditional)","wide tall","card",n=4),
+   box("Rewards-ticket card — earned tickets + “Link rewards card” (conditional)","wide tall cond","card",n=4),
    txt("sync status line","muted",n=5),
    row(btn("📸 Share this round","ghost"), btn("🏆 View leaderboard","ghost"), cls="nav"),
    btn("Done","primary",n=6),
@@ -254,7 +254,7 @@ screen(id="hunt", name="Scavenger Hunt", route="/golf/hunt",
    row(box("item — title · 💡hint · ×N/✓ · Found-by chips · 📤 share","item",n=2), btn("Snap","snap",n=3), cls="itemrow"),
    row(box("item","item",n=5), btn("Snap","snap"), cls="itemrow"),
    box("result banner (verified / flagged photo-of-screen / rejected)","wide small",n=4),
-   box("gated empty state — “Start a round to play” + Start-round button","wide small",n=7),
+   box("gated empty state — “Start a round to play” + Start-round button","wide small cond",n=7),
  ]), scales=True,
  specs=[
   (1,"“Playing as” selector","Player chips — one per player (1–4)","radius 8 pills","selected (ring-2) vs dimmed (opacity 60%)","--tag-accent (house green default here)","tag surface + selected-state treatment"),
@@ -277,7 +277,7 @@ screen(id="rules", name="Rules", route="/golf/rules",
    row(icon("3"), box("rule text — “Max N strokes per hole”","line"), cls="rule"),
    box("…6 general rules total","wide repeat"),
    txt("heading: COURSE NOTES","eyebrow"),
-   box("Course-note card — marker · course name · bulleted notes","wide tall","card",n=3),
+   box("Course-note card — marker · course name · bulleted notes","wide tall cond","card",n=3),
  ]),
  specs=[
   (1,"Section heading","“General” / “Course notes”","text eyebrow","—","muted","—"),
@@ -292,7 +292,7 @@ screen(id="tv", name="Leaderboard", route="/golf/leaderboard · /tv",
    topbar("Leaderboard", right=MENU()),
    row(box("Players","seg on",n=1),box("🏅 Teams","seg"),cls="segs two"),
    row(box("Day","seg on",n=2),box("Week","seg"),box("Month","seg"),box("All","seg"),cls="segs"),
-   box("announcement banner (hidden when none)","wide small",n=6),
+   box("announcement banner (hidden when none)","wide small cond",n=6),
    txt("“Your last round” — pinned highlighted rows","eyebrow",n=3),
    row(box("rank","chip"), box("standings row — tag · course","grow",n=5), box("You","trail",n=4), box("total","tot"), cls="lb hl"),
    row(box("rank","chip"), box("tag · course","grow"), box("total","tot"), cls="lb"),
@@ -410,7 +410,7 @@ screen(id="food", name="Food & Drink menu", route="/food",
  purpose="Native menu browser for POS-integrated venues — browse categories, build a cart, head to checkout. Redirects home when the venue has no ordering add-on.",
  body="".join([
    topbar("Food & Drink", right=MENU()),
-   box("Active-orders card — an in-kitchen order (self-gating)","wide small",n=1),
+   box("Active-orders card — an in-kitchen order (self-gating)","wide small cond",n=1),
    txt("CATEGORY NAME","eyebrow",n=2),
    row(box("item — name · description","grow",n=3), box("price","trail"), cls="lrow"),
    row(box("item — name · description","grow"), box("price","trail"), cls="lrow"),
@@ -453,7 +453,7 @@ screen(id="order", name="Order status", route="/food/order/:orderId",
  body="".join([
    topbar("Order status", right=MENU()),
    txt("“Order number” · #NNN · “Estimated ready in …”","center",n=1),
-   box("Ready card — “Show this at the counter” · pickup code · “I’ve picked it up” (ready only)","wide tall","card",n=2),
+   box("Ready card — “Show this at the counter” · pickup code · “I’ve picked it up” (ready only)","wide tall cond","card",n=2),
    box("Notify-me — 🔔 button / on / blocked (pre-ready)","wide small",n=3),
    row(icon("✓"), box("Order received","line",n=4), cls="rule"),
    row(icon("•"), box("Sent to the kitchen · Being prepared · Ready · Picked up","line"), cls="rule"),
@@ -712,6 +712,7 @@ tr{break-inside:avoid}
 .wf-box.inp{font-family:"SF Mono",monospace;letter-spacing:.15em;flex:0 0 128px;justify-content:center;background:var(--fill2);box-shadow:inset 0 2px 3px rgba(0,0,0,.07)}
 .wf-box.line{flex:1;min-height:0;padding:5px 8px}
 .wf-box.ghost{border-color:transparent;background:none;box-shadow:none;min-height:0}
+.wf-box.cond{border-style:dashed}
 .wf-box.hgrid{justify-content:flex-start;letter-spacing:.12em;font-weight:700;color:var(--muted)}
 .wf-box.tk{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;min-height:0;padding:0}
 .wf-centered{display:flex;justify-content:center}
@@ -770,6 +771,7 @@ cover = """<div class="page cover">
    <li>The <b>wireframe</b> is a labeled skeleton of one screen — every element as a plain box, with its numbered marker sitting <b>on the element</b>.</li>
    <li>That number maps to the <b>spec table</b>: role, current <b>size</b>, interaction/states, the <b>theming hooks</b> it keys to (accent / course-color variables), and the <b>art it needs</b>.</li>
    <li><b>Navigation:</b> Home is a venue dashboard that launches five sections — <b>Mini Golf, Arcade, Food &amp; Drink, Me</b>, and the Photo Booth. Every screen's top-right <b>menu button</b> opens the global <b>navigation drawer</b> (its own page here), which also holds the light/dark + sound switches.</li>
+   <li><b>Conditional cards:</b> a box with a <b>dashed</b> outline appears only when populated (a live round, a pending order, venue specials); a <b>solid</b> box is always present.</li>
    <li><b>Light &amp; dark:</b> the app has no fixed default — it follows the device setting. Design every element for <b>both</b>, clearing contrast on each (≥4.5:1 text / ≥3:1 large &amp; UI).</li>
    <li><b>Full-bleed screens:</b> the Course Map and every game playfield <b>fill the screen</b> below the bar (barring the HUD/buttons) — design them edge-to-edge.</li>
    <li><b>Player-scaled screens</b> (Player Setup, Scorecard, Summary, Scavenger Hunt) add <b>one row/chip per player</b>; they're drawn <b>at the 4-player maximum</b> (1–4 supported), so design for the fullest layout.</li>
