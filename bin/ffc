@@ -176,11 +176,28 @@ run_server_tests(){
   [ -n "$url" ] || die "no DATABASE_URL in server/.env — cannot run the test gate (FFC_SKIP_TESTS=1 to bypass)"
   name="${url##*/}"; name="${name%%\?*}"
   test_url="${FFC_TEST_DATABASE_URL:-${url%/*}/${name}_test}"
-  # Create the scratch DB on first use; harmless if it already exists.
+  # Create the scratch DB on first use; harmless if it already exists. The
+  # app role usually CAN'T create databases (provisioning creates the prod DB
+  # as the postgres superuser — DEPLOY.md), and schema.sql's pgcrypto
+  # extension is untrusted (superuser-only, once per database). Deploys run
+  # as root on the droplet, so bootstrap the scratch DB the same way the
+  # real one was provisioned: via `sudo -u postgres`, owned by the app role.
   command -v psql >/dev/null || die "psql not found — needed for the test gate (FFC_SKIP_TESTS=1 to bypass)"
-  psql "${url%/*}/postgres" -qc "create database \"${name}_test\"" >/dev/null 2>&1 || true
+  if ! psql "$test_url" -qc "select 1" >/dev/null 2>&1; then
+    local role; role="${url#*://}"; role="${role%%[:@]*}"
+    if [ "$(id -u)" -eq 0 ] && command -v sudo >/dev/null \
+       && sudo -u postgres psql -qc "select 1" >/dev/null 2>&1; then
+      log "Creating scratch test database ${name}_test (owner $role, pgcrypto)"
+      sudo -u postgres psql -qc "create database \"${name}_test\" owner \"$role\"" 2>/dev/null || true
+      sudo -u postgres psql -d "${name}_test" -qc "create extension if not exists pgcrypto" 2>/dev/null || true
+    else
+      # Not root / no local superuser access — try as the app role anyway
+      # (works where the role has CREATEDB, e.g. a dev box).
+      psql "${url%/*}/postgres" -qc "create database \"${name}_test\"" >/dev/null 2>&1 || true
+    fi
+  fi
   psql "$test_url" -qc "select 1" >/dev/null 2>&1 \
-    || die "cannot reach test database $test_url — create it, or set FFC_TEST_DATABASE_URL (FFC_SKIP_TESTS=1 to bypass)"
+    || die "cannot reach test database $test_url — create it as the postgres superuser (create database ${name}_test owner <app-role>; then in it: create extension pgcrypto), or set FFC_TEST_DATABASE_URL (FFC_SKIP_TESTS=1 to bypass)"
   log "Test gate: running server suite against ${test_url##*/} (red aborts the deploy)"
   npm_install "$APP_DIR/server" --omit=dev
   ( cd "$APP_DIR/server" && TEST_DATABASE_URL="$test_url" npm test ) \
