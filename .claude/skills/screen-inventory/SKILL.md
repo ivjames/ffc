@@ -48,7 +48,9 @@ builder to match what it reports.
 > Files: <list absolute paths>
 >
 > For EACH screen report, concisely:
-> - Top bar: title text, back target, right-side controls
+> - Top bar: title text, back target, right-side controls. Describe shared
+>   chrome (TopBar / HeaderControls) only from files you actually read this
+>   run — say "the global header control" rather than guessing its contents
 > - Main content elements IN VERTICAL ORDER, each as a short line, quoting
 >   the ACTUAL label/heading strings from the JSX
 > - WHERE each message/banner renders — inside which container. If a result,
