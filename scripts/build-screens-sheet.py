@@ -479,8 +479,6 @@ table.ng th:first-child,table.ng td:first-child{width:56px}
 
 /* ——— per-screen page (style-guide): artboard (zoomed to fit) + spec table ——— */
 .sp h2{font-size:15px;font-weight:800;border-bottom:2.5px solid var(--accent);padding-bottom:5px;margin-bottom:3px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.sp h2 .rt{font-family:"SF Mono",monospace;font-size:8.5px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 7px;font-weight:700}
-.sp h2 .tb{font:700 8px/1.6 "SF Mono",monospace;color:#9a3412;background:#fff2e6;border:1px solid #f6d3ad;border-radius:5px;padding:1px 6px}
 .purpose{color:#333;font-size:10px;margin:2px 0 8px}
 .layout{display:flex;gap:16px;align-items:flex-start}
 .framewrap{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:5px}
@@ -502,8 +500,6 @@ table.spec tr{break-inside:avoid}
 .grid-screens{display:flex;flex-wrap:wrap;gap:18px 20px;align-items:flex-start}
 .cell{break-inside:avoid;display:flex;flex-direction:column;align-items:center;gap:6px}
 .celltitle{font-size:11px;font-weight:800;text-align:center;display:flex;gap:6px;align-items:baseline;justify-content:center;flex-wrap:wrap}
-.celltitle .rt{font-family:"SF Mono",monospace;font-size:8px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 6px;font-weight:700}
-.celltitle .tb{font:700 7.5px/1.6 "SF Mono",monospace;color:#9a3412;background:#fff2e6;border:1px solid #f6d3ad;border-radius:5px;padding:1px 5px}
 /* On screen the sheet artboards stay TRUE 390px (the overlay/trace layer) — no
    zoom, so an artist can lay one over a 390px app screenshot 1:1. Print alone
    scales them down to fit the page grid. */
@@ -513,10 +509,8 @@ table.spec tr{break-inside:avoid}
 # ———————————————————————————————————————————————— contact sheet (trace layer)
 def render_cell(sc, idx):
     body = re.sub(r'<i class="cn">\d+</i>', '', sc["body"])   # drop markers
-    tb = '<span class="tb">course-tinted</span>' if sc.get("tint") else ''
     name = sc["name"].split(" (")[0]
-    return (f'<div class="cell"><div class="celltitle">{idx}. {name}'
-            f'<span class="rt">{sc["route"].split(" · ")[0]}</span>{tb}</div>'
+    return (f'<div class="cell"><div class="celltitle">{idx}. {name}</div>'
             f'<div class="sheet">{body}</div></div>')
 
 sheet_head = """<div class="sheethead">

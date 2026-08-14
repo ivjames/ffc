@@ -325,8 +325,6 @@ code{font-family:"SF Mono",ui-monospace,Menlo,monospace;background:var(--panel);
 .note b{color:#9a3412}
 /* screen page */
 .sp h2{font-size:15px;font-weight:800;border-bottom:2.5px solid var(--accent);padding-bottom:5px;margin-bottom:3px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.sp h2 .rt{font-family:"SF Mono",monospace;font-size:8.5px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 7px;font-weight:700}
-.sp h2 .tb{font:700 8px/1.6 "SF Mono",monospace;color:#9a3412;background:#fff2e6;border:1px solid #f6d3ad;border-radius:5px;padding:1px 6px}
 .purpose{color:#333;font-size:10px;margin:2px 0 8px}
 .layout{display:flex;gap:16px;align-items:flex-start}
 .framewrap{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:5px}
@@ -406,22 +404,19 @@ tr{break-inside:avoid}
 .grid-screens .frame .scr{height:496px}   /* uniform full device height for every screen */
 .cell{break-inside:avoid;display:flex;flex-direction:column;align-items:center;gap:6px;width:250px}
 .celltitle{font-size:11px;font-weight:800;text-align:center;display:flex;gap:6px;align-items:baseline;justify-content:center;flex-wrap:wrap}
-.celltitle .rt{font-family:"SF Mono",monospace;font-size:8px;color:#fff;background:#0b3d1f;border-radius:5px;padding:1px 6px;font-weight:700}
-.celltitle .tb{font:700 7.5px/1.6 "SF Mono",monospace;color:#9a3412;background:#fff2e6;border:1px solid #f6d3ad;border-radius:5px;padding:1px 5px}
 .wf-txt.muted{color:var(--muted);font-style:italic} .wf-txt.center{text-align:center}
 .wf-txt.eyebrow{font-weight:800;font-size:8px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
 .wf-txt.inline{margin:0;font-weight:700} .wf-txt.inline.r{color:var(--muted)}
 """
 
 def render_screen(sc, idx):
-    tb = '<span class="tb">course-tinted</span>' if sc.get("tint") else ''
     scr_cls = "scr fill" if sc.get("fill") else "scr"
     frame = f'<div class="frame"><div class="{scr_cls}">{sc["body"]}</div></div>'
     rows = "".join(
       f'<tr><td class="cn"><span>{r[0]}</span></td><td><b>{r[1]}</b></td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]}</td><td>{r[5]}</td><td class="artc">{r[6]}</td></tr>'
       for r in sc["specs"])
     return f"""<div class="page sp">
- <h2><span>{idx}. {sc['name']}</span><span class="rt">{sc['route']}</span>{tb}</h2>
+ <h2><span>{idx}. {sc['name']}</span></h2>
  <p class="purpose">{sc['purpose']}</p>
  <div class="layout">
    <div class="framewrap">{frame}<div class="viewcap">wireframe · schematic{" · shown at 4 players (supports 1–4)" if sc.get("scales") else ""}</div></div>
