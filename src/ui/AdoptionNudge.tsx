@@ -91,13 +91,18 @@ export default function AdoptionNudge({
             >
               {c.cta}
             </button>
+            {/* Dismiss takes a SOLID ramp step, not the muted `fairway-100/50`
+                wash used elsewhere: at 50% alpha that composites to ~#969696 on
+                a white card (2.96:1) — under AA for a control label in every
+                skin and mode. `fairway-200` is the lightest step that clears
+                4.5:1 against the lightest panel each mode can paint. */}
             <button
               onClick={() => {
                 track('nudge_dismissed', { kind });
                 dismissNudge(kind);
                 setHidden(true);
               }}
-              className="text-xs font-semibold text-fairway-100/50"
+              className="text-xs font-semibold text-fairway-200"
             >
               Not now
             </button>
