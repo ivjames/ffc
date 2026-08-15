@@ -106,27 +106,46 @@ node scripts/arcade-bot.mjs --rounds 20 --out arcade-profile.json
 
 # replay it at volume (dry run first)
 node scripts/arcade-traffic.mjs --profile arcade-profile.json \
-  --location <venue-uuid> --plays 200 --dry-run
+  --location <venue-uuid> --player-id <card> --plays 200 --dry-run
 ```
 
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
 run replayable; `--headed` lets you watch it play.
 
+## Player ids are real loyalty cards
+
+`playerId` is a **loyalty vendor card id**, and the award route forwards it
+straight to the vendor. Made-up ids don't work — the CenterEdge mock 404s any
+unseeded player, so the award comes back 502 and leaves a `pending` reservation
+holding daily-cap budget.
+
+So pass real test-card ids with `--player-id` (repeatable) or `--players-file`.
+The `synthetic-card-<n>` fallback exists only so `--dry-run` can show a payload's
+shape; the script refuses to post with it and says why.
+
 ## Safety and cleanup
 
 Every award posts with a reserved session id, `synthetic:<runId>:<uuid>` — the
-endpoint's idempotency key, recorded in `game_ticket_award`. So a run is
-bulk-deletable with zero residue:
+endpoint's idempotency key, recorded in `game_ticket_award` — so our ledger rows
+are bulk-deletable:
 
 ```sql
-delete from game_ticket_award where session_id like 'synthetic:%';           -- all bot awards
 delete from game_ticket_award where session_id like 'synthetic:<runId>:%';   -- one run
+delete from game_ticket_award where session_id like 'synthetic:%';           -- all bot awards
 ```
 
-Player ids come from a reserved `synthetic-card-<n>` pool, so bot awards never
-land on a real card. The server's per-game ceiling and per-card daily cap apply
-to bot traffic exactly as they do to real players, and the run reports tickets
-*paid* vs *requested* so clamping is visible.
+**That is not full cleanup, and the script doesn't claim it is.** A settled award
+has already credited the loyalty *vendor* — a balance increase plus a vendor
+transaction — which no local delete undoes. Reverse those with the vendor's own
+tooling, or use disposable cards you can reset. The delete also drops the
+idempotency records, so replaying the same session ids afterwards could credit
+the vendor twice. Treat it as "reset our side".
+
+The server's per-game ceiling and per-card daily cap apply to bot traffic exactly
+as they do to real players, and each sweep reports tickets *paid* vs *requested*
+— read from the server's own `ticketsAwarded` and `capped` fields — so both kinds
+of clamping are visible. Per-sweep counters are per sweep, not cumulative, so a
+multi-sweep run shows drift as daily caps fill up.
 
 Both scripts report request/round counts, latency percentiles, throughput and
 projected annual volume. Neither makes third-party model calls, so there is no
@@ -137,6 +156,8 @@ per-token spend — the cost is wall clock and request load.
 `--assert-skill` fails the run if an expert bot can't clear each game's score
 floor. A game whose constants changed underneath the solver stops landing its
 target, which is a cheap smoke test that every game is still playable at all.
+It implies `--skill 1` (an explicit `--skill` still wins) — the floors are expert
+floors, so sampling the ordinary player mix would fail healthy games at random.
 
 ## Keeping it honest
 

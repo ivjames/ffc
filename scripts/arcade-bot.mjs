@@ -34,7 +34,8 @@
 //   --seed N          PRNG seed, for a replayable run (default 1)
 //   --out FILE        write the captured score profile as JSON
 //   --headed          run with a visible browser, for watching it play
-//   --assert-skill    exit non-zero if an expert bot can't clear each game's floor
+//   --assert-skill    exit non-zero if an expert bot can't clear each game's
+//                     floor; implies --skill 1 unless --skill is given
 //   --list            print supported + unsupported games and exit
 //
 // COST
@@ -125,7 +126,11 @@ async function main() {
   for (const game of games) {
     const rows = [];
     for (let i = 0; i < args.rounds; i++) {
-      const skill = args.skill ?? sampleSkill(rng);
+      // --assert-skill compares against EXPERT floors, so it has to play like
+      // one: sampling the ordinary player mix would fail a perfectly healthy
+      // game whenever no strong round happened to be drawn. An explicit
+      // --skill still wins, so a floor can be checked at any ability.
+      const skill = args.skill ?? (args.assertSkill ? 1 : sampleSkill(rng));
       try {
         const r = await playRound(page, game, { rng, skill, baseUrl: args.base });
         rows.push(r);

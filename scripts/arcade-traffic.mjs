@@ -20,26 +20,43 @@
 //   notices. Re-running the capture is what keeps this honest, and a profile
 //   carries the date it was captured so a stale one is visible.
 //
-// SAFETY / ISOLATION
+// PLAYER IDS ARE NOT SYNTHETIC
+//   `playerId` is a LOYALTY VENDOR card id, and the award route forwards it
+//   straight to the vendor (routes/gameRewards.js → lib/posLoyalty.js). Made-up
+//   ids do not work: the CenterEdge mock 404s any unseeded player, so the award
+//   comes back 502 and leaves a 'pending' reservation holding daily-cap budget.
+//   So pass real test-card ids with --player-id (repeatable) or --players-file.
+//   The `synthetic-card-<n>` fallback pool exists only so --dry-run can show the
+//   shape of a payload; using it against a live API is expected to fail, and the
+//   script says so before it posts anything.
+//
+// SAFETY / ISOLATION, AND THE LIMIT OF IT
 //   Every award is posted with a reserved session id —
 //   `synthetic:<runId>:<uuid>` — which is the endpoint's idempotency key and is
-//   recorded in game_ticket_award. So a whole run is bulk-deletable with zero
-//   residue:
-//       delete from game_ticket_award where session_id like 'synthetic:%';
+//   recorded in game_ticket_award, so OUR ledger rows are bulk-deletable:
 //       delete from game_ticket_award where session_id like 'synthetic:<runId>:%';
-//   Player ids are drawn from a reserved `synthetic-card-<n>` pool, so bot
-//   awards never land on a real card, and the server's own per-card daily cap
-//   applies to them exactly as it would to a real player.
+//
+//   That is not full cleanup, and this script does not claim it is. A settled
+//   award has already credited the loyalty VENDOR (a balance increase plus a
+//   vendor transaction), which no local delete can undo — reversing that needs
+//   the vendor's own tooling, or a disposable card pool you can reset. Worse,
+//   deleting the ledger row also drops the idempotency record, so a later run
+//   replaying the same session ids could credit the vendor a second time.
+//   Treat the delete as "reset our side"; reverse or discard the cards
+//   separately.
 //
 // USAGE
 //   node scripts/arcade-traffic.mjs --profile arcade-profile.json \
-//     --api http://localhost:8060 --location <uuid> --plays 200 [--yes] [--dry-run]
+//     --api http://localhost:8060 --location <uuid> \
+//     --player-id <card> --plays 200 [--yes] [--dry-run]
 //
 //   --profile FILE     score profile from arcade-bot.mjs --out (required)
 //   --api URL          API base (env FFC_API_BASE, default http://localhost:8060)
 //   --location UUID    venue to award against (required)
 //   --plays N          awards per sweep (default 100)
-//   --players N        size of the synthetic card pool (default 25)
+//   --player-id ID     a real loyalty card id to award against, repeatable
+//   --players-file F   file of card ids, one per line (blank/# lines ignored)
+//   --players N        size of the placeholder pool when no real ids are given
 //   --game KEY         restrict to these games, repeatable (default: all in profile)
 //   --interval-min M   minutes between sweeps (default: single sweep and exit)
 //   --sweeps N         stop after N sweeps (default 1, or forever with --interval-min)
@@ -64,6 +81,8 @@ function parseArgs(argv) {
     location: null,
     plays: 100,
     players: 25,
+    playerIds: [],
+    playersFile: null,
     games: [],
     intervalMin: null,
     sweeps: null,
@@ -80,6 +99,8 @@ function parseArgs(argv) {
     else if (k === '--location') a.location = next();
     else if (k === '--plays') a.plays = Number(next());
     else if (k === '--players') a.players = Number(next());
+    else if (k === '--player-id') a.playerIds.push(next());
+    else if (k === '--players-file') a.playersFile = next();
     else if (k === '--game') a.games.push(next());
     else if (k === '--interval-min') a.intervalMin = Number(next());
     else if (k === '--sweeps') a.sweeps = Number(next());
@@ -119,6 +140,21 @@ async function confirm(question) {
   return /^y(es)?$/i.test(answer.trim());
 }
 
+function printCleanup(runId, realCards) {
+  console.log(`\nCleanup (our side only):`);
+  console.log(`  delete from game_ticket_award where session_id like 'synthetic:${runId}:%';`);
+  if (realCards) {
+    console.log(
+      '  ⚠ This clears OUR ledger, not the loyalty vendor. Settled awards have\n' +
+        '    already credited each card\'s balance and written a vendor transaction,\n' +
+        '    which no local delete undoes — reverse those with the vendor\'s own\n' +
+        '    tooling, or use disposable cards you can reset.\n' +
+        '  ⚠ The delete also drops the idempotency records, so replaying these\n' +
+        '    session ids afterwards could credit the vendor a second time.',
+    );
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const profile = JSON.parse(readFileSync(args.profile, 'utf8'));
@@ -141,14 +177,44 @@ async function main() {
 
   const ageDays = (Date.now() - Date.parse(profile.capturedAt)) / 86_400_000;
 
+  // Real vendor card ids if supplied; otherwise a clearly-labelled placeholder
+  // pool that only makes sense for --dry-run (see the header note).
+  let cards = [...args.playerIds];
+  if (args.playersFile) {
+    for (const line of readFileSync(args.playersFile, 'utf8').split(/\r?\n/)) {
+      const id = line.trim();
+      if (id && !id.startsWith('#')) cards.push(id);
+    }
+  }
+  const realCards = cards.length > 0;
+  if (!realCards) {
+    cards = Array.from({ length: args.players }, (_, i) => `synthetic-card-${i + 1}`);
+  }
+
   console.log(`arcade-traffic — run ${runId}`);
   console.log(`  profile   ${args.profile} (captured ${profile.capturedAt}, ${ageDays.toFixed(1)}d old)`);
   console.log(`  games     ${pools.map((p) => `${p.key}(${p.samples.length})`).join(', ')}`);
   console.log(`  target    ${args.api}  venue ${args.location}`);
   console.log(`  volume    ${args.plays} award(s)/sweep × ${args.sweeps === Infinity ? '∞' : args.sweeps} sweep(s)`);
-  console.log(`  players   ${args.players} synthetic cards`);
+  console.log(
+    `  players   ${cards.length} card(s)` +
+      (realCards ? '' : ' — PLACEHOLDER ids, not real loyalty cards'),
+  );
   if (ageDays > 30) {
     console.log('  ⚠ profile is over 30 days old — re-capture before trusting these scores');
+  }
+  if (!realCards && !args.dryRun) {
+    // Fail loudly rather than posting a few hundred requests that all 502 and
+    // leave 'pending' reservations eating the venue's daily-cap budget.
+    console.error(
+      '\n  ✗ No real card ids given. playerId is a LOYALTY VENDOR card id and the\n' +
+        '    award route forwards it to the vendor, which rejects unknown cards —\n' +
+        '    every request would 502 and leave a pending reservation behind.\n' +
+        '    Pass --player-id <card> (repeatable) or --players-file <file>,\n' +
+        '    or use --dry-run to inspect payloads without posting.',
+    );
+    process.exitCode = 1;
+    return;
   }
 
   // Pre-flight ticket estimate, from the profile's own mean tickets.
@@ -166,14 +232,14 @@ async function main() {
         '  ' +
           JSON.stringify({
             locationId: args.location,
-            playerId: `synthetic-card-${Math.floor(rng() * args.players) + 1}`,
+            playerId: cards[Math.floor(rng() * cards.length)],
             game: pool.key,
             tickets: s.tickets,
             sessionId: `synthetic:${runId}:${randomUUID()}`,
           }),
       );
     }
-    console.log(`\nCleanup for this run:\n  delete from game_ticket_award where session_id like 'synthetic:${runId}:%';`);
+    printCleanup(runId, realCards);
     return;
   }
 
@@ -182,15 +248,21 @@ async function main() {
     if (!ok) return console.log('aborted.');
   }
 
-  const totals = { ok: 0, failed: 0, requested: 0, awarded: 0, clamped: 0, lat: [] };
+  const fresh = () => ({ ok: 0, failed: 0, requested: 0, awarded: 0, clamped: 0, capped: 0, lat: [] });
+  // Per-sweep counters are what the sweep line reports; run totals accumulate
+  // for the final summary. Reporting cumulative numbers under a sweep's label
+  // would hide exactly what a multi-sweep run is for — whether behaviour drifts
+  // between sweeps as daily caps fill up.
+  const totals = fresh();
 
   for (let sweep = 1; sweep <= args.sweeps; sweep++) {
+    const m = fresh();
     const tasks = Array.from({ length: args.plays }, () => async () => {
       const pool = pools[Math.floor(rng() * pools.length)];
       const s = pool.samples[Math.floor(rng() * pool.samples.length)];
       const body = {
         locationId: args.location,
-        playerId: `synthetic-card-${Math.floor(rng() * args.players) + 1}`,
+        playerId: cards[Math.floor(rng() * cards.length)],
         game: pool.key,
         tickets: s.tickets,
         sessionId: `synthetic:${runId}:${randomUUID()}`,
@@ -203,22 +275,25 @@ async function main() {
           body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => ({}));
-        totals.lat.push(Date.now() - t0);
-        totals.requested += body.tickets;
+        m.lat.push(Date.now() - t0);
+        m.requested += body.tickets;
         if (!res.ok) {
-          totals.failed++;
-          if (totals.failed <= 3) console.log(`  ! ${res.status} ${data.error ?? ''} (${body.game})`);
+          m.failed++;
+          if (m.failed <= 3) console.log(`  ! ${res.status} ${data.error ?? ''} (${body.game})`);
           return;
         }
-        totals.ok++;
-        // The server decides what actually paid — always trust its number.
-        const paid = Number(data.awarded ?? data.tickets ?? 0);
-        totals.awarded += paid;
-        if (paid < body.tickets) totals.clamped++;
+        m.ok++;
+        // The server decides what actually paid, and names it `ticketsAwarded`
+        // (routes/gameRewards.js). It also reports `capped` itself, and answers
+        // status 'daily-cap' with zero when the card's budget is spent — so both
+        // kinds of clamping are counted from the server's own words.
+        m.awarded += Number(data.ticketsAwarded ?? 0);
+        if (data.capped === true) m.capped++;
+        if (data.status === 'daily-cap') m.clamped++;
       } catch (err) {
-        totals.failed++;
-        totals.lat.push(Date.now() - t0);
-        if (totals.failed <= 3) console.log(`  ! ${err.message}`);
+        m.failed++;
+        m.lat.push(Date.now() - t0);
+        if (m.failed <= 3) console.log(`  ! ${err.message}`);
       }
     });
 
@@ -226,12 +301,16 @@ async function main() {
     await pooled(tasks, args.concurrency);
     const secs = (Date.now() - t0) / 1000;
     console.log(
-      `sweep ${sweep}: ${totals.ok} ok / ${totals.failed} failed  ` +
-        `${totals.awarded}/${totals.requested} tickets paid  ` +
+      `sweep ${sweep}: ${m.ok} ok / ${m.failed} failed  ` +
+        `${m.awarded}/${m.requested} tickets paid  ` +
         `${(args.plays / secs).toFixed(1)} req/s  ` +
-        `p50 ${pct(totals.lat, 50)}ms p95 ${pct(totals.lat, 95)}ms max ${Math.max(...totals.lat, 0)}ms` +
-        (totals.clamped ? `  (${totals.clamped} clamped by caps)` : ''),
+        `p50 ${pct(m.lat, 50)}ms p95 ${pct(m.lat, 95)}ms max ${Math.max(...m.lat, 0)}ms` +
+        (m.capped ? `  (${m.capped} trimmed to per-round cap)` : '') +
+        (m.clamped ? `  (${m.clamped} hit the daily cap)` : ''),
     );
+
+    for (const k of ['ok', 'failed', 'requested', 'awarded', 'clamped', 'capped']) totals[k] += m[k];
+    totals.lat.push(...m.lat);
 
     if (sweep < args.sweeps && args.intervalMin) {
       const perYear = Math.round((args.plays * (60 / args.intervalMin) * 24 * 365) / 1000);
@@ -242,9 +321,12 @@ async function main() {
 
   console.log(
     `\nDone. ${totals.ok} awarded, ${totals.failed} failed, ` +
-      `${totals.awarded} tickets paid of ${totals.requested} requested.`,
+      `${totals.awarded} tickets paid of ${totals.requested} requested` +
+      (totals.capped || totals.clamped
+        ? ` (${totals.capped} per-round trims, ${totals.clamped} daily-cap zeros).`
+        : '.'),
   );
-  console.log(`Cleanup:\n  delete from game_ticket_award where session_id like 'synthetic:${runId}:%';`);
+  printCleanup(runId, realCards);
 }
 
 main().catch((err) => {
