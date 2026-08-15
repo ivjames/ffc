@@ -3,6 +3,7 @@
 
 // General dev mode. Gates development-only affordances that ship disabled:
 //   - the skin picker (bottom-left palette) and build stamp (bottom-right hash)
+//   - the reviewer feedback pill (bottom-right, above the build stamp)
 //   - the scorecard/setup "Auto play (test)" buttons
 // Add new dev-only UI behind this flag rather than inventing a per-element one.
 // Set VITE_DEV_MODE=false to hide all of it in one place. Defaults on, so

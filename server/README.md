@@ -343,6 +343,28 @@ Achievements: `hole_in_one` · `under_par` · `hunt_master`. A grant is banked t
 the player's loyalty card as tickets exactly once (`POST /api/rewards/claim`);
 `redeemedAt` is the single consume point.
 
+### `POST /api/feedback`
+Reviewer commentary — the in-app "sound off about this screen" channel. Open
+write like the announcement-view beacon (a reviewer has no account), so the
+caps *are* the safety story: a 20/min per-IP rate limit, a 4000-char ceiling on
+the comment, silent truncation of the client-stamped context fields, and a
+global disk budget over stored screenshots (`FEEDBACK_DISK_BUDGET_MB`).
+
+The widget that calls this only renders under `VITE_DEV_MODE`, so a normal
+player build never reaches it. No AI touches this pipeline — the phone
+downscales the screenshot and the server just stores bytes.
+
+```json
+{ "body": "the hole numbers wash out in sunlight",
+  "screenPath": "/golf/play", "reviewer": "Sam", "deviceId": "<uuid>",
+  "locationId": "<uuid>", "appBuild": "abc1234", "userAgent": "…",
+  "imageBase64": "<optional>", "mediaType": "image/jpeg" }
+```
+→ `201 { ok, id, createdAt, hasScreenshot }`. Only `body` is required. Past the
+disk budget the **comment still files** and the response adds
+`screenshotDropped: true` — losing a reviewer's words to an image quota would
+be the wrong failure. Review + triage is Master Control → Feedback.
+
 ### Master Control — `/api/admin/*`
 Back-office API for onboarding/managing orgs (owner/franchise), locations
 (venues), and courses. **Every route except `POST /login` is guarded by
@@ -380,6 +402,10 @@ no domain history hangs off an account.)
 | `GET  /api/admin/photos?people=1\|minors=1&limit=&before=` | stored hunt photos, newest first, with item/course/venue + moderation and people/minors flags; `before` (the previous page's last `createdAt`) keyset-paginates older photos; org-scoped via find → item → course → location |
 | `GET  /api/admin/photos/:id/image` | the image bytes, for the review UI (same scoping) |
 | `POST /api/admin/photos/:id/remove` | delete the photo file from disk and mark the find `moderation='rejected'` (the find keeps its credit); audited — the "please delete that photo" path. Time-based deletion is the retention sweep (`HUNT_PHOTO_RETENTION_DAYS`) |
+| `GET  /api/admin/feedback?status=open\|resolved&limit=&before=` | reviewer notes (`POST /api/feedback`), newest first, with the screen/build each was filed against; `before` keyset-paginates older; org-scoped via the venue selected at filing time (no venue = super_admin-only) |
+| `GET  /api/admin/feedback/:id/screenshot` | the attached screenshot's bytes, when the reviewer sent one (same scoping) |
+| `POST /api/admin/feedback/:id/status` | triage: `{ "status": "open" \| "resolved" }`. Reversible — resolving stamps who/when, re-opening clears both; audited |
+| `POST /api/admin/feedback/:id/remove` | hard-delete the note and its screenshot (a note carries no credit worth keeping); audited |
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of

@@ -22,6 +22,7 @@ import { router as announcementsRouter } from "./routes/announcements.js";
 import { router as rewardsRouter } from "./routes/rewards.js";
 import { router as gameRewardsRouter } from "./routes/gameRewards.js";
 import { router as eventsRouter } from "./routes/events.js";
+import { router as feedbackRouter } from "./routes/feedback.js";
 
 export const app = express();
 
@@ -47,6 +48,9 @@ app.use((req, res, next) => {
   // installs its own 16mb parser for both.
   if (path === "/api/photos") return next();
   if (/^\/api\/photos\/[^/]+\/replace$/.test(path)) return next();
+  // Reviewer commentary (POST /api/feedback) can carry a base64 screenshot;
+  // its router installs its own 16mb parser too.
+  if (path === "/api/feedback") return next();
   // Venue sticker SVG uploads exceed the 256kb cap; the admin router carries
   // its own parser.
   if (path === "/api/admin/booth-stickers") return next();
@@ -111,6 +115,10 @@ app.use("/api/hunt", huntRouter);
 // Photo booth — player photo sharing + stickers, no AI anywhere in the
 // pipeline. Its upload endpoint also carries its own 16mb parser (see above).
 app.use("/api/photos", photosRouter);
+// Reviewer commentary — the in-app "sound off about this screen" channel. The
+// widget that writes here is dev-mode-only in the client; the endpoint carries
+// its own 16mb parser for the optional screenshot (see above).
+app.use("/api/feedback", feedbackRouter);
 
 // 404 fallback for unknown /api routes.
 app.use((req, res) => {

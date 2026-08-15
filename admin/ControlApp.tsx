@@ -13,6 +13,7 @@ import Rewards from './Rewards';
 import Photos from './Photos';
 import BoothPhotos from './BoothPhotos';
 import BoothStickers from './BoothStickers';
+import Feedback from './Feedback';
 import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
 import SyntheticBot from './SyntheticBot';
@@ -162,6 +163,9 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <NavLink to="/booth-stickers" className={linkCls}>
               Stickers
             </NavLink>
+            <NavLink to="/feedback" className={linkCls}>
+              Feedback
+            </NavLink>
             <NavLink to="/archived" className={linkCls}>
               Archived
             </NavLink>
@@ -203,6 +207,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
           <Route path="/photos" element={<Photos />} />
           <Route path="/booth" element={<BoothPhotos />} />
           <Route path="/booth-stickers" element={<BoothStickers />} />
+          <Route path="/feedback" element={<Feedback />} />
           <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
           {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
           <Route path="*" element={<Overview />} />

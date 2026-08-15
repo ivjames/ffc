@@ -55,6 +55,7 @@ import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import GeofenceGate from './features/shared/GeofenceGate';
 import { BuildStamp } from './ui/BuildStamp';
+import FeedbackButton from './ui/FeedbackButton';
 import { UpdateModal } from './ui/UpdateModal';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
@@ -231,10 +232,10 @@ export default function App() {
           sections. Mounted once here so it overlays the whole route tree. */}
       <NavDrawer />
 
-      {/* Dev-only chrome — build stamp (bottom-right) and skin picker
-          (bottom-left). Gated behind DEV_MODE alongside the app's other
-          development affordances; the light/dark and mute switches that used to
-          share these corners now ride in each screen's header. */}
+      {/* Dev-only chrome — build stamp + reviewer feedback (bottom-right) and
+          skin picker (bottom-left). Gated behind DEV_MODE alongside the app's
+          other development affordances; the light/dark and mute switches that
+          used to share these corners now ride in each screen's header. */}
       {DEV_MODE && (
         <>
           {/* Build stamp on every page — fixed, non-interactive so it never
@@ -244,6 +245,16 @@ export default function App() {
             style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
           >
             <BuildStamp />
+          </div>
+
+          {/* Reviewer commentary — sits directly above the build stamp so a
+              reviewer's note and the build it's about share one corner. The
+              overlay stays pass-through; only the pill takes taps. */}
+          <div
+            className="pointer-events-none fixed right-0 z-50 px-2"
+            style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+          >
+            <FeedbackButton />
           </div>
 
           <div
