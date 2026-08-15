@@ -44,8 +44,12 @@ export async function playRound(page, game, { rng, skill, baseUrl, timeoutMs = 1
     throw new RoundError(`${game.key}: round did not finish (no "${AGAIN}")`);
   });
 
-  const raw = (await page.locator(SCORE_SEL).first().textContent()) ?? '';
-  const score = Number(raw.replace(/[^\d-]/g, ''));
+  // Most end cards put the headline number in `.text-5xl`; a game whose card
+  // differs (Water Gun's is a "2 – 1" heat tally) supplies its own reader.
+  const raw = game.readScore
+    ? await game.readScore(page)
+    : ((await page.locator(SCORE_SEL).first().textContent()) ?? '');
+  const score = Number(String(raw).replace(/[^\d-]/g, '').match(/-?\d+/)?.[0] ?? NaN);
   if (!Number.isFinite(score)) {
     throw new RoundError(`${game.key}: unreadable score ${JSON.stringify(raw)}`);
   }

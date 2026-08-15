@@ -95,6 +95,7 @@ const SKILL_FLOOR = {
   shootinggallery: 60,
   clawmachine: 30,
   battingcages: 24,
+  watergunrace: 2,
 };
 
 const pct = (xs, p) => {
