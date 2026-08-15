@@ -25,6 +25,7 @@
     "@fontsource/orbitron": "^5.3.0",
     "idb": "^8.0.0",
     "lean-qr": "^2.7.2",
+    "modern-screenshot": "^4.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1"

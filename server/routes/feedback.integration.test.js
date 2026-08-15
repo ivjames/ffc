@@ -15,6 +15,7 @@ import {
   testQuery,
   listenEphemeral,
 } from "../test-support/testDb.js";
+import { BUDGET_LOCKS } from "../lib/diskBudget.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 const APP_TOKEN = `feedback-test-token-${Date.now()}`;
@@ -55,10 +56,6 @@ function fileBody(overrides = {}) {
 }
 
 const SHOT = Buffer.from("feedback-test-screenshot");
-
-// Must match BUDGET_LOCK_KEY in routes/feedback.js — the advisory lock that
-// serializes the screenshot budget's check-and-reserve.
-const BUDGET_LOCK_KEY = 0x66656564;
 
 function withShot(overrides = {}) {
   return fileBody({
@@ -243,7 +240,7 @@ test("the screenshot budget is reserved under a lock, and only for screenshots",
   // this fails immediately.
   const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
   await holder.connect();
-  await holder.query("select pg_advisory_lock($1)", [BUDGET_LOCK_KEY]);
+  await holder.query("select pg_advisory_lock($1)", [BUDGET_LOCKS.feedback]);
   try {
     let uploadSettled = false;
     const upload = file(withShot()).then((r) => {
@@ -259,7 +256,7 @@ test("the screenshot budget is reserved under a lock, and only for screenshots",
     await new Promise((r) => setTimeout(r, 400));
     assert.equal(uploadSettled, false, "the screenshot upload must wait for the reservation lock");
 
-    await holder.query("select pg_advisory_unlock($1)", [BUDGET_LOCK_KEY]);
+    await holder.query("select pg_advisory_unlock($1)", [BUDGET_LOCKS.feedback]);
     const saved = await upload;
     assert.equal(saved.hasScreenshot, true, "and completes once the lock is free");
   } finally {

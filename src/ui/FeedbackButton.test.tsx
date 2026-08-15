@@ -10,6 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import FeedbackButton from './FeedbackButton';
 import { submitFeedback, getReviewerName } from '../lib/feedbackApi';
+import { captureScreen, isScreenCaptureSupported } from '../lib/screenCapture';
 
 vi.mock('../lib/feedbackApi', async (importOriginal) => {
   // Keep the real name-memory helpers (they're localStorage, which jsdom has)
@@ -23,6 +24,15 @@ vi.mock('../lib/sound', () => ({
   playStroke: vi.fn(),
   playUndo: vi.fn(),
   playCup: vi.fn(),
+}));
+// The real capture renders the DOM through an SVG foreignObject, which jsdom
+// cannot paint — so the module is mocked. Default: capture is available (it is,
+// on every real device) but returns no frame, which keeps the note-writing
+// tests focused on the note.
+vi.mock('../lib/screenCapture', () => ({
+  CAPTURE_IGNORE_ATTR: 'data-feedback-ignore',
+  isScreenCaptureSupported: vi.fn(() => true),
+  captureScreen: vi.fn(async () => null),
 }));
 
 // jsdom implements neither half of the object-URL API. The widget uses them
@@ -57,7 +67,17 @@ beforeEach(() => {
     createdAt: '2026-08-15T00:00:00Z',
     hasScreenshot: false,
   });
+  vi.mocked(isScreenCaptureSupported).mockReset().mockReturnValue(true);
+  vi.mocked(captureScreen).mockReset().mockResolvedValue(null);
 });
+
+/** Have the next press come back with a grabbed frame. */
+function withGrabbedFrame(
+  shot: File = new File(['px'], 'screen.jpg', { type: 'image/jpeg' })
+) {
+  vi.mocked(captureScreen).mockResolvedValue(shot);
+  return shot;
+}
 
 afterEach(cleanup);
 
@@ -173,7 +193,7 @@ describe('FeedbackButton', () => {
     );
   });
 
-  it('opts back into pointer events — App mounts it in a pass-through overlay', () => {
+  it('opts back into pointer events — App mounts it in a pass-through overlay', async () => {
     // The sheet renders inside App's `pointer-events-none` corner overlay. If
     // it doesn't opt back in, it paints perfectly and ignores every tap, which
     // rendering the widget bare (as these tests do) would never reveal.
@@ -185,7 +205,72 @@ describe('FeedbackButton', () => {
       </MemoryRouter>
     );
     fireEvent.click(screen.getByRole('button', { name: /feedback/i }));
-    expect(screen.getByRole('dialog').className).toContain('pointer-events-auto');
+    const sheet = await screen.findByRole('dialog');
+    expect(sheet.className).toContain('pointer-events-auto');
+  });
+
+  it('grabs the screen when pressed, and attaches the frame to the note', async () => {
+    const shot = withGrabbedFrame();
+    const user = await openSheet('/golf/play');
+
+    // Captured on press — before the sheet exists, so the shot shows the
+    // screen the reviewer was looking at rather than the sheet over it.
+    expect(captureScreen).toHaveBeenCalledTimes(1);
+    expect(await screen.findByAltText(/screenshot to attach/i)).toBeInTheDocument();
+    expect(screen.getByText(/grabbed the screen when you opened this note/i)).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', { name: /what's on your mind/i }), 'look at this');
+    await user.click(screen.getByRole('button', { name: /send note/i }));
+    await waitFor(() =>
+      expect(submitFeedback).toHaveBeenCalledWith(expect.objectContaining({ screenshot: shot }))
+    );
+  });
+
+  it('opens the sheet anyway when the grab comes back empty', async () => {
+    // A missing screenshot is a far smaller problem than a lost comment, so it
+    // is never surfaced as an error.
+    await openSheet();
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByAltText(/screenshot to attach/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/grabbed the screen/i)).not.toBeInTheDocument();
+    // The manual attach path is still right there.
+    expect(screen.getByLabelText(/attach a screenshot/i)).toBeInTheDocument();
+  });
+
+  it('opens the sheet anyway when the capture throws', async () => {
+    vi.mocked(captureScreen).mockRejectedValue(new Error('capture exploded'));
+    await openSheet();
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('skips the grab where the DOM render cannot run at all', async () => {
+    vi.mocked(isScreenCaptureSupported).mockReturnValue(false);
+    await openSheet();
+    expect(captureScreen).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/attach a screenshot/i)).toBeInTheDocument();
+  });
+
+  it('lets a grabbed frame be removed, and a different image attached over it', async () => {
+    withGrabbedFrame();
+    const user = await openSheet();
+    expect(await screen.findByAltText(/screenshot to attach/i)).toBeInTheDocument();
+
+    const own = new File(['bytes'], 'mine.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach a different screenshot/i), own);
+    // Replacing the grab drops the "we took this for you" note.
+    await waitFor(() =>
+      expect(screen.queryByText(/grabbed the screen/i)).not.toBeInTheDocument()
+    );
+
+    await user.type(screen.getByRole('textbox', { name: /what's on your mind/i }), 'mine instead');
+    await user.click(screen.getByRole('button', { name: /send note/i }));
+    await waitFor(() =>
+      expect(submitFeedback).toHaveBeenCalledWith(expect.objectContaining({ screenshot: own }))
+    );
   });
 
   it('closes on Escape', async () => {

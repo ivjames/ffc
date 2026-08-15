@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button } from './components';
 import { playClick } from '../lib/sound';
+import { captureScreen, isScreenCaptureSupported } from '../lib/screenCapture';
 import {
   submitFeedback,
   getReviewerName,
@@ -16,10 +17,16 @@ import {
 // string ride along automatically (src/lib/feedbackApi.ts), so a reviewer
 // types an opinion, not a bug report header.
 //
-// A screenshot is optional and comes from the device — the reviewer takes an
-// OS screenshot (the one capture every phone does perfectly, including the
-// native chrome an in-page renderer can't see) and attaches it here. It is
-// downscaled on the phone like every other image this app uploads.
+// A screenshot rides along automatically: pressing the pill grabs the screen
+// BEFORE the sheet opens (src/lib/screenCapture.ts), so the shot shows what
+// the reviewer was looking at rather than the sheet they just opened over it.
+// One press, phone or laptop — it's a DOM render, not a platform API, so it
+// works on iOS where the browser's own capture API doesn't exist.
+//
+// The file picker stays as the manual path: for anything the page render can't
+// see (native chrome, an OS share sheet covering a button) a reviewer attaches
+// a real screenshot instead. Either way it is downscaled on the device like
+// every other image this app uploads.
 //
 // Dev-mode-gated by the caller (src/App.tsx), alongside the skin picker and
 // build stamp. Notes land in Master Control → Feedback.
@@ -28,11 +35,18 @@ const MAX_SCREENSHOT_BYTES = 25 * 1024 * 1024;
 
 type Phase = 'writing' | 'sending' | 'sent';
 
-function NoteSheet({ onClose }: { onClose: () => void }) {
+function NoteSheet({
+  onClose,
+  initialScreenshot,
+}: {
+  onClose: () => void;
+  /** Frame grabbed when the pill was pressed, if the browser could take one. */
+  initialScreenshot: File | null;
+}) {
   const { pathname } = useLocation();
   const [body, setBody] = useState('');
   const [reviewer, setReviewer] = useState(getReviewerName);
-  const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [screenshot, setScreenshot] = useState<File | null>(initialScreenshot);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('writing');
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +119,10 @@ function NoteSheet({ onClose }: { onClose: () => void }) {
   }
 
   const remaining = MAX_FEEDBACK_CHARS - body.length;
+  // Still holding the frame grabbed at press time (as opposed to a file the
+  // reviewer picked, or nothing) — worth saying so, since they never asked for
+  // it explicitly.
+  const grabbed = screenshot !== null && screenshot === initialScreenshot;
 
   // The sheet's `pointer-events-auto` is load-bearing, not decoration: App
   // mounts the pill inside a pass-through overlay (pointer-events-none) so the
@@ -193,11 +211,17 @@ function NoteSheet({ onClose }: { onClose: () => void }) {
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-fairway-100/70">
                 Screenshot <span className="font-normal normal-case">(optional)</span>
               </span>
+              {grabbed && (
+                <p className="mb-1 text-xs text-fairway-100/60">
+                  Grabbed the screen when you opened this note — remove it or attach a
+                  different image below.
+                </p>
+              )}
               <input
                 ref={fileRef}
                 type="file"
                 accept="image/*"
-                aria-label="Attach a screenshot"
+                aria-label={grabbed ? 'Attach a different screenshot' : 'Attach a screenshot'}
                 onChange={(e) => pickScreenshot(e.target.files?.[0] ?? null)}
                 className="block w-full text-xs text-fairway-100/70 file:mr-3 file:rounded-lg file:border-0 file:bg-fairway-800 file:px-3 file:py-2 file:text-xs file:font-bold file:text-fairway-50"
               />
@@ -242,19 +266,44 @@ function NoteSheet({ onClose }: { onClose: () => void }) {
 
 export default function FeedbackButton() {
   const [open, setOpen] = useState(false);
+  const [grabbing, setGrabbing] = useState(false);
+  const [grabbedShot, setGrabbedShot] = useState<File | null>(null);
+
+  // Pressing the pill grabs the screen first, THEN opens the sheet — the note
+  // is about the screen underneath, so the shot has to be taken before the
+  // sheet covers it. captureScreen() resolves to null for every ordinary "no
+  // picture" outcome, so the sheet always opens; it just opens without an
+  // attachment rather than showing the reviewer an error about it.
+  function press() {
+    playClick();
+    if (!isScreenCaptureSupported()) {
+      setGrabbedShot(null);
+      setOpen(true);
+      return;
+    }
+    setGrabbing(true);
+    captureScreen()
+      .catch(() => null)
+      .then((shot) => {
+        setGrabbedShot(shot);
+        setGrabbing(false);
+        setOpen(true);
+      });
+  }
+
   return (
     <>
       <button
         type="button"
-        onClick={() => {
-          playClick();
-          setOpen(true);
-        }}
-        className="surface-1 pointer-events-auto rounded-full border border-fairway-700/70 px-3 py-1.5 text-xs font-bold text-fairway-50 active:translate-y-px"
+        onClick={press}
+        disabled={grabbing}
+        className="surface-1 pointer-events-auto rounded-full border border-fairway-700/70 px-3 py-1.5 text-xs font-bold text-fairway-50 active:translate-y-px disabled:opacity-60"
       >
-        💬 Feedback
+        {grabbing ? '📸 Grabbing…' : '💬 Feedback'}
       </button>
-      {open && <NoteSheet onClose={() => setOpen(false)} />}
+      {open && (
+        <NoteSheet initialScreenshot={grabbedShot} onClose={() => setOpen(false)} />
+      )}
     </>
   );
 }

@@ -27,6 +27,7 @@ import { join } from "node:path";
 import { pool } from "../db.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { ALLOWED_MEDIA_TYPES, EXT_BY_MEDIA } from "../lib/imageTypes.js";
+import { inBudgetReservation, BUDGET_LOCKS } from "../lib/diskBudget.js";
 
 export const router = Router();
 
@@ -57,11 +58,6 @@ const MAX_BUILD_CHARS = 60;
 // should never be the reason the disk fills, so past the budget the comment
 // still files — only the screenshot is dropped (see the upload path below).
 // 0 is a kill switch for new screenshots; comments keep working.
-// Advisory-lock key serializing budget check + reservation (see the upload
-// path). Feature-specific and arbitrary — it only has to be distinct from any
-// other advisory lock this app takes; 0x66656564 spells "feed".
-const BUDGET_LOCK_KEY = 0x66656564;
-
 const DEFAULT_DISK_BUDGET_MB = 1024; // 1 GB
 function resolveDiskBudgetBytes() {
   const raw = process.env.FEEDBACK_DISK_BUDGET_MB;
@@ -166,70 +162,65 @@ router.post("/", fileRateLimit, express.json({ limit: "16mb" }), async (req, res
     // files — losing a reviewer's words because the image quota is spent
     // would be the wrong failure. The response says the shot was dropped.
     //
-    // The budget is only a real ceiling if the "is there room?" read and the
-    // row that CONSUMES that room land together. Two uploads racing on an
-    // unguarded check both read the same sum(bytes), both conclude there's
-    // room, and both store — an overshoot bounded only by how many requests
-    // happen to arrive at once (up to MAX_IMAGE_BYTES each). So the check and
-    // the insert share one transaction, serialized by a transaction-scoped
-    // advisory lock. The lock is held across the file write too, which keeps
-    // the invariant simple: a committed row always has its bytes on disk.
+    // Check and reservation share one serialized transaction (lib/diskBudget.js)
+    // — otherwise concurrent uploads all read the same sum(bytes), all find
+    // room, and all store. A comment with NO screenshot consumes no budget, so
+    // it passes a null lock key and never queues behind someone else's upload:
+    // the words never wait on an image quota.
     let screenshotPath = null;
     let storedMediaType = null;
     let storedBytes = null;
     let screenshotDropped = false;
 
-    const client = await pool.connect();
     let ins;
     try {
-      await client.query("begin");
+      ins = await inBudgetReservation(
+        pool,
+        imageBytes ? BUDGET_LOCKS.feedback : null,
+        async (client) => {
+          if (imageBytes) {
+            const budget = resolveDiskBudgetBytes();
+            const used = await client.query(
+              `select coalesce(sum(bytes), 0)::bigint as n from reviewer_feedback`
+            );
+            if (Number(used.rows[0].n) + imageBytes.length > budget) {
+              screenshotDropped = true;
+            } else {
+              await mkdir(UPLOAD_DIR, { recursive: true });
+              const ext = EXT_BY_MEDIA[mediaType] || "bin";
+              screenshotPath = join(UPLOAD_DIR, `${randomUUID()}.${ext}`);
+              await writeFile(screenshotPath, imageBytes);
+              storedMediaType = mediaType;
+              storedBytes = imageBytes.length;
+            }
+          }
 
-      if (imageBytes) {
-        await client.query("select pg_advisory_xact_lock($1)", [BUDGET_LOCK_KEY]);
-        const budget = resolveDiskBudgetBytes();
-        const used = await client.query(
-          `select coalesce(sum(bytes), 0)::bigint as n from reviewer_feedback`
-        );
-        if (Number(used.rows[0].n) + imageBytes.length > budget) {
-          screenshotDropped = true;
-        } else {
-          await mkdir(UPLOAD_DIR, { recursive: true });
-          const ext = EXT_BY_MEDIA[mediaType] || "bin";
-          screenshotPath = join(UPLOAD_DIR, `${randomUUID()}.${ext}`);
-          await writeFile(screenshotPath, imageBytes);
-          storedMediaType = mediaType;
-          storedBytes = imageBytes.length;
+          return client.query(
+            `insert into reviewer_feedback
+               (body, screen_path, reviewer, device_id, location_id, app_build,
+                user_agent, screenshot_path, media_type, bytes)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             returning id, created_at as "createdAt"`,
+            [
+              body.trim(),
+              clip(screenPath, MAX_SCREEN_PATH_CHARS),
+              clip(reviewer, MAX_REVIEWER_CHARS),
+              clip(deviceId, 200),
+              venueId,
+              clip(appBuild, MAX_BUILD_CHARS),
+              clip(userAgent, MAX_USER_AGENT_CHARS),
+              screenshotPath,
+              storedMediaType,
+              storedBytes,
+            ]
+          );
         }
-      }
-
-      ins = await client.query(
-        `insert into reviewer_feedback
-           (body, screen_path, reviewer, device_id, location_id, app_build,
-            user_agent, screenshot_path, media_type, bytes)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         returning id, created_at as "createdAt"`,
-        [
-          body.trim(),
-          clip(screenPath, MAX_SCREEN_PATH_CHARS),
-          clip(reviewer, MAX_REVIEWER_CHARS),
-          clip(deviceId, 200),
-          venueId,
-          clip(appBuild, MAX_BUILD_CHARS),
-          clip(userAgent, MAX_USER_AGENT_CHARS),
-          screenshotPath,
-          storedMediaType,
-          storedBytes,
-        ]
       );
-      await client.query("commit");
     } catch (err) {
-      await client.query("rollback").catch(() => {});
       // Nothing committed, so a file written above is orphaned — and unlike a
       // row, it would still occupy disk while counting toward nothing. Drop it.
       if (screenshotPath) await rm(screenshotPath, { force: true }).catch(() => {});
       throw err;
-    } finally {
-      client.release();
     }
 
     return res.status(201).json({

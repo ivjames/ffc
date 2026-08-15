@@ -31,6 +31,7 @@ import {
   MEDIA_BY_EXT,
 } from "../lib/imageTypes.js";
 import { resolveBoothRetentionDays } from "../lib/boothPhotoRetention.js";
+import { inBudgetReservation, BUDGET_LOCKS } from "../lib/diskBudget.js";
 
 export const router = Router();
 
@@ -266,37 +267,11 @@ router.post(
     }
 
     try {
-      // Global disk budget first: actual bytes stored across ALL booths. This
-      // is the real bound — the per-booth cap below is fairness, not safety,
-      // since boothId is caller-chosen.
-      const budget = resolveDiskBudgetBytes();
-      const used = await pool.query(
-        `select coalesce(sum(bytes), 0)::bigint as n from booth_photo`
-      );
-      if (Number(used.rows[0].n) + imageBytes.length > budget) {
-        return res.status(429).json({
-          ok: false,
-          error: "the photo booth is full right now — try again later",
-        });
-      }
-
-      // Per-booth stored cap: past it, the player deletes (or retention ages
-      // photos out) before storing more. 429 so the client words it as a limit.
-      const cap = resolvePhotoCap();
-      const stored = await pool.query(
-        `select count(*)::int as n from booth_photo where booth_id = $1`,
-        [boothId]
-      );
-      if (stored.rows[0].n >= cap) {
-        return res.status(429).json({
-          ok: false,
-          error: "photo limit reached — delete some photos to make room",
-        });
-      }
-
       // The venue at upload time scopes the admin review surface. Optional and
       // best-effort: an unknown/archived location never fails the upload, it
       // just stores null (super_admin-only in review, the hunt precedent).
+      // Resolved before the reservation below, so the lock is held only for
+      // the work that actually needs serializing.
       let venueId = null;
       if (typeof locationId === "string" && UUID_RE.test(locationId)) {
         const loc = await pool.query(
@@ -306,26 +281,65 @@ router.post(
         if (loc.rowCount > 0) venueId = loc.rows[0].id;
       }
 
-      await mkdir(UPLOAD_DIR, { recursive: true });
-      const ext = EXT_BY_MEDIA[mediaType] || "bin";
-      const photoPath = join(UPLOAD_DIR, `${randomUUID()}.${ext}`);
-      await writeFile(photoPath, imageBytes);
-
-      let ins;
+      // Both limits are checked and consumed inside ONE serialized
+      // transaction (lib/diskBudget.js). Checking outside it would let
+      // concurrent uploads read the same totals, all find room, and all store
+      // — leaving the "hard ceiling" exceeded by however many arrived at once.
+      let photoPath = null;
+      let outcome;
       try {
-        ins = await pool.query(
-          `insert into booth_photo (booth_id, location_id, photo_path, media_type, bytes)
-           values ($1, $2, $3, $4, $5)
-           returning id, created_at as "createdAt"`,
-          [boothId, venueId, photoPath, mediaType, imageBytes.length]
-        );
+        outcome = await inBudgetReservation(pool, BUDGET_LOCKS.boothPhoto, async (client) => {
+          // Global disk budget first: actual bytes stored across ALL booths.
+          // This is the real bound — the per-booth cap below is fairness, not
+          // safety, since boothId is caller-chosen.
+          const budget = resolveDiskBudgetBytes();
+          const used = await client.query(
+            `select coalesce(sum(bytes), 0)::bigint as n from booth_photo`
+          );
+          if (Number(used.rows[0].n) + imageBytes.length > budget) return { full: true };
+
+          // Per-booth stored cap: past it, the player deletes (or retention
+          // ages photos out) before storing more.
+          const cap = resolvePhotoCap();
+          const stored = await client.query(
+            `select count(*)::int as n from booth_photo where booth_id = $1`,
+            [boothId]
+          );
+          if (stored.rows[0].n >= cap) return { capped: true };
+
+          await mkdir(UPLOAD_DIR, { recursive: true });
+          const ext = EXT_BY_MEDIA[mediaType] || "bin";
+          photoPath = join(UPLOAD_DIR, `${randomUUID()}.${ext}`);
+          await writeFile(photoPath, imageBytes);
+
+          const ins = await client.query(
+            `insert into booth_photo (booth_id, location_id, photo_path, media_type, bytes)
+             values ($1, $2, $3, $4, $5)
+             returning id, created_at as "createdAt"`,
+            [boothId, venueId, photoPath, mediaType, imageBytes.length]
+          );
+          return { row: ins.rows[0] };
+        });
       } catch (err) {
-        // Don't leave an orphan file behind a failed insert.
-        await rm(photoPath, { force: true }).catch(() => {});
+        // Nothing committed — don't leave an orphan file behind.
+        if (photoPath) await rm(photoPath, { force: true }).catch(() => {});
         throw err;
       }
 
-      return res.json({ ok: true, ...ins.rows[0] });
+      // 429 on either limit so the client words it as "full", not "broken".
+      if (outcome.full) {
+        return res.status(429).json({
+          ok: false,
+          error: "the photo booth is full right now — try again later",
+        });
+      }
+      if (outcome.capped) {
+        return res.status(429).json({
+          ok: false,
+          error: "photo limit reached — delete some photos to make room",
+        });
+      }
+      return res.json({ ok: true, ...outcome.row });
     } catch (err) {
       console.error("[photos] upload error:", err);
       return res.status(500).json({ ok: false, error: "internal error" });
@@ -383,43 +397,56 @@ router.post("/:id/replace", uploadRateLimit, express.json({ limit: "16mb" }), as
     }
     const oldPath = existing.rows[0].photoPath;
 
-    // Disk budget on the DELTA: count every other photo's bytes, since this row
-    // is about to be rewritten. A same-or-smaller replace never trips it.
-    const budget = resolveDiskBudgetBytes();
-    const used = await pool.query(
-      `select coalesce(sum(bytes), 0)::bigint as n from booth_photo where id <> $1`,
-      [id]
-    );
-    if (Number(used.rows[0].n) + imageBytes.length > budget) {
+    // Budget check + swap share one serialized transaction, for the same
+    // reason the upload path does (lib/diskBudget.js): a replace that read the
+    // total outside the reservation could be waved through concurrently with
+    // uploads that consumed the room it just counted as free.
+    let newPath = null;
+    let outcome;
+    try {
+      outcome = await inBudgetReservation(pool, BUDGET_LOCKS.boothPhoto, async (client) => {
+        // Disk budget on the DELTA: count every other photo's bytes, since
+        // this row is about to be rewritten. A same-or-smaller replace never
+        // trips it.
+        const budget = resolveDiskBudgetBytes();
+        const used = await client.query(
+          `select coalesce(sum(bytes), 0)::bigint as n from booth_photo where id <> $1`,
+          [id]
+        );
+        if (Number(used.rows[0].n) + imageBytes.length > budget) return { full: true };
+
+        // Write the new file first, then point the row at it, then remove the
+        // old file — so a crash never leaves the row referencing missing bytes.
+        await mkdir(UPLOAD_DIR, { recursive: true });
+        const ext = EXT_BY_MEDIA[mediaType] || "bin";
+        newPath = join(UPLOAD_DIR, `${randomUUID()}.${ext}`);
+        await writeFile(newPath, imageBytes);
+
+        // Condition the swap on the path we just read. If two replaces for the
+        // same photo overlap (or a delete lands in between), only the request
+        // whose oldPath still matches wins and removes the old file; the loser
+        // matches no row, so it removes its OWN new file — no orphan is ever
+        // left uncounted.
+        const upd = await client.query(
+          `update booth_photo set photo_path = $1, media_type = $2, bytes = $3
+            where id = $4 and booth_id = $5 and photo_path = $6`,
+          [newPath, mediaType, imageBytes.length, id, booth, oldPath]
+        );
+        return upd.rowCount === 0 ? { conflict: true } : { replaced: true };
+      });
+    } catch (err) {
+      if (newPath) await rm(newPath, { force: true }).catch(() => {});
+      throw err;
+    }
+
+    if (outcome.full) {
+      // The new file is never written on this path, so there's nothing to undo.
       return res.status(429).json({
         ok: false,
         error: "the photo booth is full right now — try again later",
       });
     }
-
-    // Write the new file first, then point the row at it, then remove the old
-    // file — so a crash never leaves the row referencing missing bytes.
-    await mkdir(UPLOAD_DIR, { recursive: true });
-    const ext = EXT_BY_MEDIA[mediaType] || "bin";
-    const newPath = join(UPLOAD_DIR, `${randomUUID()}.${ext}`);
-    await writeFile(newPath, imageBytes);
-
-    // Condition the swap on the path we just read. If two replaces for the same
-    // photo overlap (or a delete lands in between), only the request whose
-    // oldPath still matches wins and removes the old file; the loser matches no
-    // row, so it removes its OWN new file — no orphan is ever left uncounted.
-    let upd;
-    try {
-      upd = await pool.query(
-        `update booth_photo set photo_path = $1, media_type = $2, bytes = $3
-          where id = $4 and booth_id = $5 and photo_path = $6`,
-        [newPath, mediaType, imageBytes.length, id, booth, oldPath]
-      );
-    } catch (err) {
-      await rm(newPath, { force: true }).catch(() => {});
-      throw err;
-    }
-    if (upd.rowCount === 0) {
+    if (outcome.conflict) {
       await rm(newPath, { force: true }).catch(() => {});
       return res.status(409).json({ ok: false, error: "photo changed — try again" });
     }
