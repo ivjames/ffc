@@ -95,6 +95,26 @@ describe('SyntheticBot', () => {
     expect(api.syntheticStop).toHaveBeenCalled();
   });
 
+  test('background poll refresh does not blank the page to a spinner', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(api.syntheticStatus).mockResolvedValue(
+        status({ runner: { running: true, pid: 5, startedAt: new Date().toISOString(), params: null, lastExit: null, logs: [] } })
+      );
+      render(<SyntheticBot />);
+      expect(await screen.findByText(/running · pid 5/)).toBeInTheDocument();
+
+      // Fire the 4s runner poll. The first-load spinner must NOT reappear, and
+      // the page content must stay put (updates in place, no re-flash).
+      await vi.advanceTimersByTimeAsync(4500);
+      expect(screen.queryByText('Loading synthetic bot…')).not.toBeInTheDocument();
+      expect(screen.getByText(/running · pid 5/)).toBeInTheDocument();
+      expect(vi.mocked(api.syntheticStatus).mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('hides controls for non-super-admins', async () => {
     vi.mocked(api.syntheticStatus).mockResolvedValue(status({ canControl: false }));
     render(<SyntheticBot />);

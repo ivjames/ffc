@@ -120,8 +120,12 @@ export default function SyntheticBot() {
     }
   }
 
-  if (loading) return <Spinner label="Loading synthetic bot…" />;
-  if (error) return <Banner kind="error">{error.message}</Banner>;
+  // Only take over the whole page on the FIRST load (no data yet). The runner
+  // poll refetches every 4s and useAsync flips `loading` each time — gating the
+  // page on it would unmount and re-flash everything on every tick. Once we have
+  // a status, keep rendering it and let the data update in place.
+  if (loading && !status) return <Spinner label="Loading synthetic bot…" />;
+  if (error && !status) return <Banner kind="error">{error.message}</Banner>;
   if (!status) return null;
 
   const { keySet, canControl, policy, courses, syntheticRounds, runner } = status;
