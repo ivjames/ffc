@@ -95,6 +95,47 @@ describe('SyntheticBot', () => {
     expect(api.syntheticStop).toHaveBeenCalled();
   });
 
+  test('background poll refresh does not blank the page to a spinner', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(api.syntheticStatus).mockResolvedValue(
+        status({ runner: { running: true, pid: 5, startedAt: new Date().toISOString(), params: null, lastExit: null, logs: [] } })
+      );
+      render(<SyntheticBot />);
+      expect(await screen.findByText(/running · pid 5/)).toBeInTheDocument();
+
+      // Fire the 4s runner poll. The first-load spinner must NOT reappear, and
+      // the page content must stay put (updates in place, no re-flash).
+      await vi.advanceTimersByTimeAsync(4500);
+      expect(screen.queryByText('Loading synthetic bot…')).not.toBeInTheDocument();
+      expect(screen.getByText(/running · pid 5/)).toBeInTheDocument();
+      expect(vi.mocked(api.syntheticStatus).mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('a failed refresh shows a non-blocking banner over stale data, not a full-page error', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(api.syntheticStatus)
+        .mockResolvedValueOnce(
+          status({ runner: { running: true, pid: 7, startedAt: new Date().toISOString(), params: null, lastExit: null, logs: [] } })
+        )
+        .mockRejectedValue(new Error('network')); // subsequent polls fail
+      render(<SyntheticBot />);
+      expect(await screen.findByText(/running · pid 7/)).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(4500); // fire a poll that rejects
+      // Stale content stays put, with a non-blocking refresh banner over it.
+      expect(screen.getByText(/running · pid 7/)).toBeInTheDocument();
+      expect(screen.getByText(/Couldn.t refresh status/)).toBeInTheDocument();
+      expect(screen.queryByText('Loading synthetic bot…')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('hides controls for non-super-admins', async () => {
     vi.mocked(api.syntheticStatus).mockResolvedValue(status({ canControl: false }));
     render(<SyntheticBot />);

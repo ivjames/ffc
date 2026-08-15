@@ -48,12 +48,16 @@ export default function SyntheticBot() {
 
   const running = status?.runner.running ?? false;
 
-  // Poll status while the bot runs, so pid/uptime/logs stay live without a manual refresh.
+  // Poll status while the bot runs (keep pid/uptime/logs live), and ALSO while a
+  // refresh is failing — so a transient error self-heals instead of stranding
+  // stale state (e.g. a Start that succeeded but whose reload failed would
+  // otherwise show "stopped" forever, and running-gated polling would never
+  // retry).
   useEffect(() => {
-    if (!running) return;
+    if (!running && !error) return;
     const id = setInterval(() => reload(), 4000);
     return () => clearInterval(id);
-  }, [running, reload]);
+  }, [running, error, reload]);
 
   // Debounced projection preview whenever a knob changes.
   const payload = useMemo<SyntheticBotParams>(
@@ -120,8 +124,12 @@ export default function SyntheticBot() {
     }
   }
 
-  if (loading) return <Spinner label="Loading synthetic bot…" />;
-  if (error) return <Banner kind="error">{error.message}</Banner>;
+  // Only take over the whole page on the FIRST load (no data yet). The runner
+  // poll refetches every 4s and useAsync flips `loading` each time — gating the
+  // page on it would unmount and re-flash everything on every tick. Once we have
+  // a status, keep rendering it and let the data update in place.
+  if (loading && !status) return <Spinner label="Loading synthetic bot…" />;
+  if (error && !status) return <Banner kind="error">{error.message}</Banner>;
   if (!status) return null;
 
   const { keySet, canControl, policy, courses, syntheticRounds, runner } = status;
@@ -131,6 +139,13 @@ export default function SyntheticBot() {
 
   return (
     <div className="space-y-4">
+      {/* A refresh failed but we still have prior data: keep the page (no flash)
+          and flag the staleness non-blockingly. Polling above keeps retrying. */}
+      {error && (
+        <Banner kind="error">
+          Couldn’t refresh status — showing last-known state, retrying… ({error.message})
+        </Banner>
+      )}
       <div>
         <h1 className="text-lg font-semibold">Synthetic player bot</h1>
         <p className="mt-1 text-sm text-slate-500">
