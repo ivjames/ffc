@@ -69,9 +69,19 @@ function NoteSheet({ onClose }: { onClose: () => void }) {
     setError(null);
     if (file && file.size > MAX_SCREENSHOT_BYTES) {
       setError('That screenshot is too large — try a smaller one.');
+      // Drop whatever was attached before, rather than silently keeping it:
+      // the file input now shows the rejected file's name, so leaving the old
+      // one staged would send evidence the reviewer thinks they replaced.
+      clearScreenshot();
       return;
     }
     setScreenshot(file);
+  }
+
+  function clearScreenshot() {
+    setScreenshot(null);
+    // Reset the input too, so re-picking the SAME file still fires a change.
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   async function send() {
@@ -96,12 +106,18 @@ function NoteSheet({ onClose }: { onClose: () => void }) {
 
   const remaining = MAX_FEEDBACK_CHARS - body.length;
 
+  // The sheet's `pointer-events-auto` is load-bearing, not decoration: App
+  // mounts the pill inside a pass-through overlay (pointer-events-none) so the
+  // fixed corner never eats a tap meant for the screen underneath. This sheet
+  // renders inside that overlay, so without opting back in it would paint
+  // perfectly and ignore every tap. Keeping the opt-in on the sheet itself
+  // (rather than relying on its mount point) makes the widget self-contained.
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="feedback-sheet-title"
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-fairway-950/80 p-3 backdrop-blur-sm sm:items-center"
+      className="pointer-events-auto fixed inset-0 z-[100] flex items-end justify-center bg-fairway-950/80 p-3 backdrop-blur-sm sm:items-center"
     >
       <div
         className="w-full max-w-md rounded-2xl border border-fairway-700 bg-fairway-900 p-5 shadow-2xl"
@@ -195,12 +211,7 @@ function NoteSheet({ onClose }: { onClose: () => void }) {
                   <button
                     type="button"
                     className="text-xs text-fairway-100/70 underline"
-                    onClick={() => {
-                      pickScreenshot(null);
-                      // Clear the input too, so re-picking the SAME file still
-                      // fires a change event.
-                      if (fileRef.current) fileRef.current.value = '';
-                    }}
+                    onClick={clearScreenshot}
                   >
                     Remove
                   </button>

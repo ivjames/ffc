@@ -5,7 +5,7 @@
 // what they typed.
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import FeedbackButton from './FeedbackButton';
@@ -148,6 +148,44 @@ describe('FeedbackButton', () => {
     );
     // Dropping the attachment released its preview URL.
     expect(objectUrls.revoked).toBe(objectUrls.created);
+  });
+
+  it('drops a previously attached screenshot when a replacement is rejected', async () => {
+    const user = await openSheet();
+    const good = new File(['bytes'], 'good.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach a screenshot/i), good);
+    expect(await screen.findByAltText(/screenshot to attach/i)).toBeInTheDocument();
+
+    // Oversized replacement: the input now shows the rejected file's name, so
+    // keeping the old one staged would send evidence the reviewer believes
+    // they replaced.
+    const huge = new File([new Uint8Array(2)], 'huge.png', { type: 'image/png' });
+    Object.defineProperty(huge, 'size', { value: 26 * 1024 * 1024 });
+    await user.upload(screen.getByLabelText(/attach a screenshot/i), huge);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/too large/i);
+    expect(screen.queryByAltText(/screenshot to attach/i)).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', { name: /what's on your mind/i }), 'no shot then');
+    await user.click(screen.getByRole('button', { name: /send note/i }));
+    await waitFor(() =>
+      expect(submitFeedback).toHaveBeenCalledWith(expect.objectContaining({ screenshot: null }))
+    );
+  });
+
+  it('opts back into pointer events — App mounts it in a pass-through overlay', () => {
+    // The sheet renders inside App's `pointer-events-none` corner overlay. If
+    // it doesn't opt back in, it paints perfectly and ignores every tap, which
+    // rendering the widget bare (as these tests do) would never reveal.
+    render(
+      <MemoryRouter initialEntries={['/golf/play']}>
+        <div className="pointer-events-none">
+          <FeedbackButton />
+        </div>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /feedback/i }));
+    expect(screen.getByRole('dialog').className).toContain('pointer-events-auto');
   });
 
   it('closes on Escape', async () => {

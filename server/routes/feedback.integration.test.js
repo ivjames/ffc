@@ -5,6 +5,7 @@
 // if an AI call ever crept in.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import pg from "pg";
 import { access, mkdtemp, rm as rmDir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,6 +55,10 @@ function fileBody(overrides = {}) {
 }
 
 const SHOT = Buffer.from("feedback-test-screenshot");
+
+// Must match BUDGET_LOCK_KEY in routes/feedback.js — the advisory lock that
+// serializes the screenshot budget's check-and-reserve.
+const BUDGET_LOCK_KEY = 0x66656564;
 
 function withShot(overrides = {}) {
   return fileBody({
@@ -222,6 +227,43 @@ test("the screenshot disk budget drops the image but keeps the comment", async (
     assert.equal(row.rows[0].screenshot_path, null);
   } finally {
     delete process.env.FEEDBACK_DISK_BUDGET_MB;
+  }
+});
+
+test("the screenshot budget is reserved under a lock, and only for screenshots", async () => {
+  // The budget is only a ceiling if the "is there room?" read and the row that
+  // CONSUMES that room commit together — otherwise concurrent uploads all read
+  // the same sum(bytes), all conclude there's room, and all store.
+  //
+  // Firing a burst of HTTP uploads does NOT prove this: the payload size that
+  // widens the racy window also staggers arrival, so the interleaving never
+  // reliably happens and such a test passes with or without the fix. So test
+  // the mechanism instead — hold the advisory lock from another connection and
+  // assert the upload actually waits on it. Remove the lock from the route and
+  // this fails immediately.
+  const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
+  await holder.connect();
+  await holder.query("select pg_advisory_lock($1)", [BUDGET_LOCK_KEY]);
+  try {
+    let uploadSettled = false;
+    const upload = file(withShot()).then((r) => {
+      uploadSettled = true;
+      return r.json();
+    });
+
+    // A comment-only note takes no lock — the words never queue behind an
+    // image quota.
+    const commentOnly = await (await file(fileBody({ body: `${tag} words only` }))).json();
+    assert.equal(commentOnly.ok, true);
+
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(uploadSettled, false, "the screenshot upload must wait for the reservation lock");
+
+    await holder.query("select pg_advisory_unlock($1)", [BUDGET_LOCK_KEY]);
+    const saved = await upload;
+    assert.equal(saved.hasScreenshot, true, "and completes once the lock is free");
+  } finally {
+    await holder.end();
   }
 });
 
