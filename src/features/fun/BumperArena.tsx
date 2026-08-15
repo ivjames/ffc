@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playBump, playWaterBump, playScore, playTick, playFanfare } from '../../lib/sound';
 import type { Vec as FxVec, Floater } from './fx';
 import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, spawnFloater, stepFloaters, drawFloaters, decay, shakeOffset } from './fx';
@@ -571,6 +572,18 @@ function drawArena(ctx: CanvasRenderingContext2D, theme: BumperTheme, now: numbe
     ctx.fillStyle = sheen;
     ctx.fillRect(0, 0, W, H);
   }
+
+  // Floor marking at center, in the theme's own accent — painted on the rink
+  // for cars, showing through the water as the painted pool bottom for boats
+  // (hence the lower alpha there: the sine bands and glints draw over it and
+  // full strength would fight them). One placement covers both games, since
+  // Bumper Cars and Bumper Boats are this same arena themed two ways.
+  drawLogo(ctx, W / 2, H / 2, {
+    variant: 'badge',
+    width: 132,
+    tint: accent,
+    alpha: boat ? 0.28 : 0.38,
+  });
 
   // Corner vignette for depth.
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.75);

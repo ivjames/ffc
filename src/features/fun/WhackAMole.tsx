@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playBump, playCup, playBuzz, playStroke, playTick, playFanfare } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
 import {
@@ -390,6 +391,11 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
       ctx.stroke();
     }
   }
+
+  // Mowed into the fairway across the top, between the clock bar (ends 22) and
+  // the top-row moles (heads peak ~110 when fully risen). Wordmark, not the
+  // lockup: the lockup tall enough to read here would run into the mole heads.
+  drawLogo(ctx, W / 2, 58, { variant: 'wordmark', width: 150, tint: '#a3e635', alpha: 0.35 });
 
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
   vig.addColorStop(0, 'rgba(0,0,0,0)');

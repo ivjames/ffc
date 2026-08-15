@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import {
   playStroke,
   playCup,
@@ -824,6 +825,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.arc(157, 260, 78, 0, TWO_PI);
   ctx.stroke();
   ctx.restore();
+
+  // Playfield art: the badge inside the bumper triangle's decal circle, the
+  // way real tables print the theme art in the middle of the bumper cluster.
+  // Part of the static backdrop, so the bumpers, ball, and flippers all draw
+  // over it — it reads as printed on the deck, not floating above play.
+  drawLogo(ctx, 157, 262, { variant: 'badge', width: 100, tint: '#a78bfa', alpha: 0.32 });
 
   // Vignette for depth.
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);

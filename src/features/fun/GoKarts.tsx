@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
 import {
@@ -533,6 +534,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number, fx: FX) {
   glow.addColorStop(1, 'rgba(120,200,150,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
+
+  // Infield logo, painted on the grass the way karting circuits paint sponsor
+  // marks inside the loop. Deliberately drawn BEFORE the track: the barriers
+  // and asphalt stroke over it, so whatever part of the grass a given track
+  // layout leaves open shows exactly that much logo — no per-track fitting.
+  drawLogo(ctx, W / 2, H / 2, { variant: 'badge', width: 140, tint: '#86efac', alpha: 0.4 });
 
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
