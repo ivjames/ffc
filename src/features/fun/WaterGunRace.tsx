@@ -824,7 +824,7 @@ export default function WaterGunRace() {
             <span
               key={i}
               className={`h-2.5 w-2.5 rounded-full ${
-                results[i] === 'you' ? 'bg-green-400' : results[i] === 'cpu' ? 'bg-red-400' : 'bg-fairway-700'
+                results[i] === 'you' ? 'bg-positive' : results[i] === 'cpu' ? 'bg-danger' : 'bg-fairway-700'
               }`}
             />
           ))}

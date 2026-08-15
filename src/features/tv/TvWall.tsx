@@ -117,7 +117,7 @@ export default function TvWall() {
       </div>
 
       {error && !boards && (
-        <div className="m-auto rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-amber-200">
+        <div className="m-auto rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-warning">
           The board needs the backend API running. {error}
         </div>
       )}
@@ -152,7 +152,7 @@ export default function TvWall() {
                   </span>
                 </header>
                 {board.rows.length === 0 ? (
-                  <p className="m-auto px-4 text-center text-sm text-fairway-100/50">
+                  <p className="m-auto px-4 text-center text-sm text-fairway-100/80">
                     No scores yet — be the first!
                   </p>
                 ) : (
@@ -163,7 +163,7 @@ export default function TvWall() {
                         style={{ '--i': Math.min(row.rank, 12) } as CSSProperties}
                         className="animate-rise-in flex items-center gap-3 border-b border-fairway-800/40 py-1.5 last:border-b-0"
                       >
-                        <span className="w-7 shrink-0 text-center font-mono text-sm text-fairway-100/60">
+                        <span className="w-7 shrink-0 text-center font-mono text-sm text-fairway-100/80">
                           {row.rank}
                         </span>
                         <span className="font-arcade min-w-0 flex-1 truncate text-xl font-bold text-fairway-50">

@@ -281,7 +281,7 @@ export default function Hunt() {
         </p>
         {/* The photo pipeline's player-facing disclosure — photos go to an AI
             check and live on the venue server for a while (see /me/privacy). */}
-        <p className="mb-4 text-xs text-fairway-100/50">
+        <p className="mb-4 text-xs text-fairway-100/80">
           Photos are checked by AI and stored so your group can share them.{' '}
           <Link to="/me/privacy" className="underline">
             How photos are handled
@@ -312,7 +312,7 @@ export default function Hunt() {
         </div>
 
         {loadError && (
-          <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+          <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-danger">
             {loadError}
           </div>
         )}
@@ -418,7 +418,7 @@ export default function Hunt() {
                       state.verified
                         ? 'bg-fairway-500/15 text-fairway-200'
                         : state.flagged
-                          ? 'bg-amber-500/15 text-amber-200'
+                          ? 'bg-amber-500/15 text-warning'
                           : 'bg-fairway-800/40 text-fairway-100/70'
                     }`}
                   >

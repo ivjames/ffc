@@ -103,7 +103,7 @@ export default function Teams() {
               placeholder="The Putters"
               className={inputClass}
             />
-            {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+            {error && <p className="mt-2 text-sm text-danger">{error}</p>}
             <div className="mt-3">
               <Button onClick={() => void create()} disabled={creating || name.trim() === ''}>
                 {creating ? 'Creating…' : 'Create team'}

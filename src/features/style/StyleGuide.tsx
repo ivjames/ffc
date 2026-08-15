@@ -148,7 +148,7 @@ export default function StyleGuide() {
             <div className="text-base text-fairway-100">Aa base · body copy</div>
             <div className="text-xs font-semibold uppercase tracking-wide text-fairway-400">Eyebrow · xs uppercase</div>
             <div className="font-arcade text-2xl font-black text-fairway-50">ABC · arcade</div>
-            <div className="font-mono text-2xl font-black text-fairway-100/60">01 · mono rank</div>
+            <div className="font-mono text-2xl font-black text-fairway-100/80">01 · mono rank</div>
           </div>
         </Section>
 
@@ -310,7 +310,7 @@ export default function StyleGuide() {
           </div>
           {/* Standings row */}
           <div className="surface-1 mb-4 flex items-center gap-4 rounded-2xl border border-fairway-800/60 px-5 py-3">
-            <span className="w-10 shrink-0 text-center font-mono text-2xl font-black text-fairway-100/50">2</span>
+            <span className="w-10 shrink-0 text-center font-mono text-2xl font-black text-fairway-100/80">2</span>
             <div className="min-w-0 flex-1 text-center">
               <span className="font-arcade text-xl font-bold" style={{ color: accentInk('blue') }}>
                 JZ

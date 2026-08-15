@@ -162,7 +162,7 @@ export default function TvLeaderboard() {
         </div>
 
         {error && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-warning">
             Leaderboard needs the backend API running. {error}
           </div>
         )}

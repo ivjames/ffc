@@ -76,7 +76,7 @@ export default function AcceptInvite() {
 
         {state === 'failed' && (
           <>
-            <p className="mb-4 text-sm text-red-400">{error}</p>
+            <p className="mb-4 text-sm text-danger">{error}</p>
             <Button variant="ghost" onClick={() => navigate('/')}>
               Back home
             </Button>

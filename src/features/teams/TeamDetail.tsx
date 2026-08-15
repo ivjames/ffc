@@ -159,7 +159,7 @@ export default function TeamDetail() {
                     {m.displayName || m.email}
                     {m.userId === me?.id ? ' (you)' : ''}
                   </span>
-                  <span className="block text-xs text-fairway-100/60">
+                  <span className="block text-xs text-fairway-100/80">
                     {m.role === 'owner' ? 'Owner' : 'Member'}
                   </span>
                 </span>
@@ -168,7 +168,7 @@ export default function TeamDetail() {
               {((isOwner && m.userId !== me?.id) || (!isOwner && m.userId === me?.id)) && (
                 <button
                   onClick={() => void remove(m.userId)}
-                  className="text-sm font-semibold text-red-400"
+                  className="text-sm font-semibold text-danger"
                   disabled={busy}
                 >
                   {m.userId === me?.id ? 'Leave' : 'Remove'}
@@ -211,7 +211,7 @@ export default function TeamDetail() {
               placeholder="friend@example.com"
               className={inputClass}
             />
-            {inviteErr && <p className="mt-1.5 text-sm text-red-400">{inviteErr}</p>}
+            {inviteErr && <p className="mt-1.5 text-sm text-danger">{inviteErr}</p>}
             <div className="mt-3 mb-6">
               <Button
                 onClick={() => void sendInvite()}
@@ -245,7 +245,7 @@ export default function TeamDetail() {
           </>
         )}
 
-        {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
         {notice && <p className="mt-4 text-sm text-fairway-400">{notice}</p>}
       </Content>
     </Screen>

@@ -119,12 +119,12 @@ export default function Lobby() {
               >
                 <TagChip tag={tag} color={course.accent} />
                 {i === round.shared!.slot && (
-                  <span className="text-xs text-fairway-100/60">(this phone)</span>
+                  <span className="text-xs text-fairway-100/80">(this phone)</span>
                 )}
               </div>
             ))}
             {round.playerTags.length < 4 && (
-              <p className="px-1 text-xs text-fairway-100/60">
+              <p className="px-1 text-xs text-fairway-100/80">
                 Waiting for friends… up to {4 - round.playerTags.length} more can join.
               </p>
             )}
@@ -133,7 +133,7 @@ export default function Lobby() {
           <Button sound="cup" onClick={() => navigate(`/golf/play/${clientId}`)}>
             Start playing
           </Button>
-          <p className="mt-2 text-center text-xs text-fairway-100/60">
+          <p className="mt-2 text-center text-xs text-fairway-100/80">
             Friends can still join after you start.
           </p>
         </Content>
@@ -144,9 +144,9 @@ export default function Lobby() {
 
 export function LivePill({ status }: { status: SharedStatus }) {
   const styles: Record<SharedStatus, { dot: string; label: string }> = {
-    live: { dot: 'bg-emerald-400', label: 'Live' },
-    reconnecting: { dot: 'bg-amber-400', label: 'Reconnecting…' },
-    offline: { dot: 'bg-red-400', label: 'Offline' },
+    live: { dot: 'bg-positive', label: 'Live' },
+    reconnecting: { dot: 'bg-warning', label: 'Reconnecting…' },
+    offline: { dot: 'bg-danger', label: 'Offline' },
   };
   const s = styles[status];
   return (

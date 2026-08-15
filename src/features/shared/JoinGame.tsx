@@ -116,9 +116,9 @@ export default function JoinGame() {
           className="surface-sunk font-arcade w-32 rounded-xl border border-fairway-800/60 px-4 py-2.5 text-center text-2xl font-bold uppercase tracking-widest text-fairway-50 focus:border-fairway-500 focus:outline-none"
           style={{ borderColor: tagErr ? '#ef4444' : undefined }}
         />
-        {tagErr && <p className="mt-1.5 text-sm text-red-400">{tagErr}</p>}
+        {tagErr && <p className="mt-1.5 text-sm text-danger">{tagErr}</p>}
 
-        {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
         <div className="mt-6">
           <Button onClick={() => void join()} disabled={!ready || busy}>
             {busy ? 'Joining…' : 'Join game'}

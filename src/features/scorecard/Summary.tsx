@@ -224,7 +224,7 @@ export default function Summary() {
                   {/* Same three zones and column widths as the hero — place
                       left, tag centered, score right — so the columns line up
                       down the whole card. */}
-                  <span className="w-14 shrink-0 text-center font-mono text-2xl font-black text-fairway-100/50">
+                  <span className="w-14 shrink-0 text-center font-mono text-2xl font-black text-fairway-100/80">
                     {row.rank}
                   </span>
                   <div className="min-w-0 flex-1 text-center">
@@ -563,7 +563,7 @@ function SyncNote({ state, failed }: { state: LocalRound['syncState']; failed: b
   }
   if (failed) {
     return (
-      <p className="text-center text-xs text-amber-400/80">
+      <p className="text-center text-xs text-warning">
         Couldn’t reach the leaderboard — saved on this device, will retry.
       </p>
     );

@@ -208,7 +208,7 @@ export default function Account() {
               Save your info and play with friends across phones. We’ll email you a 6-digit
               code — no password to remember.
             </p>
-            {notice && <p className="mb-4 text-sm text-amber-400">{notice}</p>}
+            {notice && <p className="mb-4 text-sm text-warning">{notice}</p>}
             <label className={labelClass}>Email</label>
             <input
               value={email}
@@ -224,12 +224,12 @@ export default function Account() {
               placeholder="you@example.com"
               className={inputClass}
             />
-            {emailErr && <p className="mt-1.5 text-sm text-red-400">{emailErr}</p>}
+            {emailErr && <p className="mt-1.5 text-sm text-danger">{emailErr}</p>}
 
             <div className="mt-5 space-y-4">
               <div>
                 <label className={labelClass}>
-                  Name <span className="font-normal text-fairway-100/60">(optional)</span>
+                  Name <span className="font-normal text-fairway-100/80">(optional)</span>
                 </label>
                 <input
                   value={displayName}
@@ -242,7 +242,7 @@ export default function Account() {
               </div>
               <div>
                 <label className={labelClass}>
-                  Arcade tag <span className="font-normal text-fairway-100/60">(optional — prefills rosters)</span>
+                  Arcade tag <span className="font-normal text-fairway-100/80">(optional — prefills rosters)</span>
                 </label>
                 <input
                   value={defaultTag}
@@ -254,11 +254,11 @@ export default function Account() {
                   placeholder="ABC"
                   className={`${inputClass} font-arcade w-32 text-center text-2xl font-bold uppercase tracking-widest`}
                 />
-                {tagErr && <p className="mt-1.5 text-sm text-red-400">{tagErr}</p>}
+                {tagErr && <p className="mt-1.5 text-sm text-danger">{tagErr}</p>}
               </div>
             </div>
 
-            {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+            {error && <p className="mt-4 text-sm text-danger">{error}</p>}
             <div className="mt-6">
               <Button
                 onClick={() => void sendCode()}
@@ -267,7 +267,7 @@ export default function Account() {
                 {busy ? 'Sending…' : 'Email me a code'}
               </Button>
             </div>
-            <p className="mt-4 text-xs text-fairway-100/50">
+            <p className="mt-4 text-xs text-fairway-100/80">
               <Link to="/me/privacy" className="underline">
                 How we handle your info
               </Link>
@@ -293,7 +293,7 @@ export default function Account() {
               placeholder="123456"
               className={`${inputClass} font-arcade w-48 text-center text-3xl font-bold tracking-[0.4em]`}
             />
-            {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+            {error && <p className="mt-4 text-sm text-danger">{error}</p>}
             <div className="mt-6 space-y-2">
               <Button onClick={() => void submitCode()} disabled={busy || code.length !== 6}>
                 {busy ? 'Checking…' : 'Sign in'}
@@ -346,11 +346,11 @@ export default function Account() {
                   placeholder="ABC"
                   className={`${inputClass} font-arcade w-32 text-center text-2xl font-bold uppercase tracking-widest`}
                 />
-                {tagErr && <p className="mt-1.5 text-sm text-red-400">{tagErr}</p>}
+                {tagErr && <p className="mt-1.5 text-sm text-danger">{tagErr}</p>}
               </div>
             </div>
 
-            {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+            {error && <p className="mt-4 text-sm text-danger">{error}</p>}
             {saved && <p className="mt-4 text-sm text-fairway-400">Saved.</p>}
             <div className="mt-6 space-y-2">
               <Button onClick={() => void saveProfile()} disabled={busy || !profileValid}>
@@ -363,7 +363,7 @@ export default function Account() {
                 Sign out
               </Button>
             </div>
-            <p className="mt-4 text-xs text-fairway-100/50">
+            <p className="mt-4 text-xs text-fairway-100/80">
               <Link to="/me/privacy" className="underline">
                 How we handle your info
               </Link>

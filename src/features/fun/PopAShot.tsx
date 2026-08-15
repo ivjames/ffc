@@ -847,9 +847,9 @@ export default function PopAShot() {
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title="Pop-a-Shot" back="/arcade" />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
-        <span className={`font-bold ${bonus ? 'text-amber-300' : 'text-fairway-50'}`}>
+        <span className={`font-bold ${bonus ? 'text-warning' : 'text-fairway-50'}`}>
           ⏱ <span className="tabular-nums">{secondsLeft}</span>s
-          {bonus && <span className="ml-2 rounded bg-amber-400/20 px-1.5 py-0.5 text-xs font-black text-amber-300">×3</span>}
+          {bonus && <span className="ml-2 rounded bg-warning/20 px-1.5 py-0.5 text-xs font-black text-warning">×3</span>}
         </span>
         <span className="text-fairway-300">
           Score <span className="font-bold text-fairway-100">{score}</span>

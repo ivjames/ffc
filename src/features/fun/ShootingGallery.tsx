@@ -809,13 +809,13 @@ export default function ShootingGallery() {
           {Array.from({ length: MAG }, (_, i) => (
             <span
               key={i}
-              className={`inline-block h-3.5 w-1.5 rounded-full ${i < shells ? 'bg-amber-400' : 'bg-fairway-800'}`}
+              className={`inline-block h-3.5 w-1.5 rounded-full ${i < shells ? 'bg-warning' : 'bg-fairway-800'}`}
             />
           ))}
         </span>
         <span className="text-fairway-300">
           Time{' '}
-          <span className={`font-bold ${phase === 'playing' && timeLeft <= 5 ? 'text-red-400' : 'text-fairway-100'}`}>
+          <span className={`font-bold ${phase === 'playing' && timeLeft <= 5 ? 'text-danger' : 'text-fairway-100'}`}>
             {phase === 'playing' ? timeLeft : GAME_MS / 1000}s
           </span>
         </span>

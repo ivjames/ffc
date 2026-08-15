@@ -139,7 +139,7 @@ export default function OrderStatusScreen() {
       <Content>
         {!order && !error && <p className="text-fairway-100/70">Checking on your order…</p>}
         {error && (
-          <p className="mb-4 text-sm text-red-400">
+          <p className="mb-4 text-sm text-danger">
             Couldn't find that order — {error}. Ask at the counter if it was just placed.
           </p>
         )}
@@ -178,7 +178,7 @@ export default function OrderStatusScreen() {
                     {pickingUp ? 'Confirming…' : "I've picked it up"}
                   </Button>
                 </div>
-                {pickupError && <p className="mt-2 text-xs text-red-400">{pickupError}</p>}
+                {pickupError && <p className="mt-2 text-xs text-danger">{pickupError}</p>}
               </div>
             )}
 
@@ -190,12 +190,12 @@ export default function OrderStatusScreen() {
                   </Button>
                 )}
                 {notifyPerm === 'granted' && (
-                  <p className="text-center text-xs text-fairway-100/60">
+                  <p className="text-center text-xs text-fairway-100/80">
                     🔔 Notifications on — we'll alert you when it's ready.
                   </p>
                 )}
                 {notifyPerm === 'denied' && (
-                  <p className="text-center text-xs text-fairway-100/60">
+                  <p className="text-center text-xs text-fairway-100/80">
                     Notifications are blocked in your browser — we'll still chime and buzz here.
                   </p>
                 )}
@@ -238,7 +238,7 @@ export default function OrderStatusScreen() {
                     <span>{formatCents(line.lineTotalCents)}</span>
                   </div>
                   {!!line.modifierNames?.length && (
-                    <div className="pl-4 text-xs text-fairway-100/50">
+                    <div className="pl-4 text-xs text-fairway-100/80">
                       {line.modifierNames.join(', ')}
                     </div>
                   )}

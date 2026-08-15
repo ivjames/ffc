@@ -46,7 +46,10 @@ function FoodDrinkCard({ menuUrl, orderingUrl }: { menuUrl?: string; orderingUrl
       className={`flex-1 rounded-xl py-2.5 text-center text-sm font-bold ${
         online
           ? 'btn-accent text-fairway-50 transition-transform active:translate-y-px'
-          : 'surface-sunk cursor-not-allowed text-fairway-100/50'
+          : // Keeps `fairway-100/50` where the rest of the app moved to /80 for
+            // AA — the offline state is an inactive control (`aria-disabled`),
+            // which WCAG 1.4.3 exempts, and the dimming IS the affordance.
+            'surface-sunk cursor-not-allowed text-fairway-100/50'
       }`}
       onClick={(e) => {
         if (!online) e.preventDefault();

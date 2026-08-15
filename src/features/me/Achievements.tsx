@@ -132,7 +132,7 @@ export default function Achievements() {
           })}
         </ul>
 
-        <p className="mt-4 text-center text-xs text-fairway-100/60">
+        <p className="mt-4 text-center text-xs text-fairway-100/80">
           Achievements are tracked on this device. Sign in on the Me screen to keep them across
           visits.
         </p>

@@ -187,7 +187,7 @@ export default function Checkout() {
               </label>
             )}
 
-            {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+            {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
             <Button onClick={() => void pay()} disabled={placing} sound="cup">
               {placing ? 'Placing order…' : `Pay ${formatCents(totals.totalCents)}`}
