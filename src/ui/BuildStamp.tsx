@@ -40,7 +40,7 @@ export function BuildStamp() {
         <>
           build {__BUILD_ID__}
           {apiBuild && <> · api {apiBuild}</>}
-          {mismatch && <span className="text-amber-400/80"> (mismatch)</span>}
+          {mismatch && <span className="text-warning"> (mismatch)</span>}
         </>
       )}
     </button>

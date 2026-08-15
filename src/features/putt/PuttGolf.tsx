@@ -791,7 +791,7 @@ export default function PuttGolf() {
 
         <p
           className={`flex h-16 shrink-0 items-center justify-center px-4 pt-3 text-center text-sm ${
-            note && phase === 'aim' ? 'font-semibold text-sky-300' : 'text-fairway-100/80'
+            note && phase === 'aim' ? 'font-semibold text-info' : 'text-fairway-100/80'
           }`}
         >
           <span className="line-clamp-2">{hint}</span>

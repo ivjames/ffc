@@ -117,7 +117,7 @@ export default function TvWall() {
       </div>
 
       {error && !boards && (
-        <div className="m-auto rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-amber-200">
+        <div className="m-auto rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-warning">
           The board needs the backend API running. {error}
         </div>
       )}

@@ -208,7 +208,7 @@ export default function Account() {
               Save your info and play with friends across phones. We’ll email you a 6-digit
               code — no password to remember.
             </p>
-            {notice && <p className="mb-4 text-sm text-amber-400">{notice}</p>}
+            {notice && <p className="mb-4 text-sm text-warning">{notice}</p>}
             <label className={labelClass}>Email</label>
             <input
               value={email}

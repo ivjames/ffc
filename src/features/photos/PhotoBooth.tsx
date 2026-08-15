@@ -1028,7 +1028,7 @@ export default function PhotoBooth() {
           )}
 
           {editorError && (
-            <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+            <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-danger">
               {editorError}
             </div>
           )}
@@ -1096,7 +1096,7 @@ export default function PhotoBooth() {
         </Button>
 
         {galleryError && (
-          <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+          <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-warning">
             {galleryError}
           </div>
         )}

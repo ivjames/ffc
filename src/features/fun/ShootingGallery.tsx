@@ -809,7 +809,7 @@ export default function ShootingGallery() {
           {Array.from({ length: MAG }, (_, i) => (
             <span
               key={i}
-              className={`inline-block h-3.5 w-1.5 rounded-full ${i < shells ? 'bg-amber-400' : 'bg-fairway-800'}`}
+              className={`inline-block h-3.5 w-1.5 rounded-full ${i < shells ? 'bg-warning' : 'bg-fairway-800'}`}
             />
           ))}
         </span>

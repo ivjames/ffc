@@ -921,7 +921,7 @@ export default function CoinPusher() {
           Coins <span className="text-fairway-100">{coinsLeft}</span>
         </span>
         <span className="text-fairway-300">
-          Payout <span className="font-bold text-amber-300">{score}</span>
+          Payout <span className="font-bold text-warning">{score}</span>
         </span>
       </div>
       {phase === 'play' && (

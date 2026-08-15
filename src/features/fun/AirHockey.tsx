@@ -588,9 +588,9 @@ export default function AirHockey() {
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title="Air Hockey" back="/arcade" />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
-        <span className="font-bold text-red-400">CPU {cpu}</span>
+        <span className="font-bold text-danger">CPU {cpu}</span>
         <span className="text-fairway-400">First to {TARGET}</span>
-        <span className="font-bold text-green-400">You {you}</span>
+        <span className="font-bold text-positive">You {you}</span>
       </div>
 
       <div className="grid min-h-0 flex-1 place-items-center px-4">

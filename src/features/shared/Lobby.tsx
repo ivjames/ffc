@@ -144,8 +144,8 @@ export default function Lobby() {
 
 export function LivePill({ status }: { status: SharedStatus }) {
   const styles: Record<SharedStatus, { dot: string; label: string }> = {
-    live: { dot: 'bg-emerald-400', label: 'Live' },
-    reconnecting: { dot: 'bg-amber-400', label: 'Reconnecting…' },
+    live: { dot: 'bg-positive', label: 'Live' },
+    reconnecting: { dot: 'bg-warning', label: 'Reconnecting…' },
     offline: { dot: 'bg-danger', label: 'Offline' },
   };
   const s = styles[status];

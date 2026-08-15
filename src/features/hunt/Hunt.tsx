@@ -312,7 +312,7 @@ export default function Hunt() {
         </div>
 
         {loadError && (
-          <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+          <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-danger">
             {loadError}
           </div>
         )}
@@ -418,7 +418,7 @@ export default function Hunt() {
                       state.verified
                         ? 'bg-fairway-500/15 text-fairway-200'
                         : state.flagged
-                          ? 'bg-amber-500/15 text-amber-200'
+                          ? 'bg-amber-500/15 text-warning'
                           : 'bg-fairway-800/40 text-fairway-100/70'
                     }`}
                   >

@@ -563,7 +563,7 @@ function SyncNote({ state, failed }: { state: LocalRound['syncState']; failed: b
   }
   if (failed) {
     return (
-      <p className="text-center text-xs text-amber-400/80">
+      <p className="text-center text-xs text-warning">
         Couldn’t reach the leaderboard — saved on this device, will retry.
       </p>
     );

@@ -889,7 +889,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
     <div className="animate-page-in mx-auto flex h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <TopBar title={theme.title} back="/arcade" />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
-        <span className="font-bold text-green-400">Bumps {score}</span>
+        <span className="font-bold text-positive">Bumps {score}</span>
         <span className={`font-bold ${secs <= 5 ? 'text-danger' : 'text-fairway-300'}`}>⏱ {secs}s</span>
       </div>
 

@@ -41,7 +41,7 @@ export default function LocationPicker() {
             {detecting ? 'Locating…' : 'Use my location'}
           </button>
         )}
-        {message && <p className="mb-4 text-center text-sm text-amber-400">{message}</p>}
+        {message && <p className="mb-4 text-center text-sm text-warning">{message}</p>}
 
         <div className="space-y-3">
           {LOCATIONS.map((loc) => {
