@@ -19,15 +19,15 @@ import whackamole from './games/whackamole.mjs';
 import bowling from './games/bowling.mjs';
 import shootinggallery from './games/shootinggallery.mjs';
 import clawmachine from './games/clawmachine.mjs';
+import battingcages from './games/battingcages.mjs';
 
-export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine];
+export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine, battingcages];
 
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
 /** Server-registry games with no policy yet, and why. */
 export const UNSUPPORTED = [
   ['airhockey', 'reactive — tracks a live puck'],
-  ['battingcages', 'reactive — pitch timing'],
   ['bumperboats', 'reactive — continuous steering'],
   ['bumpercars', 'reactive — continuous steering'],
   ['gokarts', 'reactive — continuous steering'],
