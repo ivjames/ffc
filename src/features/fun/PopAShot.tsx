@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import {
   playStroke,
   playCup,
@@ -294,6 +295,12 @@ function drawHoop(ctx: CanvasRenderingContext2D, hx: number, bonus: boolean) {
   ctx.strokeStyle = 'rgba(15,23,42,0.8)';
   ctx.lineWidth = 3;
   ctx.stroke();
+  // House wordmark across the backboard, like a real Pop-a-Shot cabinet. The
+  // wordmark rather than the full lockup: the clear band above the shooter's
+  // square is only ~54px tall and ~105px wide, and the moose's hairlines go to
+  // mush much below 92px. Dark tint — this is the one light surface in the set.
+  // Drawn off `hx` so it rides along when the hoop slides in the bonus round.
+  drawLogo(ctx, hx, 106, { variant: 'wordmark', width: 94, tint: '#0f172a', alpha: 0.85 });
   // Shooter's square above the rim — flips to the bonus color too.
   ctx.strokeStyle = withAlpha(rimColor, 0.9);
   ctx.lineWidth = 2.5;

@@ -83,6 +83,31 @@ export function Content({ children }: { children: ReactNode }) {
   return <main className="animate-page-in flex-1 px-4 py-4">{children}</main>;
 }
 
+/** The venue wordmark for DOM screens (canvas games draw it via fun/logo.ts).
+ *  The brand asset is white-on-transparent, which can't survive the theme flip
+ *  as a plain <img> — so it's a mask over `bg-current`, taking whatever text
+ *  color the caller sets and flipping with the theme like any other text.
+ *  Size and color via className (give it a height, width, and text color). */
+export function BrandMark({ className = '' }: { className?: string }) {
+  const url = "url('/brand/logo-wordmark.png')";
+  return (
+    <span
+      aria-hidden
+      className={`block bg-current ${className}`}
+      style={{
+        WebkitMaskImage: url,
+        maskImage: url,
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+      }}
+    />
+  );
+}
+
 type ButtonProps = {
   children: ReactNode;
   onClick?: () => void;

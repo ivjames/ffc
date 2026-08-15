@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { useFitCanvas } from '../fun/useFitCanvas';
 import {
   W,
@@ -738,6 +738,7 @@ export default function PuttGolf() {
         <Content>
           <div className="mt-6 text-center">
             <div className="text-5xl">⛳️</div>
+            <BrandMark className="mx-auto mt-3 h-4 w-44 text-fairway-400" />
             <h2 className="mt-2 text-2xl font-black text-fairway-50">Choose your game</h2>
             <p className="mx-auto mt-1 max-w-xs text-sm text-fairway-100/70">
               Drag back from the ball to aim, release to putt. Sink it in as few strokes as you can.

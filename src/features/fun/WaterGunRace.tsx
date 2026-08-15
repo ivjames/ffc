@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playWaterBump, playTick, playScore, playBuzz, playFanfare } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
 import {
@@ -503,6 +504,10 @@ function drawGun(ctx: CanvasRenderingContext2D, gs: GS) {
 function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.clearRect(0, 0, W, H);
   drawBooth(ctx);
+  // Booth backdrop, above the clown target. Pushed right of center because the
+  // RIVALS standings panel occupies the left edge during a heat — centering on
+  // W/2 would tuck the mark half behind it.
+  drawLogo(ctx, 205, 98, { width: 124, tint: '#f1f5f9', alpha: 0.42 });
 
   // —— Dynamic layer (shaken on pops) ——
   ctx.save();

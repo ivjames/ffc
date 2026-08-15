@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
 import {
@@ -250,6 +251,16 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.strokeStyle = rail;
   ctx.stroke();
   ctx.restore();
+
+  // Lane decal, on the clear felt between the lowest scoring ring (~380) and
+  // the racked ball (~478). Low alpha and the lane's own green so it reads as
+  // printed INTO the felt — a full-strength white mark here would look like a
+  // sticker floating above the surface the ball rolls across.
+  //
+  // Wordmark, not the lockup: the gap is under 100px tall, and a lockup narrow
+  // enough to fit puts the moose below the ~92px its hairlines need, so it
+  // renders as a smudge and crowds the 10-ring on top of that.
+  drawLogo(ctx, W / 2, 432, { variant: 'wordmark', width: 140, tint: '#86efac', alpha: 0.4 });
 
   // —— Corner vignette for depth ——
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.72);

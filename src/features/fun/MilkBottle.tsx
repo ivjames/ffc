@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playCup, playDing, playUndo, playPinClack, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
 import {
@@ -556,6 +557,11 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   drawAwning(ctx);
   drawBunting(ctx);
+  // Back wall of the booth, in the band between the bunting (hangs to ~108) and
+  // the top of the bottle pyramid (~197). The full lockup fits here — this is
+  // the roomiest wall in the booth set. Warm gold, matching the bunting's own
+  // flags, so it reads as booth decor rather than an overlay.
+  drawLogo(ctx, W / 2, 152, { width: 150, tint: '#e8b93b', alpha: 0.5 });
 
   // Vignette for depth.
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.74);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare, playPinClack } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
 import {
@@ -324,16 +325,12 @@ function drawBooth(ctx: CanvasRenderingContext2D) {
   }
   ctx.restore();
 
-  // Booth sign.
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = 'bold 15px system-ui, sans-serif';
-  ctx.fillStyle = '#fbbf24';
-  ctx.shadowColor = 'rgba(251,191,36,0.7)';
-  ctx.shadowBlur = 10;
-  ctx.fillText('★ RING TOSS ★', W / 2, 114);
-  ctx.restore();
+  // Booth sign — the house logo, hung between the awning's scalloped hem (~71)
+  // and the felt table (150). The game's own name isn't lost: the screen's
+  // TopBar already reads "Ring Toss", so this slot is free for the venue.
+  // Warm amber tint to sit under the same string lights as the rest of the
+  // booth, rather than reading as a white sticker pasted on the scene.
+  drawLogo(ctx, W / 2, 114, { width: 118, tint: '#fbbf24' });
 
   // Felt table (perspective trapezoid) the bottles stand on.
   const felt = ctx.createLinearGradient(0, 150, 0, 372);

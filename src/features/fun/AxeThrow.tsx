@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
 import {
@@ -331,6 +332,13 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   // —— Throwing-range backdrop: wood-plank wall + vignette ——
   drawWoodWall(ctx);
+
+  // House sign painted on the range wall, in the clear band between the target
+  // panel (which ends ~380) and the axe on the floor (~505) — the one big empty
+  // stretch of plank in the scene. Drawn before the vignette so it sits IN the
+  // wall rather than on top of it; at this height the vignette is still fully
+  // transparent, so it doesn't get muddied.
+  drawLogo(ctx, W / 2, 432, { width: 150, tint: '#fbbf24', alpha: 0.5 });
 
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
   vig.addColorStop(0, 'rgba(0,0,0,0)');

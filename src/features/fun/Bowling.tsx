@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playPinClack, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
 import {
@@ -518,6 +519,11 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.fillStyle = '#07060d';
   ctx.fillRect(farL.x - 16, farL.y - 30, farR.x - farL.x + 32, 30);
   neonLine(ctx, farL.x - 16, farL.y - 30, farR.x + 16, farL.y - 30, PURPLE, 2, 10);
+  // House mark on the masking unit — the branded panel above the pin deck on a
+  // real lane. The band is only ~84px wide at this projection depth, so the
+  // wordmark runs at 76px: below its usual floor, but it's the far end of the
+  // alley, where "small and glowing" is exactly how the real thing reads.
+  drawLogo(ctx, W / 2, farL.y - 16, { variant: 'wordmark', width: 76, tint: PURPLE, alpha: 0.8 });
 
   // —— Gutters: converging recessed channels either side of the lane ——
   const gut = ctx.createLinearGradient(0, farL.y, 0, nearL.y);

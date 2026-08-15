@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playTick, playPinClack, playScore, playCup, playUndo, playFanfare, playDing } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
 import {
@@ -481,10 +482,15 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.fillStyle = '#0d1420';
   ctx.fillRect(0, 0, W, TOP_STRIP);
   ctx.save();
+  // House wordmark on the drop panel, in place of the old "TAP TO DROP" label.
+  // The instruction isn't lost: the arrows below still mark the drop slots, and
+  // the screen's footer already reads "Tap to drop a coin, or hold to keep
+  // feeding the pile". The mirrored back wall was tried first and doesn't work
+  // — the pusher bar rides up over it and the coin reflections clutter it.
+  drawLogo(ctx, W / 2, 18, { variant: 'wordmark', width: 118, tint: '#fbbf24', alpha: 0.75 });
   ctx.fillStyle = 'rgba(251,191,36,0.5)';
   ctx.font = 'bold 10px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('T A P   T O   D R O P', W / 2, 20);
   for (let k = 0; k < 5; k++) {
     const x = 50 + k * 60;
     ctx.beginPath();

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playPinClack, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
 import {
@@ -348,6 +349,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.fillRect(0, 0, W, H);
 
   drawBoard(ctx);
+
+  // Pub sign on the wall under the board (the surround ends at y 378, the
+  // ready dart draws in from ~470). Warm brass on the dark paneling, drawn
+  // after the vignette so it keeps its color at the wall's edge-darkened
+  // bottom half instead of being muddied by it.
+  drawLogo(ctx, CX, 420, { variant: 'wordmark', width: 150, tint: '#c8a06a', alpha: 0.5 });
 
   // —— Dynamic layer (shaken on impact) ——
   ctx.save();

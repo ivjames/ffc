@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
 import {
@@ -270,6 +271,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   vig.addColorStop(1, 'rgba(0,0,0,0.5)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, W, H);
+
+  // Outfield billboard, above the fence arc's apex (y 62) — where a real park
+  // hangs sponsor boards. In the fence's red so it reads as part of the same
+  // distant glow, and drawn BEFORE the netting so the mesh hangs in front of
+  // it: the player sees it through the cage, like everything else out there.
+  drawLogo(ctx, W / 2, 34, { variant: 'wordmark', width: 130, tint: '#ef4444', alpha: 0.5 });
 
   // —— Cage netting: a faint diamond mesh, fading toward the foreground ——
   ctx.save();
