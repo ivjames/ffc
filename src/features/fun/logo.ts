@@ -15,38 +15,64 @@
 // that the server-side tests load under a NODE environment, where `Image` and
 // `document` don't exist — so no DOM global may be touched at import time.
 
-const LOGO_SRC = '/brand/logo.png';
+// Three cuts of the same mark. Which one fits is driven by how much room the
+// placement has, because the moose is fine line art — see the aspect ratios and
+// the minimum legible widths below (measured on a 340px game canvas):
+//
+//   full      1.93:1   needs ~140px  — badge over both lines of type
+//   badge     1.27:1   needs ~92px   — the moose roundel alone
+//   wordmark  5.52:1   needs ~80px   — BULLWINKLE'S + & FAMILY FUN CENTER
+//
+// Below those widths the badge's hairlines collapse into a smudge, so small
+// signage (a marquee strip, a narrow backboard) wants the wordmark, not the
+// full lockup shrunk down.
+//
+// The badge is a repaired cut: in the master the circle's bottom arc is fused
+// with the wordmark's letters, so lifting the moose out on its own leaves the
+// roundel visibly broken. The shipped asset restores that arc. The two breaks
+// where the antlers cross the circle are deliberate — the antlers sit in front.
+export type LogoVariant = 'full' | 'badge' | 'wordmark';
 
-let img: HTMLImageElement | null = null;
-let failed = false;
+const SRC: Record<LogoVariant, string> = {
+  full: '/brand/logo.png',
+  badge: '/brand/logo-badge.png',
+  wordmark: '/brand/logo-wordmark.png',
+};
+
+const imgs = new Map<LogoVariant, HTMLImageElement>();
+const failed = new Set<LogoVariant>();
 
 /** Kick off the decode once, on first draw. Safe to call every frame. */
-function ensureLoading(): HTMLImageElement | null {
-  if (failed) return null;
-  if (img) return img;
+function ensureLoading(variant: LogoVariant): HTMLImageElement | null {
+  if (failed.has(variant)) return null;
+  const hit = imgs.get(variant);
+  if (hit) return hit;
   if (typeof Image === 'undefined') return null; // node (tests) — never loads
   const el = new Image();
   el.onerror = () => {
     // No logo deployed: latch the failure so we stop retrying every frame.
-    failed = true;
-    img = null;
+    failed.add(variant);
+    imgs.delete(variant);
   };
-  el.src = LOGO_SRC;
-  img = el;
-  return img;
+  el.src = SRC[variant];
+  imgs.set(variant, el);
+  return el;
 }
 
-/** True once the master has decoded and can be drawn. */
-export function logoReady(): boolean {
-  const el = ensureLoading();
-  return !!el && el.complete && el.naturalWidth > 0;
+function decoded(variant: LogoVariant): HTMLImageElement | null {
+  const el = ensureLoading(variant);
+  return el && el.complete && el.naturalWidth > 0 ? el : null;
 }
 
-/** The master's intrinsic aspect (width / height), or null until it decodes. */
-export function logoAspect(): number | null {
-  const el = ensureLoading();
-  if (!el || !el.complete || el.naturalWidth === 0) return null;
-  return el.naturalWidth / el.naturalHeight;
+/** True once the given cut has decoded and can be drawn. */
+export function logoReady(variant: LogoVariant = 'full'): boolean {
+  return !!decoded(variant);
+}
+
+/** A cut's intrinsic aspect (width / height), or null until it decodes. */
+export function logoAspect(variant: LogoVariant = 'full'): number | null {
+  const el = decoded(variant);
+  return el ? el.naturalWidth / el.naturalHeight : null;
 }
 
 // Recoloring is done on offscreen canvases keyed by color, built once each.
@@ -55,8 +81,13 @@ export function logoAspect(): number | null {
 // approach affordable.
 const tinted = new Map<string, HTMLCanvasElement>();
 
-function tintedCopy(el: HTMLImageElement, color: string): HTMLCanvasElement | null {
-  const hit = tinted.get(color);
+function tintedCopy(
+  variant: LogoVariant,
+  el: HTMLImageElement,
+  color: string,
+): HTMLCanvasElement | null {
+  const key = `${variant}|${color}`;
+  const hit = tinted.get(key);
   if (hit) return hit;
   if (typeof document === 'undefined') return null;
   const c = document.createElement('canvas');
@@ -72,12 +103,14 @@ function tintedCopy(el: HTMLImageElement, color: string): HTMLCanvasElement | nu
   cx.fillRect(0, 0, c.width, c.height);
   cx.globalCompositeOperation = 'destination-in';
   cx.drawImage(el, 0, 0);
-  tinted.set(color, c);
+  tinted.set(key, c);
   return c;
 }
 
 export type LogoOpts = {
-  /** Drawn width in canvas units; height follows the master's aspect. */
+  /** Which cut to draw. Default 'full'. */
+  variant?: LogoVariant;
+  /** Drawn width in canvas units; height follows the cut's aspect. */
   width: number;
   /** Horizontal anchor. Default 'center'. */
   align?: 'left' | 'center' | 'right';
@@ -106,10 +139,11 @@ export function drawLogo(
   y: number,
   opts: LogoOpts,
 ): void {
-  const el = ensureLoading();
-  if (!el || !el.complete || el.naturalWidth === 0) return;
+  const variant = opts.variant ?? 'full';
+  const el = decoded(variant);
+  if (!el) return;
 
-  const src = opts.tint ? tintedCopy(el, opts.tint) : el;
+  const src = opts.tint ? tintedCopy(variant, el, opts.tint) : el;
   if (!src) return;
 
   const w = opts.width;
