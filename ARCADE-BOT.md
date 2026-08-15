@@ -112,6 +112,13 @@ node scripts/arcade-traffic.mjs --profile arcade-profile.json \
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
 run replayable; `--headed` lets you watch it play.
 
+To watch it on a machine with no display — CI, a remote dev container — record
+the session instead, since `--headed` has nothing to display to there:
+
+```bash
+node scripts/arcade-bot.mjs --game skeeball --skill 1 --video ./vid   # → ./vid/*.webm
+```
+
 ## Player ids are real loyalty cards
 
 `playerId` is a **loyalty vendor card id**, and the award route forwards it

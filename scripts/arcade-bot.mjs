@@ -34,6 +34,8 @@
 //   --seed N          PRNG seed, for a replayable run (default 1)
 //   --out FILE        write the captured score profile as JSON
 //   --headed          run with a visible browser, for watching it play
+//   --video DIR       record the session to DIR as .webm — how to watch it play
+//                     on a headless box, where --headed has nothing to display to
 //   --assert-skill    exit non-zero if an expert bot can't clear each game's
 //                     floor; implies --skill 1 unless --skill is given
 //   --list            print supported + unsupported games and exit
@@ -58,6 +60,7 @@ function parseArgs(argv) {
     seed: 1,
     out: null,
     headed: false,
+    video: null,
     assertSkill: false,
     list: false,
   };
@@ -71,6 +74,7 @@ function parseArgs(argv) {
     else if (k === '--seed') a.seed = Number(next());
     else if (k === '--out') a.out = next();
     else if (k === '--headed') a.headed = true;
+    else if (k === '--video') a.video = next();
     else if (k === '--assert-skill') a.assertSkill = true;
     else if (k === '--list') a.list = true;
     else throw new Error(`unknown flag ${k}`);
@@ -117,7 +121,15 @@ async function main() {
   console.log('(no model/API calls — cost is wall clock + one headless browser)\n');
 
   const browser = await chromium.launch({ headless: !args.headed });
-  const page = await browser.newPage({ viewport: { width: 420, height: 900 } });
+  // --video records the session instead of needing a visible browser, which is
+  // the only way to watch the bot play on a headless box (CI, a remote dev
+  // container). One .webm per page, written when the context closes.
+  const viewport = { width: 420, height: 900 };
+  const context = await browser.newContext({
+    viewport,
+    ...(args.video ? { recordVideo: { dir: args.video, size: viewport } } : {}),
+  });
+  const page = await context.newPage();
 
   const profile = { capturedAt: new Date().toISOString(), base: args.base, games: {} };
   const t0 = Date.now();
@@ -168,6 +180,7 @@ async function main() {
     );
   }
 
+  await context.close(); // finalises any video
   await browser.close();
 
   const wall = (Date.now() - t0) / 1000;
