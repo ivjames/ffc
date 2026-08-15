@@ -10,6 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import FeedbackButton from './FeedbackButton';
 import { submitFeedback, getReviewerName } from '../lib/feedbackApi';
+import { captureScreen, isScreenCaptureSupported } from '../lib/screenCapture';
 
 vi.mock('../lib/feedbackApi', async (importOriginal) => {
   // Keep the real name-memory helpers (they're localStorage, which jsdom has)
@@ -23,6 +24,12 @@ vi.mock('../lib/sound', () => ({
   playStroke: vi.fn(),
   playUndo: vi.fn(),
   playCup: vi.fn(),
+}));
+// jsdom implements no screen-capture API. Default to "unsupported", which is
+// also the truth on every phone — the tests that care opt in per case.
+vi.mock('../lib/screenCapture', () => ({
+  isScreenCaptureSupported: vi.fn(() => false),
+  captureScreen: vi.fn(async () => null),
 }));
 
 // jsdom implements neither half of the object-URL API. The widget uses them
@@ -57,7 +64,17 @@ beforeEach(() => {
     createdAt: '2026-08-15T00:00:00Z',
     hasScreenshot: false,
   });
+  vi.mocked(isScreenCaptureSupported).mockReset().mockReturnValue(false);
+  vi.mocked(captureScreen).mockReset().mockResolvedValue(null);
 });
+
+/** Put the suite on a browser that can grab the screen, returning the frame it
+ *  will hand back (desktop reviewers; phones never take this path). */
+function onCapableBrowser(shot: File | null = new File(['px'], 'screen.png', { type: 'image/png' })) {
+  vi.mocked(isScreenCaptureSupported).mockReturnValue(true);
+  vi.mocked(captureScreen).mockResolvedValue(shot);
+  return shot;
+}
 
 afterEach(cleanup);
 
@@ -186,6 +203,69 @@ describe('FeedbackButton', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /feedback/i }));
     expect(screen.getByRole('dialog').className).toContain('pointer-events-auto');
+  });
+
+  it('grabs the screen when pressed, and attaches the frame to the note', async () => {
+    const shot = onCapableBrowser();
+    const user = await openSheet('/golf/play');
+
+    // Captured on press — before the sheet exists, so the shot shows the
+    // screen the reviewer was looking at rather than the sheet over it.
+    expect(captureScreen).toHaveBeenCalledTimes(1);
+    expect(await screen.findByAltText(/screenshot to attach/i)).toBeInTheDocument();
+    expect(screen.getByText(/grabbed the screen when you opened this note/i)).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox', { name: /what's on your mind/i }), 'look at this');
+    await user.click(screen.getByRole('button', { name: /send note/i }));
+    await waitFor(() =>
+      expect(submitFeedback).toHaveBeenCalledWith(expect.objectContaining({ screenshot: shot }))
+    );
+  });
+
+  it('opens the sheet anyway when the reviewer dismisses the capture prompt', async () => {
+    // Declining to share your screen is a choice, not a failure.
+    onCapableBrowser(null);
+    await openSheet();
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByAltText(/screenshot to attach/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/grabbed the screen/i)).not.toBeInTheDocument();
+  });
+
+  it('opens the sheet anyway when the capture throws', async () => {
+    vi.mocked(isScreenCaptureSupported).mockReturnValue(true);
+    vi.mocked(captureScreen).mockRejectedValue(new Error('capture exploded'));
+    await openSheet();
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('never asks to capture on a browser that cannot (every phone)', async () => {
+    await openSheet();
+    expect(captureScreen).not.toHaveBeenCalled();
+    // The manual attach path is still right there.
+    expect(screen.getByLabelText(/attach a screenshot/i)).toBeInTheDocument();
+  });
+
+  it('lets a grabbed frame be removed, and a different image attached over it', async () => {
+    onCapableBrowser();
+    const user = await openSheet();
+    expect(await screen.findByAltText(/screenshot to attach/i)).toBeInTheDocument();
+
+    const own = new File(['bytes'], 'mine.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText(/attach a different screenshot/i), own);
+    // Replacing the grab drops the "we took this for you" note.
+    await waitFor(() =>
+      expect(screen.queryByText(/grabbed the screen/i)).not.toBeInTheDocument()
+    );
+
+    await user.type(screen.getByRole('textbox', { name: /what's on your mind/i }), 'mine instead');
+    await user.click(screen.getByRole('button', { name: /send note/i }));
+    await waitFor(() =>
+      expect(submitFeedback).toHaveBeenCalledWith(expect.objectContaining({ screenshot: own }))
+    );
   });
 
   it('closes on Escape', async () => {

@@ -6,6 +6,7 @@
 // ANTHROPIC_API_KEY set and would fail loudly if an AI call ever crept in.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import pg from "pg";
 import { access, mkdtemp, rm as rmDir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +16,7 @@ import {
   testQuery,
   listenEphemeral,
 } from "../test-support/testDb.js";
+import { BUDGET_LOCKS } from "../lib/diskBudget.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 const APP_TOKEN = `booth-test-token-${Date.now()}`;
@@ -279,6 +281,64 @@ test("the global disk budget counts real stored bytes and 429s past it", async (
   // Room in the budget again -> uploads flow.
   process.env.PHOTO_BOOTH_DISK_BUDGET_MB = "1024";
   assert.equal((await upload(uploadBody(booth))).status, 200);
+});
+
+test("the budget is reserved under a lock, so concurrent uploads can't race past it", async () => {
+  // A budget checked in one statement and consumed in another is not a
+  // ceiling: concurrent uploads all read the same sum(bytes), all conclude
+  // there is room, and all store — overshooting by up to MAX_IMAGE_BYTES per
+  // request in flight. The check and the insert therefore share a transaction
+  // serialized by an advisory lock (lib/diskBudget.js).
+  //
+  // Firing a burst of HTTP uploads does NOT prove that: the payload size that
+  // widens the racy window also staggers arrival, so such a test passes with
+  // or without the fix. Test the mechanism instead — hold the lock from
+  // another connection and assert the write actually waits on it.
+  const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
+  await holder.connect();
+  await holder.query("select pg_advisory_lock($1)", [BUDGET_LOCKS.boothPhoto]);
+  try {
+    const booth = newBoothId("lock");
+    let uploadSettled = false;
+    const pending = upload(uploadBody(booth)).then((r) => {
+      uploadSettled = true;
+      return r.json();
+    });
+
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(uploadSettled, false, "the upload must wait for the budget reservation");
+
+    await holder.query("select pg_advisory_unlock($1)", [BUDGET_LOCKS.boothPhoto]);
+    const saved = await pending;
+    assert.ok(saved.ok && saved.id, "and completes once the lock is free");
+
+    // Replace reserves against the same lock — it rewrites bytes, so it spends
+    // budget exactly like an upload does.
+    await holder.query("select pg_advisory_lock($1)", [BUDGET_LOCKS.boothPhoto]);
+    let replaceSettled = false;
+    const replacing = fetch(
+      `${baseUrl}/api/photos/${saved.id}/replace?booth=${encodeURIComponent(booth)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: Buffer.from("replaced-under-lock").toString("base64"),
+          mediaType: "image/jpeg",
+        }),
+      }
+    ).then((r) => {
+      replaceSettled = true;
+      return r.json();
+    });
+
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(replaceSettled, false, "replace must wait too");
+
+    await holder.query("select pg_advisory_unlock($1)", [BUDGET_LOCKS.boothPhoto]);
+    assert.equal((await replacing).ok, true);
+  } finally {
+    await holder.end();
+  }
 });
 
 test("GET /api/photos/retention reports the live retention config", async (t) => {
