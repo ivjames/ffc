@@ -68,20 +68,25 @@ builder to match what it reports.
 
 ## Screenshot-verify recipe
 
-Global playwright lives outside the repo; run from its directory:
+Global playwright lives outside the repo; run from its directory. The HTML
+path is resolved from the current checkout (never hardcode it):
 
 ```bash
-cd /opt/node22/lib/node_modules/playwright && node -e '
-const { chromium } = require("playwright");
+DOC="$(git -C "$(pwd)" rev-parse --show-toplevel)/public/docs/screens.html" \
+bash -c 'cd /opt/node2*/lib/node_modules/playwright 2>/dev/null || cd $(npm root -g)/playwright; node -e "
+const { chromium } = require(\"playwright\");
 (async () => {
-  const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const b = await chromium.launch({ executablePath: \"/opt/pw-browsers/chromium\" });
   const p = await b.newPage({ viewport: { width: 900, height: 1300 }, deviceScaleFactor: 2 });
-  await p.goto("file:///home/user/ffc/public/docs/screens.html");
+  await p.goto(\"file://\" + process.env.DOC);
   // .cell = one artboard on the contact sheet; .page.sp = one guide page
-  await p.locator(".cell").nth(IDX).screenshot({ path: "OUT.png" });
+  await p.locator(\".cell\").nth(IDX).screenshot({ path: \"OUT.png\" });
   await b.close();
 })().catch(e => { console.error(e); process.exit(1); });
-'
+"'
 ```
+
+If `/opt/pw-browsers/chromium` doesn't exist in your environment, drop the
+`executablePath` option and let Playwright find its own browser.
 
 Then Read the PNG and check it against the reader's report before committing.
