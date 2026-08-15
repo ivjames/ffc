@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import {
   playStroke,
   playPinClack,
@@ -354,6 +355,12 @@ function drawBooth(ctx: CanvasRenderingContext2D) {
 function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.clearRect(0, 0, W, H);
   drawBooth(ctx);
+
+  // Painted on the backboard, in the band between the clock bar (ends 86) and
+  // the gold duck's wire (132). Only ~46px of clearance, so the wordmark rather
+  // than the lockup, at the same amber the booth's painted stars use so it
+  // reads as part of the scenery.
+  drawLogo(ctx, W / 2, 108, { variant: 'wordmark', width: 130, tint: '#facc15', alpha: 0.45 });
 
   // —— Clock bar across the top of the backboard ——
   if (gs.phase === 'playing' || gs.phase === 'done') {
