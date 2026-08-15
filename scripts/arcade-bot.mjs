@@ -92,6 +92,7 @@ const SKILL_FLOOR = {
   darts: 200,
   whackamole: 20,
   bowling: 150,
+  shootinggallery: 60,
 };
 
 const pct = (xs, p) => {
