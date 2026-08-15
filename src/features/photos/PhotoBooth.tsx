@@ -946,7 +946,7 @@ export default function PhotoBooth() {
                 {keyBtn('🗑️', () => selectedId !== null && removeSticker(selectedId), 'Remove sticker')}
               </>
             ) : (
-              <span className="text-xs text-fairway-100/60">
+              <span className="text-xs text-fairway-100/80">
                 Tap a sticker to select · drag to move · ✕ to remove
               </span>
             )}
@@ -1022,7 +1022,7 @@ export default function PhotoBooth() {
           </div>
 
           {watermarks.length > 0 && (
-            <p className="mt-2 text-center text-[11px] text-fairway-100/50">
+            <p className="mt-2 text-center text-[11px] text-fairway-100/80">
               This venue adds its branding to saved photos.
             </p>
           )}
@@ -1049,7 +1049,7 @@ export default function PhotoBooth() {
               📤 Share
             </Button>
             {!venueReady && (
-              <p className="text-center text-[11px] text-fairway-100/50">
+              <p className="text-center text-[11px] text-fairway-100/80">
                 Connecting to this venue to apply its branding…
               </p>
             )}
@@ -1083,7 +1083,7 @@ export default function PhotoBooth() {
         </p>
         {/* The pipeline's player-facing disclosure — stored on the venue
             server, never sent to any AI (see /me/privacy). */}
-        <p className="mb-4 text-xs text-fairway-100/50">
+        <p className="mb-4 text-xs text-fairway-100/80">
           Saved photos are only visible to this phone and never AI-checked — until you
           choose to share one.{' '}
           <Link to="/me/privacy" className="underline">
@@ -1107,7 +1107,7 @@ export default function PhotoBooth() {
         {photos === null ? (
           <p className="text-sm text-fairway-100/70">Loading…</p>
         ) : photos.length === 0 ? (
-          <p className="text-sm text-fairway-100/60">
+          <p className="text-sm text-fairway-100/80">
             Nothing here yet — your saved photos will show up in a grid.
           </p>
         ) : (

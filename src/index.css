@@ -29,6 +29,10 @@
   --color-fairway-800: var(--gray-800);
   --color-fairway-900: var(--gray-900);
   --color-fairway-950: var(--gray-950);
+  /* Error/destructive text + status dots. Mode-aware because a single red can't
+     clear AA on both a near-white card and the lightest dark panel a skin
+     paints — see the `--danger` pair below. */
+  --color-danger: var(--danger);
 }
 
 /* Dark (default) — neutral mid-gray base + colored feature/interactive vars. */
@@ -53,6 +57,10 @@
   --ink-dragon: #fdba74;
   --score-under: #34d399;
   --score-over: #fbbf24;
+  /* Pale enough to clear 4.5:1 on the LIGHTEST panel any dark skin paints
+     (chrome's `--cr-hi` #4c5661 → 5.16:1). The old `red-400` only managed
+     2.70:1 there, so error copy failed AA in dark mode too, not just light. */
+  --danger: #fecaca;
   /* Interactive/brand accent (buttons). House green on un-themed hub screens;
      CourseTheme overrides it to the course accent. */
   --accent: #22c55e;
@@ -94,6 +102,9 @@
   --ink-dragon: #a34a08;
   --score-under: #0a7a40;
   --score-over: #a34a08;
+  /* Dark enough to clear 4.5:1 on the DARKEST panel any light skin paints
+     (chrome's `--cr-lo` #dde3e9 → 5.65:1; 4.98:1 on the chrome paper). */
+  --danger: #a81f16;
   --accent: #1f9d55;
 
   /* —— Depth system (light) ——————————————————————————————————————————————

@@ -181,7 +181,7 @@ export default function ItemSheet({ item, onClose }: { item: MenuItem; onClose: 
             Add to cart · {formatCents(lineTotal)}
           </Button>
           {!satisfied && (
-            <p className="mt-2 text-center text-xs text-fairway-100/60">
+            <p className="mt-2 text-center text-xs text-fairway-100/80">
               Choose the required options above first.
             </p>
           )}

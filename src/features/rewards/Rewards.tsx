@@ -133,7 +133,7 @@ export default function Rewards() {
               placeholder={DEV_MODE ? '770001112223 (mock card)' : 'Card number'}
               className={inputClass}
             />
-            {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+            {error && <p className="mt-2 text-sm text-danger">{error}</p>}
             <div className="mt-3">
               <Button onClick={() => void link()} disabled={busy || cardInput.trim() === ''}>
                 {busy ? 'Looking up…' : 'Link card'}
@@ -145,7 +145,7 @@ export default function Rewards() {
         {playerId && !player && !error && <p className="text-fairway-100/70">Loading…</p>}
         {playerId && error && !player && (
           <>
-            <p className="mb-3 text-sm text-red-400">{error}</p>
+            <p className="mb-3 text-sm text-danger">{error}</p>
             <Button variant="ghost" onClick={() => setLinkedPlayerId(null)}>
               Unlink and try another card
             </Button>
@@ -195,7 +195,7 @@ export default function Rewards() {
               </div>
             )}
 
-            {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+            {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
             <h2 className="mb-2 text-sm font-black uppercase tracking-wide text-fairway-400">
               Activity

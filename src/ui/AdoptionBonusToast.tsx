@@ -75,7 +75,7 @@ export default function AdoptionBonusToast({ signedIn }: { signedIn: boolean }) 
         </div>
         <button
           onClick={() => setDismissed(true)}
-          className="shrink-0 text-xs font-semibold text-fairway-100/50"
+          className="shrink-0 text-xs font-semibold text-fairway-100/80"
           aria-label="Dismiss"
         >
           ✕
@@ -105,7 +105,7 @@ export default function AdoptionBonusToast({ signedIn }: { signedIn: boolean }) 
               </button>
               <button
                 onClick={() => setDismissed(true)}
-                className="text-xs font-semibold text-fairway-100/50"
+                className="text-xs font-semibold text-fairway-100/80"
               >
                 Not now
               </button>

@@ -182,7 +182,7 @@ export default function PlayerSetup() {
                   className="surface-sunk font-arcade w-32 rounded-xl border border-fairway-800/60 px-4 py-2.5 text-center text-2xl font-bold uppercase tracking-widest text-fairway-50 focus:border-fairway-500 focus:outline-none"
                   style={{ borderColor: err ? '#ef4444' : undefined }}
                 />
-                {err && <span className="text-sm text-red-400">{err}</span>}
+                {err && <span className="text-sm text-danger">{err}</span>}
               </div>
             );
           })}
@@ -214,10 +214,10 @@ export default function PlayerSetup() {
             className="surface-sunk font-arcade w-32 rounded-xl border border-fairway-800/60 px-4 py-2.5 text-center text-2xl font-bold uppercase tracking-widest text-fairway-50 focus:border-fairway-500 focus:outline-none"
             style={{ borderColor: teamErr ? '#ef4444' : undefined }}
           />
-          {teamErr && <span className="text-sm text-red-400">{teamErr}</span>}
+          {teamErr && <span className="text-sm text-danger">{teamErr}</span>}
         </div>
 
-        {formError && <p className="mt-4 text-sm text-red-400">{formError}</p>}
+        {formError && <p className="mt-4 text-sm text-danger">{formError}</p>}
 
         <div className="mt-8">
           <Button onClick={start} disabled={!rosterValid || submitting}>
@@ -232,7 +232,7 @@ export default function PlayerSetup() {
             📲 Play together (everyone on their own phone)
           </Button>
           {!me && me !== 'loading' && (
-            <p className="mt-1.5 text-center text-xs text-fairway-100/60">
+            <p className="mt-1.5 text-center text-xs text-fairway-100/80">
               Hosting needs a (free) account — friends join without one.
             </p>
           )}

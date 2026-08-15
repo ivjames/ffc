@@ -141,6 +141,10 @@ export default function Trivia() {
             // after answering, reveal the correct choice in green and a wrong
             // pick in red (flat feedback colors, not raised — these are no
             // longer tappable). Other options dim to a flat, inert disabled look.
+            // That dim keeps `fairway-100/50` while the rest of the app moved to
+            // /80 for AA: these rows are inactive once answered, which WCAG 1.4.3
+            // exempts from the contrast minimum, and lifting them would read as
+            // "still pickable".
             let cls = 'surface-1 border-fairway-800/60 text-fairway-50';
             if (answered && isCorrect) cls = 'border-green-500 bg-green-500/20 text-fairway-50';
             else if (answered && isPicked) cls = 'border-red-500 bg-red-500/20 text-fairway-50';

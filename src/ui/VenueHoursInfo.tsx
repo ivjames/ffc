@@ -44,13 +44,13 @@ export function VenueOpenLine({
   return (
     <div className={`flex items-center gap-1.5 text-xs font-semibold ${className}`}>
       <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${open ? 'bg-fairway-400' : 'bg-red-400'}`}
+        className={`h-1.5 w-1.5 shrink-0 rounded-full ${open ? 'bg-fairway-400' : 'bg-danger'}`}
         aria-hidden="true"
       />
-      <span className={open ? 'text-fairway-400' : 'text-red-400'}>
+      <span className={open ? 'text-fairway-400' : 'text-danger'}>
         {open ? 'Open now' : 'Closed'}
       </span>
-      <span className="truncate text-fairway-100/60">· {formatDayHours(today)} today</span>
+      <span className="truncate text-fairway-100/80">· {formatDayHours(today)} today</span>
     </div>
   );
 }

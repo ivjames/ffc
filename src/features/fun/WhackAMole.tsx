@@ -741,7 +741,7 @@ export default function WhackAMole() {
         </span>
         <span className="text-fairway-300">
           Time{' '}
-          <span className={`font-bold ${phase === 'playing' && timeLeft <= 5 ? 'text-red-400' : 'text-fairway-100'}`}>
+          <span className={`font-bold ${phase === 'playing' && timeLeft <= 5 ? 'text-danger' : 'text-fairway-100'}`}>
             {phase === 'playing' ? timeLeft : GAME_MS / 1000}s
           </span>
         </span>
