@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import {
   playStroke,
   playTick,
@@ -54,6 +55,7 @@ const WALL_T = 56;
 const FLOOR_Y = 534;
 const RAIL_Y = 88;
 const HOME_Y = 128; // claw tip resting height
+const MARQUEE_HALF = 50; // half-width of the wordmark on the header band
 const SWEEP_X0 = 88; // sweep stays clear of the chute on the left
 const SWEEP_X1 = 312;
 const SWEEP_MS = 1400;
@@ -644,10 +646,15 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Marquee bulbs across the header, chasing on a fixed clock.
+  // Marquee: the house wordmark on the header, flanked by chasing bulbs. The
+  // band is only 20px tall, which rules out the full lockup — the moose needs
+  // ~92px of width and there is nowhere near the height for it here. Bulbs
+  // whose slot falls under the wordmark are skipped rather than drawn through
+  // it, leaving three a side like a real cabinet marquee.
   const lit = Math.floor(now / 300);
   for (let i = 0; i < 10; i++) {
     const bx = 38 + i * 29.5;
+    if (Math.abs(bx - W / 2) < MARQUEE_HALF) continue;
     const c = BULBS[i % BULBS.length];
     const on = (i + lit) % 4 !== 0;
     ctx.beginPath();
@@ -660,6 +667,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.fill();
     ctx.shadowBlur = 0;
   }
+  drawLogo(ctx, W / 2, 46, { variant: 'wordmark', width: MARQUEE_HALF * 2, tint: '#fde68a' });
 
   // —— Glass interior ——
   const inner = ctx.createLinearGradient(0, WALL_T, 0, FLOOR_Y);
