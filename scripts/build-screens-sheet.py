@@ -16,11 +16,13 @@ Covers the post-FEC-restructure app: a venue dashboard (Home) that launches five
 sections through a global navigation drawer. Companion to the full Screen &
 Element Guide (style-guide.html/pdf — schematic wireframes + numbered spec
 tables), built by build-style-guide.py. Output lands in public/docs/ so the built
-app serves it at /docs/screens.html; the companion screens.pdf is printed from it.
+app serves it at /docs/screens.html; the companion screens.pdf is reprinted from
+it automatically on each build (see scripts/lib/print_pdf.py).
 """
 
 import os
 import re
+from lib.print_pdf import print_pdf
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT2 = os.path.join(_ROOT, "public", "docs", "screens.html")
 SCREENS = []
@@ -741,3 +743,4 @@ html2 = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <body>{sheet_head}<div class="grid-screens">{cells}</div></body></html>"""
 open(OUT2, "w").write(html2)
 print("wrote", OUT2, "screens:", len(SCREENS))
+print_pdf(OUT2, os.path.join(_ROOT, "public", "docs", "screens.pdf"))

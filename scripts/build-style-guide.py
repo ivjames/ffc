@@ -12,10 +12,17 @@ Output lands in public/docs/ so the built app serves it: Vite copies public/* to
 the site root, so these are reachable at /docs/style-guide.html and
 /docs/screens.html (and are linked from the in-app 🎨 style picker menu). The
 companion PDFs (style-guide.pdf, screens.pdf) are printed from these HTML files
-and live alongside them."""
+automatically on each build (see scripts/lib/print_pdf.py) and live alongside
+them."""
 
+import os
 import re
-OUT = "/home/user/ffc/public/docs/style-guide.html"
+from lib.print_pdf import print_pdf
+
+# Resolve output relative to this script (repo_root/public/docs), so it works in
+# any checkout — not just the author's workspace.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(_ROOT, "public", "docs", "style-guide.html")
 SCREENS = []
 def screen(**kw): SCREENS.append(kw)
 
@@ -846,6 +853,7 @@ html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <body>{cover}{pages}</body></html>"""
 open(OUT,"w").write(html)
 print("wrote", OUT, "screens:", len(SCREENS))
+print_pdf(OUT, os.path.join(_ROOT, "public", "docs", "style-guide.pdf"))
 
 # The to-scale contact sheet (public/docs/screens.html + screens.pdf) is built
 # separately by scripts/build-screens-sheet.py so it can render real-pixel
