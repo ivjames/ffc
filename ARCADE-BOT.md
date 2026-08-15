@@ -65,7 +65,7 @@ the guide isn't drawn at all.
 ## Coverage
 
 Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`, `axethrow`,
-`darts`, `whackamole` — 7 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
+`darts`, `whackamole`, `bowling` — 8 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
 usefully, for *why* each unsupported game isn't in it.
 
 The gap is narrowing rather than fixed. Whack-a-Mole was the first REACTIVE
@@ -77,8 +77,8 @@ position recovered from pixels and predicted forward, which is the next step up.
 
 Still out: air hockey, batting cages, pinball, shooting gallery, water gun and
 the driving games (moving entities or continuous steering); bowling and milk
-bottle, whose aim inverts but whose pin/bottle scatter is a sim needing
-empirical calibration; claw machine, whose sweep is solvable but whose prize
+bottle, whose aim inverts but whose scatter is a sim (bowling is now in, by
+CALIBRATING the line rather than solving it — see its policy); claw machine, whose sweep is solvable but whose prize
 positions come from a physics pile; and trivia, which is knowledge rather than a
 gesture.
 
@@ -93,6 +93,7 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | Axe Throw | 27–31 | 17–20 | 35 |
 | Darts | 286–370 | 154–175 | 540 |
 | Whack-a-Mole | 48–53 | — | (30s clock) |
+| Bowling | 300 | 126 | 300 |
 
 Two honest caveats:
 

@@ -16,8 +16,9 @@ import popashot from './games/popashot.mjs';
 import axethrow from './games/axethrow.mjs';
 import darts from './games/darts.mjs';
 import whackamole from './games/whackamole.mjs';
+import bowling from './games/bowling.mjs';
 
-export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole];
+export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling];
 
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
@@ -25,7 +26,6 @@ export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 export const UNSUPPORTED = [
   ['airhockey', 'reactive — tracks a live puck'],
   ['battingcages', 'reactive — pitch timing'],
-  ['bowling', 'physics — pin scatter is a sim, so no closed-form aim'],
   ['bumperboats', 'reactive — continuous steering'],
   ['bumpercars', 'reactive — continuous steering'],
   ['clawmachine', 'timing — but prize positions come from a physics pile'],
