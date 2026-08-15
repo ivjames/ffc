@@ -119,6 +119,7 @@ screen(id="home", name="Home (venue dashboard)",
       cls="col", n=2, mt=6, border="none", background="none") +
    el(lab("Announcement banner — venue specials (hidden when none)",12), cls="s1", n=3, mt=12, r=16, pad="12px 14px", border=DASH) +
    el(lab("Adoption nudge — install / sign-in (dismissible)",12), cls="s1", n=4, mt=10, r=16, pad="12px 14px", border=DASH) +
+   el(lab("Adoption bonus — 🎟️ “+N added!” ✕ / link-your-card variants",12), cls="s1", mt=10, r=16, pad="12px 14px", border=DASH) +
    el(f'{lab("RESUME ROUND",11)}<div style="margin-top:6px;display:flex;align-items:center">{sp("Course name",18,700)}<span style="margin-left:auto;display:flex;gap:4px">{tag("AVA",size=14,h=26)}{tag("JZ",size=14,h=26)}</span></div>',
       cls="s1", n=5, mt=10, r=16, pad="14px", border=DASH) +
    el(lab("Active-orders card — an in-kitchen order (self-gating)",12), cls="s1", n=6, mt=10, r=16, pad="12px 14px", border=DASH) +
@@ -631,6 +632,39 @@ screen(id="teamdetail", name="Team detail",
    el(lab("footer error / notice lines — bottom of the page",12), cls="ctr jc-start", n=8, mt=12, r=12, pad="8px 12px", background="var(--f0)", border=DASH)
  ))),
 
+# ════════════════════════════════════════════════════════════ 31. PRIVACY
+def _prose(eyebrow, lines=1, extra="", n=None, mt=20):
+    body = "".join(f'<div style="margin-top:6px">{lab("prose paragraph" + (" — " + extra if extra and i == 0 else ""),13)}</div>' for i in range(lines))
+    return el(f'<span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)">{eyebrow}</span>{body}',
+              cls="", n=n, mt=mt, border="none")
+screen(id="privacy", name="Privacy",
+ body=dev(bar("Your info") + content(
+   el(lab("This app is built to need as little of your information as possible. Here's everything it records, in plain language.",13), border="none") +
+   _prose("Playing a round", n=1) +
+   _prose("If you create an account") +
+   _prose("Scavenger-hunt photos", lines=2, extra="retention sentence (dynamic)", n=2) +
+   _prose("Photo booth pictures", lines=2, extra="retention sentence (dynamic)") +
+   el(f'<span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)">What we don’t do</span>'
+      f'<div style="margin-top:6px">{lab("•  no ads or tracking pixels",13)}</div>'
+      f'<div style="margin-top:4px">{lab("•  no selling or sharing",13)}</div>'
+      f'<div style="margin-top:4px">{lab("•  no location tracking · no IP logs",13)}</div>',
+      n=3, mt=20, border="none") +
+   _prose("Questions")
+ ))),
+
+# ════════════════════════════════════════════════════════════ 32. TEAM INVITE
+def _invstate(text, btn_label=None, primary=False, n=None, mt=12):
+    b = (btn(btn_label, primary=primary, mt=10, h=44) if btn_label else "")
+    return el(lab(text,13) + b, cls="s1", n=n, r=16, pad="14px 16px", mt=mt, border=DASH)
+screen(id="invite", name="Team invite",
+ body=dev(bar("Team invite") + content(
+   el(lab("Four mutually exclusive states — exactly one renders:",12), border="none") +
+   _invstate("“Checking your invite…”", n=1) +
+   _invstate("“You’ve been invited to a team! Sign in (or register) first…”", "Sign in / register", primary=True, n=2) +
+   _invstate("“You’re in — welcome to Team name! 🎉”", "See my teams", primary=True, n=3) +
+   _invstate("bare red error text — malformed / expired / server", "Back home", n=4)
+ ))),
+
 # screens whose layout grows by one row/chip per player (1–4)
 for _s in SCREENS:
     if _s["id"] in ("setup","play","sum","hunt"): _s["scales"] = True
@@ -734,7 +768,7 @@ def render_cell(sc, idx):
 
 sheet_head = """<div class="sheethead">
  <h1>Mini Golf — Screens (to scale)</h1>
- <p>Every screen's element layout drawn to scale on a 390px phone artboard — the overlay/trace layer. On screen these are true size; open a screen at 390px and design your art over the matching board. Companion to the full <b>Screen &amp; Element Guide</b> (dimensions, states, theming hooks, and the art needed per element). 30 screens across five sections; each screen's top-right pill is the menu button that opens the global navigation drawer.</p>
+ <p>Every screen's element layout drawn to scale on a 390px phone artboard — the overlay/trace layer. On screen these are true size; open a screen at 390px and design your art over the matching board. Companion to the full <b>Screen &amp; Element Guide</b> (dimensions, states, theming hooks, and the art needed per element). 32 screens across five sections; each screen's top-right pill is the menu button that opens the global navigation drawer.</p>
  <div class="note"><b>A template, not the design.</b> Neutral fills so your art reads over them. A <b>dashed</b> card appears only when populated (a live round, a pending order, venue specials); a <b>solid</b> card is always present. Player-scaled screens are drawn at 4 players; the Course Map and game playfields fill the device below the bar.</div>
 </div>"""
 cells = "".join(render_cell(sc, i+1) for i, sc in enumerate(SCREENS))

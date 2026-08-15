@@ -63,6 +63,7 @@ screen(id="home", name="Home (venue dashboard)", route="/",
    txt("venue name · “What do you want to do?” · open/closed line","center",n=3),
    box("Announcement banner — venue specials (hidden when none)","wide small cond",n=4),
    box("Adoption nudge — install / sign-in (dismissible, self-gating)","wide small cond",n=5),
+   box("Adoption bonus card — “+N bonus tickets” / link-your-card variants","wide small cond",n=11),
    box("Resume-round card — course name · player tags (only mid-round)","wide tall cond","card",n=6),
    box("Active-orders card — a live food order (self-gating)","wide small cond",n=7),
    row(box("section tile","tile",n=8),box("section tile","tile"),box("section tile","tile"),box("section tile","tile"),cls="ftiles"),
@@ -80,6 +81,7 @@ screen(id="home", name="Home (venue dashboard)", route="/",
   (8,"Section tiles","Launcher grid → Mini Golf / Arcade / Photo Booth / Food & Drink","2-col grid, radius 16; 40×40 accent puck + glyph","tappable; pop-in stagger; Mini Golf shown only when the venue has courses, Food only for POS venues","--tile-accent / --puck-accent per section","tile surface + a section icon per tile"),
   (9,"Food & Drink card","Deep links to the venue's menu / ordering (non-POS venues)","full-width, radius 16","two link buttons; offline = disabled with a note; hidden when the venue has no links","--accent (link buttons)","card surface + a food glyph"),
   (10,"Account button","Ghost row → the Me hub","full-width ghost, radius 16","shows the signed-in name/tag/email, or “Sign in / register”","—","ghost surface + a person glyph"),
+  (11,"Adoption bonus card","Bonus-ticket card after an install/sign-in milestone (between the nudge and resume card)","full-width, radius 16","awarded variant (🎟️ “+N bonus tickets added to your card!” + ✕ dismiss) or needs-card variant (“Collect your bonus tickets” + a Link-my-card / Not-now button row); hidden when neither; dismissal is per-visit","--accent (Link my card)","the card surface + a ticket glyph"),
  ]),
 
 # ============================================================ 2. NAV DRAWER
@@ -685,6 +687,43 @@ screen(id="teamdetail", name="Team detail", route="/me/teams/:id",
   (8,"Footer messages","Error and notice lines at the very bottom of the content","bare text, page footer","conditional; can both show; note they render far from the control that triggered them; separate Loading / “Team not found” states","(error emphasis)","—"),
  ]),
 
+# ============================================================ 31. PRIVACY
+screen(id="privacy", name="Privacy (“Your info”)", route="/me/privacy",
+ purpose="Plain-language disclosure of everything the app records. Static prose — zero interactive elements; reached from the drawer footer, the Me hub, and in-context privacy links.",
+ body="".join([
+   topbar("Your info", right=MENU()),
+   txt("intro — “…everything it records, in plain language.”","muted"),
+   txt("PLAYING A ROUND","eyebrow",n=1),
+   row(icon("¶"), box("prose paragraph","line"), cls="rule"),
+   txt("SCAVENGER-HUNT PHOTOS · PHOTO BOOTH PICTURES","eyebrow"),
+   row(icon("¶"), box("prose + retention sentence (dynamic, inline)","line",n=2), cls="rule"),
+   txt("WHAT WE DON’T DO","eyebrow"),
+   row(icon("•"), box("no ads / no selling / no location tracking / no IP logs","line",n=3), cls="rule"),
+   box("…7 sections total (round · account · hunt photos · booth photos · usefulness · don’t-do · questions)","wide repeat"),
+ ]),
+ specs=[
+  (1,"Section blocks","Seven uppercase-eyebrow prose sections","eyebrow + body paragraphs","all unconditional; no cards, banners, buttons, or inputs anywhere in the body","muted eyebrows","—"),
+  (2,"Retention sentences","Dynamic per-venue photo-retention wording, inline in the hunt and booth sections","leading sentence of a body paragraph","three wordings: venue-settings default / kept-until-deleted / auto-deleted after N days; a failed fetch silently renders the default","—","—"),
+  (3,"Don't-do list","Four disc bullets","list","—","—","list-bullet treatment"),
+ ]),
+
+# ============================================================ 32. TEAM INVITE
+screen(id="invite", name="Team invite (accept)", route="/teams/accept",
+ purpose="Emailed-invite landing — accepts the invite token on arrival. A four-state machine; exactly one flat block renders (paragraph + at most one button).",
+ body="".join([
+   topbar("Team invite", right=MENU()),
+   box("checking — “Checking your invite…”","wide small cond",n=1),
+   box("needs sign-in — invite explainer + “Sign in / register”","wide small cond",n=2),
+   box("accepted — “You’re in — welcome to <team>! 🎉” + “See my teams”","wide small cond",n=3),
+   box("failed — bare red error text + “Back home”","wide small cond",n=4),
+ ]),
+ specs=[
+  (1,"Checking state","Initial token check","bare paragraph","no spinner; accept runs once on mount","muted","—"),
+  (2,"Needs sign-in","Signed-out gate (token not consumed)","paragraph + primary “Sign in / register”","→ Account; user re-opens the emailed link after","--accent","—"),
+  (3,"Accepted","Success state","paragraph (team name bold) + primary “See my teams”","→ Teams","--accent","a celebration mark"),
+  (4,"Failed","Malformed / expired-or-used / server error","bare red paragraph + ghost “Back home”","error text renders flat in the content, not in a card; each state shows at most one full-width button","(error emphasis)","—"),
+ ]),
+
 # screens whose layout grows by one row/chip per player (1–4)
 for _s in SCREENS:
     if _s["id"] in ("setup","play","sum","hunt"): _s["scales"] = True
@@ -829,7 +868,7 @@ cover = """<div class="page cover">
  <h1>Screen &amp; Element Guide</h1>
  <p class="tag">A structural wireframe of every screen — the element inventory and rough arrangement — with each interface element numbered and spec'd (including current dimensions). It tells you <b>what each screen contains and what art each element needs</b>, so nothing is missed when you theme the app.</p>
  <div style="margin-top:16px">
-  <span class="chip">30 screens</span><span class="chip">5 sections</span><span class="chip">Wireframe layout</span><span class="chip">Numbered on-element markers</span><span class="chip">Dimensions + specs</span>
+  <span class="chip">32 screens</span><span class="chip">5 sections</span><span class="chip">Wireframe layout</span><span class="chip">Numbered on-element markers</span><span class="chip">Dimensions + specs</span>
  </div>
  <div class="note"><b>These wireframes are not the design.</b> They show structure only — no colors, type, icons, or materials are implied, and the current app art is <b>not</b> a reference to match (much of it is placeholder and wrong). Dimensions are the <b>current</b> values for scale, not fixed targets — only tap-target sizes, safe areas, and contrast are constraints. Boxes and positions are schematic. You define the actual look; mark up anything here that's wrong.</div>
  <div class="how">
