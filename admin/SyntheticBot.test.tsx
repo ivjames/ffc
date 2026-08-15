@@ -115,6 +115,27 @@ describe('SyntheticBot', () => {
     }
   });
 
+  test('a failed refresh shows a non-blocking banner over stale data, not a full-page error', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(api.syntheticStatus)
+        .mockResolvedValueOnce(
+          status({ runner: { running: true, pid: 7, startedAt: new Date().toISOString(), params: null, lastExit: null, logs: [] } })
+        )
+        .mockRejectedValue(new Error('network')); // subsequent polls fail
+      render(<SyntheticBot />);
+      expect(await screen.findByText(/running · pid 7/)).toBeInTheDocument();
+
+      await vi.advanceTimersByTimeAsync(4500); // fire a poll that rejects
+      // Stale content stays put, with a non-blocking refresh banner over it.
+      expect(screen.getByText(/running · pid 7/)).toBeInTheDocument();
+      expect(screen.getByText(/Couldn.t refresh status/)).toBeInTheDocument();
+      expect(screen.queryByText('Loading synthetic bot…')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('hides controls for non-super-admins', async () => {
     vi.mocked(api.syntheticStatus).mockResolvedValue(status({ canControl: false }));
     render(<SyntheticBot />);
