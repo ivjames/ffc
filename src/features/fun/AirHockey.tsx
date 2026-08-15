@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
 import {
@@ -39,6 +40,7 @@ const GOAL_W = 150;
 const GOAL_X0 = (W - GOAL_W) / 2;
 const GOAL_X1 = (W + GOAL_W) / 2;
 const MID = H / 2;
+const FACEOFF_R = 58; // center-ice circle — sized to hold the logo badge
 
 const TARGET = 7; // goals to win
 const FIXED = 1000 / 120; // physics substep (ms)
@@ -333,13 +335,17 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.lineTo(W - 10, MID);
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(W / 2, MID, 46, 0, Math.PI * 2);
+  ctx.arc(W / 2, MID, FACEOFF_R, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(W / 2, MID, 5, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(120,190,255,0.4)';
-  ctx.fill();
   ctx.restore();
+
+  // Center ice. The circle was widened from 46 to make room: the badge needs
+  // ~92px before its hairlines collapse, and 46 only offered 92px of diameter
+  // to fit an 81px-tall mark inside. It's decorative — nothing collides with
+  // it — and 116px across is about a third of the table, which is what the
+  // real markings look like anyway. The center dot is gone because the logo is
+  // now what sits there, exactly as on a real rink.
+  drawLogo(ctx, W / 2, MID, { variant: 'badge', width: 104, tint: '#78beff', alpha: 0.5 });
 
   // —— Goals: glowing neon mouths (cyan = CPU end, green = your end) ——
   neonLine(ctx, GOAL_X0, 4, GOAL_X1, 4, '#38bdf8', 5, 16);
