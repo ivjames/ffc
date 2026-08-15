@@ -25,10 +25,13 @@ vi.mock('../lib/sound', () => ({
   playUndo: vi.fn(),
   playCup: vi.fn(),
 }));
-// jsdom implements no screen-capture API. Default to "unsupported", which is
-// also the truth on every phone — the tests that care opt in per case.
+// The real capture renders the DOM through an SVG foreignObject, which jsdom
+// cannot paint — so the module is mocked. Default: capture is available (it is,
+// on every real device) but returns no frame, which keeps the note-writing
+// tests focused on the note.
 vi.mock('../lib/screenCapture', () => ({
-  isScreenCaptureSupported: vi.fn(() => false),
+  CAPTURE_IGNORE_ATTR: 'data-feedback-ignore',
+  isScreenCaptureSupported: vi.fn(() => true),
   captureScreen: vi.fn(async () => null),
 }));
 
@@ -64,14 +67,14 @@ beforeEach(() => {
     createdAt: '2026-08-15T00:00:00Z',
     hasScreenshot: false,
   });
-  vi.mocked(isScreenCaptureSupported).mockReset().mockReturnValue(false);
+  vi.mocked(isScreenCaptureSupported).mockReset().mockReturnValue(true);
   vi.mocked(captureScreen).mockReset().mockResolvedValue(null);
 });
 
-/** Put the suite on a browser that can grab the screen, returning the frame it
- *  will hand back (desktop reviewers; phones never take this path). */
-function onCapableBrowser(shot: File | null = new File(['px'], 'screen.png', { type: 'image/png' })) {
-  vi.mocked(isScreenCaptureSupported).mockReturnValue(true);
+/** Have the next press come back with a grabbed frame. */
+function withGrabbedFrame(
+  shot: File = new File(['px'], 'screen.jpg', { type: 'image/jpeg' })
+) {
   vi.mocked(captureScreen).mockResolvedValue(shot);
   return shot;
 }
@@ -190,7 +193,7 @@ describe('FeedbackButton', () => {
     );
   });
 
-  it('opts back into pointer events — App mounts it in a pass-through overlay', () => {
+  it('opts back into pointer events — App mounts it in a pass-through overlay', async () => {
     // The sheet renders inside App's `pointer-events-none` corner overlay. If
     // it doesn't opt back in, it paints perfectly and ignores every tap, which
     // rendering the widget bare (as these tests do) would never reveal.
@@ -202,11 +205,12 @@ describe('FeedbackButton', () => {
       </MemoryRouter>
     );
     fireEvent.click(screen.getByRole('button', { name: /feedback/i }));
-    expect(screen.getByRole('dialog').className).toContain('pointer-events-auto');
+    const sheet = await screen.findByRole('dialog');
+    expect(sheet.className).toContain('pointer-events-auto');
   });
 
   it('grabs the screen when pressed, and attaches the frame to the note', async () => {
-    const shot = onCapableBrowser();
+    const shot = withGrabbedFrame();
     const user = await openSheet('/golf/play');
 
     // Captured on press — before the sheet exists, so the shot shows the
@@ -222,19 +226,20 @@ describe('FeedbackButton', () => {
     );
   });
 
-  it('opens the sheet anyway when the reviewer dismisses the capture prompt', async () => {
-    // Declining to share your screen is a choice, not a failure.
-    onCapableBrowser(null);
+  it('opens the sheet anyway when the grab comes back empty', async () => {
+    // A missing screenshot is a far smaller problem than a lost comment, so it
+    // is never surfaced as an error.
     await openSheet();
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByAltText(/screenshot to attach/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText(/grabbed the screen/i)).not.toBeInTheDocument();
+    // The manual attach path is still right there.
+    expect(screen.getByLabelText(/attach a screenshot/i)).toBeInTheDocument();
   });
 
   it('opens the sheet anyway when the capture throws', async () => {
-    vi.mocked(isScreenCaptureSupported).mockReturnValue(true);
     vi.mocked(captureScreen).mockRejectedValue(new Error('capture exploded'));
     await openSheet();
 
@@ -242,15 +247,15 @@ describe('FeedbackButton', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('never asks to capture on a browser that cannot (every phone)', async () => {
+  it('skips the grab where the DOM render cannot run at all', async () => {
+    vi.mocked(isScreenCaptureSupported).mockReturnValue(false);
     await openSheet();
     expect(captureScreen).not.toHaveBeenCalled();
-    // The manual attach path is still right there.
     expect(screen.getByLabelText(/attach a screenshot/i)).toBeInTheDocument();
   });
 
   it('lets a grabbed frame be removed, and a different image attached over it', async () => {
-    onCapableBrowser();
+    withGrabbedFrame();
     const user = await openSheet();
     expect(await screen.findByAltText(/screenshot to attach/i)).toBeInTheDocument();
 

@@ -17,19 +17,19 @@ import {
 // string ride along automatically (src/lib/feedbackApi.ts), so a reviewer
 // types an opinion, not a bug report header.
 //
-// A screenshot rides along, two ways:
+// A screenshot rides along automatically: pressing the pill grabs the screen
+// BEFORE the sheet opens (src/lib/screenCapture.ts), so the shot shows what
+// the reviewer was looking at rather than the sheet they just opened over it.
+// One press, phone or laptop — it's a DOM render, not a platform API, so it
+// works on iOS where the browser's own capture API doesn't exist.
 //
-//   - Where the browser can capture the screen itself (desktop — see
-//     src/lib/screenCapture.ts), pressing the pill grabs a frame BEFORE the
-//     sheet opens, so the shot shows the screen the reviewer was looking at
-//     rather than the sheet they just opened over it. One press, no fumbling.
-//   - Everywhere else (iOS and Android have no such API), the reviewer takes
-//     an OS screenshot and attaches it with the file picker — the capture
-//     every phone does perfectly, including native chrome.
+// The file picker stays as the manual path: for anything the page render can't
+// see (native chrome, an OS share sheet covering a button) a reviewer attaches
+// a real screenshot instead. Either way it is downscaled on the device like
+// every other image this app uploads.
 //
-// Either way it is downscaled on the device like every other image this app
-// uploads. Dev-mode-gated by the caller (src/App.tsx), alongside the skin
-// picker and build stamp. Notes land in Master Control → Feedback.
+// Dev-mode-gated by the caller (src/App.tsx), alongside the skin picker and
+// build stamp. Notes land in Master Control → Feedback.
 
 const MAX_SCREENSHOT_BYTES = 25 * 1024 * 1024;
 
@@ -272,11 +272,8 @@ export default function FeedbackButton() {
   // Pressing the pill grabs the screen first, THEN opens the sheet — the note
   // is about the screen underneath, so the shot has to be taken before the
   // sheet covers it. captureScreen() resolves to null for every ordinary "no
-  // picture" outcome (unsupported browser, reviewer dismissed the picker), so
-  // the sheet always opens; it just opens without an attachment.
-  //
-  // Deliberately NOT awaited behind any other work: getDisplayMedia must be
-  // called straight from the click to count as a user gesture.
+  // picture" outcome, so the sheet always opens; it just opens without an
+  // attachment rather than showing the reviewer an error about it.
   function press() {
     playClick();
     if (!isScreenCaptureSupported()) {

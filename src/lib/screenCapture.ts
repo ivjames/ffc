@@ -1,96 +1,131 @@
-// One-tap screen grab for the reviewer feedback widget.
+// One-tap screen grab for the reviewer feedback widget — on every device,
+// phones included.
 //
-// Uses the browser's own screen-capture API (getDisplayMedia): the reviewer
-// approves a capture, we pull a SINGLE frame out of the stream, and stop the
-// tracks immediately — nothing is recorded and no stream stays open. Real
-// pixels, so gradients, blur, the arcade skins and any native chrome all come
-// out exactly as the reviewer saw them, which is precisely what an in-page DOM
-// renderer (html2canvas and friends) gets wrong on this app's CSS. It also
-// costs no bundle weight.
+// The browser's own screen-capture API (getDisplayMedia) gives true pixels,
+// but it does not exist on iOS Safari or Chrome on Android, and reviewers walk
+// this venue with phones. A capture that only works on a laptop is not a
+// capture. So this renders the live DOM instead, which works everywhere.
 //
-// The catch is support: getDisplayMedia is a desktop-browser API. iOS Safari
-// doesn't implement it at all, and neither does Chrome on Android. So this is
-// strictly an upgrade for reviewers on a laptop — `isScreenCaptureSupported()`
-// tells the UI whether to offer it, and the manual "attach a screenshot" file
-// picker remains the path that works on every device.
+// `modern-screenshot` does that by cloning the DOM into an SVG <foreignObject>
+// and letting the BROWSER paint it — it is not a reimplementation of CSS the
+// way html2canvas is, so this app's gradients, color-mix(), custom properties
+// and arcade skins come out as themselves. It is zero-dependency and actively
+// maintained (the Safari/iOS foreignObject quirks are the ones it exists to
+// handle, which is exactly the platform that matters here).
+//
+// Known gaps, since a screenshot that quietly lies is worse than none:
+//   - `backdrop-filter` (the header's backdrop-blur) cannot be sampled inside a
+//     foreignObject; those areas render unblurred. Layout and color are right.
+//   - Only the page is captured — never the browser chrome, the notch, or
+//     anything outside the document. For "the iOS share sheet covers the
+//     button", a reviewer still attaches a real OS screenshot by hand.
+//
+// The library is loaded with a dynamic import so it lands in its own chunk
+// (~27 KB, 10 KB gzipped) instead of the main bundle. The service worker still
+// precaches that chunk along with everything else, so it IS downloaded — but
+// it is never parsed or executed unless a reviewer presses the pill, and with
+// DEV_MODE off there is no pill to press.
 
-/** Can this browser grab the screen itself? False on iOS/Android. */
+/** Marks dev-only chrome (the pill itself, build stamp, skin picker) so the
+ *  capture leaves it out — the reviewer is commenting on the app, not on our
+ *  overlay. Set as a data attribute in src/App.tsx. */
+export const CAPTURE_IGNORE_ATTR = 'data-feedback-ignore';
+
+// Cap the pixel ratio. Phones report 3x, which turns a tall page into a
+// multi-megapixel PNG for no gain — the upload path downscales to a 1280px
+// long edge anyway (src/lib/image.ts).
+const MAX_SCALE = 2;
+
+/** Every device can do this — it is a DOM render, not a platform API. */
 export function isScreenCaptureSupported(): boolean {
-  return (
-    typeof navigator !== 'undefined' &&
-    typeof navigator.mediaDevices?.getDisplayMedia === 'function'
-  );
+  return typeof document !== 'undefined' && typeof HTMLCanvasElement !== 'undefined';
 }
 
-/** Pull one frame from a live capture stream and encode it as a PNG file. */
-async function grabFrame(stream: MediaStream): Promise<File | null> {
-  const video = document.createElement('video');
-  video.srcObject = stream;
-  // Muted + playsInline so autoplay isn't blocked and iOS never goes fullscreen.
-  video.muted = true;
-  video.playsInline = true;
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error('capture stream would not load'));
-    });
-    await video.play();
-    // One frame has to actually paint before the canvas has anything to copy.
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-    if (!width || !height) return null;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, width, height);
-
-    // PNG keeps text crisp; the upload path downscales and re-encodes to JPEG
-    // anyway (src/lib/image.ts), so this only has to survive one hop.
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/png')
-    );
-    if (!blob) return null;
-    return new File([blob], `screen-${Date.now()}.png`, { type: 'image/png' });
-  } finally {
-    video.pause();
-    video.srcObject = null;
-  }
+function isOpaque(color: string): boolean {
+  return Boolean(color) && color !== 'transparent' && !/,\s*0\s*\)$/.test(color);
 }
 
 /**
- * Ask the browser to capture the screen and return one frame as a File.
+ * The colour to paint behind the render.
  *
- * Resolves to null for every "no picture, carry on" outcome — unsupported
- * browser, the reviewer dismissing the picker, or a frame that wouldn't
- * encode. Declining to share your screen is a choice, not an error, so the
- * caller opens the note sheet either way and never shows a failure.
+ * Not cosmetic: CSS propagates the BODY's background up to the canvas and then
+ * paints nothing on the body element itself, so a foreignObject clone of the
+ * body comes back with no background at all — which a JPEG flattens to black,
+ * putting this app's dark-on-light text on a black field. Resolve the same way
+ * the CSS cascade does: html's background if it has one, otherwise the body's.
+ */
+function resolvePageBackground(): string {
+  const html = getComputedStyle(document.documentElement).backgroundColor;
+  if (isOpaque(html)) return html;
+  const body = getComputedStyle(document.body).backgroundColor;
+  if (isOpaque(body)) return body;
+  // Neither is set (shouldn't happen — index.css paints one in both themes).
+  return '#ffffff';
+}
+
+/**
+ * Render what the reviewer is currently looking at into an image File.
  *
- * MUST be called directly from a user gesture (a click handler): browsers
- * reject a capture request that isn't tied to one.
+ * Resolves to null for any "no picture, carry on" outcome — the caller opens
+ * the note sheet either way and never reports a failure, because a missing
+ * screenshot is a smaller problem than a lost comment.
  */
 export async function captureScreen(): Promise<File | null> {
   if (!isScreenCaptureSupported()) return null;
-  let stream: MediaStream | null = null;
   try {
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: false,
-      // Chrome-only hint that puts "This Tab" first in the picker, so the
-      // common case is one click. Other browsers ignore unknown members.
-      preferCurrentTab: true,
-    } as DisplayMediaStreamOptions);
-    return await grabFrame(stream);
+    const { domToCanvas } = await import('modern-screenshot');
+
+    // Capture the viewport, not the full scrollable page: the note is about
+    // what the reviewer can see right now, and a 6000px-tall render of a long
+    // scroller buries it.
+    const width = Math.min(window.innerWidth, document.documentElement.clientWidth || Infinity);
+    const height = Math.min(window.innerHeight, document.documentElement.clientHeight || Infinity);
+
+    // Capture <html>, not <body>. Cloning the body leaves an 8px unpainted
+    // frame down the left and top of the render on any page tall enough to
+    // scroll (verified in Chromium under mobile emulation) — the whole clone
+    // sits offset inside the canvas and the far edges get clipped. Rooting at
+    // the document element renders flush.
+    //
+    // Rendered WITHOUT a background so the transparent areas stay transparent,
+    // then composited over one below. The library paints its background only
+    // where the captured element's box lands, which on a scrolled page leaves
+    // the rest of the frame empty — and "empty" becomes black the moment it is
+    // encoded as JPEG.
+    const rendered = await domToCanvas(document.documentElement, {
+      width,
+      height,
+      scale: Math.min(window.devicePixelRatio || 1, MAX_SCALE),
+      // Offset the clone by the scroll position so the capture starts at the
+      // top of the VIEWPORT rather than the top of the document.
+      style: {
+        transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
+        transformOrigin: 'top left',
+      },
+      filter: (node) =>
+        !(node instanceof Element && node.hasAttribute(CAPTURE_IGNORE_ATTR)),
+      // Don't hang the widget on a font or image that won't load; a slightly
+      // imperfect grab beats a spinner that never resolves.
+      timeout: 8000,
+    });
+
+    const out = document.createElement('canvas');
+    out.width = rendered.width;
+    out.height = rendered.height;
+    const ctx = out.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = resolvePageBackground();
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(rendered, 0, 0);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      out.toBlob(resolve, 'image/jpeg', 0.9)
+    );
+    if (!blob || blob.size === 0) return null;
+    return new File([blob], `screen-${Date.now()}.jpg`, { type: 'image/jpeg' });
   } catch {
+    // Any failure at all — unsupported CSS, a tainted canvas, a timeout — is
+    // just "no screenshot this time".
     return null;
-  } finally {
-    // Always release the capture — otherwise the browser keeps showing its
-    // "sharing your screen" indicator for the rest of the session.
-    stream?.getTracks().forEach((track) => track.stop());
   }
 }

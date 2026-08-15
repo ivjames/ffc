@@ -56,6 +56,7 @@ import StyleGuide from './features/style/StyleGuide';
 import GeofenceGate from './features/shared/GeofenceGate';
 import { BuildStamp } from './ui/BuildStamp';
 import FeedbackButton from './ui/FeedbackButton';
+import { CAPTURE_IGNORE_ATTR } from './lib/screenCapture';
 import { UpdateModal } from './ui/UpdateModal';
 import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
@@ -238,9 +239,14 @@ export default function App() {
           used to share these corners now ride in each screen's header. */}
       {DEV_MODE && (
         <>
+          {/* Each corner carries CAPTURE_IGNORE_ATTR so the feedback widget's
+              screen grab leaves the dev chrome out — a reviewer's screenshot
+              should show the app, not our own overlay sitting on top of it. */}
+
           {/* Build stamp on every page — fixed, non-interactive so it never
               blocks a tap. Confirms which build the browser actually loaded. */}
           <div
+            {...{ [CAPTURE_IGNORE_ATTR]: '' }}
             className="pointer-events-none fixed bottom-0 right-0 z-50 select-none px-2"
             style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
           >
@@ -251,6 +257,7 @@ export default function App() {
               reviewer's note and the build it's about share one corner. The
               overlay stays pass-through; only the pill takes taps. */}
           <div
+            {...{ [CAPTURE_IGNORE_ATTR]: '' }}
             className="pointer-events-none fixed right-0 z-50 px-2"
             style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
           >
@@ -258,6 +265,7 @@ export default function App() {
           </div>
 
           <div
+            {...{ [CAPTURE_IGNORE_ATTR]: '' }}
             className="fixed bottom-0 left-0 z-50 flex items-center gap-2 p-2"
             style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
           >

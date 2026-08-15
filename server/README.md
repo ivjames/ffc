@@ -351,11 +351,12 @@ the comment, silent truncation of the client-stamped context fields, and a
 global disk budget over stored screenshots (`FEEDBACK_DISK_BUDGET_MB`).
 
 The widget that calls this only renders under `VITE_DEV_MODE`, so a normal
-player build never reaches it. Pressing it grabs the screen automatically where
-the browser can (desktop, via `getDisplayMedia` — one frame, taken before the
-note sheet opens); on iOS/Android, which have no such API, the reviewer attaches
-an OS screenshot instead. No AI touches this pipeline — the device downscales
-the image and the server just stores bytes.
+player build never reaches it. Pressing it grabs the screen automatically —
+a DOM render (not `getDisplayMedia`, which iOS Safari and Chrome on Android
+don't implement), taken before the note sheet opens, so it works on the phones
+reviewers actually carry. The file picker stays for anything the page render
+can't see. No AI touches this pipeline — the device downscales the image and
+the server just stores bytes.
 
 ```json
 { "body": "the hole numbers wash out in sunlight",
