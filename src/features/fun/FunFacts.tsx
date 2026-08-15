@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { FUN_FACTS } from '../../data/funContent';
 import { playClick } from '../../lib/sound';
 
@@ -39,6 +39,7 @@ export default function FunFacts() {
         >
           <span className="text-6xl">{fact.emoji}</span>
           <p className="text-lg font-semibold leading-snug text-fairway-50">{fact.text}</p>
+          <BrandMark className="mt-2 h-3 w-32 text-fairway-400 opacity-70" />
         </button>
 
         <Button onClick={next} sound="none">

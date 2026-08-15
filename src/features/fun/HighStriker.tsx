@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import { useFitCanvas } from './useFitCanvas';
+import { drawLogo } from './logo';
 import { playStroke, playSoClose, playUndo, playDing, playLand, playFanfare } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
 import {
@@ -395,6 +396,11 @@ function drawMeter(ctx: CanvasRenderingContext2D, value: number) {
 function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterVal: number) {
   ctx.clearRect(0, 0, W, H);
   drawBackdrop(ctx);
+  // Midway banner in the night sky, right of the tower (posts at W/2 ± 46, so
+  // the right flank is clear from ~220 across; the power meter only occupies
+  // the bottom corner). The badge, since the flank is a tall narrow strip a
+  // wordmark would waste, at banner-glow amber over the stars.
+  drawLogo(ctx, 272, 168, { variant: 'badge', width: 100, tint: '#fbbf24', alpha: 0.3 });
 
   // —— Dynamic layer (shaken on impacts) ——
   ctx.save();

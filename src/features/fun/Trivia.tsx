@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { TRIVIA, type TriviaQuestion } from '../../data/funContent';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
 import GameTicketAward from './GameTicketAward';
@@ -99,6 +99,7 @@ export default function Trivia() {
               <span className="text-2xl text-fairway-400"> / {round.length}</span>
             </div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
+            <BrandMark className="mt-1 h-4 w-40 text-fairway-400" />
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round. */}
           <GameTicketAward

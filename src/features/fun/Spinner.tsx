@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import type { Challenge } from '../../data/funContent';
 import { challengesForTheme } from '../../data/funContent';
 import { courseById } from '../../data/courses';
@@ -211,6 +211,8 @@ export default function Spinner() {
             </g>
           </svg>
         </div>
+
+        <BrandMark className="mx-auto mb-5 h-4 w-40 text-fairway-400 opacity-80" />
 
         {chosen ? (
           <div className="animate-result-swell mb-5 rounded-2xl border border-fairway-700 bg-fairway-900/50 px-5 py-5 text-center">
