@@ -84,6 +84,27 @@ export class ArcadeDriver {
   }
 
   /**
+   * Tap, and bracket the press with page-clock readings.
+   *
+   * The two-axis timing games rebase their sweep clock to performance.now()
+   * inside the pointerdown handler, so the tap itself is the phase reference for
+   * whatever comes next. The handler runs during mouse.down(), somewhere between
+   * these two readings; the midpoint is the best available estimate, and the
+   * spread is the uncertainty it carries.
+   *
+   * @returns {Promise<{ t: number, spread: number }>} page time of the press
+   */
+  async tapTimed(x, y) {
+    const p = this.toClient(x, y);
+    await this.page.mouse.move(p.x, p.y);
+    const t0 = await this.pageNow();
+    await this.page.mouse.down();
+    const t1 = await this.pageNow();
+    await this.page.mouse.up();
+    return { t: (t0 + t1) / 2, spread: t1 - t0 };
+  }
+
+  /**
    * Drag from a logical point by a logical delta, which is what the swipe games
    * actually read (launchVelocity() takes the delta; the press point is free).
    * `steps` intermediate moves so onPointerMove sees the full delta before the

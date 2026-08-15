@@ -38,18 +38,35 @@ so for a target `(tx,ty)`, with `k = (X0-tx) / (2·(Y0-ty))`:
 
 which is exact and lands every ring inside the legal speed band.
 
-**Timing games** (High Striker) can't be dead-reckoned: the sweep phase lives in
-a React ref that's re-based from a rAF frame each swing. So the bot *looks at
-the screen* — it reads the power meter's fill height straight off the canvas
-with `getImageData`, inverts the draw code to recover the live value, samples
-twice to get direction, and schedules the tap. Re-measured every swing, so
-phase error never accumulates. It rings the bell (100/100) reliably.
+**Timing games** can't be dead-reckoned: the sweep phase lives in a React ref
+that's re-based from a rAF frame. So the bot *looks at the screen* — it reads
+the guide straight off the canvas with `getImageData`, inverts the draw code to
+recover the live value, samples twice to get direction, and schedules the tap.
+
+For High Striker that's the power meter's fill height, re-measured every swing
+so phase error never accumulates. It rings the bell (100/100) reliably.
+
+Axe Throw and Darts are **two-axis** timing games — a vertical guide sweeps for
+x, then a horizontal one for y — and they get solved by two different means,
+because the games hand us a freebie:
+
+- **x** — phase unknown, so probe the amber guide line and schedule, as above.
+- **y** — phase *known*. Locking x runs `gs.sweepBase = now` inside the
+  pointerdown handler, so the vertical sweep restarts from the bot's own tap.
+  Its phase is whatever the clock said when we pressed, making the y lock plain
+  dead reckoning off a timestamp we measured ourselves — no second probe.
+
+The guide finder takes the intensity-weighted centroid of the amber run rather
+than the single best pixel, which recovers the line to well under a pixel. It's
+deliberately strict about what counts as amber: the boards carry warm browns and
+low-alpha sparkle, and a nearest-colour match would happily lock onto those when
+the guide isn't drawn at all.
 
 ## Coverage
 
-Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`. Run
-`node scripts/arcade-bot.mjs --list` for the current list and, more usefully,
-for *why* each unsupported game isn't in it.
+Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`, `axethrow`,
+`darts`. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
+usefully, for *why* each unsupported game isn't in it.
 
 The gap is deliberate. Reactive games (whack-a-mole, shooting gallery, air
 hockey, pinball, go-karts, …) need to track moving entities frame by frame,
@@ -57,12 +74,29 @@ which the canvas-probe approach can be extended to but doesn't do yet. Bowling
 and milk-bottle are physics sims — the aim inverts, the pin/bottle scatter
 doesn't, so they'd need empirical calibration instead of a closed form.
 
-Measured at expert skill: Skee-Ball 570–820, Ring Toss 16–31, Pop-a-Shot 69–72,
-High Striker 100.
+Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
-One honest caveat: **High Striker's headline is the best of five swings**, which
-compresses scores toward 100 regardless of skill. That's the game's shape, not a
-bot artifact, and it's left alone rather than faked into a wider spread.
+| Game | Expert | Beginner | Round max |
+| --- | --- | --- | --- |
+| Skee-Ball | 570–820 | 30–90 | 900 |
+| Ring Toss | 16–31 | 0–4 | 40 |
+| Pop-a-Shot | 69–72 | — | (45s clock) |
+| High Striker | 100 | 100 | 100 |
+| Axe Throw | 27–31 | 17–20 | 35 |
+| Darts | 286–370 | 154–175 | 540 |
+
+Two honest caveats:
+
+- **High Striker's headline is the best of five swings**, which compresses
+  scores toward 100 regardless of skill. That's the game's shape, not a bot
+  artifact, and it's left alone rather than faked into a wider spread.
+- **Axe Throw's spread is narrow** because any hit inside the outer ring scores.
+  A beginner still hits the board — which is also true of real axe throwing.
+
+Darts is the least forgiving, by design: the treble band is 12px deep and sector
+20's neighbours are 1 and 5, so missing the treble sideways scores 1 instead of
+60. That cruelty is the real dartboard's, and it makes the distribution wide and
+lumpy in exactly the way real darts is.
 
 ## Usage
 

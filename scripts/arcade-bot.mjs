@@ -78,7 +78,14 @@ function parseArgs(argv) {
 }
 
 /** Expert-bot score floors — the regression signal for "this game still works". */
-const SKILL_FLOOR = { skeeball: 400, ringtoss: 12, popashot: 20, highstriker: 70 };
+const SKILL_FLOOR = {
+  skeeball: 400,
+  ringtoss: 12,
+  popashot: 20,
+  highstriker: 70,
+  axethrow: 22,
+  darts: 200,
+};
 
 const pct = (xs, p) => {
   if (xs.length === 0) return 0;

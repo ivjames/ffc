@@ -13,21 +13,21 @@ import skeeball from './games/skeeball.mjs';
 import ringtoss from './games/ringtoss.mjs';
 import highstriker from './games/highstriker.mjs';
 import popashot from './games/popashot.mjs';
+import axethrow from './games/axethrow.mjs';
+import darts from './games/darts.mjs';
 
-export const GAMES = [skeeball, ringtoss, popashot, highstriker];
+export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts];
 
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
 /** Server-registry games with no policy yet, and why. */
 export const UNSUPPORTED = [
   ['airhockey', 'reactive — tracks a live puck'],
-  ['axethrow', 'timing — two sweeping guides, needs a phase lock per axis'],
   ['battingcages', 'reactive — pitch timing'],
   ['bowling', 'physics — pin scatter is a sim, so no closed-form aim'],
   ['bumperboats', 'reactive — continuous steering'],
   ['bumpercars', 'reactive — continuous steering'],
   ['clawmachine', 'timing — but prize positions come from a physics pile'],
-  ['darts', 'timing — two sweeping guides, needs a phase lock per axis'],
   ['gokarts', 'reactive — continuous steering'],
   ['milkbottle', 'physics — topple cascade is a sim, so no closed-form aim'],
   ['pinball', 'reactive — flipper timing on a live ball'],
