@@ -200,6 +200,25 @@ export type AdminBoothPhoto = {
   createdAt: string;
 };
 
+// A reviewer's note filed from inside the player app (routes/feedback.js).
+// The context fields are stamped by the client, so a note always says which
+// screen and which build it is about without the reviewer typing either.
+export type AdminFeedbackStatus = 'open' | 'resolved';
+export type AdminFeedback = {
+  id: string;
+  body: string;
+  screenPath: string | null;
+  reviewer: string | null;
+  appBuild: string | null;
+  userAgent: string | null;
+  status: AdminFeedbackStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  hasScreenshot: boolean;
+  locationName: string | null;
+};
+
 // A venue-uploaded SVG asset for the photo booth (Master Control → Booth
 // stickers). `kind` sets how it's applied; `corner` places a watermark.
 export type AdminStickerKind = 'sticker' | 'frame' | 'watermark';
@@ -471,6 +490,38 @@ export const api = {
     return req<AdminBoothPhoto[]>('GET', `/booth-photos${s ? `?${s}` : ''}`);
   },
   removeBoothPhoto: (id: string) => req<{ ok: true }>('POST', `/booth-photos/${id}/remove`),
+
+  // Reviewer commentary (routes/admin/feedback.js). Same keyset pagination
+  // contract as the photo lists; `status` narrows to open or resolved.
+  listFeedback: (
+    opts: { before?: string; limit?: number; status?: AdminFeedbackStatus } = {}
+  ) => {
+    const q = new URLSearchParams();
+    if (opts.before) q.set('before', opts.before);
+    if (opts.limit) q.set('limit', String(opts.limit));
+    if (opts.status) q.set('status', opts.status);
+    const s = q.toString();
+    return req<AdminFeedback[]>('GET', `/feedback${s ? `?${s}` : ''}`);
+  },
+  setFeedbackStatus: (id: string, status: AdminFeedbackStatus) =>
+    req<{ ok: true; status: AdminFeedbackStatus; resolvedAt: string | null; resolvedBy: string | null }>(
+      'POST',
+      `/feedback/${id}/status`,
+      { status }
+    ),
+  removeFeedback: (id: string) => req<{ ok: true }>('POST', `/feedback/${id}/remove`),
+  fetchFeedbackScreenshot: async (id: string) => {
+    const res = await fetch(`/api/admin/feedback/${id}/screenshot`, {
+      credentials: 'same-origin',
+      headers: { 'x-app-token': getToken() },
+    });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
 
   // Venue booth stickers (Master Control → Booth stickers). The preview image
   // uses the PUBLIC player endpoint (/api/photos/stickers/:id/image) — these

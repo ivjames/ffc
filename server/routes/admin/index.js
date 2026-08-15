@@ -21,6 +21,7 @@ import { router as photosRouter } from "./photos.js";
 import { router as boothPhotosRouter } from "./boothPhotos.js";
 import { router as boothStickersRouter } from "./boothStickers.js";
 import { router as announcementsRouter } from "./announcements.js";
+import { router as feedbackRouter } from "./feedback.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as gameRewardsAdminRouter } from "./gameRewards.js";
 import { router as exportRouter } from "./export.js";
@@ -51,6 +52,8 @@ router.use("/booth-photos", boothPhotosRouter);
 // Per-venue SVG sticker management for the photo booth.
 router.use("/booth-stickers", boothStickersRouter);
 router.use("/announcements", announcementsRouter);
+// Reviewer commentary review + triage (player side: routes/feedback.js).
+router.use("/feedback", feedbackRouter);
 router.use("/rewards", rewardsRouter);
 // Game ticket economy — caps metadata + app-issued ticket rollup.
 router.use("/game-rewards", gameRewardsAdminRouter);

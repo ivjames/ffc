@@ -917,3 +917,43 @@ create table if not exists bonus_award (
   unique (location_id, player_id, kind)
 );
 create index if not exists bonus_award_player_idx on bonus_award (location_id, player_id);
+
+-- Reviewer commentary (routes/feedback.js + routes/admin/feedback.js): a
+-- comment, and optionally a screenshot, filed from inside the player app by
+-- whoever is walking it — staff, stakeholders, testers. The point is that the
+-- note arrives already attached to the screen it is about: the client stamps
+-- screen_path (the route), app_build, and user_agent automatically, so nobody
+-- has to describe "the page with the leaderboard on my phone".
+--
+-- This is a REVIEW tool, not player content and not a support inbox: the
+-- widget that writes these rows only renders under VITE_DEV_MODE, alongside
+-- the skin picker and build stamp. Screenshots live on disk like every other
+-- image in this app (the booth's pattern — the phone downscales, the server
+-- stores bytes) and are bounded by FEEDBACK_DISK_BUDGET_MB.
+--
+-- `status` is the triage state Master Control writes: 'open' until an operator
+-- marks it 'resolved' (reversible — resolved_at/resolved_by simply re-stamp).
+-- Identity is deliberately thin: an optional self-declared `reviewer` name and
+-- the anonymous device install id. No account is required to file one, and no
+-- app_user_id is stored.
+create table if not exists reviewer_feedback (
+  id              uuid primary key default gen_random_uuid(),
+  body            text not null,           -- the comment itself (1..4000 chars)
+  screen_path     text,                    -- app route the reviewer was on, e.g. /golf/play
+  reviewer        text,                    -- optional self-declared name, remembered client-side
+  device_id       text,                    -- anonymous per-install id (untrusted client input)
+  location_id     uuid references location(id) on delete set null,
+                                           -- venue selected at filing time; scopes the admin
+                                           -- surface (null = super_admin-only, booth precedent)
+  app_build       text,                    -- client bundle build id, so a note pins to a build
+  user_agent      text,                    -- device/browser string, truncated
+  screenshot_path text,                    -- stored image path on disk (null = comment only)
+  media_type      text,                    -- image/jpeg | png | webp | gif
+  bytes           int,                     -- stored file size; backs FEEDBACK_DISK_BUDGET_MB
+  status          text not null default 'open',  -- open | resolved
+  created_at      timestamptz not null default now(),
+  resolved_at     timestamptz,
+  resolved_by     text                     -- actor label of the operator who triaged it
+);
+create index if not exists reviewer_feedback_status_idx  on reviewer_feedback (status, created_at desc);
+create index if not exists reviewer_feedback_created_idx on reviewer_feedback (created_at desc);
