@@ -93,6 +93,7 @@ const SKILL_FLOOR = {
   whackamole: 20,
   bowling: 150,
   shootinggallery: 60,
+  clawmachine: 30,
 };
 
 const pct = (xs, p) => {

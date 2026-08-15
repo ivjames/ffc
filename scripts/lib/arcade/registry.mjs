@@ -18,8 +18,9 @@ import darts from './games/darts.mjs';
 import whackamole from './games/whackamole.mjs';
 import bowling from './games/bowling.mjs';
 import shootinggallery from './games/shootinggallery.mjs';
+import clawmachine from './games/clawmachine.mjs';
 
-export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery];
+export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine];
 
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
@@ -29,7 +30,6 @@ export const UNSUPPORTED = [
   ['battingcages', 'reactive — pitch timing'],
   ['bumperboats', 'reactive — continuous steering'],
   ['bumpercars', 'reactive — continuous steering'],
-  ['clawmachine', 'timing — but prize positions come from a physics pile'],
   ['gokarts', 'reactive — continuous steering'],
   ['milkbottle', 'physics — topple cascade is a sim, so no closed-form aim'],
   ['pinball', 'reactive — flipper timing on a live ball'],
