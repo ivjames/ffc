@@ -90,6 +90,7 @@ const SKILL_FLOOR = {
   highstriker: 70,
   axethrow: 22,
   darts: 200,
+  whackamole: 20,
 };
 
 const pct = (xs, p) => {

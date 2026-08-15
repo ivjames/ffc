@@ -65,14 +65,22 @@ the guide isn't drawn at all.
 ## Coverage
 
 Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`, `axethrow`,
-`darts`. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
+`darts`, `whackamole` — 7 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
 usefully, for *why* each unsupported game isn't in it.
 
-The gap is deliberate. Reactive games (whack-a-mole, shooting gallery, air
-hockey, pinball, go-karts, …) need to track moving entities frame by frame,
-which the canvas-probe approach can be extended to but doesn't do yet. Bowling
-and milk-bottle are physics sims — the aim inverts, the pin/bottle scatter
-doesn't, so they'd need empirical calibration instead of a closed form.
+The gap is narrowing rather than fixed. Whack-a-Mole was the first REACTIVE
+game — targets that are live state, not fixed geometry — and it works by
+sampling all nine holes in one round trip and acting on what is there. Its holes
+are a known 3×3 grid, so nothing has to be tracked frame to frame; games with
+genuinely moving entities (a duck on a rail, a puck, a pinball) need the
+position recovered from pixels and predicted forward, which is the next step up.
+
+Still out: air hockey, batting cages, pinball, shooting gallery, water gun and
+the driving games (moving entities or continuous steering); bowling and milk
+bottle, whose aim inverts but whose pin/bottle scatter is a sim needing
+empirical calibration; claw machine, whose sweep is solvable but whose prize
+positions come from a physics pile; and trivia, which is knowledge rather than a
+gesture.
 
 Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
@@ -84,6 +92,7 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | High Striker | 100 | 100 | 100 |
 | Axe Throw | 27–31 | 17–20 | 35 |
 | Darts | 286–370 | 154–175 | 540 |
+| Whack-a-Mole | 48–53 | — | (30s clock) |
 
 Two honest caveats:
 

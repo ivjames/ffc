@@ -15,8 +15,9 @@ import highstriker from './games/highstriker.mjs';
 import popashot from './games/popashot.mjs';
 import axethrow from './games/axethrow.mjs';
 import darts from './games/darts.mjs';
+import whackamole from './games/whackamole.mjs';
 
-export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts];
+export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole];
 
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
@@ -34,7 +35,6 @@ export const UNSUPPORTED = [
   ['shootinggallery', 'reactive — moving targets'],
   ['trivia', 'knowledge — answers are bundled content, not a gesture'],
   ['watergunrace', 'reactive — sustained aim on a moving target'],
-  ['whackamole', 'reactive — mole positions are live state'],
 ];
 
 export function resolve(keys) {
