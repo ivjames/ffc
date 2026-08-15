@@ -22,11 +22,19 @@ type Sampled = {
   bodyBackground: string;
 };
 
+type GrabOpts = { scrollY?: number; skin?: string; mode?: 'light' | 'dark' };
+
 /** Open the app on an emulated phone, press the pill, and measure the grab. */
-async function grabOnPhone(browser: Browser, route: string, scrollY = 0): Promise<Sampled> {
+async function grabOnPhone(
+  browser: Browser,
+  route: string,
+  { scrollY = 0, skin, mode }: GrabOpts = {}
+): Promise<Sampled> {
   const context = await browser.newContext({ ...devices['iPhone 13'] });
   const page = await context.newPage();
   try {
+    if (skin) await page.addInitScript((s) => localStorage.setItem('ffc-skin', s), skin);
+    if (mode) await page.addInitScript((m) => localStorage.setItem('ffc-theme', m), mode);
     await page.goto(`${PLAYER_APP}${route}`, { waitUntil: 'networkidle' });
     if (scrollY) {
       await page.evaluate((y) => window.scrollTo(0, y), scrollY);
@@ -117,12 +125,31 @@ test('a scrolled page grabs the viewport, fully painted', async ({ browser }) =>
   // the element's own box no longer covers is left transparent — which a JPEG
   // encodes as solid black. The capture paints its own background underneath
   // for exactly this case, so the bottom edge is the one that matters here.
-  const shot = await grabOnPhone(browser, '/arcade', 400);
+  const shot = await grabOnPhone(browser, '/arcade', { scrollY: 400 });
 
   expect(shot.distinctColours).toBeGreaterThan(50);
   for (const edge of shot.edges) {
     const [r, g, b] = rgb(edge);
     expect(r + g + b, `edge sample ${edge} looks unpainted`).toBeGreaterThan(60);
+  }
+});
+
+test('a gradient skin in dark mode fills with the theme, not white', async ({ browser }) => {
+  // Several skins (candy, chrome) paint the body entirely with background-image
+  // gradients, which leaves the computed background-color transparent. Reading
+  // the fill off the DOM therefore finds nothing, and any light default lands
+  // white bands across a dark themed screenshot. The fill is sampled from the
+  // render itself so it continues whatever the gradient had reached.
+  const shot = await grabOnPhone(browser, '/arcade', {
+    scrollY: 400,
+    skin: 'candy',
+    mode: 'dark',
+  });
+
+  for (const edge of shot.edges) {
+    const [r, g, b] = rgb(edge);
+    expect(r + g + b, `edge sample ${edge} is unpainted`).toBeGreaterThan(20);
+    expect(r + g + b, `edge sample ${edge} is a white band on a dark theme`).toBeLessThan(450);
   }
 });
 

@@ -46,21 +46,46 @@ function isOpaque(color: string): boolean {
 }
 
 /**
- * The colour to paint behind the render.
+ * The colour to paint behind the render, read from what the render ACTUALLY
+ * painted: scan up the left edge for the lowest fully-opaque pixel.
  *
- * Not cosmetic: CSS propagates the BODY's background up to the canvas and then
- * paints nothing on the body element itself, so a foreignObject clone of the
- * body comes back with no background at all — which a JPEG flattens to black,
- * putting this app's dark-on-light text on a black field. Resolve the same way
- * the CSS cascade does: html's background if it has one, otherwise the body's.
+ * Reading it off the DOM instead would be wrong for half this app's skins.
+ * Several of them (candy, chrome) paint the body entirely with
+ * `background-image` gradients, which leaves the computed `background-color`
+ * transparent — so a CSS lookup finds nothing and any hardcoded default puts
+ * white bands under a dark themed page. Sampling costs one getImageData and
+ * continues the gradient with the colour it had actually reached, since the
+ * area needing fill always sits directly below the painted region.
  */
+function sampleRenderedBackground(rendered: HTMLCanvasElement): string | null {
+  try {
+    const ctx = rendered.getContext('2d', { willReadFrequently: true });
+    if (!ctx || rendered.height === 0) return null;
+    const column = ctx.getImageData(0, 0, 1, rendered.height).data;
+    for (let y = rendered.height - 1; y >= 0; y--) {
+      if (column[y * 4 + 3] > 250) {
+        return `rgb(${column[y * 4]}, ${column[y * 4 + 1]}, ${column[y * 4 + 2]})`;
+      }
+    }
+    return null;
+  } catch {
+    // Tainted canvas (an image that wouldn't inline) — fall back to the DOM.
+    return null;
+  }
+}
+
+/** DOM-side fallback, for a render with nothing opaque to sample. */
 function resolvePageBackground(): string {
   const html = getComputedStyle(document.documentElement).backgroundColor;
   if (isOpaque(html)) return html;
   const body = getComputedStyle(document.body).backgroundColor;
   if (isOpaque(body)) return body;
-  // Neither is set (shouldn't happen — index.css paints one in both themes).
-  return '#ffffff';
+  // Every skin sets one or the other, so this is only reached if the page
+  // hasn't painted at all. Match the mode so it can't flash white on a dark
+  // theme — the failure Codex caught on the gradient skins.
+  return getComputedStyle(document.documentElement).colorScheme === 'light'
+    ? '#ffffff'
+    : '#111111';
 }
 
 /**
@@ -114,7 +139,7 @@ export async function captureScreen(): Promise<File | null> {
     out.height = rendered.height;
     const ctx = out.getContext('2d');
     if (!ctx) return null;
-    ctx.fillStyle = resolvePageBackground();
+    ctx.fillStyle = sampleRenderedBackground(rendered) ?? resolvePageBackground();
     ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(rendered, 0, 0);
 
