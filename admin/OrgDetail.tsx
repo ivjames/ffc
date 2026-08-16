@@ -1,6 +1,221 @@
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { api } from './api';
-import { BackLink, Button, Card, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
+import { api, type Branding, type Org } from './api';
+import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
+
+// The platform defaults from MULTI-VENUE.md §2 — shown as placeholders so an
+// empty field visibly means "use the platform default". The server holds the
+// canonical copy (server/lib/branding.js); this list only feeds placeholders
+// and the color-swatch fallback, so drift is cosmetic, not behavioral.
+export const BRANDING_DEFAULTS: Required<Branding> = {
+  appName: 'Mini Golf Scorecard',
+  shortName: 'MiniGolf',
+  themeColor: '#15803d',
+  backgroundColor: '#052e16',
+  accentColor: '#38bdf8',
+  logoUrl: '/brand/logo.png',
+  logoBadgeUrl: '/brand/logo-badge.png',
+  logoWordmarkUrl: '/brand/logo-wordmark.png',
+  icon192Url: '/icons/icon-192.png',
+  icon512Url: '/icons/icon-512.png',
+  shareFooter: "Bullwinkle's · come beat this score",
+};
+
+type BrandingKey = keyof Branding;
+const BRANDING_KEYS = Object.keys(BRANDING_DEFAULTS) as BrandingKey[];
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** Editor state → the full-replace PATCH body: only non-empty fields ship.
+ *  All-blank collapses to {} — valid, and means "all platform defaults". */
+export function buildBrandingPayload(values: Record<BrandingKey, string>): Branding {
+  const out: Branding = {};
+  for (const key of BRANDING_KEYS) {
+    const v = values[key].trim();
+    if (v !== '') out[key] = v;
+  }
+  return out;
+}
+
+function ColorField({
+  label,
+  value,
+  def,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  def: string;
+  onChange: (v: string) => void;
+}) {
+  // The native swatch needs a valid #rrggbb at all times — while the text is
+  // blank or mid-edit it previews the default instead.
+  const swatch = HEX_RE.test(value.trim()) ? value.trim() : def;
+  return (
+    <Field label={label} hint={`Blank = platform default (${def}).`}>
+      <div className="flex items-center gap-2">
+        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={def} />
+        <input
+          type="color"
+          aria-label={`${label} swatch`}
+          value={swatch}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-8 w-10 shrink-0 cursor-pointer rounded-md border border-slate-300 bg-white p-0.5"
+        />
+      </div>
+    </Field>
+  );
+}
+
+/** Tiny logo preview next to a URL field; disappears (rather than showing a
+ *  broken-image glyph) if the URL doesn't load. Note "/…" paths resolve
+ *  against the admin origin here, so a player-bundle path may not preview —
+ *  that's fine, the field is still valid. */
+function LogoPreview({ url }: { url: string }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  if (failedUrl === url) return null;
+  return (
+    <img
+      src={url}
+      alt=""
+      onError={() => setFailedUrl(url)}
+      className="h-8 w-8 shrink-0 rounded bg-slate-100 object-contain ring-1 ring-slate-200"
+    />
+  );
+}
+
+function UrlField({
+  label,
+  value,
+  def,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  def: string;
+  onChange: (v: string) => void;
+}) {
+  const trimmed = value.trim();
+  return (
+    <Field label={label} hint={`"/path" or "https://…". Blank = ${def}.`}>
+      <div className="flex items-center gap-2">
+        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={def} inputMode="url" />
+        {trimmed !== '' && <LogoPreview url={trimmed} />}
+      </div>
+    </Field>
+  );
+}
+
+function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
+  const [values, setValues] = useState<Record<BrandingKey, string>>(() => {
+    const stored = org.branding ?? {};
+    return Object.fromEntries(BRANDING_KEYS.map((k) => [k, stored[k] ?? ''])) as Record<
+      BrandingKey,
+      string
+    >;
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
+
+  const set = (key: BrandingKey) => (v: string) => setValues((cur) => ({ ...cur, [key]: v }));
+
+  async function save() {
+    setErr(null);
+    setBusy(true);
+    try {
+      await api.updateOrgBranding(org.id, buildBrandingPayload(values));
+      toast('Branding saved.');
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-sm font-semibold text-slate-700">Branding</h2>
+      <p className="mb-3 text-xs text-slate-500">
+        White-label overrides for this org's player app (name, colors, logos). Every field is
+        optional — blank means the platform default shown as the placeholder.
+      </p>
+      {err && <Banner kind="error">{err}</Banner>}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <Field label="App name" hint="PWA install name and document title (1–80 chars).">
+          <Input
+            value={values.appName}
+            onChange={(e) => set('appName')(e.target.value)}
+            placeholder={BRANDING_DEFAULTS.appName}
+          />
+        </Field>
+        <Field label="Short name" hint="Home-screen label (1–30 chars).">
+          <Input
+            value={values.shortName}
+            onChange={(e) => set('shortName')(e.target.value)}
+            placeholder={BRANDING_DEFAULTS.shortName}
+          />
+        </Field>
+        <ColorField
+          label="Theme color"
+          value={values.themeColor}
+          def={BRANDING_DEFAULTS.themeColor}
+          onChange={set('themeColor')}
+        />
+        <ColorField
+          label="Background color"
+          value={values.backgroundColor}
+          def={BRANDING_DEFAULTS.backgroundColor}
+          onChange={set('backgroundColor')}
+        />
+        <ColorField
+          label="Accent color"
+          value={values.accentColor}
+          def={BRANDING_DEFAULTS.accentColor}
+          onChange={set('accentColor')}
+        />
+        <Field label="Share footer" hint="Tagline on shared score images (1–120 chars).">
+          <Input
+            value={values.shareFooter}
+            onChange={(e) => set('shareFooter')(e.target.value)}
+            placeholder={BRANDING_DEFAULTS.shareFooter}
+          />
+        </Field>
+        <UrlField label="Logo URL" value={values.logoUrl} def={BRANDING_DEFAULTS.logoUrl} onChange={set('logoUrl')} />
+        <UrlField
+          label="Logo badge URL"
+          value={values.logoBadgeUrl}
+          def={BRANDING_DEFAULTS.logoBadgeUrl}
+          onChange={set('logoBadgeUrl')}
+        />
+        <UrlField
+          label="Logo wordmark URL"
+          value={values.logoWordmarkUrl}
+          def={BRANDING_DEFAULTS.logoWordmarkUrl}
+          onChange={set('logoWordmarkUrl')}
+        />
+        <UrlField
+          label="Icon 192 URL"
+          value={values.icon192Url}
+          def={BRANDING_DEFAULTS.icon192Url}
+          onChange={set('icon192Url')}
+        />
+        <UrlField
+          label="Icon 512 URL"
+          value={values.icon512Url}
+          def={BRANDING_DEFAULTS.icon512Url}
+          onChange={set('icon512Url')}
+        />
+      </div>
+      <div className="mt-3">
+        <Button onClick={save} disabled={busy}>
+          {busy ? 'Saving…' : 'Save branding'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
 
 export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { id = '' } = useParams();
@@ -62,6 +277,10 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           ))}
         </div>
       </Card>
+
+      {/* Branding is cosmetic, so unlike archive it's open to the org's own
+          org_admin too (the server enforces scope either way). */}
+      <BrandingCard org={org} onSaved={reload} />
     </div>
   );
 }

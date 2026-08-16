@@ -58,6 +58,27 @@ async function req<T>(
 }
 
 // --- Types ------------------------------------------------------------------
+
+// Per-org white-label branding (MULTI-VENUE.md §2). Every key is optional —
+// a missing key means "use the platform default" — and the PATCH endpoint
+// takes the FULL object with replace (not merge) semantics, so {} resets an
+// org to all defaults. Server-side validation rejects unknown keys, enforces
+// #rrggbb on the color fields, and requires URL fields to start "/" or
+// "https://".
+export type Branding = {
+  appName?: string;
+  shortName?: string;
+  themeColor?: string;
+  backgroundColor?: string;
+  accentColor?: string;
+  logoUrl?: string;
+  logoBadgeUrl?: string;
+  logoWordmarkUrl?: string;
+  icon192Url?: string;
+  icon512Url?: string;
+  shareFooter?: string;
+};
+
 export type Org = {
   id: string;
   name: string;
@@ -66,6 +87,9 @@ export type Org = {
   sortOrder: number;
   archivedAt: string | null;
   locationCount?: number;
+  /** Stored branding overrides only (defaults NOT merged in). Optional while
+   *  the multi-venue server rollout is in flight. */
+  branding?: Branding;
 };
 
 export type Location = {
@@ -411,6 +435,11 @@ export const api = {
   saveOrg: (org: Partial<Org>) => req<{ ok: true; org: Org }>('POST', '/orgs', org),
   archiveOrg: (id: string, archived: boolean) =>
     req<{ ok: true; org: Org }>('POST', `/orgs/${id}/${archived ? 'archive' : 'unarchive'}`),
+  // Full-replace semantics: send the complete branding object every time
+  // (omitted keys revert to platform defaults; {} = all defaults). Allowed
+  // for super_admin or the org's own org_admin.
+  updateOrgBranding: (id: string, branding: Branding) =>
+    req<{ ok: true; org: Org }>('PATCH', `/orgs/${id}/branding`, branding),
 
   listLocations: (opts: { orgId?: string; archived?: boolean } = {}) => {
     const q = new URLSearchParams();
