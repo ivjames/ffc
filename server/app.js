@@ -11,6 +11,7 @@ import { router as leaderboardRouter } from "./routes/leaderboard.js";
 import { router as seedRouter } from "./routes/seed.js";
 import { router as locationsRouter } from "./routes/locations.js";
 import { router as contentRouter } from "./routes/content.js";
+import { router as manifestRouter } from "./routes/manifest.js";
 import { router as huntRouter } from "./routes/hunt.js";
 import { router as photosRouter } from "./routes/photos.js";
 import { router as adminRouter } from "./routes/admin/index.js";
@@ -92,6 +93,8 @@ app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/seed", seedRouter);
 app.use("/api/locations", locationsRouter);
 app.use("/api/content", contentRouter);
+// Per-tenant PWA manifest — index.html links here instead of a static file.
+app.use("/api/manifest.webmanifest", manifestRouter);
 // Player accounts — passwordless email sign-in.
 app.use("/api/auth", authRouter);
 // Persistent teams (signed-in players only — guarded inside the router).

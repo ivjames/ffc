@@ -12,17 +12,30 @@
 // either global (location_id null) or pinned to the requested location.
 import { Router } from "express";
 import { pool } from "../db.js";
+import { tenant } from "../lib/tenant.js";
 
 export const router = Router();
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-router.get("/", async (req, res) => {
+router.get("/", tenant(), async (req, res) => {
   const locationId = typeof req.query.locationId === "string" ? req.query.locationId : null;
   if (locationId !== null && !UUID_RE.test(locationId)) {
     return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
   }
+  // Multi-venue: location-scoped rows must belong to the tenant's venues so a
+  // guessed locationId can't read another client's promos; global rows
+  // (location_id null) show on every subdomain. Same fallback rule as
+  // /api/content — the default-org path also covers org-less legacy locations.
+  const t = req.tenant;
+  const tenantFilter =
+    t == null
+      ? ""
+      : t.via === "host"
+        ? "and (a.location_id is null or l.org_id = $2)"
+        : "and (a.location_id is null or l.org_id = $2 or l.org_id is null)";
+  const params = t == null ? [locationId] : [locationId, t.org.id];
   try {
     const result = await pool.query(
       `select a.id, a.title, a.body, a.location_id as "locationId",
@@ -35,8 +48,9 @@ router.get("/", async (req, res) => {
           and (a.ends_at   is null or a.ends_at   >  now())
           and (a.location_id is null or l.archived_at is null)
           and (a.location_id is null or $1::uuid is not null and a.location_id = $1)
+          ${tenantFilter}
         order by a.sort_order, a.created_at`,
-      [locationId]
+      params
     );
     return res.json(result.rows);
   } catch (err) {

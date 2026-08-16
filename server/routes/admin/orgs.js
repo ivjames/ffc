@@ -2,22 +2,25 @@
 //   GET    /api/admin/orgs                list orgs (+ live location counts)
 //   POST   /api/admin/orgs               create/update (upsert on id, else slug)
 //   GET    /api/admin/orgs/:id           one org + its locations
+//   PATCH  /api/admin/orgs/:id/branding  replace the white-label branding object
 //   POST   /api/admin/orgs/:id/archive   soft-delete (set archived_at)
 //   POST   /api/admin/orgs/:id/unarchive restore
 //
 // Org-scoping: an org is the top-level tenant boundary, so managing orgs
 // themselves (create/rename/archive) is super_admin only. An org_admin can
 // only read their OWN org (GET list/one) — never another org's, never all of
-// them.
+// them. Branding is the one org-level WRITE an org_admin gets (own org only):
+// it's cosmetic, with no tenancy consequences.
 import { Router } from "express";
 import { pool } from "../../db.js";
 import { audit, isSuperAdmin, orgScope, actorLabel } from "../../lib/adminAuth.js";
 import { UUID_RE, SLUG_RE, LOCATION_RETURN_COLS, withLabel } from "../../lib/validateLocation.js";
+import { normalizeBranding } from "../../lib/branding.js";
 
 export const router = Router();
 
 const ORG_COLS = `id, name, slug, status, sort_order as "sortOrder",
-  archived_at as "archivedAt"`;
+  branding, archived_at as "archivedAt"`;
 
 function normalizeOrg(body) {
   if (body == null || typeof body !== "object" || Array.isArray(body)) {
@@ -43,7 +46,16 @@ function normalizeOrg(body) {
     }
     sortOrder = body.sortOrder;
   }
-  return { row: { id, name: name.trim(), slug, sortOrder } };
+  // Branding is optional on the upsert: null here means "not provided" — the
+  // insert path defaults it to {}, the conflict-update path preserves what's
+  // already stored (see the coalesce($n, org.branding) in the SQL).
+  let branding = null;
+  if (body.branding !== undefined && body.branding !== null) {
+    const b = normalizeBranding(body.branding);
+    if (b.error) return b;
+    branding = b.branding;
+  }
+  return { row: { id, name: name.trim(), slug, sortOrder, branding } };
 }
 
 // --- List -------------------------------------------------------------------
@@ -53,7 +65,7 @@ router.get("/", async (req, res) => {
   try {
     const result = await pool.query(
       `select o.id, o.name, o.slug, o.status, o.sort_order as "sortOrder",
-              o.archived_at as "archivedAt",
+              o.branding, o.archived_at as "archivedAt",
               count(l.id) filter (where l.archived_at is null) as "locationCount"
          from org o
          left join location l on l.org_id = o.id
@@ -106,21 +118,23 @@ router.post("/", async (req, res) => {
     let db;
     if (row.id) {
       db = await pool.query(
-        `insert into org (id, name, slug, sort_order)
-           values ($1, $2, $3, $4)
+        `insert into org (id, name, slug, sort_order, branding)
+           values ($1, $2, $3, $4, coalesce($5::jsonb, '{}'::jsonb))
          on conflict (id) do update set
-           name = excluded.name, slug = excluded.slug, sort_order = excluded.sort_order
+           name = excluded.name, slug = excluded.slug, sort_order = excluded.sort_order,
+           branding = coalesce($5::jsonb, org.branding)
          returning ${ORG_COLS}`,
-        [row.id, row.name, row.slug, row.sortOrder]
+        [row.id, row.name, row.slug, row.sortOrder, row.branding]
       );
     } else {
       db = await pool.query(
-        `insert into org (name, slug, sort_order)
-           values ($1, $2, $3)
+        `insert into org (name, slug, sort_order, branding)
+           values ($1, $2, $3, coalesce($4::jsonb, '{}'::jsonb))
          on conflict (slug) do update set
-           name = excluded.name, sort_order = excluded.sort_order
+           name = excluded.name, sort_order = excluded.sort_order,
+           branding = coalesce($4::jsonb, org.branding)
          returning ${ORG_COLS}`,
-        [row.name, row.slug, row.sortOrder]
+        [row.name, row.slug, row.sortOrder, row.branding]
       );
     }
     await audit({
@@ -136,6 +150,39 @@ router.post("/", async (req, res) => {
       return res.status(409).json({ ok: false, error: "slug already in use by another org" });
     }
     console.error("[admin/orgs] upsert error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// --- Branding (white-label) ---------------------------------------------------
+// Body is the FULL branding object — replace, not merge ({} resets to the
+// platform defaults). super_admin, or an org_admin on their own org: branding
+// is cosmetic, so it doesn't get the create/rename/archive super_admin gate.
+router.patch("/:id/branding", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "bad id" });
+  const scope = orgScope(req);
+  if (scope && id !== scope) {
+    return res.status(403).json({ ok: false, error: "forbidden: not your org" });
+  }
+  const result = normalizeBranding(req.body);
+  if (result.error) return res.status(result.status).json({ ok: false, error: result.error });
+  try {
+    const db = await pool.query(
+      `update org set branding = $2::jsonb where id = $1 returning ${ORG_COLS}`,
+      [id, result.branding]
+    );
+    if (db.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
+    await audit({
+      action: "org.branding",
+      entity: "org",
+      entityId: id,
+      detail: result.branding,
+      actor: actorLabel(req),
+    });
+    return res.json({ ok: true, org: db.rows[0] });
+  } catch (err) {
+    console.error("[admin/orgs] branding error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });

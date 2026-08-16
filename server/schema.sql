@@ -309,6 +309,12 @@ create table if not exists org (
   sort_order  int  not null default 0
 );
 
+-- Per-org white-label branding (MULTI-VENUE.md §2). Sparse object: only the
+-- keys an operator set are stored; everything else falls back to the platform
+-- defaults in server/lib/branding.js, so '{}' means "stock look" and this add
+-- changes nothing for existing rows.
+alter table org add column if not exists branding jsonb not null default '{}';
+
 -- Link locations to their org.
 alter table location add column if not exists org_id      uuid references org(id);
 create index if not exists location_org_idx on location (org_id);
