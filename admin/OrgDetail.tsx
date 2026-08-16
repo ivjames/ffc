@@ -306,17 +306,41 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const toast = useToast();
+  // Suspend/unsuspend failures (notably the server's refusal to suspend the
+  // default org without ?force=1) need reading, so they land in an inline
+  // banner — never silently retried with force.
+  const [lifecycleErr, setLifecycleErr] = useState<string | null>(null);
   const { data, error, loading, reload } = useAsync(() => api.getOrg(id), [id]);
 
   if (loading) return <Spinner />;
   if (error) return <Banner kind="error">{error.message}</Banner>;
   if (!data) return null;
   const { org, locations } = data;
+  const suspended = org.status === 'suspended';
 
   async function toggleArchive() {
     await api.archiveOrg(id, !org.archivedAt);
     toast(org.archivedAt ? 'Org unarchived.' : 'Org archived.');
     reload();
+  }
+
+  async function toggleSuspend() {
+    setLifecycleErr(null);
+    if (
+      !suspended &&
+      !window.confirm(
+        `Suspend ${org.name}? Its subdomain goes dark for players immediately (all data is kept).`
+      )
+    ) {
+      return;
+    }
+    try {
+      await (suspended ? api.unsuspendOrg(id) : api.suspendOrg(id));
+      toast(suspended ? 'Org unsuspended.' : 'Org suspended.');
+      reload();
+    } catch (e) {
+      setLifecycleErr((e as Error).message);
+    }
   }
 
   return (
@@ -328,6 +352,7 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           <>
             <span className="text-xs text-slate-400">/{org.slug}</span>
             {org.archivedAt && <Pill tone="amber">Archived</Pill>}
+            {suspended && <Pill tone="red">Suspended</Pill>}
           </>
         }
         actions={
@@ -336,6 +361,11 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               <Button>+ Location</Button>
             </Link>
             {isSuperAdmin && (
+              <Button variant={suspended ? 'ghost' : 'danger'} onClick={toggleSuspend}>
+                {suspended ? 'Unsuspend' : 'Suspend'}
+              </Button>
+            )}
+            {isSuperAdmin && (
               <Button variant={org.archivedAt ? 'ghost' : 'danger'} onClick={toggleArchive}>
                 {org.archivedAt ? 'Unarchive' : 'Archive'}
               </Button>
@@ -343,6 +373,8 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           </>
         }
       />
+
+      {lifecycleErr && <Banner kind="error">{lifecycleErr}</Banner>}
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold text-slate-700">Locations</h2>

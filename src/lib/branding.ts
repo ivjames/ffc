@@ -98,6 +98,26 @@ export function hasExplicitThemeColor(): boolean {
   return themeColorExplicit;
 }
 
+/** The org's EXPLICITLY set logo URL, or null. Same rule as
+ *  hasExplicitThemeColor: only a raw non-empty branding key counts. The merged
+ *  defaults are the Bullwinkle's assets — painting the default moose on a
+ *  tenant that simply hasn't uploaded a logo yet would be worse than no logo,
+ *  so UI placements (Home hero, nav drawer) fall back to neutral chrome
+ *  instead. `prefer` picks which cut leads for the placement's shape; the
+ *  other is the cross-fallback, so a tenant that uploaded only one cut still
+ *  brands every placement. */
+export function getExplicitLogoUrl(prefer: 'full' | 'badge' = 'full'): string | null {
+  const raw = org?.branding;
+  if (!raw || typeof raw !== 'object') return null;
+  const order: (keyof Branding)[] =
+    prefer === 'badge' ? ['logoBadgeUrl', 'logoUrl'] : ['logoUrl', 'logoBadgeUrl'];
+  for (const k of order) {
+    const v = raw[k];
+    if (typeof v === 'string' && v) return v;
+  }
+  return null;
+}
+
 // Mode greys for the theme-color meta — must match index.html's static
 // content and the values src/lib/mode.ts owned before multi-venue. Keyed by
 // <html data-theme>, which the index.html inline script sets before any

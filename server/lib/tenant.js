@@ -1,9 +1,20 @@
 // Tenant (org) resolution from the request host (MULTI-VENUE.md §1). One
 // deployed instance serves every client subdomain; the first DNS label of the
-// Host header is the candidate org slug. A miss falls back to DEFAULT_ORG_SLUG
-// (so today's staging host `ffc.lab980.com` keeps resolving to Bullwinkle's),
-// then to the first live org; no live orgs at all resolves to null and readers
-// preserve their pre-org unfiltered behavior.
+// Host header is the candidate org slug. A label that matches NO org at all
+// falls back to DEFAULT_ORG_SLUG (so today's staging host `ffc.lab980.com`
+// keeps resolving to Bullwinkle's). Only when no org with that slug EXISTS at
+// all (fresh-install bootstrap: the seed org was renamed) does resolution fall
+// through to the first live org; no live orgs at all resolves to null and
+// readers preserve their pre-org unfiltered behavior.
+//
+// A label that matches an org that EXISTS but is not live (suspended or
+// archived) must NOT fall through to the default org — that would serve the
+// default tenant's brand and catalog on the suspended client's subdomain, a
+// cross-brand leak. It resolves to the distinct 'suspended' shape instead
+// (see resolveTenant), which every reader treats as "matches nothing". The
+// same rule guards the fallback itself: a DEFAULT org that exists but is
+// suspended/archived takes every unmatched host dark with it — it never hands
+// the apex/staging hosts to whichever OTHER client sorts first.
 import { pool } from "../db.js";
 
 const ORG_COLS = `id, slug, name, branding`;
@@ -22,18 +33,43 @@ export function clearTenantCache() {
   cache.clear();
 }
 
-async function liveOrgBySlug(slug) {
-  const db = await pool.query(`select ${ORG_COLS} from org where slug = $1 and ${LIVE}`, [slug]);
+// Any org row for a slug, live or not — resolveTenant needs to tell "no such
+// org" (fallback) apart from "org exists but is suspended/archived" (the
+// subdomain goes dark, no fallback).
+async function orgBySlug(slug) {
+  const db = await pool.query(
+    `select ${ORG_COLS}, status, archived_at as "archivedAt" from org where slug = $1`,
+    [slug]
+  );
   return db.rows[0] ?? null;
+}
+
+// Shape an orgBySlug row into a resolution: a live row resolves normally under
+// the given via; a suspended/archived row resolves to the dark SENTINEL (see
+// resolveTenant's doc comment) regardless of which path found it.
+function resolution(row, via) {
+  if (row.archivedAt == null && row.status === "active") {
+    const { status: _s, archivedAt: _a, ...org } = row;
+    return { org, via };
+  }
+  return { org: { id: null, slug: row.slug, name: null, branding: null }, via: "suspended" };
 }
 
 /**
  * Resolve the tenant for a request. Returns `{ org, via }` or `null`:
  *   - org: { id, slug, name, branding } (branding as stored — sparse; merge
  *     through resolveBranding() before use)
- *   - via: 'host' when the subdomain label matched an org slug exactly, else
- *     'fallback' (default-org path — steps 3/4). Readers use this to decide
- *     whether org-less legacy rows are in scope (fallback only).
+ *   - via: 'host' when the subdomain label matched a LIVE org slug exactly;
+ *     'suspended' when the label matched an org that exists but is suspended
+ *     or archived; else 'fallback' (default-org path — steps 3/4). Readers use
+ *     via to decide whether org-less legacy rows are in scope (fallback only).
+ *
+ * The 'suspended' shape keeps `org` a non-null SENTINEL — { id: null, slug,
+ * name: null, branding: null } — so readers that pass `tenant.org.id` into
+ * tenantOrgFilter's strict `col = $n` predicate compare against NULL and match
+ * nothing (never true in SQL), and branding readers (`tenant?.org.branding ??
+ * {}`) land on the platform defaults. That makes every guarded route take its
+ * existing empty/not-found path without special-casing.
  */
 export async function resolveTenant(req) {
   // Express strips the port from req.hostname, but belt-and-braces it anyway.
@@ -44,14 +80,24 @@ export async function resolveTenant(req) {
   if (hit && hit.expires > Date.now()) return hit.value;
 
   let value = null;
-  const bySlug = label ? await liveOrgBySlug(label) : null;
+  const bySlug = label ? await orgBySlug(label) : null;
   if (bySlug) {
-    value = { org: bySlug, via: "host" };
+    // Exact slug match. A suspended/archived org's subdomain goes DARK (empty
+    // catalog, default branding) instead of leaking the default org.
+    value = resolution(bySlug, "host");
   } else {
-    const fallback = await liveOrgBySlug(process.env.DEFAULT_ORG_SLUG || "bullwinkles");
-    if (fallback) {
-      value = { org: fallback, via: "fallback" };
+    // No org matches the label: the default-org fallback. Looked up WITHOUT
+    // the live filter on purpose — a default org that exists but is
+    // suspended/archived resolves to the same dark sentinel as a suspended
+    // host match, so unmatched hosts (apex/staging included) go blank rather
+    // than falling through to the first live org, which would serve ANOTHER
+    // client's catalog, branding, and manifest there.
+    const byDefault = await orgBySlug(process.env.DEFAULT_ORG_SLUG || "bullwinkles");
+    if (byDefault) {
+      value = resolution(byDefault, "fallback");
     } else {
+      // No org with the default slug exists at all — fresh-install bootstrap
+      // (the seed org was renamed): fall back to the first live org.
       const first = await pool.query(
         `select ${ORG_COLS} from org where ${LIVE} order by sort_order, name limit 1`
       );
@@ -59,8 +105,10 @@ export async function resolveTenant(req) {
     }
   }
   // Only completed resolutions are cached — a NEGATIVE result (null = no live
-  // orgs) included. A thrown DB error never reaches this line, so a transient
-  // failure can neither masquerade as "no orgs" nor poison the cache.
+  // orgs) and the 'suspended' shape included (an unsuspend propagates within
+  // the TTL, same as any other org edit). A thrown DB error never reaches this
+  // line, so a transient failure can neither masquerade as "no orgs" nor
+  // poison the cache.
   cache.set(label, { value, expires: Date.now() + TTL_MS });
   return value;
 }
@@ -71,7 +119,9 @@ export async function resolveTenant(req) {
 // nonexistent id (the route's own not-found shape, never a 403: existence must
 // not leak). Every reader applies the /api/content contract: via='host' →
 // strict org match; via='fallback' → the tenant's rows plus org-less legacy
-// rows (the safety net); no tenant at all → legacy unfiltered behavior.
+// rows (the safety net); via='suspended' → the strict predicate against the
+// sentinel's NULL org id, which matches nothing (the venue is off); no tenant
+// at all → legacy unfiltered behavior.
 
 /**
  * WHERE fragment scoping an org_id column to the tenant. `col` is the org_id
@@ -83,9 +133,13 @@ export async function resolveTenant(req) {
  */
 export function tenantOrgFilter(tenant, col, placeholder) {
   if (tenant == null) return "";
-  return tenant.via === "host"
-    ? `and ${col} = ${placeholder}`
-    : `and (${col} = ${placeholder} or ${col} is null)`;
+  // Only the fallback path sweeps in org-less legacy rows. 'host' matches the
+  // org strictly; 'suspended' takes the same strict form on purpose — its
+  // sentinel org id is NULL, and `col = NULL` is never true, so a suspended
+  // tenant matches zero rows (legacy rows included).
+  return tenant.via === "fallback"
+    ? `and (${col} = ${placeholder} or ${col} is null)`
+    : `and ${col} = ${placeholder}`;
 }
 
 /** The params that pair with tenantOrgFilter's placeholder. */

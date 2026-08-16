@@ -18,11 +18,16 @@
 // The player-facing disclosure for all of this lives at /privacy in the app.
 //
 // Cost controls: every model call is metered into hunt_scan (exact token counts
-// from the API's usage object, for monthly per-course cost rollups). On top of
+// from the API's usage object, for monthly per-course cost rollups; the row is
+// inserted as a RESERVATION before the model call so the caps below can't be
+// raced during its latency — see the reservation lifecycle at reserveScan,
+// which also stamps org_id, the write-time invoice attribution). On top of
 // the per-IP rate limit below (bounds burn *rate*), each round has a total scan
 // budget (HUNT_SCAN_CAP, default 60) and each player gets HUNT_ATTEMPT_CAP
 // (default 3) judged shots per non-countable item — together they bound total
-// spend per round to a hard number.
+// spend per round to a hard number. Per TENANT, location.hunt.dailyScanCap
+// (see resolveVenueDailyCap below) bounds a venue's total daily spend — the
+// per-client control the env-global knobs can't provide.
 import { Router } from "express";
 import express from "express";
 import { randomUUID } from "node:crypto";
@@ -90,20 +95,147 @@ function resolveAttemptCap() {
   return Number.isFinite(n) && n >= 1 ? n : DEFAULT_ATTEMPT_CAP;
 }
 
-// Record one vision model call in hunt_scan — the metering row that backs the
-// scan cap and monthly per-course cost rollups. Metering must never break
-// gameplay, so failures are logged and swallowed.
-async function recordScan({ roundClientId, playerTag, itemId, courseId, usage, verified, flagged }) {
+// --- Per-venue daily scan cap -------------------------------------------------
+// The two caps above are env-global: one knob for every tenant, and setting
+// HUNT_SCAN_CAP=0 kills the hunt platform-wide. This cap is the per-client
+// spend control: location.hunt.dailyScanCap (jsonb, validated in
+// lib/validateLocation.js normalizeHunt, set through the location upsert)
+// bounds a single venue's billed vision calls over a rolling 24h window.
+//   0       -> the hunt is disabled at this venue (per-client kill switch)
+//   absent  -> unlimited (pre-config behavior; the env-global caps still apply)
+// Read defensively: validation guarantees the shape on write, but rows edited
+// by hand must degrade to "unlimited", never to a crash or an accidental 0.
+function resolveVenueDailyCap(huntConfig) {
+  const cap = huntConfig?.dailyScanCap;
+  return Number.isInteger(cap) && cap >= 0 ? cap : null;
+}
+
+// --- Scan reservation lifecycle ----------------------------------------------
+// A hunt_scan verify row is born as a RESERVATION and settles into a metering
+// record. Checking the caps first and metering after the model call — the old
+// shape — was a check-then-bill race: N concurrent requests at cap-1 all
+// passed the count during the (seconds-long) model call and all billed.
+//
+//   1. reserveScan — one SHORT transaction takes a per-venue advisory lock,
+//      re-runs every spend-cap count, and if there's room INSERTs the row up
+//      front with null model/token/verdict fields, then commits. From that
+//      moment the reservation occupies a budget slot (the cap counts are
+//      plain count(*), so billed and in-flight rows count alike — a
+//      reservation IS an imminent billed call). The lock is never held
+//      across the model call.
+//   2. finalizeScan — the provider call happened (billed), so the reservation
+//      becomes the permanent metering record: model/tokens/verdict stamped.
+//   3. releaseScan — the provider call failed before billing; the spend never
+//      happened, so the reservation is deleted and the slot freed.
+//
+// A process crash between 1 and 2/3 orphans the reservation. Accepted: the
+// phantom row ages out of the venue's rolling 24h window on its own (and
+// costs its round one slot of a 240 budget). The hunt-usage rollup ignores
+// un-finalized reservations — no tokens, nothing billed to report.
+//
+// Advisory-lock idiom mirrors lib/diskBudget.js (transaction-scoped, so it
+// auto-releases on commit/rollback — even if the process dies mid-request);
+// hashtext folds the venue uuid into the integer key space.
+async function reserveScan({
+  lockId,
+  roundClientId,
+  playerTag,
+  itemId,
+  courseId,
+  orgId,
+  countable,
+  locationId,
+  venueCap,
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(`select pg_advisory_xact_lock(hashtext($1))`, [lockId]);
+
+    // Per-round scan budget: once the round has burned its cap of model
+    // calls, stop spending. 429 (not 200) so the client surfaces it as a
+    // limit rather than a failed find. count(*) — reservations included.
+    const scanCap = resolveScanCap();
+    const spent = await client.query(
+      `select count(*)::int as n from hunt_scan where round_client_id = $1`,
+      [roundClientId]
+    );
+    if (spent.rows[0].n >= scanCap) {
+      await client.query("rollback");
+      return { rejected: { status: 429, error: "scan limit reached for this round" } };
+    }
+
+    // Per-venue daily budget: bound the venue's billed calls over a rolling
+    // 24h window, across ALL of its courses and rounds. Same counting
+    // semantics as the round budget above — every billed-or-in-flight verify
+    // row counts. kind='verify' only: admin item-image screens ('screen'
+    // rows) are operator spend, not player spend, and must not eat the
+    // venue's gameplay budget. Distinct error string so the client (and ops)
+    // can tell it from the per-round 429.
+    if (venueCap !== null && locationId) {
+      const venueSpent = await client.query(
+        `select count(*)::int as n
+           from hunt_scan s
+           join course c on c.id = s.course_id
+          where c.location_id = $1
+            and s.kind = 'verify'
+            and s.created_at > now() - interval '24 hours'`,
+        [locationId]
+      );
+      if (venueSpent.rows[0].n >= venueCap) {
+        await client.query("rollback");
+        return { rejected: { status: 429, error: "daily scan limit reached for this venue" } };
+      }
+    }
+
+    // Per-item attempt cap: after N judged misses on one item, stop paying
+    // for more shots at it. Countable items are exempt. `verified is not
+    // null` — a reservation (or no-output retry) doesn't burn an attempt.
+    if (!countable) {
+      const attemptCap = resolveAttemptCap();
+      const attempts = await client.query(
+        `select count(*)::int as n from hunt_scan
+          where round_client_id = $1 and player_tag = $2 and item_id = $3
+            and verified is not null`,
+        [roundClientId, playerTag, itemId]
+      );
+      if (attempts.rows[0].n >= attemptCap) {
+        await client.query("rollback");
+        return { rejected: { status: 429, error: "attempt limit reached for this item" } };
+      }
+    }
+
+    // Room confirmed under the lock — consume it. org_id is the INVOICE
+    // stamp: the org that owns the venue right now, i.e. at bill time, so a
+    // later course/venue move can't re-bill this row to another client.
+    const ins = await client.query(
+      `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, org_id)
+         values ($1, $2, $3, $4, $5)
+       returning id`,
+      [roundClientId, playerTag, itemId, courseId, orgId]
+    );
+    await client.query("commit");
+    return { scanId: ins.rows[0].id };
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Settle a reservation into the metering record for the call we just paid
+// for. Metering must never break gameplay, so failures are logged and
+// swallowed — a failed UPDATE leaves the row as a bare reservation, which
+// still counts toward the caps (conservative) and is ignored by the rollup.
+async function finalizeScan({ scanId, usage, verified, flagged }) {
   try {
     await pool.query(
-      `insert into hunt_scan
-         (round_client_id, player_tag, item_id, course_id, model, input_tokens, output_tokens, verified, flagged)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `update hunt_scan
+          set model = $2, input_tokens = $3, output_tokens = $4, verified = $5, flagged = $6
+        where id = $1`,
       [
-        roundClientId,
-        playerTag,
-        itemId,
-        courseId,
+        scanId,
         usage?.model ?? null,
         usage?.inputTokens ?? null,
         usage?.outputTokens ?? null,
@@ -112,7 +244,18 @@ async function recordScan({ roundClientId, playerTag, itemId, courseId, usage, v
       ]
     );
   } catch (err) {
-    console.error("[hunt] scan metering insert failed:", err);
+    console.error("[hunt] scan metering update failed:", err);
+  }
+}
+
+// Free a reservation whose provider call failed before billing. Swallows its
+// own failure (the original error matters more); a row this misses just ages
+// out of the 24h window like a crash orphan.
+async function releaseScan(scanId) {
+  try {
+    await pool.query(`delete from hunt_scan where id = $1`, [scanId]);
+  } catch (err) {
+    console.error("[hunt] scan reservation release failed:", err);
   }
 }
 
@@ -354,7 +497,9 @@ router.post(
       // burn vision spend or write finds against another venue. Foreign and
       // nonexistent answer identically below.
       const itemRes = await pool.query(
-        `select i.id, i.name, i.hint, i.extra_prompt, i.countable
+        `select i.id, i.name, i.hint, i.extra_prompt, i.countable,
+                c.location_id as "locationId", l.hunt as "locationHunt",
+                l.org_id as "orgId"
            from hunt_item i
            join course c on c.id = i.course_id
            left join location l on l.id = c.location_id
@@ -368,6 +513,18 @@ router.post(
           .json({ ok: false, error: "itemId does not exist on this course" });
       }
       const item = itemRes.rows[0];
+
+      // Per-venue kill switch: dailyScanCap 0 means the venue's hunt is off —
+      // refuse before any gameplay logic (even dedupe replies would misleadingly
+      // present a live hunt). 403, not 429: this isn't a budget that resets, and
+      // the client surfaces the error string of any non-OK status as-is
+      // (src/features/hunt/api.ts throws body.error).
+      const venueCap = resolveVenueDailyCap(item.locationHunt);
+      if (venueCap === 0) {
+        return res
+          .status(403)
+          .json({ ok: false, error: "the hunt is not available at this venue" });
+      }
 
       // Anti-cheat / anti-farming: for a normal (one-off) item, if this player
       // already has a verified find for it in this round, don't re-credit it (and
@@ -391,69 +548,85 @@ router.post(
         }
       }
 
-      // Per-round scan budget: once the round has burned its cap of model
-      // calls, stop spending. 429 (not 200) so the client surfaces it as a
-      // limit rather than a failed find.
-      const scanCap = resolveScanCap();
-      const spent = await pool.query(
-        `select count(*)::int as n from hunt_scan where round_client_id = $1`,
-        [roundClientId]
-      );
-      if (spent.rows[0].n >= scanCap) {
-        return res.status(429).json({
-          ok: false,
-          error: "scan limit reached for this round",
-        });
-      }
-
-      // Per-item attempt cap: after N judged misses on one item, stop paying
-      // for more shots at it. Countable items are exempt.
-      if (!item.countable) {
-        const attemptCap = resolveAttemptCap();
-        const attempts = await pool.query(
-          `select count(*)::int as n from hunt_scan
-            where round_client_id = $1 and player_tag = $2 and item_id = $3
-              and verified is not null`,
-          [roundClientId, playerTag, itemId]
-        );
-        if (attempts.rows[0].n >= attemptCap) {
-          return res.status(429).json({
-            ok: false,
-            error: "attempt limit reached for this item",
-          });
-        }
-      }
-
-      // Ask the model.
-      const verdict = await verifyItemInImage({
-        imageBase64,
-        mediaType,
-        itemName: item.name,
-        itemHint: item.hint,
-        itemExtraPrompt: item.extra_prompt,
-      });
-
-      // A photo-of-a-photo never counts as a genuine find, regardless of what's
-      // depicted — flag it and reject. TESTING: when ALLOW_PHOTO_OF_PHOTO is on
-      // we treat it as un-flagged so a screenshot of a landmark still verifies.
-      const flagged = ALLOW_PHOTO_OF_PHOTO ? false : verdict.photoOfPhoto;
-      // Moderation: unsafe content earns no credit and is never written to
-      // disk, whatever it depicts. (Verdicts without the field — old mocks —
-      // default to safe.)
-      const unsafe = Boolean(verdict.unsafe);
-      const verified = verdict.present && !flagged && !unsafe;
-
-      // Meter the call we just paid for, before anything else can fail — the
-      // tokens are billed whether or not the find persists.
-      await recordScan({
+      // Atomic cap check + reservation: every spend-cap count and the row
+      // that consumes the checked room commit together, under a per-venue
+      // advisory lock — see the reservation lifecycle above reserveScan.
+      // Dedupe short-circuits returned before this point, so they still
+      // never occupy (or need) a budget slot.
+      const reservation = await reserveScan({
+        lockId: item.locationId ?? courseId, // per-venue; per-course when the course has no venue
         roundClientId,
         playerTag,
         itemId,
         courseId,
-        usage: verdict.usage,
-        verified,
-        flagged,
+        orgId: item.orgId,
+        countable: item.countable,
+        locationId: item.locationId,
+        venueCap,
       });
+      if (reservation.rejected) {
+        return res
+          .status(reservation.rejected.status)
+          .json({ ok: false, error: reservation.rejected.error });
+      }
+      const { scanId } = reservation;
+
+      // Ask the model. Every path out of this block settles the reservation:
+      // finalize (the call was billed) or release (it wasn't) — the finally
+      // guarantees a provider failure can't leak a phantom row that keeps
+      // eating the caps. A process crash mid-call still can; that orphan is
+      // accepted (see the lifecycle comment above reserveScan).
+      let verdict;
+      let flagged;
+      let unsafe;
+      let verified;
+      let settled = false;
+      try {
+        try {
+          verdict = await verifyItemInImage({
+            imageBase64,
+            mediaType,
+            itemName: item.name,
+            itemHint: item.hint,
+            itemExtraPrompt: item.extra_prompt,
+          });
+        } catch (err) {
+          if (err.code === "VISION_NO_OUTPUT") {
+            // Transient: the model returned no verdict, but the call was
+            // still billed — settle the reservation into the metering row
+            // (usage rides on the error), record no find, and let the player
+            // retry with a fresh shot instead of failing hard.
+            await finalizeScan({ scanId, usage: err.usage, verified: null, flagged: null });
+            settled = true;
+            return res.json({
+              ok: true,
+              verified: false,
+              flagged: false,
+              reason: "Couldn't read that photo — try another shot.",
+            });
+          }
+          throw err;
+        }
+
+        // A photo-of-a-photo never counts as a genuine find, regardless of what's
+        // depicted — flag it and reject. TESTING: when ALLOW_PHOTO_OF_PHOTO is on
+        // we treat it as un-flagged so a screenshot of a landmark still verifies.
+        flagged = ALLOW_PHOTO_OF_PHOTO ? false : verdict.photoOfPhoto;
+        // Moderation: unsafe content earns no credit and is never written to
+        // disk, whatever it depicts. (Verdicts without the field — old mocks —
+        // default to safe.)
+        unsafe = Boolean(verdict.unsafe);
+        verified = verdict.present && !flagged && !unsafe;
+
+        // Meter the call we just paid for, before anything else can fail — the
+        // tokens are billed whether or not the find persists.
+        await finalizeScan({ scanId, usage: verdict.usage, verified, flagged });
+        settled = true;
+      } finally {
+        // Provider failure (anything thrown before finalize): the spend
+        // didn't happen, so free the slot instead of billing a phantom.
+        if (!settled) await releaseScan(scanId);
+      }
 
       // Persist the photo, then record the find. We only keep the file for
       // successful, unflagged, safe finds; rejected/unsafe attempts are never
@@ -545,26 +718,6 @@ router.post(
         return res
           .status(503)
           .json({ ok: false, error: "vision is not configured on the server" });
-      }
-      if (err.code === "VISION_NO_OUTPUT") {
-        // Transient: the model returned no verdict, but the call was still
-        // billed — meter it (usage rides on the error), record no find, and
-        // let the player retry with a fresh shot instead of failing hard.
-        await recordScan({
-          roundClientId,
-          playerTag,
-          itemId,
-          courseId,
-          usage: err.usage,
-          verified: null,
-          flagged: null,
-        });
-        return res.json({
-          ok: true,
-          verified: false,
-          flagged: false,
-          reason: "Couldn't read that photo — try another shot.",
-        });
       }
       console.error("[hunt] verify error:", err);
       return res.status(500).json({ ok: false, error: "internal error" });

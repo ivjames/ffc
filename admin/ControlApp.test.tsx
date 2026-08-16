@@ -15,6 +15,7 @@ vi.mock('./api', async () => {
       logout: vi.fn(),
       overview: vi.fn(),
       overviewSeries: vi.fn(),
+      huntUsage: vi.fn(),
     },
   };
 });
@@ -49,6 +50,12 @@ beforeEach(() => {
   vi.mocked(api.overviewSeries)
     .mockReset()
     .mockResolvedValue({ days: 30, tz: 'America/Los_Angeles', series: [] });
+  vi.mocked(api.huntUsage).mockReset().mockResolvedValue({
+    pricing: { model: 'claude-haiku-4-5', inputUsdPerMTok: 1, outputUsdPerMTok: 5 },
+    months: 6,
+    rows: [],
+    orgSummary: [],
+  });
 });
 
 function renderApp() {
@@ -160,6 +167,42 @@ describe('token flow', () => {
 
     expect(await screen.findByText('Enter the admin token to continue.')).toBeInTheDocument();
     expect(getToken()).toBe('');
+  });
+});
+
+describe('hunt usage nav', () => {
+  test('every admin gets the Hunt usage entry (org_admins see their own org only, server-side)', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: ORG_ADMIN_USER });
+    const user = userEvent.setup();
+    renderApp();
+    await screen.findByText('FFC · Master Control');
+
+    await user.click(screen.getByRole('link', { name: 'Hunt usage' }));
+
+    expect(await screen.findByRole('heading', { name: 'Hunt usage' })).toBeInTheDocument();
+    expect(api.huntUsage).toHaveBeenCalledWith(6);
+  });
+});
+
+describe('account', () => {
+  test('a logged-in admin reaches Account (change password) via the footer identity link', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: SUPER_ADMIN_USER });
+    const user = userEvent.setup();
+    renderApp();
+    await screen.findByText('FFC · Master Control');
+
+    await user.click(screen.getByRole('link', { name: /super@example\.com/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Account' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change password' })).toBeInTheDocument();
+  });
+
+  test('APP_TOKEN pseudo-auth gets no account link (no password to change)', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: TOKEN_USER });
+    renderApp();
+    await screen.findByText('FFC · Master Control');
+    expect(await screen.findByText('Admin token')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Admin token' })).not.toBeInTheDocument();
   });
 });
 

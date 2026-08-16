@@ -74,6 +74,7 @@ export default function Orgs({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                 </Link>
                 <span className="ml-2 text-xs text-slate-400">/{o.slug}</span>
               </div>
+              {o.status === 'suspended' && <Pill tone="red">Suspended</Pill>}
               <Pill>{o.locationCount ?? 0} locations</Pill>
             </Card>
           ))}

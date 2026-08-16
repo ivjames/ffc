@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Screen, Content, Button, TagChip } from '../../ui/components';
 import HeaderControls from '../../ui/HeaderControls';
 import AnnouncementBanner from '../../ui/AnnouncementBanner';
+import BrandLogo from '../../ui/BrandLogo';
 import { VenueOpenLine } from '../../ui/VenueHoursInfo';
 import { getActiveRound } from '../../db';
 import { courseById, locationById, coursesByLocation } from '../../data/courses';
@@ -154,7 +155,18 @@ export default function Home() {
           <HeaderControls />
         </div>
         <div className="mb-3 text-center">
-          <div className="animate-wiggle inline-block text-4xl leading-none drop-shadow">🎡</div>
+          {/* Hero mark: the tenant's uploaded logo when their branding sets one
+              EXPLICITLY (BrandLogo enforces the raw-key rule); the ferris wheel
+              is the neutral no-logo / load-failure fallback. Height-capped so
+              an oversized upload can't reflow the dashboard. */}
+          <BrandLogo
+            className="mx-auto h-14 w-auto max-w-[75%] object-contain drop-shadow"
+            fallback={
+              <div className="animate-wiggle inline-block text-4xl leading-none drop-shadow">
+                🎡
+              </div>
+            }
+          />
           <h1 className="mt-1.5 text-2xl font-black tracking-tight text-fairway-50">
             {location?.name ?? 'Family Fun Center'}
           </h1>

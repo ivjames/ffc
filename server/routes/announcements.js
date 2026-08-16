@@ -29,6 +29,9 @@ router.get("/", tenant(), async (req, res) => {
   // (location_id null) show on every subdomain. Same fallback rule as
   // /api/content — the default-org path also covers org-less legacy locations.
   const t = req.tenant;
+  // Suspended/archived tenant: the venue is off, so its subdomain shows NO
+  // announcements at all — global rows included (lib/tenant.js).
+  if (t?.via === "suspended") return res.json([]);
   const tenantFilter =
     t == null
       ? ""
@@ -94,6 +97,8 @@ router.post("/views", tenant(), async (req, res) => {
   // above), so a guessed foreign id is dropped exactly like a nonexistent one
   // instead of inflating another client's view rollup.
   const t = req.tenant;
+  // Suspended tenant sees no announcements (GET above), so nothing to record.
+  if (t?.via === "suspended") return res.json({ ok: true, recorded: 0 });
   const tenantFilter =
     t == null
       ? ""

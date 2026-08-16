@@ -44,6 +44,7 @@ const { app } = await import("../../app.js");
 
 let baseUrl;
 let close;
+let orgId;
 let locationId;
 let courseId;
 
@@ -66,9 +67,16 @@ const uploadBody = (extra = {}) => ({
 before(async () => {
   await ensureSchema();
   ({ baseUrl, close } = await listenEphemeral(app));
+  // The venue is org-owned so the screen-metering test can assert the
+  // write-time org stamp (invoice attribution) on the hunt_scan row.
+  const org = await testQuery(
+    `insert into org (name, slug) values ($1, $2) returning id`,
+    [`Hunt Admin Org ${stamp}`, `hunt-admin-org-${stamp}`]
+  );
+  orgId = org.rows[0].id;
   const loc = await testQuery(
-    `insert into location (name, slug) values ($1, $2) returning id`,
-    [`Hunt Admin Venue ${stamp}`, `hunt-admin-test-${stamp}`]
+    `insert into location (name, slug, org_id) values ($1, $2, $3) returning id`,
+    [`Hunt Admin Venue ${stamp}`, `hunt-admin-test-${stamp}`, orgId]
   );
   locationId = loc.rows[0].id;
   const course = await testQuery(
@@ -80,6 +88,7 @@ before(async () => {
 
 after(async () => {
   if (close) await close();
+  await testQuery(`delete from hunt_scan where course_id = $1`, [courseId]);
   await testQuery(
     `delete from hunt_find where item_id in (select id from hunt_item where course_id = $1)`,
     [courseId]
@@ -87,6 +96,7 @@ after(async () => {
   await testQuery(`delete from hunt_item where course_id = $1`, [courseId]);
   await testQuery(`delete from course where id = $1`, [courseId]);
   await testQuery(`delete from location where id = $1`, [locationId]);
+  await testQuery(`delete from org where id = $1`, [orgId]);
   await testQuery(`delete from admin_audit where entity in ('hunt_item', 'hunt_item_image')`);
   await rmDir(imageDir, { recursive: true, force: true });
   const { pool } = await import("../../db.js");
@@ -203,6 +213,28 @@ test("image upload screens for people, stores the file, and returns the scan bur
   assert.equal(dbRow.rows[0].media_type, "image/jpeg");
   await access(dbRow.rows[0].image_path); // file is on disk
 
+  // The billed screen is PERSISTED as a hunt_scan kind='screen' row with the
+  // exact token fields — not just echoed on the response (CLAUDE.md metering
+  // rule) — and org_id stamped at write time, so the hunt-usage rollup bills
+  // the org that owned the venue when the call happened, however the course
+  // is reassigned later.
+  const meter = await testQuery(
+    `select kind, round_client_id, player_tag, course_id, org_id, model,
+            input_tokens, output_tokens, cost_usd
+       from hunt_scan where item_id = $1`,
+    [id]
+  );
+  assert.equal(meter.rowCount, 1);
+  assert.equal(meter.rows[0].kind, "screen");
+  assert.equal(meter.rows[0].round_client_id, null, "an admin screen has no round");
+  assert.equal(meter.rows[0].player_tag, null, "an admin screen has no player");
+  assert.equal(meter.rows[0].course_id, courseId);
+  assert.equal(meter.rows[0].org_id, orgId, "the invoice org is stamped at write time");
+  assert.equal(meter.rows[0].model, "mock-descriptor");
+  assert.equal(meter.rows[0].input_tokens, 300);
+  assert.equal(meter.rows[0].output_tokens, 20);
+  assert.equal(meter.rows[0].cost_usd, 0.000105);
+
   // The list/detail now surface it.
   const detail = await (await call("GET", `/${id}`)).json();
   assert.equal(detail.images.length, 1);
@@ -253,6 +285,17 @@ test("an image with people in frame is rejected and nothing is stored", async (t
 
   const rows = await testQuery(`select id from hunt_item_image where item_id = $1`, [id]);
   assert.equal(rows.rowCount, 0, "no row for a rejected image");
+
+  // ...and still metered: the tokens were billed even though nothing stored.
+  const meter = await testQuery(
+    `select kind, input_tokens, output_tokens, cost_usd from hunt_scan where item_id = $1`,
+    [id]
+  );
+  assert.equal(meter.rowCount, 1);
+  assert.equal(meter.rows[0].kind, "screen");
+  assert.equal(meter.rows[0].input_tokens, 310);
+  assert.equal(meter.rows[0].output_tokens, 22);
+  assert.equal(meter.rows[0].cost_usd, 0.00011);
 });
 
 test("image removal deletes the file and the row, and audits", async () => {
