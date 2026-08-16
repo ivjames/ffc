@@ -23,7 +23,13 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
+    /* Duration alone isn't enough: infinite animations (spin, pulse) would
+       still cycle every 0.01ms and flicker — cap the iteration count too. */
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

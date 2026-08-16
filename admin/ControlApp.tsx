@@ -356,9 +356,13 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
         />
       )}
 
+      {/* When the drawer is closed on mobile it must leave the tab order and
+          the accessibility tree, not just slide off-screen — hence
+          `invisible`, which the transition flips only after the slide-out
+          finishes. The desktop sidebar is always visible. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white transition-transform duration-150 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
-          navOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200 bg-white transition-[transform,visibility] duration-150 lg:sticky lg:top-0 lg:h-screen lg:visible lg:translate-x-0 ${
+          navOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'
         }`}
       >
         <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3.5">
