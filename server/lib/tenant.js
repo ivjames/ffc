@@ -62,6 +62,64 @@ export async function resolveTenant(req) {
   return value;
 }
 
+// --- Tenant scoping helpers (MULTI-VENUE.md §6 bullet 1) ---------------------
+// Player-facing routes accept course/location/row ids the device remembered —
+// a guessed or stale UUID from another tenant must behave exactly like a
+// nonexistent id (the route's own not-found shape, never a 403: existence must
+// not leak). Every reader applies the /api/content contract: via='host' →
+// strict org match; via='fallback' → the tenant's rows plus org-less legacy
+// rows (the safety net); no tenant at all → legacy unfiltered behavior.
+
+/**
+ * WHERE fragment scoping an org_id column to the tenant. `col` is the org_id
+ * column reference — usually a LEFT-JOINed location's ("l.org_id"), so a row
+ * with no location at all counts as org-less. `placeholder` is the $n that
+ * carries tenant.org.id; append tenantParams(tenant) to the query's params —
+ * it is [] exactly when this fragment is "" (no tenant), so the two always
+ * stay in step.
+ */
+export function tenantOrgFilter(tenant, col, placeholder) {
+  if (tenant == null) return "";
+  return tenant.via === "host"
+    ? `and ${col} = ${placeholder}`
+    : `and (${col} = ${placeholder} or ${col} is null)`;
+}
+
+/** The params that pair with tenantOrgFilter's placeholder. */
+export function tenantParams(tenant) {
+  return tenant == null ? [] : [tenant.org.id];
+}
+
+/**
+ * Look up a course within the tenant's scope (course → location → org).
+ * Returns { id, pars } or null — a course that exists under another tenant is
+ * null, indistinguishable from a nonexistent id. Pass a transaction's client
+ * as `q` when the caller is already inside one.
+ */
+export async function findTenantCourse(courseId, tenant, q = pool) {
+  const db = await q.query(
+    `select c.id, c.pars from course c
+       left join location l on l.id = c.location_id
+      where c.id = $1 ${tenantOrgFilter(tenant, "l.org_id", "$2")}`,
+    [courseId, ...tenantParams(tenant)]
+  );
+  return db.rows[0] ?? null;
+}
+
+/**
+ * Look up a LIVE (not archived) location within the tenant's scope; null for
+ * foreign and nonexistent alike. Callers name the columns they need
+ * (caller-chosen literals, never user input).
+ */
+export async function findTenantLocation(locationId, tenant, { cols = "id", q = pool } = {}) {
+  const db = await q.query(
+    `select ${cols} from location
+      where id = $1 and archived_at is null ${tenantOrgFilter(tenant, "org_id", "$2")}`,
+    [locationId, ...tenantParams(tenant)]
+  );
+  return db.rows[0] ?? null;
+}
+
 /**
  * Middleware form: sets req.tenant (result of resolveTenant, or null). Mounted
  * per-route on the reads that need it (content, manifest, announcements) —

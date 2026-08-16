@@ -72,7 +72,7 @@ router.get("/", tenant(), async (req, res) => {
 // ids are dropped, never 500'd, so a stale cached id can't wedge the beacon.
 const MAX_VIEW_IDS = 50;
 
-router.post("/views", async (req, res) => {
+router.post("/views", tenant(), async (req, res) => {
   const body = req.body;
   const deviceId = body && typeof body.deviceId === "string" ? body.deviceId : null;
   if (!deviceId || !UUID_RE.test(deviceId)) {
@@ -89,6 +89,18 @@ router.post("/views", async (req, res) => {
   if (ids.length === 0) return res.json({ ok: true, recorded: 0 });
 
   const appUserId = req.user?.id ?? null;
+  // Multi-venue: a view only counts for announcements this tenant can actually
+  // see (global rows, or rows pinned to the tenant's venues — the GET filter
+  // above), so a guessed foreign id is dropped exactly like a nonexistent one
+  // instead of inflating another client's view rollup.
+  const t = req.tenant;
+  const tenantFilter =
+    t == null
+      ? ""
+      : t.via === "host"
+        ? "and (a.location_id is null or l.org_id = $4)"
+        : "and (a.location_id is null or l.org_id = $4 or l.org_id is null)";
+  const params = t == null ? [ids, deviceId, appUserId] : [ids, deviceId, appUserId, t.org.id];
   try {
     // insert...select over the real announcements filters out ids that don't
     // exist (no FK 23503), so `recorded` reflects genuine announcements only.
@@ -96,12 +108,14 @@ router.post("/views", async (req, res) => {
       `insert into announcement_view (announcement_id, device_id, app_user_id)
          select a.id, $2::uuid, $3::uuid
            from announcement a
+           left join location l on l.id = a.location_id
           where a.id = any($1::uuid[])
+            ${tenantFilter}
        on conflict (announcement_id, device_id) do update set
          last_seen_at = now(),
          seen_count   = announcement_view.seen_count + 1,
          app_user_id  = coalesce(excluded.app_user_id, announcement_view.app_user_id)`,
-      [ids, deviceId, appUserId]
+      params
     );
     return res.json({ ok: true, recorded: result.rowCount });
   } catch (err) {
