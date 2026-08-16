@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type SeriesBucket } from './api';
-import { Button, Card, Input, Spinner, Banner, useAsync } from './ui';
+import { Button, Card, Input, PageHeader, Spinner, Banner, useAsync } from './ui';
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
@@ -158,6 +158,7 @@ export default function Overview() {
   const t = data.totals;
   return (
     <div className="space-y-6">
+      <PageHeader title="Overview" description="Platform totals and the last 30 days of activity." />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Orgs" value={t.orgs} />
         <Stat label="Locations" value={t.locations} />

@@ -1,5 +1,5 @@
 import { api } from './api';
-import { Button, Card, Banner, Spinner, useAsync, fmtDateTime, ADMIN_TZ_LABEL } from './ui';
+import { Button, Card, Banner, PageHeader, Spinner, useAsync, fmtDateTime, ADMIN_TZ_LABEL } from './ui';
 
 export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const orgs = useAsync(() => api.listOrgs(true), []);
@@ -10,11 +10,15 @@ export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Archived</h1>
-      <p className="text-sm text-slate-500">
-        Archived items are hidden from players and the main lists, but nothing is deleted — history stays intact.
-        Unarchive to restore. Times shown in {ADMIN_TZ_LABEL}.
-      </p>
+      <PageHeader
+        title="Archived"
+        description={
+          <>
+            Archived items are hidden from players and the main lists, but nothing is deleted —
+            history stays intact. Unarchive to restore. Times shown in {ADMIN_TZ_LABEL}.
+          </>
+        }
+      />
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-slate-700">Orgs</h2>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, type Location } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, useAsync } from './ui';
+import { Button, Card, Field, Input, Banner, PageHeader, Select, Spinner, useAsync } from './ui';
 
 const autoSlug = (v: string) =>
   v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -68,7 +68,10 @@ export default function LocationWizard({
 
   return (
     <div className="mx-auto max-w-xl space-y-4">
-      <h1 className="text-lg font-semibold">Onboard a location</h1>
+      <PageHeader
+        title="Onboard a location"
+        description="Creates the venue record; add courses from its detail page afterwards."
+      />
 
       {saved && (
         <Banner kind="success">
@@ -98,18 +101,14 @@ export default function LocationWizard({
             ) : orgs.loading ? (
               <Spinner label="Loading orgs…" />
             ) : (
-              <select
-                value={orgId}
-                onChange={(e) => setOrgId(e.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-              >
+              <Select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="w-full">
                 <option value="">— unassigned —</option>
                 {orgs.data?.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
           </Field>
 

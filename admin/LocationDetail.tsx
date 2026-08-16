@@ -10,7 +10,7 @@ import {
   type Location,
   type VenueHours,
 } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, Pill, useAsync, fmtDateTime } from './ui';
+import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Select, Spinner, useAsync, fmtDateTime } from './ui';
 
 const HOURS_DAY_LABELS: Record<HoursDayKey, string> = {
   mon: 'Mon',
@@ -460,14 +460,10 @@ function LocationForm({
       <div className="mt-3 border-t border-slate-200 pt-3">
         <div className="grid grid-cols-2 gap-2">
           <Field label="Food ordering POS" hint="Native in-app ordering. None = deep links only.">
-            <select
-              value={ordVendor}
-              onChange={(e) => setOrdVendor(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-            >
+            <Select value={ordVendor} onChange={(e) => setOrdVendor(e.target.value)} className="w-full">
               <option value="">None</option>
               <option value="centeredge">CenterEdge</option>
-            </select>
+            </Select>
           </Field>
           {ordVendor !== '' && (
             <Field label="Ordering API base URL" hint="Optional per-venue endpoint override.">
@@ -480,17 +476,17 @@ function LocationForm({
             </Field>
           )}
           <Field label="Loyalty / rewards POS" hint="Player card balances in the app. None = no rewards surface.">
-            <select
+            <Select
               value={loyVendor}
               onChange={(e) => {
                 setLoyVendor(e.target.value);
                 if (e.target.value === '') setGameRewards(false); // rides on loyalty
               }}
-              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              className="w-full"
             >
               <option value="">None</option>
               <option value="centeredge">CenterEdge</option>
-            </select>
+            </Select>
           </Field>
           {loyVendor !== '' && (
             <Field label="Loyalty API base URL" hint="Optional per-venue endpoint override.">
@@ -563,16 +559,23 @@ export default function LocationDetail() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">{location.name}</h1>
-        <span className="text-xs text-slate-400">/{location.slug}</span>
-        {location.archivedAt && <Pill tone="amber">Archived</Pill>}
-        <div className="ml-auto">
+      <BackLink to={location.orgId ? `/orgs/${location.orgId}` : '/orgs'}>
+        {location.orgId ? 'Org' : 'Orgs'}
+      </BackLink>
+      <PageHeader
+        title={location.name}
+        titleExtra={
+          <>
+            <span className="text-xs text-slate-400">/{location.slug}</span>
+            {location.archivedAt && <Pill tone="amber">Archived</Pill>}
+          </>
+        }
+        actions={
           <Button variant={location.archivedAt ? 'ghost' : 'danger'} onClick={toggleArchive}>
             {location.archivedAt ? 'Unarchive location' : 'Archive location'}
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       <LocationForm location={location} gameRewardsMeta={gameRewardsMeta} onSaved={reload} />
 

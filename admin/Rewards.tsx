@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, type GameRewardsMeta } from './api';
-import { Card, Banner, Spinner, useAsync } from './ui';
+import { Card, Banner, EmptyState, PageHeader, Select, Spinner, useAsync } from './ui';
 
 // Rewards & usage reporting. Since #157 tickets are the only player-facing
 // reward — golf achievements pay straight to a loyalty card and no counter
@@ -38,9 +38,7 @@ function AchievementRewards({ days }: { days: number }) {
       {summary.loading && <Spinner />}
       {summary.error && <Banner kind="error">{summary.error.message}</Banner>}
       {summary.data && summary.data.byAchievement.length === 0 && (
-        <p className="py-3 text-center text-sm text-slate-400">
-          No golf achievements earned in this window.
-        </p>
+        <EmptyState>No golf achievements earned in this window.</EmptyState>
       )}
       {summary.data && totals && summary.data.byAchievement.length > 0 && (
         <>
@@ -158,9 +156,7 @@ function GameTicketIssuance({ days }: { days: number }) {
       {usage.loading && <Spinner />}
       {usage.error && <Banner kind="error">{usage.error.message}</Banner>}
       {usage.data && usage.data.rows.length === 0 && (
-        <p className="py-3 text-center text-sm text-slate-400">
-          No app tickets issued in this window.
-        </p>
+        <EmptyState>No app tickets issued in this window.</EmptyState>
       )}
       {usage.data && usage.data.rows.length > 0 && (
         <>
@@ -222,22 +218,17 @@ export default function Rewards() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">Rewards &amp; usage</h1>
-        <select
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-          className="ml-auto rounded border border-slate-300 px-1.5 py-1 text-xs"
-        >
-          <option value={7}>Last 7 days</option>
-          <option value={30}>Last 30 days</option>
-          <option value={90}>Last 90 days</option>
-        </select>
-      </div>
-      <p className="-mt-2 text-xs text-slate-500">
-        Tickets are the only player-facing reward — golf achievements pay straight to a
-        loyalty card, so there are no counter codes to redeem.
-      </p>
+      <PageHeader
+        title="Rewards & usage"
+        description="Tickets are the only player-facing reward — golf achievements pay straight to a loyalty card, so there are no counter codes to redeem."
+        actions={
+          <Select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </Select>
+        }
+      />
 
       <AchievementRewards days={days} />
       <GameTicketIssuance days={days} />

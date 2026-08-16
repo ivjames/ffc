@@ -8,7 +8,7 @@
 // server/routes/admin/syntheticBot.js.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type SyntheticBotParams, type SyntheticProjection } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, Pill, fmtDateTime, useAsync } from './ui';
+import { Button, Card, Field, Input, Banner, PageHeader, Pill, Select, Spinner, fmtDateTime, useAsync } from './ui';
 
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
@@ -146,14 +146,16 @@ export default function SyntheticBot() {
           Couldn’t refresh status — showing last-known state, retrying… ({error.message})
         </Banner>
       )}
-      <div>
-        <h1 className="text-lg font-semibold">Synthetic player bot</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Drives synthetic rounds through the real production path (load/soak test, smoke test, demo
-          seed). Every round is tagged <code>synthetic</code> and lives under a reserved{' '}
-          <code>synthetic:&lt;run&gt;:&lt;uuid&gt;</code> client id, so a run is fully reversible.
-        </p>
-      </div>
+      <PageHeader
+        title="Synthetic player bot"
+        description={
+          <>
+            Drives synthetic rounds through the real production path (load/soak test, smoke test,
+            demo seed). Every round is tagged <code>synthetic</code> and lives under a reserved{' '}
+            <code>synthetic:&lt;run&gt;:&lt;uuid&gt;</code> client id, so a run is fully reversible.
+          </>
+        }
+      />
 
       {!keySet && (
         <Banner kind="error">
@@ -208,8 +210,8 @@ export default function SyntheticBot() {
       <Card>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Venue" hint="Scope the run to one venue, or play every live course.">
-            <select
-              className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+            <Select
+              className="w-full"
               value={params.locationId}
               onChange={(e) => setParams((p) => ({ ...p, locationId: e.target.value }))}
             >
@@ -219,7 +221,7 @@ export default function SyntheticBot() {
                   {v.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Plays per course / sweep" hint="1–20 rounds per course each sweep.">
             <Input

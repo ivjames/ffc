@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, type HuntItem, type HuntItemImage, type ItemImageScan } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, Pill, fmtDateTime, useAsync } from './ui';
+import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, Textarea, fmtDateTime, useAsync } from './ui';
 import { ItemImageThumb } from './Hunt';
 
 // One hunt item: its prompt variables (name, hint, and the extra judge
@@ -10,9 +10,6 @@ import { ItemImageThumb } from './Hunt';
 // the item goes live. Uploads are people-screened server-side (one cheap
 // descriptor call each); the running burn tally below shows the exact billed
 // tokens and cost of those screens, per the metering house rule.
-
-const textareaCls =
-  'w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500';
 
 type UploadResult = {
   fileName: string;
@@ -78,11 +75,7 @@ export default function HuntItemDetail() {
   // Form state, seeded from the loaded item via the `key` remount below.
   return (
     <div className="space-y-4">
-      <div className="text-sm">
-        <Link to="/hunt" className="text-slate-500 underline hover:text-slate-900">
-          ← Scavenger hunt
-        </Link>
-      </div>
+      <BackLink to="/hunt">Scavenger hunt</BackLink>
       {error && <Banner kind="error">{error.message}</Banner>}
       {loading && <Spinner />}
       {data && (
@@ -184,15 +177,19 @@ function Loaded({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-lg font-semibold">{item.name}</h1>
-        <span className="text-sm text-slate-400">
-          {item.locationName ? `${item.locationName} · ` : ''}
-          {item.courseName}
-        </span>
-        {!item.active && <Pill tone="amber">inactive</Pill>}
-        {item.countable && <Pill>countable</Pill>}
-      </div>
+      <PageHeader
+        title={item.name}
+        titleExtra={
+          <>
+            <span className="text-sm text-slate-400">
+              {item.locationName ? `${item.locationName} · ` : ''}
+              {item.courseName}
+            </span>
+            {!item.active && <Pill tone="amber">inactive</Pill>}
+            {item.countable && <Pill>countable</Pill>}
+          </>
+        }
+      />
 
       <Card className="space-y-3">
         <h2 className="text-sm font-semibold text-slate-700">Prompt variables</h2>
@@ -208,18 +205,13 @@ function Loaded({
           </Field>
         </div>
         <Field label="Hint" hint="Shown to players, and given to the judge as context.">
-          <textarea className={textareaCls} rows={2} value={hint} onChange={(e) => setHint(e.target.value)} />
+          <Textarea rows={2} value={hint} onChange={(e) => setHint(e.target.value)} />
         </Field>
         <Field
           label="Extra judge prompt"
           hint="Admin-only judging guidance appended to the vision prompt for this item — e.g. “credit only the RED windmill, not the blue one by hole 4”. Players never see this."
         >
-          <textarea
-            className={textareaCls}
-            rows={3}
-            value={extraPrompt}
-            onChange={(e) => setExtraPrompt(e.target.value)}
-          />
+          <Textarea rows={3} value={extraPrompt} onChange={(e) => setExtraPrompt(e.target.value)} />
         </Field>
         <div className="flex flex-wrap items-end gap-4">
           <Field label="Sort order">

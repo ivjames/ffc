@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Org } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, Pill, useAsync } from './ui';
+import { Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync } from './ui';
 
 function OrgForm({ onSaved }: { onSaved: () => void }) {
   const [name, setName] = useState('');
@@ -50,35 +50,40 @@ function OrgForm({ onSaved }: { onSaved: () => void }) {
 export default function Orgs({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { data, error, loading, reload } = useAsync(() => api.listOrgs(), []);
   return (
-    <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
-      <div className="space-y-3">
-        <h1 className="text-lg font-semibold">Orgs</h1>
-        {loading && <Spinner />}
-        {error && <Banner kind="error">{error.message}</Banner>}
-        {data && data.length === 0 && (
-          <Banner kind="info">
-            {isSuperAdmin ? 'No orgs yet — create one on the right.' : 'No org yet.'}
-          </Banner>
-        )}
-        {data?.map((o: Org) => (
-          <Card key={o.id} className="flex items-center gap-3">
-            <div className="flex-1">
-              <Link to={`/orgs/${o.id}`} className="font-medium text-slate-900 hover:underline">
-                {o.name}
-              </Link>
-              <span className="ml-2 text-xs text-slate-400">/{o.slug}</span>
-            </div>
-            <Pill>{o.locationCount ?? 0} locations</Pill>
+    <div className="space-y-4">
+      <PageHeader
+        title="Orgs"
+        description="Owners and franchises. Each org groups its venues; org admins only ever see their own."
+      />
+      <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
+        <div className="space-y-3">
+          {loading && <Spinner />}
+          {error && <Banner kind="error">{error.message}</Banner>}
+          {data && data.length === 0 && (
+            <Banner kind="info">
+              {isSuperAdmin ? 'No orgs yet — create one on the right.' : 'No org yet.'}
+            </Banner>
+          )}
+          {data?.map((o: Org) => (
+            <Card key={o.id} className="flex items-center gap-3">
+              <div className="flex-1">
+                <Link to={`/orgs/${o.id}`} className="font-medium text-slate-900 hover:underline">
+                  {o.name}
+                </Link>
+                <span className="ml-2 text-xs text-slate-400">/{o.slug}</span>
+              </div>
+              <Pill>{o.locationCount ?? 0} locations</Pill>
+            </Card>
+          ))}
+        </div>
+        {isSuperAdmin ? (
+          <OrgForm onSaved={reload} />
+        ) : (
+          <Card>
+            <p className="text-sm text-slate-500">Only a super admin can create or rename orgs.</p>
           </Card>
-        ))}
+        )}
       </div>
-      {isSuperAdmin ? (
-        <OrgForm onSaved={reload} />
-      ) : (
-        <Card>
-          <p className="text-sm text-slate-500">Only a super admin can create or rename orgs.</p>
-        </Card>
-      )}
     </div>
   );
 }

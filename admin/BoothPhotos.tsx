@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AdminBoothPhoto } from './api';
-import { Button, Card, Banner, Spinner, fmtDateTime } from './ui';
+import { BlobThumb, Button, Card, Banner, EmptyState, PageHeader, Spinner, fmtDateTime } from './ui';
 
 // Photo-booth review — the operator side of the AI-free photo pipeline
 // (player side: the app's Photo Booth). Unlike hunt photos, NOTHING screened
@@ -12,52 +12,12 @@ import { Button, Card, Banner, Spinner, fmtDateTime } from './ui';
 // after the retention window (PHOTO_BOOTH_RETENTION_DAYS, default 30 days) —
 // this page is for human judgment inside that window.
 
-// <img src> can't carry the admin auth header, so each thumbnail fetches its
-// bytes into an object URL (revoked on unmount so removed photos don't leak).
-function BoothPhotoThumb({ id }: { id: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    api.fetchBoothPhotoImage(id).then(
-      (blob) => {
-        // Resolved after unmount: cleanup already ran, so revoke right here —
-        // assigning objectUrl instead would leak the blob for the SPA's life.
-        const u = URL.createObjectURL(blob);
-        if (cancelled) {
-          URL.revokeObjectURL(u);
-          return;
-        }
-        objectUrl = u;
-        setUrl(u);
-      },
-      () => {
-        if (!cancelled) setFailed(true);
-      }
-    );
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [id]);
-  if (failed) {
-    return (
-      <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs text-slate-400">
-        unavailable
-      </div>
-    );
-  }
-  if (!url) return <div className="h-28 w-28 shrink-0 animate-pulse rounded-md bg-slate-100" />;
-  return <img src={url} alt="Booth photo" className="h-28 w-28 shrink-0 rounded-md object-cover" />;
-}
-
 function BoothPhotoRow({ photo, onRemoved }: { photo: AdminBoothPhoto; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
     <Card className="flex items-center gap-4">
-      <BoothPhotoThumb id={photo.id} />
+      <BlobThumb fetchBlob={() => api.fetchBoothPhotoImage(photo.id)} refetchKey={photo.id} alt="Booth photo" />
       <div className="min-w-0 flex-1">
         <div className="font-medium">Photo booth</div>
         <div className="mt-1 text-xs text-slate-400">
@@ -124,13 +84,10 @@ export default function BoothPhotos() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Booth photos</h1>
-      <p className="text-sm text-slate-500">
-        Every photo-booth picture currently stored on the server. Unlike hunt photos, these are
-        NOT screened by AI before storage — this page is the moderation. Photos delete themselves
-        after the retention window (default 30 days); guests can also delete their own in the
-        app, and you can delete one here immediately — e.g. when a guest asks.
-      </p>
+      <PageHeader
+        title="Booth photos"
+        description="Every photo-booth picture currently stored on the server. Unlike hunt photos, these are NOT screened by AI before storage — this page is the moderation. Photos delete themselves after the retention window (default 30 days); guests can also delete their own in the app, and you can delete one here immediately — e.g. when a guest asks."
+      />
 
       {error && <Banner kind="error">{error.message}</Banner>}
       {photos && (
@@ -143,7 +100,7 @@ export default function BoothPhotos() {
             />
           ))}
           {photos.length === 0 && !loading && (
-            <p className="py-4 text-center text-sm text-slate-400">No photos stored right now.</p>
+            <EmptyState>No photos stored right now.</EmptyState>
           )}
         </div>
       )}

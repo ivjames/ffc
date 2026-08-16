@@ -1,7 +1,14 @@
 // Lightweight, utilitarian UI primitives for the admin console. Deliberately
 // plain (not the player app's arcade styling) — this is a back office.
-import type { ReactNode, ButtonHTMLAttributes, InputHTMLAttributes } from 'react';
+import type {
+  ReactNode,
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from 'react';
 import { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 
 // Master Control operates in a single HQ/operator timezone (Pacific), distinct
 // from each venue's own tz (which drives that venue's leaderboard). Every
@@ -72,6 +79,103 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 ${props.className ?? ''}`}
+    />
+  );
+}
+
+export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 ${props.className ?? ''}`}
+    />
+  );
+}
+
+/** Standard page top: h1 + optional inline extras, right-aligned actions, and
+ *  a description line under. `title` stays a plain h1 so tests can keep
+ *  querying by heading text. */
+export function PageHeader({
+  title,
+  titleExtra,
+  description,
+  actions,
+}: {
+  title: ReactNode;
+  /** Pills / slug / metadata rendered inline after the title. */
+  titleExtra?: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="text-lg font-semibold">{title}</h1>
+        {titleExtra}
+        {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
+      </div>
+      {description && <p className="mt-1 max-w-3xl text-sm text-slate-500">{description}</p>}
+    </div>
+  );
+}
+
+/** "← Back" line for detail pages. */
+export function BackLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <div className="text-sm">
+      <Link to={to} className="text-slate-500 underline hover:text-slate-900">
+        ← {children}
+      </Link>
+    </div>
+  );
+}
+
+/** Pill-tab filter row (one look for every screen's filter tabs). */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (next: T) => void;
+}) {
+  return (
+    <div className="inline-flex gap-1 rounded-lg bg-slate-200/70 p-1">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={value === o.value}
+          className={`rounded-md px-3 py-1 text-sm font-medium transition ${
+            value === o.value
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Muted centered "nothing here" line for lists (compact = tighter, for
+ *  empties nested inside a card). */
+export function EmptyState({ children, compact = false }: { children: ReactNode; compact?: boolean }) {
+  return (
+    <p className={compact ? 'py-2 text-center text-xs text-slate-400' : 'py-4 text-center text-sm text-slate-400'}>
+      {children}
+    </p>
+  );
+}
+
 export function Banner({ kind, children }: { kind: 'error' | 'info' | 'success'; children: ReactNode }) {
   const styles = {
     error: 'bg-red-50 text-red-800 ring-red-200',
@@ -96,6 +200,69 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
 export function Pill({ children, tone = 'slate' }: { children: ReactNode; tone?: 'slate' | 'amber' }) {
   const styles = tone === 'amber' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600';
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles}`}>{children}</span>;
+}
+
+// The admin API requires an auth header, which <img src> can't carry — so
+// authed images are fetched into an object URL. This hook owns that lifecycle:
+// state resets when deps change, and the URL is revoked on unmount/refetch
+// (including the resolved-after-unmount race, where cleanup has already run
+// and the fresh URL must be revoked on the spot).
+export function useObjectUrl(fetchBlob: () => Promise<Blob>, deps: unknown[]) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    setUrl(null);
+    setFailed(false);
+    fetchBlob().then(
+      (blob) => {
+        const u = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(u);
+          return;
+        }
+        objectUrl = u;
+        setUrl(u);
+      },
+      () => {
+        if (!cancelled) setFailed(true);
+      }
+    );
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return { url, failed };
+}
+
+/** Authed-image thumbnail: pulse while loading, "unavailable" box on failure,
+ *  square-cropped <img> once loaded. `refetchKey` re-runs the fetch. */
+export function BlobThumb({
+  fetchBlob,
+  refetchKey,
+  alt = '',
+  className = 'h-28 w-28',
+}: {
+  fetchBlob: () => Promise<Blob>;
+  refetchKey: unknown;
+  alt?: string;
+  className?: string;
+}) {
+  const { url, failed } = useObjectUrl(fetchBlob, [refetchKey]);
+  if (failed) {
+    return (
+      <div
+        className={`flex shrink-0 items-center justify-center rounded-md bg-slate-100 text-center text-xs text-slate-400 ${className}`}
+      >
+        unavailable
+      </div>
+    );
+  }
+  if (!url) return <div className={`shrink-0 animate-pulse rounded-md bg-slate-100 ${className}`} />;
+  return <img src={url} alt={alt} className={`shrink-0 rounded-md object-cover ${className}`} />;
 }
 
 // Tiny data-loading hook: runs `fn`, exposes {data, error, loading, reload}.
