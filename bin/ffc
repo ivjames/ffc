@@ -30,6 +30,10 @@
 #             doctl) — covers admin.<fqdn> AND every client org subdomain
 #   admin-vhost    (re)write the Master Control vhost (admin.<fqdn>)
 #   admin-setup    one-time: wildcard-cert + admin-vhost (Master Control bring-up)
+#
+# NOTE: uploaded org branding assets must outlive deploys — set
+#   BRAND_ASSET_DIR=<app-dir>/shared/brand-assets in server/.env (deploy
+#   creates that dir; this script only READS server/.env, it never writes it).
 set -euo pipefail
 
 # Resolve the app dir from this script's own location (…/ffc/bin/ffc -> …/ffc),
@@ -356,6 +360,10 @@ cmd_deploy(){
     FFC_REEXEC=1 exec "$SELF" deploy
   fi
   # Past this point we are running the up-to-date script (post-pull).
+  # Deploy-surviving home for uploaded branding assets (see header NOTE):
+  # server/.env should point BRAND_ASSET_DIR here so uploads never live inside
+  # anything a release/reset churns.
+  mkdir -p "$APP_DIR/shared/brand-assets"
   run_server_tests      # the gate: red aborts with production untouched
   build_release
   cmd_migrate           # apply any new schema before the new code serves

@@ -10,6 +10,7 @@ vi.mock('./api', () => ({
     getOrg: vi.fn(),
     archiveOrg: vi.fn(),
     updateOrgBranding: vi.fn(),
+    uploadBrandingAsset: vi.fn(),
   },
 }));
 
@@ -30,6 +31,7 @@ beforeEach(() => {
   vi.mocked(api.updateOrgBranding)
     .mockReset()
     .mockResolvedValue({ ok: true, org: ORG });
+  vi.mocked(api.uploadBrandingAsset).mockReset();
 });
 
 function renderOrgDetail(isSuperAdmin: boolean) {
@@ -132,6 +134,75 @@ describe('OrgDetail — branding', () => {
     expect(await screen.findByText('themeColor must be a #rrggbb color')).toBeInTheDocument();
     // The save failed, so no reload happened (initial load only).
     expect(api.getOrg).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('OrgDetail — branding asset upload', () => {
+  test('Upload fills the URL field and the save payload carries it', async () => {
+    const url = '/api/brand-assets/org-1/logo-0123456789ab.png';
+    vi.mocked(api.uploadBrandingAsset).mockResolvedValue({ ok: true, url });
+    const user = userEvent.setup();
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+
+    const file = new File(['png-bytes'], 'logo.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText('Logo URL file'), file);
+
+    await waitFor(() => expect(api.uploadBrandingAsset).toHaveBeenCalledWith('org-1', 'logo', file));
+    // The returned served URL lands in the text field (the img preview keys
+    // off the same value)…
+    expect(screen.getByPlaceholderText('/brand/logo.png')).toHaveValue(url);
+    // …and rides the normal full-replace save (upload alone saved nothing).
+    await user.click(screen.getByRole('button', { name: 'Save branding' }));
+    await waitFor(() => expect(api.updateOrgBranding).toHaveBeenCalledWith('org-1', { logoUrl: url }));
+  });
+
+  test('each field maps to its own asset kind (icon512 → icon512)', async () => {
+    vi.mocked(api.uploadBrandingAsset).mockResolvedValue({
+      ok: true,
+      url: '/api/brand-assets/org-1/icon512-0123456789ab.png',
+    });
+    const user = userEvent.setup();
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    const file = new File(['png-bytes'], 'icon.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText('Icon 512 URL file'), file);
+    await waitFor(() =>
+      expect(api.uploadBrandingAsset).toHaveBeenCalledWith('org-1', 'icon512', file)
+    );
+  });
+
+  test('a server rejection surfaces inline and leaves the field untouched', async () => {
+    vi.mocked(api.uploadBrandingAsset).mockRejectedValue(
+      new Error('SVG rejected: contains <script>')
+    );
+    const user = userEvent.setup();
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    const file = new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' });
+    await user.upload(screen.getByLabelText('Logo URL file'), file);
+    expect(await screen.findByText('SVG rejected: contains <script>')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('/brand/logo.png')).toHaveValue('');
+  });
+
+  test('client pre-checks fail fast: non-PNG icon and oversize file never hit the API', async () => {
+    // applyAccept off: the icon input's accept attr would otherwise filter the
+    // wrong-type file before our own pre-check code ever runs.
+    const user = userEvent.setup({ applyAccept: false });
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+
+    // Icon kinds are PNG-only.
+    const jpeg = new File(['jpg-bytes'], 'icon.jpg', { type: 'image/jpeg' });
+    await user.upload(screen.getByLabelText('Icon 192 URL file'), jpeg);
+    expect(await screen.findByText(/must be a PNG \(exactly 192×192\)/)).toBeInTheDocument();
+
+    // Over the 1 MiB cap (mirrors the server's decode-size limit).
+    const big = new File([new Uint8Array(1024 * 1024 + 1)], 'big.png', { type: 'image/png' });
+    await user.upload(screen.getByLabelText('Logo URL file'), big);
+    expect(await screen.findByText(/too large \(max 1 MiB\)/)).toBeInTheDocument();
+
+    expect(api.uploadBrandingAsset).not.toHaveBeenCalled();
   });
 });
 

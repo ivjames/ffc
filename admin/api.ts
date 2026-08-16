@@ -79,6 +79,11 @@ export type Branding = {
   shareFooter?: string;
 };
 
+/** The uploadable branding asset kinds — one per branding URL field
+ *  (logoUrl → 'logo', …, icon512Url → 'icon512'). The two icon kinds must be
+ *  PNG at exactly 192×192 / 512×512 (server-enforced from the PNG's IHDR). */
+export type BrandingAssetKind = 'logo' | 'logoBadge' | 'logoWordmark' | 'icon192' | 'icon512';
+
 export type Org = {
   id: string;
   name: string;
@@ -412,6 +417,21 @@ export type CurrentUser = {
   viaToken: boolean;
 };
 
+/** Read a File's bytes as base64 (data: prefix stripped) — same pattern as the
+ *  booth-sticker uploader; the server ships image bytes through JSON base64. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error('Could not read the file'));
+    r.onload = () => {
+      const s = String(r.result);
+      const c = s.indexOf(',');
+      resolve(c >= 0 ? s.slice(c + 1) : s);
+    };
+    r.readAsDataURL(file);
+  });
+}
+
 // --- Endpoints --------------------------------------------------------------
 export const api = {
   overview: () => req<Overview>('GET', '/overview'),
@@ -440,6 +460,15 @@ export const api = {
   // for super_admin or the org's own org_admin.
   updateOrgBranding: (id: string, branding: Branding) =>
     req<{ ok: true; org: Org }>('PATCH', `/orgs/${id}/branding`, branding),
+  // Upload a logo/icon file for a branding URL field. Returns the served
+  // /api/brand-assets/... URL to put in the matching field — the endpoint does
+  // NOT modify org.branding, so Save keeps its full-replace semantics.
+  uploadBrandingAsset: async (orgId: string, kind: BrandingAssetKind, file: File) =>
+    req<{ ok: true; url: string }>('POST', `/orgs/${orgId}/branding/assets`, {
+      kind,
+      filename: file.name,
+      data: await fileToBase64(file),
+    }),
 
   listLocations: (opts: { orgId?: string; archived?: boolean } = {}) => {
     const q = new URLSearchParams();
