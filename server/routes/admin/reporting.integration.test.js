@@ -108,7 +108,7 @@ test("GET /api/admin/export/rounds.csv streams one row per player with venue con
   const lines = text.trim().split("\r\n");
   assert.equal(
     lines[0],
-    "completed_at_local,location,course,course_par,round_id,team_tag,player_tag,holes_entered,total_strokes"
+    "completed_at_local,org,location,course,course_par,round_id,team_tag,player_tag,holes_entered,total_strokes"
   );
   assert.equal(lines.length, 3, "header + one row per player");
   const rowA = lines.find((l) => l.includes("RPA"));

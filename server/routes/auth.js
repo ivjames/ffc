@@ -15,6 +15,7 @@ import { pool } from "../db.js";
 import { normalizeEmail, normalizeProfile } from "../lib/validateUser.js";
 import { createAuthCode, verifyAuthCode, verifyMagicToken } from "../lib/authCodes.js";
 import { sendMail, isMailDeliveryConfigured } from "../lib/mailer.js";
+import { tenant } from "../lib/tenant.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import {
   USER_COOKIE_NAME,
@@ -72,7 +73,11 @@ function codeEmail(code, magicToken) {
   return { subject: `${code} is your FFC sign-in code`, text, html };
 }
 
-router.post("/request-code", ipSendLimit, emailSendLimit, async (req, res) => {
+// tenant() resolves the org this subdomain serves so the OTP send is metered
+// against THAT org's MAIL_DAILY_CAP pool (lib/mailer.js) — one client's busy
+// Saturday must not lock another client's players out of sign-in. No
+// resolvable tenant (no live orgs) attributes to the null pool.
+router.post("/request-code", ipSendLimit, emailSendLimit, tenant(), async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   if (!email) return res.status(400).json({ ok: false, error: "email must be a valid address" });
   const profileCheck = normalizeProfile(req.body?.profile);
@@ -80,7 +85,14 @@ router.post("/request-code", ipSendLimit, emailSendLimit, async (req, res) => {
   try {
     const { code, magicToken } = await createAuthCode(email, profileCheck.row);
     const { subject, text, html } = codeEmail(code, magicToken);
-    await sendMail({ to: email, subject, text, html, kind: "otp" });
+    await sendMail({
+      to: email,
+      subject,
+      text,
+      html,
+      kind: "otp",
+      orgSlug: req.tenant?.org?.slug ?? null,
+    });
     // BYPASS while no real mail provider is configured: hand the code straight
     // back so the app can sign in without an inbox — the stopgap until Resend
     // is wired up. Setting MAIL_PROVIDER retires this automatically (checked

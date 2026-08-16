@@ -478,9 +478,17 @@ create table if not exists mail_send (
   id         uuid primary key default gen_random_uuid(),
   recipient  text not null,
   kind       text not null,                 -- 'otp' | 'team_invite'
+  org_slug   text,                          -- resolved tenant at send time; null =
+                                            --   no resolvable tenant (shared pool)
   created_at timestamptz not null default now()
 );
+-- Per-org cap attribution (multi-venue): MAIL_DAILY_CAP is counted per org_slug
+-- so one client's busy Saturday can't lock another client's players out of OTP
+-- sign-in. Idempotent add for databases from before attribution existed.
+alter table mail_send add column if not exists org_slug text;
 create index if not exists mail_send_created_idx on mail_send (created_at);
+-- No org_slug index on purpose: the on-send prune keeps this table under one
+-- day of traffic, so the per-org count is a trivial scan.
 -- One-time catch-up for databases from before the on-send prune existed (the
 -- prune keeps it empty of old rows thereafter; harmless to re-run).
 delete from mail_send where created_at < now() - interval '24 hours';
