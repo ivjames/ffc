@@ -18,7 +18,8 @@ server/.env
 *.log
 npm-debug.log*
 
-# runtime-uploaded scavenger-hunt photos (server/lib default dir)
+# runtime-uploaded scavenger-hunt photos + org brand assets (server/lib
+# default dirs, incl. BRAND_ASSET_DIR's default server/data/brand-assets)
 server/data/
 
 # ffc backups + CenterEdge mock persisted state (bin/ffc, MOCK_STATE_FILE)

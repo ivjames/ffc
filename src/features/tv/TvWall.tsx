@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import AnnouncementBanner from '../../ui/AnnouncementBanner';
 import { useCurrentLocationId } from '../../lib/location';
 import { LOCATIONS, locationById, courseById } from '../../data/courses';
+import { getBranding } from '../../lib/branding';
 import { themeEmoji } from '../../lib/theme';
 import { fetchCourseBoards, courseBoardsStreamUrl, type CourseBoard } from '../../sync';
 
@@ -29,7 +30,6 @@ const PERIOD_LABEL: Record<Period, string> = {
 // SSE is the live path (a board updates the moment a round syncs); this slow
 // poll runs alongside as a safety net for proxies that silently kill streams.
 const SAFETY_POLL_MS = 60_000;
-const DEFAULT_ACCENT = '#38bdf8';
 
 function resolveLocationId(param: string | null, fallback: string): string {
   if (!param) return fallback;
@@ -134,7 +134,7 @@ export default function TvWall() {
             // Accent/emoji come from the bundled course styling when we have
             // it; a course onboarded after this build falls back to theme/default.
             const seed = courseById(board.courseId);
-            const accent = seed?.accent ?? DEFAULT_ACCENT;
+            const accent = seed?.accent ?? getBranding().accentColor;
             return (
               <section
                 key={board.courseId}

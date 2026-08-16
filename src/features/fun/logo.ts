@@ -1,6 +1,6 @@
 // Venue logo, drawn into the arcade games' canvases.
 //
-// The brand asset ships as ONE white-on-transparent master (see LOGO_SRC).
+// The brand asset ships as ONE white-on-transparent master (see srcFor()).
 // Every placement recolors it at draw time via `tint`, so there are no
 // light/dark variant files to keep in sync — a white master composited through
 // `source-in` becomes any color, and the games need both (white reads on the
@@ -31,31 +31,40 @@
 // with the wordmark's letters, so lifting the moose out on its own leaves the
 // roundel visibly broken. The shipped asset restores that arc. The two breaks
 // where the antlers cross the circle are deliberate — the antlers sit in front.
+import { getBranding } from '../../lib/branding';
+
 export type LogoVariant = 'full' | 'badge' | 'wordmark';
 
-const SRC: Record<LogoVariant, string> = {
-  full: '/brand/logo.png',
-  badge: '/brand/logo-badge.png',
-  wordmark: '/brand/logo-wordmark.png',
-};
+// Asset URLs come from the tenant branding (BRANDING_DEFAULTS carries the
+// original /brand/*.png paths). Resolved per draw, not at import: branding
+// hydrates from /api/content after the first frames.
+function srcFor(variant: LogoVariant): string {
+  const b = getBranding();
+  return variant === 'badge' ? b.logoBadgeUrl : variant === 'wordmark' ? b.logoWordmarkUrl : b.logoUrl;
+}
 
+// Caches are keyed by URL (not variant) so a hydrate that swaps a logo URL
+// reloads the asset — and clears a failure latched against the old URL.
 const imgs = new Map<LogoVariant, HTMLImageElement>();
-const failed = new Set<LogoVariant>();
+const loadedSrc = new Map<LogoVariant, string>();
+const failed = new Set<string>();
 
 /** Kick off the decode once, on first draw. Safe to call every frame. */
 function ensureLoading(variant: LogoVariant): HTMLImageElement | null {
-  if (failed.has(variant)) return null;
+  const url = srcFor(variant);
+  if (failed.has(url)) return null;
   const hit = imgs.get(variant);
-  if (hit) return hit;
+  if (hit && loadedSrc.get(variant) === url) return hit;
   if (typeof Image === 'undefined') return null; // node (tests) — never loads
   const el = new Image();
   el.onerror = () => {
     // No logo deployed: latch the failure so we stop retrying every frame.
-    failed.add(variant);
-    imgs.delete(variant);
+    failed.add(url);
+    if (imgs.get(variant) === el) imgs.delete(variant);
   };
-  el.src = SRC[variant];
+  el.src = url;
   imgs.set(variant, el);
+  loadedSrc.set(variant, url);
   return el;
 }
 
@@ -81,12 +90,10 @@ export function logoAspect(variant: LogoVariant = 'full'): number | null {
 // approach affordable.
 const tinted = new Map<string, HTMLCanvasElement>();
 
-function tintedCopy(
-  variant: LogoVariant,
-  el: HTMLImageElement,
-  color: string,
-): HTMLCanvasElement | null {
-  const key = `${variant}|${color}`;
+function tintedCopy(el: HTMLImageElement, color: string): HTMLCanvasElement | null {
+  // Keyed by the element's resolved URL so a branding swap can't serve a tint
+  // built from the previous tenant's asset.
+  const key = `${el.src}|${color}`;
   const hit = tinted.get(key);
   if (hit) return hit;
   if (typeof document === 'undefined') return null;
@@ -143,7 +150,7 @@ export function drawLogo(
   const el = decoded(variant);
   if (!el) return;
 
-  const src = opts.tint ? tintedCopy(variant, el, opts.tint) : el;
+  const src = opts.tint ? tintedCopy(el, opts.tint) : el;
   if (!src) return;
 
   const w = opts.width;

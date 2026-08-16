@@ -38,7 +38,7 @@ export async function geoPermissionState(): Promise<PermissionState> {
   }
 }
 
-function nearest(coords: Coords): { id: string; geofenceKm: number; km: number } {
+function nearest(coords: Coords): { id: string; geofenceKm: number; km: number } | null {
   let best: { id: string; geofenceKm: number; km: number } | null = null;
   for (const loc of LOCATIONS) {
     const km = distanceKm(coords, { lat: loc.lat, lng: loc.lng });
@@ -46,8 +46,8 @@ function nearest(coords: Coords): { id: string; geofenceKm: number; km: number }
       best = { id: loc.id, geofenceKm: loc.geofenceKm ?? DEFAULT_GEOFENCE_KM, km };
     }
   }
-  // LOCATIONS is never empty in this app.
-  return best!;
+  // null only for a zero-location catalog (un-onboarded tenant).
+  return best;
 }
 
 function getPosition(timeoutMs = 10000): Promise<GeolocationPosition> {
@@ -64,10 +64,15 @@ function getPosition(timeoutMs = 10000): Promise<GeolocationPosition> {
  *  it hasn't been granted/denied yet — call from a user gesture in that case. */
 export async function detectNearestLocation(): Promise<DetectResult> {
   if (!geolocationSupported()) return { status: 'unavailable' };
+  // A zero-location catalog (un-onboarded tenant) has nothing to match — bail
+  // before firing a GPS permission prompt we can't use the answer to.
+  if (LOCATIONS.length === 0) return { status: 'unavailable' };
   try {
     const pos = await getPosition();
     const here: Coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     const n = nearest(here);
+    // Re-checked after the await: hydration may have swapped the catalog.
+    if (!n) return { status: 'unavailable' };
     return n.km <= n.geofenceKm
       ? { status: 'matched', locationId: n.id, distanceKm: n.km }
       : { status: 'nomatch', nearestId: n.id, distanceKm: n.km };

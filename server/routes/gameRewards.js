@@ -27,12 +27,13 @@ import { dailySpentTickets } from "../lib/dailyTickets.js";
 import { isBonusKind, effectiveAdoptionBonus } from "../lib/adoptionBonus.js";
 import { rewardTickets } from "../lib/posLoyalty.js";
 import { UUID_RE } from "../lib/validateLocation.js";
+import { tenant, findTenantLocation } from "../lib/tenant.js";
 
 export const router = Router();
 
 const VENUE_TZ = process.env.VENUE_TZ || "America/Los_Angeles";
 
-router.post("/award", async (req, res) => {
+router.post("/award", tenant(), async (req, res) => {
   const { locationId, playerId, game, tickets, sessionId } = req.body ?? {};
 
   if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
@@ -55,11 +56,10 @@ router.post("/award", async (req, res) => {
   }
 
   try {
-    const locResult = await pool.query(
-      `select id, tz, pos from location where id = $1 and archived_at is null`,
-      [locationId]
-    );
-    const loc = locResult.rows[0];
+    // Tenant-scoped: a foreign tenant's location id 404s exactly like a
+    // nonexistent one — a guessed id must not draw down (or write ledger rows
+    // against) another client's ticket system.
+    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, tz, pos" });
     if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
     const loyalty = loc.pos?.loyalty ?? null;
     if (!loyalty?.gameRewards) {
@@ -188,7 +188,7 @@ router.post("/award", async (req, res) => {
 // milestone perk, not a per-round earning. `unique (location_id, player_id,
 // kind)` makes it one-time; the pending -> awarded flow (mirroring /award)
 // keeps a lost vendor response from double-crediting.
-router.post("/bonus", async (req, res) => {
+router.post("/bonus", tenant(), async (req, res) => {
   const { locationId, playerId, kind } = req.body ?? {};
 
   if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
@@ -209,11 +209,8 @@ router.post("/bonus", async (req, res) => {
   }
 
   try {
-    const locResult = await pool.query(
-      `select id, pos from location where id = $1 and archived_at is null`,
-      [locationId]
-    );
-    const loc = locResult.rows[0];
+    // Same tenant gate as /award: foreign location = unknown location.
+    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, pos" });
     if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
     const loyalty = loc.pos?.loyalty ?? null;
     if (!loyalty?.gameRewards) {

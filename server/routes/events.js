@@ -23,6 +23,7 @@
 //   and the client re-sends anything still queued.
 import { Router } from "express";
 import { pool } from "../db.js";
+import { tenant, tenantOrgFilter, tenantParams } from "../lib/tenant.js";
 
 export const router = Router();
 
@@ -65,7 +66,7 @@ function sanitizeMeta(meta) {
   }
 }
 
-router.post("/", async (req, res) => {
+router.post("/", tenant(), async (req, res) => {
   const body = req.body ?? {};
   const deviceId = typeof body.deviceId === "string" ? body.deviceId : null;
   if (!deviceId || !UUID_RE.test(deviceId)) {
@@ -95,13 +96,16 @@ router.post("/", async (req, res) => {
   if (rows.length === 0) return res.json({ ok: true, recorded: 0 });
 
   try {
-    // One multi-row insert. A location id that doesn't exist resolves to null
-    // (FK-safe subselect) rather than 23503. ON CONFLICT DO NOTHING absorbs a
-    // re-sent batch, so `recorded` counts only genuinely new events.
+    // One multi-row insert. A location id that doesn't exist — or belongs to
+    // another tenant — resolves to null (FK-safe subselect) rather than
+    // 23503, so a guessed id can't attribute funnel traffic to another
+    // client's venue. ON CONFLICT DO NOTHING absorbs a re-sent batch, so
+    // `recorded` counts only genuinely new events.
     const result = await pool.query(
       `insert into funnel_event (client_event_id, event, device_id, location_id, platform, meta)
          select e.id, e.name, $1::uuid,
-                (select l.id from location l where l.id = e.location_id),
+                (select l.id from location l where l.id = e.location_id
+                   ${tenantOrgFilter(req.tenant, "l.org_id", "$4")}),
                 $2::text, e.meta
            from jsonb_to_recordset($3::jsonb)
              as e(id uuid, name text, location_id uuid, meta jsonb)
@@ -111,7 +115,7 @@ router.post("/", async (req, res) => {
         name: r.name,
         location_id: r.locationId,
         meta: r.meta,
-      })))]
+      }))), ...tenantParams(req.tenant)]
     );
     return res.json({ ok: true, recorded: result.rowCount });
   } catch (err) {

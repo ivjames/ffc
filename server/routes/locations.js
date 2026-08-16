@@ -11,6 +11,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAppToken } from "../lib/adminAuth.js";
+import { tenant, tenantOrgFilter, tenantParams } from "../lib/tenant.js";
 import {
   normalizeLocation,
   withLabel,
@@ -20,13 +21,16 @@ import {
 export const router = Router();
 
 // --- List (public) ----------------------------------------------------------
-// Only live venues — archived ones drop out of the player-facing list.
-router.get("/", async (_req, res) => {
+// Only live venues — archived ones drop out of the player-facing list. Scoped
+// to the tenant like /api/content's locations: one subdomain must not
+// enumerate another client's venues.
+router.get("/", tenant(), async (req, res) => {
   try {
     const result = await pool.query(
       `select ${LOCATION_RETURN_COLS} from location
-        where archived_at is null
-        order by sort_order, name`
+        where archived_at is null ${tenantOrgFilter(req.tenant, "org_id", "$1")}
+        order by sort_order, name`,
+      tenantParams(req.tenant)
     );
     return res.json(result.rows.map(withLabel));
   } catch (err) {

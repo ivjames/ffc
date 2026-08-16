@@ -3,9 +3,12 @@ import type { CourseSeed, LocationSeed } from '../types';
 import {
   GENERATED_LOCATIONS,
   GENERATED_COURSES,
+  GENERATED_ORG,
   type GeneratedCourse,
   type GeneratedLocation,
+  type GeneratedOrg,
 } from './content.generated';
+import { getBranding, setOrg } from '../lib/branding';
 
 // §4 White-label content. The DB (managed in Master Control) is the source of
 // truth for the DATA of locations and courses — names, slugs, coords, tz,
@@ -23,6 +26,11 @@ import {
 // instant/offline starts. Read POS/venue state through the accessors below (not
 // a captured snapshot) and subscribe with `useContentRevision()` to re-render on
 // update.
+//
+// The payload also carries the tenant `org` (+ branding, MULTI-VENUE.md §3);
+// this store forwards it to src/lib/branding.ts (`setOrg`) at boot and on
+// every hydrate, so branding travels with the catalog — same fetch, same
+// cache entry, same revision cycle.
 
 // Stable site ids (mirror content.generated.ts / the Postgres seed).
 const LOC_UPLAND = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -30,9 +38,9 @@ const LOC_TUKWILA = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const LOC_WILSONVILLE = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 // Per-site brand accent (hex), keyed by location id. Frontend-only — not a DB
-// column. New locations onboarded in Master Control fall back to DEFAULT_ACCENT
-// until an accent is added here.
-const DEFAULT_ACCENT = '#38bdf8';
+// column. New locations onboarded in Master Control fall back to the tenant's
+// branding.accentColor (BRANDING_DEFAULTS carries the old DEFAULT_ACCENT
+// #38bdf8) until an accent is added here.
 const LOCATION_ACCENTS: Record<string, string> = {
   [LOC_UPLAND]: '#38bdf8',
   [LOC_TUKWILA]: '#f472b6',
@@ -111,7 +119,7 @@ const THEME_RULES: Record<string, string[]> = {
 };
 
 function courseAccent(c: GeneratedCourse): string {
-  return COURSE_ACCENTS_BY_ID[c.id] ?? THEME_ACCENTS[c.theme] ?? DEFAULT_ACCENT;
+  return COURSE_ACCENTS_BY_ID[c.id] ?? THEME_ACCENTS[c.theme] ?? getBranding().accentColor;
 }
 
 // Merge generated (DB) data + frontend styling into the app's LocationSeed/
@@ -121,7 +129,7 @@ function buildLocations(raw: GeneratedLocation[]): LocationSeed[] {
     id: l.id,
     name: l.name,
     slug: l.slug,
-    accent: LOCATION_ACCENTS[l.id] ?? DEFAULT_ACCENT,
+    accent: LOCATION_ACCENTS[l.id] ?? getBranding().accentColor,
     lat: l.lat ?? 0,
     lng: l.lng ?? 0,
     geofenceKm: l.geofenceKm ?? undefined,
@@ -150,20 +158,44 @@ function buildCourses(raw: GeneratedCourse[]): CourseSeed[] {
 // ---- live-hydrated content store -------------------------------------------
 
 const CONTENT_CACHE_KEY = 'ffc.content';
-type RawContent = { locations: GeneratedLocation[]; courses: GeneratedCourse[] };
+type RawContent = {
+  locations: GeneratedLocation[];
+  courses: GeneratedCourse[];
+  // Tenant org + branding (MULTI-VENUE.md §3). Optional: caches written before
+  // the org rollout lack the key — that must read as "no org", not a crash.
+  org?: GeneratedOrg | null;
+};
 
-/** Shape-guard a parsed /api/content (or cache) before trusting it. Requires at
- *  least one location: `getCurrentLocationId()` falls back to `LOCATIONS[0].id`,
- *  so an empty catalog (fresh DB, or every venue archived) would crash every
- *  catalog consumer — and caching it would poison later offline reloads too. The
- *  build-time exporter rejects zero locations for the same reason; match it. */
+/** The payload's org, or null when absent/malformed (pre-org cache, no-tenant
+ *  server response). Branding falls back to BRANDING_DEFAULTS either way. */
+function orgOf(c: RawContent): GeneratedOrg | null {
+  const o = c.org;
+  if (!o || typeof o.id !== 'string' || typeof o.slug !== 'string' || typeof o.name !== 'string') {
+    return null;
+  }
+  return {
+    id: o.id,
+    slug: o.slug,
+    name: o.name,
+    branding: o.branding && typeof o.branding === 'object' ? o.branding : {},
+  };
+}
+
+/** Shape-guard a parsed /api/content (or cache) before trusting it. A payload
+ *  carrying the `org` key (the tenant-aware shape, MULTI-VENUE.md §3) is valid
+ *  even with ZERO locations: a brand-new tenant, or one whose venues are all
+ *  archived, legitimately serves an empty catalog, and rejecting it would keep
+ *  the previously cached/baked catalog — ANOTHER tenant's venues and branding —
+ *  on that tenant's subdomain. Zero-location payloads WITHOUT the org key stay
+ *  rejected: legacy/garbled shapes where empty only ever meant a broken fetch. */
 export function isValidContent(c: unknown): c is RawContent {
   const v = c as RawContent | null;
   return (
     !!v &&
+    typeof v === 'object' &&
     Array.isArray(v.locations) &&
-    v.locations.length > 0 &&
     Array.isArray(v.courses) &&
+    (v.locations.length > 0 || 'org' in v) &&
     v.locations.every((l) => l && typeof l.id === 'string' && typeof l.name === 'string') &&
     v.courses.every((cs) => cs && typeof cs.id === 'string' && Array.isArray(cs.pars))
   );
@@ -184,6 +216,11 @@ function readCache(): RawContent | null {
 // snapshot. `let` (not `const`) so hydration can swap in live data and importers
 // of LOCATIONS/COURSES that read at call-time see it (ES live bindings).
 const cached = readCache();
+// Branding first (document title/theme-color + the accent fallback the builds
+// below read). The cache and the snapshot travel as a unit: a cached catalog
+// means a cached org decision too — even a missing one (pre-org cache → null →
+// defaults) — never the snapshot's org over the cache's catalog.
+setOrg(cached ? orgOf(cached) : GENERATED_ORG);
 export let LOCATIONS: LocationSeed[] = buildLocations(cached?.locations ?? GENERATED_LOCATIONS);
 export let COURSES: CourseSeed[] = buildCourses(cached?.courses ?? GENERATED_COURSES);
 
@@ -191,6 +228,8 @@ let revision = 0;
 const listeners = new Set<() => void>();
 
 function applyContent(raw: RawContent): void {
+  // Org first: the accent fallback inside the builds reads the live branding.
+  setOrg(orgOf(raw));
   LOCATIONS = buildLocations(raw.locations);
   COURSES = buildCourses(raw.courses);
   revision += 1;
@@ -210,7 +249,7 @@ export async function hydrateContent(): Promise<void> {
     try {
       localStorage.setItem(
         CONTENT_CACHE_KEY,
-        JSON.stringify({ locations: data.locations, courses: data.courses }),
+        JSON.stringify({ locations: data.locations, courses: data.courses, org: orgOf(data) }),
       );
     } catch {
       // Non-fatal: we just won't have an instant/offline copy next launch.

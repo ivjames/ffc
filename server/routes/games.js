@@ -21,6 +21,7 @@ import { applyCellWrite } from "../lib/lww.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { UUID_RE } from "../lib/validateLocation.js";
+import { tenant, findTenantCourse } from "../lib/tenant.js";
 import { grantRewards } from "./rounds.js";
 
 export const router = Router();
@@ -106,7 +107,10 @@ async function buildSnapshot(game) {
 }
 
 // --- Create ----------------------------------------------------------------
-router.post("/", requireUser, async (req, res) => {
+// Tenant-scoped COURSE lookup only: the social graph (accounts, teams, join
+// codes, participant tokens) is deliberately global — a shared game joins
+// players across devices, and after create everything runs on capabilities.
+router.post("/", requireUser, tenant(), async (req, res) => {
   const { courseId, teamId, tag } = req.body ?? {};
   if (typeof courseId !== "string" || !UUID_RE.test(courseId)) {
     return res.status(400).json({ ok: false, error: "courseId must be a uuid" });
@@ -120,8 +124,10 @@ router.post("/", requireUser, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const course = await client.query(`select id from course where id = $1`, [courseId]);
-    if (course.rowCount === 0) {
+    // A foreign tenant's course id answers exactly like a nonexistent one —
+    // a shared game must not materialize a round onto another venue's board.
+    const course = await findTenantCourse(courseId, req.tenant, client);
+    if (!course) {
       await client.query("ROLLBACK");
       return res.status(400).json({ ok: false, error: "courseId does not exist" });
     }

@@ -22,6 +22,7 @@ import { pool } from "../db.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
 import { boardSyntheticFilter } from "../lib/syntheticConfig.js";
+import { tenant, tenantOrgFilter } from "../lib/tenant.js";
 
 export const router = Router();
 
@@ -40,7 +41,7 @@ const PERIOD_UNITS = {
   all: null,
 };
 
-router.get("/", async (req, res) => {
+router.get("/", tenant(), async (req, res) => {
   const period = typeof req.query.period === "string" ? req.query.period : "all";
   if (!(period in PERIOD_UNITS)) {
     return res.status(400).json({ ok: false, error: "period must be day|week|month|all" });
@@ -81,6 +82,17 @@ router.get("/", async (req, res) => {
     locationFilter = `and c.location_id = $${params.length}`;
   }
 
+  // Tenant scope (MULTI-VENUE.md §6 bullet 1): a board must never surface
+  // another client's scores — whether via a guessed foreign locationId (which
+  // then reads as an empty board, same as a nonexistent id) or by omitting
+  // locationId entirely. Same fallback semantics as /api/content; `loc` is
+  // LEFT-joined, so a course with no location counts as org-less.
+  let tenantFilter = "";
+  if (req.tenant != null) {
+    params.push(req.tenant.org.id);
+    tenantFilter = tenantOrgFilter(req.tenant, "loc.org_id", `$${params.length}`);
+  }
+
   // Synthetic (bot) rounds count on the board by default; excluded only when
   // SYNTHETIC_COUNT_ON_BOARD=false. Fragment is "" or `and not r.synthetic` —
   // a caller-chosen literal, no user input, no bound param claimed.
@@ -115,6 +127,7 @@ router.get("/", async (req, res) => {
         and r.group_tag is not null
         ${timeFilter}
         ${locationFilter}
+        ${tenantFilter}
         ${syntheticFilter}
       group by r.id, r.group_tag, r.course_id, c.name, r.completed_at
     ),
@@ -152,6 +165,7 @@ router.get("/", async (req, res) => {
       where r.completed_at is not null
         ${timeFilter}
         ${locationFilter}
+        ${tenantFilter}
         ${syntheticFilter}
       group by pt.tag, r.course_id, c.name, r.completed_at, r.id
     ),
@@ -218,15 +232,21 @@ function parseBoardParams(req) {
 }
 
 /** Compute the per-course boards payload (shared by the GET and SSE routes). */
-async function computeCourseBoards({ period, by, locationId, limit, unit }) {
+async function computeCourseBoards({ period, by, locationId, limit, unit, tenant: t }) {
   // Shared window/venue filter: $1 tz fallback, $2 unit (null = all time),
-  // $3 location (null = every venue).
+  // $3 location (null = every venue). $5/$6 are the tenant scope, in the same
+  // null-tolerant style so one statement serves every case: $5 = the tenant
+  // org (null = no tenant, legacy unfiltered), $6 = whether org-less legacy
+  // rows are in scope (the fallback-host path only, mirroring /api/content).
+  const orgId = t?.org.id ?? null;
+  const includeOrgless = t?.via === "fallback";
   const zone = `coalesce(loc.tz, $1)`;
   const where = `
       where r.completed_at is not null
         and ($2::text is null
              or r.completed_at >= timezone(${zone}, date_trunc($2, timezone(${zone}, now()))))
         and ($3::uuid is null or c.location_id = $3)
+        and ($5::uuid is null or loc.org_id = $5 or ($6 and loc.org_id is null))
         ${boardSyntheticFilter("r", process.env)}`;
 
   const playerRowsSql = `
@@ -278,6 +298,8 @@ async function computeCourseBoards({ period, by, locationId, limit, unit }) {
       from ranked where rn <= $4 order by course_id, rn`;
 
   const [courses, rows] = await Promise.all([
+    // The course columns themselves are tenant-scoped too — a foreign
+    // locationId must not even enumerate another client's course names.
     pool.query(
       `select c.id, c.name, c.theme, c.sort_order as "sortOrder",
               c.location_id as "locationId", l.name as "locationName"
@@ -286,10 +308,18 @@ async function computeCourseBoards({ period, by, locationId, limit, unit }) {
         where c.archived_at is null
           and (l.id is null or l.archived_at is null)
           and ($1::uuid is null or c.location_id = $1)
+          and ($2::uuid is null or l.org_id = $2 or ($3 and l.org_id is null))
         order by c.sort_order, c.name`,
-      [locationId]
+      [locationId, orgId, includeOrgless]
     ),
-    pool.query(by === "team" ? teamRowsSql : playerRowsSql, [VENUE_TZ, unit, locationId, limit]),
+    pool.query(by === "team" ? teamRowsSql : playerRowsSql, [
+      VENUE_TZ,
+      unit,
+      locationId,
+      limit,
+      orgId,
+      includeOrgless,
+    ]),
   ]);
 
   const rowsByCourse = new Map();
@@ -312,11 +342,11 @@ async function computeCourseBoards({ period, by, locationId, limit, unit }) {
   };
 }
 
-router.get("/courses", async (req, res) => {
+router.get("/courses", tenant(), async (req, res) => {
   const params = parseBoardParams(req);
   if (params.error) return res.status(400).json({ ok: false, error: params.error });
   try {
-    return res.json(await computeCourseBoards(params));
+    return res.json(await computeCourseBoards({ ...params, tenant: req.tenant }));
   } catch (err) {
     console.error("[leaderboard] courses error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
@@ -336,9 +366,12 @@ const STREAM_REFRESH_MS = 60_000;
 const STREAM_DEBOUNCE_MS = 300;
 const HEARTBEAT_MS = 25_000;
 
-router.get("/courses/stream", async (req, res) => {
+router.get("/courses/stream", tenant(), async (req, res) => {
   const params = parseBoardParams(req);
   if (params.error) return res.status(400).json({ ok: false, error: params.error });
+  // Tenant is captured once at connect — a TV stream keeps its venue's scope
+  // for the life of the connection (reconnects re-resolve).
+  params.tenant = req.tenant;
 
   res.set({
     "Content-Type": "text/event-stream",

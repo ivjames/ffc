@@ -1,5 +1,6 @@
 import type { CourseSeed, LocalRound } from '../../types';
 import { coursePar, playerTotal, formatOverUnder, winners } from '../../lib/scoring';
+import { getBranding } from '../../lib/branding';
 
 // Score sharing (punchlist #9 tier 1) — render a branded scorecard image
 // entirely client-side (canvas) and hand it to the Web Share API. No backend,
@@ -130,10 +131,10 @@ export async function renderShareImage(
     y += rowH;
   });
 
-  // --- Footer.
+  // --- Footer. Tenant-branded tagline (defaults to the Bullwinkle's line).
   ctx.font = '600 34px system-ui, sans-serif';
   ctx.fillStyle = '#66817a';
-  ctx.fillText("Bullwinkle's · come beat this score", W / 2, H - 70);
+  ctx.fillText(getBranding().shareFooter, W / 2, H - 70);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png');

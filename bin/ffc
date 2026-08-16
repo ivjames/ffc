@@ -23,10 +23,17 @@
 #   backup    pg_dump -> data/backups/ (gzip, retention) + offsite push when
 #             FFC_BACKUP_REMOTE is set (rclone remote or scp target)
 #   backup-cron  install the nightly backup cron (/etc/cron.d/ffc-backup)
-#   vhost     (re)write the player nginx vhost + (re)issue TLS
-#   wildcard-cert  issue/renew the *.<fqdn> wildcard cert (certbot DNS-01 via doctl)
+#   vhost     (re)write the player nginx vhost (serves <fqdn> + *.<fqdn> —
+#             each client org lives on <org-slug>.<fqdn>) + (re)issue TLS;
+#             installs the wildcard cert when it exists, else single-name
+#   wildcard-cert  issue/renew the *.<fqdn> wildcard cert (certbot DNS-01 via
+#             doctl) — covers admin.<fqdn> AND every client org subdomain
 #   admin-vhost    (re)write the Master Control vhost (admin.<fqdn>)
 #   admin-setup    one-time: wildcard-cert + admin-vhost (Master Control bring-up)
+#
+# NOTE: uploaded org branding assets must outlive deploys — set
+#   BRAND_ASSET_DIR=<app-dir>/shared/brand-assets in server/.env (deploy
+#   creates that dir; this script only READS server/.env, it never writes it).
 set -euo pipefail
 
 # Resolve the app dir from this script's own location (…/ffc/bin/ffc -> …/ffc),
@@ -71,6 +78,8 @@ ADMIN_FQDN="${FFC_ADMIN_FQDN:-admin.$FQDN}"     # e.g. admin.ffc.lab980.com
 # The registered DNS zone doctl manages (last two labels of the FQDN).
 BASE_DNS="${FFC_DNS_DOMAIN:-$(echo "$FQDN" | awk -F. '{print $(NF-1)"."$NF}')}"
 # certbot lineage name for the wildcard cert (deterministic path under live/).
+# The wildcard fronts BOTH admin.$FQDN and the multi-venue client subdomains
+# (org slug -> <slug>.$FQDN, one CNAME/A per org — or a wildcard DNS record).
 WILDCARD_CERT_NAME="${FFC_WILDCARD_CERT_NAME:-$STUB-wildcard}"
 
 c_b=$'\033[1;34m'; c_r=$'\033[1;31m'; c_o=$'\033[0m'
@@ -257,17 +266,28 @@ api_health(){
 cmd_vhost(){
   [ -f "$APP_DIR/deploy/nginx.conf.template" ] || die "missing deploy/nginx.conf.template"
   local conf="/etc/nginx/sites-available/$FQDN"
-  log "Writing static vhost $conf (root current/dist, /api -> :$API_PORT, /ce -> :$CE_MOCK_PORT)"
+  log "Writing static vhost $conf (serves $FQDN + *.$FQDN client subdomains; root current/dist, /api -> :$API_PORT, /ce -> :$CE_MOCK_PORT)"
   sed -e "s/__FQDN__/$FQDN/g" -e "s#__APP_DIR__#$APP_DIR#g" -e "s/__API_PORT__/$API_PORT/g" \
     -e "s/__CE_MOCK_PORT__/$CE_MOCK_PORT/g" \
     "$APP_DIR/deploy/nginx.conf.template" > "$conf"
   ln -sf "$conf" "/etc/nginx/sites-enabled/$FQDN"
   nginx -t && systemctl reload nginx
   if command -v certbot >/dev/null; then
-    log "Issuing/refreshing TLS for $FQDN"
-    certbot --nginx -d "$FQDN" --redirect -n --agree-tos \
-      -m "${CERTBOT_EMAIL:-ivjames@gmail.com}" \
-      || log "certbot did not complete (DNS still propagating?). Re-run later: ffc vhost"
+    # The vhost's server_name is now "$FQDN *.$FQDN" (one subdomain per client
+    # org slug). Only the wildcard lineage covers those subdomains, so install
+    # it when it exists — a plain `certbot --nginx -d $FQDN` here would mint a
+    # single-name lineage that leaves every client subdomain with a bad cert.
+    if [ -d "/etc/letsencrypt/live/$WILDCARD_CERT_NAME" ]; then
+      log "Installing wildcard cert '$WILDCARD_CERT_NAME' for $FQDN + *.$FQDN"
+      certbot install --nginx --cert-name "$WILDCARD_CERT_NAME" \
+        -d "$FQDN" -d "*.$FQDN" --redirect -n \
+        || log "certbot install did not complete. Re-run later: ffc vhost"
+    else
+      log "Issuing/refreshing single-name TLS for $FQDN (client subdomains need the wildcard: ffc wildcard-cert, then ffc vhost)"
+      certbot --nginx -d "$FQDN" --redirect -n --agree-tos \
+        -m "${CERTBOT_EMAIL:-ivjames@gmail.com}" \
+        || log "certbot did not complete (DNS still propagating?). Re-run later: ffc vhost"
+    fi
   else
     log "certbot not found — install it, then: ffc vhost"
   fi
@@ -340,6 +360,10 @@ cmd_deploy(){
     FFC_REEXEC=1 exec "$SELF" deploy
   fi
   # Past this point we are running the up-to-date script (post-pull).
+  # Deploy-surviving home for uploaded branding assets (see header NOTE):
+  # server/.env should point BRAND_ASSET_DIR here so uploads never live inside
+  # anything a release/reset churns.
+  mkdir -p "$APP_DIR/shared/brand-assets"
   run_server_tests      # the gate: red aborts with production untouched
   build_release
   cmd_migrate           # apply any new schema before the new code serves
@@ -360,6 +384,9 @@ cmd_deploy(){
     cmd_vhost
   elif [ -f "$conf" ] && ! grep -q 'location /ce/' "$conf"; then
     log "vhost missing /ce proxy — re-rendering (runs certbot once)"
+    cmd_vhost
+  elif [ -f "$conf" ] && ! grep -qE 'server_name[^;]*\*\.' "$conf"; then
+    log "vhost missing *.$FQDN server_name (client org subdomains) — re-rendering (runs certbot once)"
     cmd_vhost
   else
     nginx -t && systemctl reload nginx
@@ -386,6 +413,8 @@ cmd_setup(){
 # Issue/renew the wildcard TLS cert (*.FQDN + FQDN) via certbot DNS-01, backed
 # by the droplet's existing doctl auth (no plugin, no credentials file). The
 # _acme-challenge TXT records are written/removed by deploy/acme-doctl-*.sh.
+# One lineage covers admin.FQDN and every client org subdomain (<slug>.FQDN);
+# `ffc vhost` installs it on the player vhost once it exists.
 cmd_wildcard_cert(){
   command -v certbot >/dev/null || die "certbot not found"
   command -v doctl   >/dev/null || die "doctl not found (needed for DNS-01)"

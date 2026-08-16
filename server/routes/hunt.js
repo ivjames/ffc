@@ -37,6 +37,7 @@ import {
   ALLOWED_MEDIA_TYPES,
 } from "../lib/vision.js";
 import { resolvePhotoRetentionDays } from "../lib/photoRetention.js";
+import { tenant, tenantOrgFilter, tenantParams } from "../lib/tenant.js";
 
 export const router = Router();
 
@@ -172,18 +173,23 @@ router.get("/photo-retention", (_req, res) => {
 
 // --- GET /api/hunt/items?course=<uuid> -------------------------------------
 // Each course has its own themed list, so the caller must say which course.
-router.get("/items", async (req, res) => {
+// Tenant-scoped: a foreign tenant's course id answers like a nonexistent one
+// (an empty list — that's what a course with no items returns today).
+router.get("/items", tenant(), async (req, res) => {
   const course = req.query.course;
   if (typeof course !== "string" || !UUID_RE.test(course)) {
     return res.status(400).json({ ok: false, error: "course (uuid) is required" });
   }
   try {
     const result = await pool.query(
-      `select id, slug, name, hint, countable
-         from hunt_item
-        where active = true and course_id = $1
-        order by sort_order asc, name asc`,
-      [course]
+      `select i.id, i.slug, i.name, i.hint, i.countable
+         from hunt_item i
+         join course c on c.id = i.course_id
+         left join location l on l.id = c.location_id
+        where i.active = true and i.course_id = $1
+          ${tenantOrgFilter(req.tenant, "l.org_id", "$2")}
+        order by i.sort_order asc, i.name asc`,
+      [course, ...tenantParams(req.tenant)]
     );
     return res.json(result.rows);
   } catch (err) {
@@ -286,6 +292,7 @@ router.post(
   // Base64 inflates ~33%, so a 10 MB decoded image is ~13.3 MB of JSON. Give
   // headroom above that; keep it aligned with nginx's client_max_body_size.
   express.json({ limit: "16mb" }),
+  tenant(),
   async (req, res) => {
     if (!isVisionConfigured()) {
       return res
@@ -342,10 +349,18 @@ router.post(
     }
 
     try {
-      // Item must exist, be active, and belong to the round's course.
+      // Item must exist, be active, and belong to the round's course — and the
+      // course must belong to this tenant, so a foreign course/item pair can't
+      // burn vision spend or write finds against another venue. Foreign and
+      // nonexistent answer identically below.
       const itemRes = await pool.query(
-        "select id, name, hint, extra_prompt, countable from hunt_item where id = $1 and course_id = $2 and active = true",
-        [itemId, courseId]
+        `select i.id, i.name, i.hint, i.extra_prompt, i.countable
+           from hunt_item i
+           join course c on c.id = i.course_id
+           left join location l on l.id = c.location_id
+          where i.id = $1 and i.course_id = $2 and i.active = true
+            ${tenantOrgFilter(req.tenant, "l.org_id", "$3")}`,
+        [itemId, courseId, ...tenantParams(req.tenant)]
       );
       if (itemRes.rowCount === 0) {
         return res

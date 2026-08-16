@@ -28,6 +28,7 @@ import { pool } from "../db.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { ALLOWED_MEDIA_TYPES, EXT_BY_MEDIA } from "../lib/imageTypes.js";
 import { inBudgetReservation, BUDGET_LOCKS } from "../lib/diskBudget.js";
+import { tenant, findTenantLocation } from "../lib/tenant.js";
 
 export const router = Router();
 
@@ -95,7 +96,7 @@ function clip(value, max) {
 // Carries its own larger body parser — a base64 screenshot blows past the
 // global 256kb cap (app.js skips this path for the same reason it skips the
 // hunt's and booth's uploads).
-router.post("/", fileRateLimit, express.json({ limit: "16mb" }), async (req, res) => {
+router.post("/", fileRateLimit, express.json({ limit: "16mb" }), tenant(), async (req, res) => {
   const payload = req.body ?? {};
   const {
     body,
@@ -147,15 +148,14 @@ router.post("/", fileRateLimit, express.json({ limit: "16mb" }), async (req, res
 
   try {
     // The venue selected at filing time scopes the admin surface. Optional and
-    // best-effort: an unknown/archived location never fails the filing, it just
-    // stores null (super_admin-only in review — the hunt/booth precedent).
+    // best-effort: an unknown/archived — or foreign-tenant — location never
+    // fails the filing, it just stores null (super_admin-only in review — the
+    // hunt/booth precedent). The tenant check keeps a guessed id from filing
+    // notes into another client's triage queue.
     let venueId = null;
     if (typeof locationId === "string" && UUID_RE.test(locationId)) {
-      const loc = await pool.query(
-        `select id from location where id = $1 and archived_at is null`,
-        [locationId]
-      );
-      if (loc.rowCount > 0) venueId = loc.rows[0].id;
+      const loc = await findTenantLocation(locationId, req.tenant);
+      if (loc) venueId = loc.id;
     }
 
     // Disk budget over stored screenshot bytes. Past it the COMMENT still

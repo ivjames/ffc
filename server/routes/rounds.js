@@ -11,6 +11,7 @@ import { makeRateLimit } from "../lib/rateLimit.js";
 import { scoreAchievements } from "../lib/rewards.js";
 import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
 import { resolveSynthetic, syntheticMintsRewards } from "../lib/syntheticConfig.js";
+import { tenant, findTenantCourse } from "../lib/tenant.js";
 
 export const router = Router();
 
@@ -106,7 +107,7 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
 }
 
 // --- Route -----------------------------------------------------------------
-router.post("/", rateLimit, async (req, res) => {
+router.post("/", rateLimit, tenant(), async (req, res) => {
   const body = req.body ?? {};
   const { clientId, courseId, playerTags, groupTag, createdAt, completedAt, scores } = body;
 
@@ -160,9 +161,12 @@ router.post("/", rateLimit, async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // Course must exist (pars feed the reward computation below).
-    const courseRes = await client.query("select id, pars from course where id = $1", [courseId]);
-    if (courseRes.rowCount === 0) {
+    // Course must exist AND belong to this tenant (pars feed the reward
+    // computation below). A foreign tenant's course id answers exactly like a
+    // nonexistent one — a guessed/stale UUID must not write a round onto
+    // another venue's leaderboard.
+    const course = await findTenantCourse(courseId, req.tenant, client);
+    if (!course) {
       await client.query("ROLLBACK");
       return res.status(400).json({ ok: false, error: "courseId does not exist" });
     }
@@ -221,7 +225,7 @@ router.post("/", rateLimit, async (req, res) => {
           courseId,
           playerTags,
           scoreRows: collected.rows,
-          pars: courseRes.rows[0].pars,
+          pars: course.pars,
         });
       }
     } else {

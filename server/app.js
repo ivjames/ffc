@@ -11,6 +11,7 @@ import { router as leaderboardRouter } from "./routes/leaderboard.js";
 import { router as seedRouter } from "./routes/seed.js";
 import { router as locationsRouter } from "./routes/locations.js";
 import { router as contentRouter } from "./routes/content.js";
+import { router as manifestRouter } from "./routes/manifest.js";
 import { router as huntRouter } from "./routes/hunt.js";
 import { router as photosRouter } from "./routes/photos.js";
 import { router as adminRouter } from "./routes/admin/index.js";
@@ -18,6 +19,7 @@ import { router as authRouter } from "./routes/auth.js";
 import { router as teamsRouter } from "./routes/teams.js";
 import { router as gamesRouter } from "./routes/games.js";
 import { attachUser } from "./lib/userAuth.js";
+import { BRAND_ASSET_DIR } from "./lib/brandAssets.js";
 import { router as announcementsRouter } from "./routes/announcements.js";
 import { router as rewardsRouter } from "./routes/rewards.js";
 import { router as gameRewardsRouter } from "./routes/gameRewards.js";
@@ -54,6 +56,9 @@ app.use((req, res, next) => {
   // Venue sticker SVG uploads exceed the 256kb cap; the admin router carries
   // its own parser.
   if (path === "/api/admin/booth-stickers") return next();
+  // Org branding asset uploads (base64 logo/icon files) exceed the cap too;
+  // the admin orgs router installs its own 3mb parser for this path.
+  if (/^\/api\/admin\/orgs\/[^/]+\/branding\/assets$/.test(path)) return next();
   // Same deal for the (temporary) admin vision bake-off — base64 photos on
   // both /describe and /prescan; the router carries its own 16mb parser.
   if (path.startsWith("/api/admin/vision-bakeoff/")) return next();
@@ -81,6 +86,36 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, build: BUILD_ID });
 });
 
+// Uploaded org branding assets (logos/icons — routes/admin/orgs.js writes
+// them). Living under /api/ means the existing nginx /api proxy carries these
+// on EVERY tenant subdomain with zero nginx changes. Filenames are content-
+// hashed (<kind>-<sha256-12>.<ext>), so cache hard and immutable; a re-upload
+// is a new name, never a stale hit. fallthrough:false keeps misses out of the
+// API routers below (they'd never match anyway — fail here, precisely).
+app.use(
+  "/api/brand-assets",
+  express.static(BRAND_ASSET_DIR, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: "365d",
+    index: false,
+    redirect: false,
+    dotfiles: "deny",
+    setHeaders(res) {
+      // Defense in depth for SVG (an XSS vector when navigated directly):
+      // serve every asset inert — same posture as the booth-sticker endpoint.
+      res.set("X-Content-Type-Options", "nosniff");
+      res.set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    },
+  }),
+  // fallthrough:false surfaces misses/denials as errors — keep the API's JSON
+  // error shape instead of Express's default HTML error page.
+  (err, _req, res, _next) => {
+    const status = err.statusCode || err.status || 404;
+    res.status(status).json({ ok: false, error: status === 403 ? "forbidden" : "not found" });
+  }
+);
+
 // Resolve the player-session cookie (if any) to req.user for every /api route.
 // Anonymous requests pass through with req.user = null — nothing public
 // changes behavior. Individual routers opt in to requiring a user.
@@ -92,6 +127,8 @@ app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/seed", seedRouter);
 app.use("/api/locations", locationsRouter);
 app.use("/api/content", contentRouter);
+// Per-tenant PWA manifest — index.html links here instead of a static file.
+app.use("/api/manifest.webmanifest", manifestRouter);
 // Player accounts — passwordless email sign-in.
 app.use("/api/auth", authRouter);
 // Persistent teams (signed-in players only — guarded inside the router).

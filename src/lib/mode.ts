@@ -2,19 +2,22 @@
 //
 // The whole environment is driven by the `--color-fairway-*` ramp in index.css,
 // which has a dark set (default) and a light set under `:root[data-theme=light]`.
-// All this module does is flip the `data-theme` attribute on <html> (and keep
-// the PWA status-bar color in step); the CSS does the actual recoloring, so no
-// component has to re-render to change theme.
+// All this module does is flip the `data-theme` attribute on <html>; the CSS
+// does the actual recoloring, so no component has to re-render to change
+// theme. The PWA status-bar color (`theme-color` meta) has ONE writer —
+// src/lib/branding.ts — because an org's explicit themeColor must override the
+// mode greys; this module only pokes it after a flip.
 //
 // With no explicit choice the app follows the OS preference (and keeps
 // following live OS changes until the user picks a mode). The initial attribute
 // is set by a tiny inline script in index.html BEFORE first paint, so there's
 // no flash of the wrong theme; this module reads it back and takes over.
 
+import { applyThemeColorMeta } from './branding';
+
 export type Mode = 'light' | 'dark';
 
 const KEY = 'ffc-theme';
-const THEME_COLOR: Record<Mode, string> = { dark: '#2f2f2f', light: '#eaeaea' };
 
 // The user's saved choice, or null if they've never toggled (→ follow the OS).
 function storedMode(): Mode | null {
@@ -44,9 +47,10 @@ let current: Mode = readInitial();
 const listeners = new Set<() => void>();
 
 function apply(mode: Mode): void {
+  // dataset first — applyThemeColorMeta reads it back to pick the mode grey
+  // (unless the org's explicit themeColor owns the meta).
   document.documentElement.dataset.theme = mode;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', THEME_COLOR[mode]);
+  applyThemeColorMeta();
 }
 
 export function getMode(): Mode {

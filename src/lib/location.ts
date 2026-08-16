@@ -33,11 +33,13 @@ function write(key: string, value: string | null): void {
   }
 }
 
-/** The stored location id, or the first location as a safe default. Always
- *  returns a valid id so callers never handle an "unset" state. */
+/** The stored location id, or the first location as a safe default. Returns
+ *  '' only when the catalog has zero locations (an un-onboarded tenant) — an
+ *  id that matches nothing, so lookups take their undefined/empty branches
+ *  instead of crashing on LOCATIONS[0]. */
 export function getCurrentLocationId(): string {
   const stored = read(KEY);
-  return isKnown(stored) ? stored : LOCATIONS[0].id;
+  return isKnown(stored) ? stored : (LOCATIONS[0]?.id ?? '');
 }
 
 /** True when the current site was chosen by hand (so GPS shouldn't override). */

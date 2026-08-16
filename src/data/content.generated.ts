@@ -55,6 +55,24 @@ export type GeneratedCourse = {
   sortOrder: number;
 };
 
+// The tenant org the payload was filtered by (MULTI-VENUE.md §3), or null when
+// the server resolved no tenant. `branding` is a partial overlay; the typed
+// shape + defaults live in src/lib/branding.ts (kept loose here so this
+// generated file stays import-free).
+export type GeneratedOrg = {
+  id: string;
+  slug: string;
+  name: string;
+  branding: Record<string, string>;
+};
+
+export const GENERATED_ORG: GeneratedOrg | null = {
+  id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  slug: "bullwinkles",
+  name: "Bullwinkle's",
+  branding: {},
+};
+
 export const GENERATED_LOCATIONS: GeneratedLocation[] = [
   {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",

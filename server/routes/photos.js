@@ -32,6 +32,7 @@ import {
 } from "../lib/imageTypes.js";
 import { resolveBoothRetentionDays } from "../lib/boothPhotoRetention.js";
 import { inBudgetReservation, BUDGET_LOCKS } from "../lib/diskBudget.js";
+import { tenant, tenantOrgFilter, tenantParams, findTenantLocation } from "../lib/tenant.js";
 
 export const router = Router();
 
@@ -118,17 +119,22 @@ router.get("/retention", (_req, res) => {
 // The venue's active sticker sheet (public — these are branded decorations,
 // not user content). Returns ids + label + intrinsic size so the client sizes
 // each with the right aspect; the SVG bytes come from /stickers/:id/image.
-router.get("/stickers", async (req, res) => {
+router.get("/stickers", tenant(), async (req, res) => {
   const location = req.query.location;
   if (typeof location !== "string" || !UUID_RE.test(location)) {
     return res.status(400).json({ ok: false, error: "location (uuid) is required" });
   }
   try {
+    // Tenant-scoped: a foreign tenant's location id answers like a nonexistent
+    // one (an empty sheet) — stickers are another client's branding.
     const result = await pool.query(
-      `select id, label, width, height, kind, corner from booth_sticker
-        where location_id = $1 and active = true
-        order by sort_order asc, created_at asc`,
-      [location]
+      `select b.id, b.label, b.width, b.height, b.kind, b.corner
+         from booth_sticker b
+         join location l on l.id = b.location_id
+        where b.location_id = $1 and b.active = true
+          ${tenantOrgFilter(req.tenant, "l.org_id", "$2")}
+        order by b.sort_order asc, b.created_at asc`,
+      [location, ...tenantParams(req.tenant)]
     );
     return res.json(result.rows);
   } catch (err) {
@@ -140,16 +146,21 @@ router.get("/stickers", async (req, res) => {
 // --- GET /api/photos/stickers/:id/image -------------------------------------
 // Serve a venue sticker asset (SVG or PNG), hardened so it can only ever render
 // as inert image data (see SVG_CSP). The client draws it via <img>/canvas.
-router.get("/stickers/:id/image", async (req, res) => {
+router.get("/stickers/:id/image", tenant(), async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) {
     return res.status(400).json({ ok: false, error: "bad sticker id" });
   }
   try {
+    // Tenant-scoped like the list: a foreign sticker id 404s exactly like a
+    // nonexistent one, so guessed UUIDs can't pull another client's assets.
     const result = await pool.query(
-      `select svg_path as "svgPath", media_type as "mediaType"
-         from booth_sticker where id = $1 and active = true`,
-      [id]
+      `select b.svg_path as "svgPath", b.media_type as "mediaType"
+         from booth_sticker b
+         join location l on l.id = b.location_id
+        where b.id = $1 and b.active = true
+          ${tenantOrgFilter(req.tenant, "l.org_id", "$2")}`,
+      [id, ...tenantParams(req.tenant)]
     );
     if (result.rowCount === 0) {
       return res.status(404).json({ ok: false, error: "not found" });
@@ -239,6 +250,7 @@ router.post(
   "/",
   uploadRateLimit,
   express.json({ limit: "16mb" }),
+  tenant(),
   async (req, res) => {
     const body = req.body ?? {};
     const { boothId, locationId, imageBase64, mediaType } = body;
@@ -268,17 +280,16 @@ router.post(
 
     try {
       // The venue at upload time scopes the admin review surface. Optional and
-      // best-effort: an unknown/archived location never fails the upload, it
-      // just stores null (super_admin-only in review, the hunt precedent).
-      // Resolved before the reservation below, so the lock is held only for
-      // the work that actually needs serializing.
+      // best-effort: an unknown/archived — or foreign-tenant — location never
+      // fails the upload, it just stores null (super_admin-only in review, the
+      // hunt precedent). The tenant check keeps a guessed id from planting
+      // photos in another client's review queue. Resolved before the
+      // reservation below, so the lock is held only for the work that
+      // actually needs serializing.
       let venueId = null;
       if (typeof locationId === "string" && UUID_RE.test(locationId)) {
-        const loc = await pool.query(
-          `select id from location where id = $1 and archived_at is null`,
-          [locationId]
-        );
-        if (loc.rowCount > 0) venueId = loc.rows[0].id;
+        const loc = await findTenantLocation(locationId, req.tenant);
+        if (loc) venueId = loc.id;
       }
 
       // Both limits are checked and consumed inside ONE serialized
