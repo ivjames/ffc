@@ -2,27 +2,37 @@
 # /etc/nginx/sites-available/<fqdn> symlinked into sites-enabled/.
 #
 # Placeholders to replace:
-#   __FQDN__     e.g. minigolf.lab980.com   (or an apex like putt.example.com)
+#   __FQDN__     e.g. minigolf.lab980.com   (or an apex like putt.example.com);
+#                also serves every client subdomain via *.__FQDN__ (see below)
 #   __APP_DIR__  e.g. /var/www/ffc
 #   __API_PORT__ e.g. 8060  (the Node/Express API's local pm2 port)
 #   __CE_MOCK_PORT__ e.g. 8070  (the CenterEdge mock's local pm2 port)
 #
-# TLS is added by certbot (`certbot --nginx -d __FQDN__ --redirect`), which
-# rewrites this file to add the 443 server block + HTTP->HTTPS redirect.
+# TLS is added by certbot via `ffc vhost`: once the wildcard cert exists
+# (`ffc wildcard-cert`, covers __FQDN__ + *.__FQDN__) that lineage is installed
+# here; before then it falls back to `certbot --nginx -d __FQDN__` (single-name
+# — client subdomains need the wildcard). Either way certbot rewrites this file
+# to add the 443 server block + HTTP->HTTPS redirect.
 # §3: HTTPS is mandatory — the service worker (offline + install) only runs in
 # a secure context and silently fails without TLS in production.
 
 server {
     listen 80;
     listen [::]:80;
-    server_name __FQDN__;
+    # Multi-venue: each client org is served on <org-slug>.__FQDN__ — the
+    # wildcard routes every client subdomain to this same vhost, and the API
+    # resolves the tenant from the Host header (which the /api/ proxy below
+    # passes through intact). The admin vhost's exact admin.__FQDN__ name
+    # still wins over this wildcard (nginx: exact match beats wildcard).
+    server_name __FQDN__ *.__FQDN__;
 
     # Static build served from the atomically-swapped release symlink.
     root __APP_DIR__/current/dist;
     index index.html;
 
     # API → Node/Express (pm2) on its local port. Must come before the SPA
-    # fallback so /api/* is never rewritten to index.html.
+    # fallback so /api/* is never rewritten to index.html. This prefix also
+    # carries the per-tenant PWA manifest (/api/manifest.webmanifest).
     location /api/ {
         # Scavenger-hunt photo uploads (POST /api/hunt/verify) carry a base64
         # image; the default 1m cap would 413 them. Keep this aligned with the
@@ -31,6 +41,8 @@ server {
 
         proxy_pass http://127.0.0.1:__API_PORT__;
         proxy_http_version 1.1;
+        # Host must be the ORIGINAL client host — tenant resolution
+        # (server/lib/tenant.js) derives the org from its first DNS label.
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
