@@ -10,7 +10,7 @@ import {
   type Location,
   type VenueHours,
 } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, Pill, useAsync, fmtDateTime } from './ui';
+import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Select, Spinner, useAsync, useToast, fmtDateTime } from './ui';
 
 const HOURS_DAY_LABELS: Record<HoursDayKey, string> = {
   mon: 'Mon',
@@ -160,6 +160,7 @@ function CourseCard({ course, onChanged }: { course: Course; onChanged: () => vo
   const [pars, setPars] = useState<number[]>(course.pars);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   const total = pars.reduce((a, b) => a + b, 0);
 
@@ -168,6 +169,7 @@ function CourseCard({ course, onChanged }: { course: Course; onChanged: () => vo
     setBusy(true);
     try {
       await api.patchCourse(course.id, { name: name.trim(), theme: theme.trim(), pars });
+      toast('Course saved.');
       onChanged();
     } catch (e) {
       setErr((e as Error).message);
@@ -177,6 +179,7 @@ function CourseCard({ course, onChanged }: { course: Course; onChanged: () => vo
   }
   async function archive() {
     await api.archiveCourse(course.id, true);
+    toast('Course archived.');
     onChanged();
   }
 
@@ -215,6 +218,7 @@ function AddCourse({ locationId, onAdded }: { locationId: string; onAdded: () =>
   const [theme, setTheme] = useState('blue');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -228,6 +232,7 @@ function AddCourse({ locationId, onAdded }: { locationId: string; onAdded: () =>
         pars: Array(18).fill(3),
       });
       setName('');
+      toast('Course added.');
       onAdded();
     } catch (e) {
       setErr((e as Error).message);
@@ -350,6 +355,7 @@ function LocationForm({
   const [hoursState, setHoursState] = useState<HoursState>(() => hoursToState(location.hours));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   // Only explicit overrides ship; all-blank collapses to "no caps object".
   function buildCaps() {
@@ -408,6 +414,7 @@ function LocationForm({
                       },
               },
       });
+      toast('Location saved.');
       onSaved();
     } catch (e) {
       setErr((e as Error).message);
@@ -460,14 +467,10 @@ function LocationForm({
       <div className="mt-3 border-t border-slate-200 pt-3">
         <div className="grid grid-cols-2 gap-2">
           <Field label="Food ordering POS" hint="Native in-app ordering. None = deep links only.">
-            <select
-              value={ordVendor}
-              onChange={(e) => setOrdVendor(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-            >
+            <Select value={ordVendor} onChange={(e) => setOrdVendor(e.target.value)} className="w-full">
               <option value="">None</option>
               <option value="centeredge">CenterEdge</option>
-            </select>
+            </Select>
           </Field>
           {ordVendor !== '' && (
             <Field label="Ordering API base URL" hint="Optional per-venue endpoint override.">
@@ -480,17 +483,17 @@ function LocationForm({
             </Field>
           )}
           <Field label="Loyalty / rewards POS" hint="Player card balances in the app. None = no rewards surface.">
-            <select
+            <Select
               value={loyVendor}
               onChange={(e) => {
                 setLoyVendor(e.target.value);
                 if (e.target.value === '') setGameRewards(false); // rides on loyalty
               }}
-              className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              className="w-full"
             >
               <option value="">None</option>
               <option value="centeredge">CenterEdge</option>
-            </select>
+            </Select>
           </Field>
           {loyVendor !== '' && (
             <Field label="Loyalty API base URL" hint="Optional per-venue endpoint override.">
@@ -536,6 +539,7 @@ function LocationForm({
 
 export default function LocationDetail() {
   const { id = '' } = useParams();
+  const toast = useToast();
   const { data, error, loading, reload } = useAsync(async () => {
     const [detail, allCourses, gameRewardsMeta] = await Promise.all([
       api.getLocation(id),
@@ -558,21 +562,29 @@ export default function LocationDetail() {
 
   async function toggleArchive() {
     await api.archiveLocation(id, !location.archivedAt);
+    toast(location.archivedAt ? 'Location unarchived.' : 'Location archived.');
     reload();
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">{location.name}</h1>
-        <span className="text-xs text-slate-400">/{location.slug}</span>
-        {location.archivedAt && <Pill tone="amber">Archived</Pill>}
-        <div className="ml-auto">
+      <BackLink to={location.orgId ? `/orgs/${location.orgId}` : '/orgs'}>
+        {location.orgId ? 'Org' : 'Orgs'}
+      </BackLink>
+      <PageHeader
+        title={location.name}
+        titleExtra={
+          <>
+            <span className="text-xs text-slate-400">/{location.slug}</span>
+            {location.archivedAt && <Pill tone="amber">Archived</Pill>}
+          </>
+        }
+        actions={
           <Button variant={location.archivedAt ? 'ghost' : 'danger'} onClick={toggleArchive}>
             {location.archivedAt ? 'Unarchive location' : 'Archive location'}
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       <LocationForm location={location} gameRewardsMeta={gameRewardsMeta} onSaved={reload} />
 
@@ -603,6 +615,7 @@ export default function LocationDetail() {
                 variant="ghost"
                 onClick={async () => {
                   await api.archiveCourse(c.id, false);
+                  toast('Course unarchived.');
                   reload();
                 }}
               >

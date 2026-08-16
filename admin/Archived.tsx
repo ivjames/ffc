@@ -1,20 +1,25 @@
 import { api } from './api';
-import { Button, Card, Banner, Spinner, useAsync, fmtDateTime, ADMIN_TZ_LABEL } from './ui';
+import { Button, Card, Banner, PageHeader, Spinner, useAsync, useToast, fmtDateTime, ADMIN_TZ_LABEL } from './ui';
 
 export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const orgs = useAsync(() => api.listOrgs(true), []);
   const locations = useAsync(() => api.listLocations({ archived: true }), []);
+  const toast = useToast();
 
   const archivedOrgs = orgs.data?.filter((o) => o.archivedAt) ?? [];
   const archivedLocations = locations.data?.filter((l) => l.archivedAt) ?? [];
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Archived</h1>
-      <p className="text-sm text-slate-500">
-        Archived items are hidden from players and the main lists, but nothing is deleted — history stays intact.
-        Unarchive to restore. Times shown in {ADMIN_TZ_LABEL}.
-      </p>
+      <PageHeader
+        title="Archived"
+        description={
+          <>
+            Archived items are hidden from players and the main lists, but nothing is deleted —
+            history stays intact. Unarchive to restore. Times shown in {ADMIN_TZ_LABEL}.
+          </>
+        }
+      />
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-slate-700">Orgs</h2>
@@ -34,6 +39,7 @@ export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                 variant="ghost"
                 onClick={async () => {
                   await api.archiveOrg(o.id, false);
+                  toast('Org unarchived.');
                   orgs.reload();
                 }}
               >
@@ -61,6 +67,7 @@ export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               variant="ghost"
               onClick={async () => {
                 await api.archiveLocation(l.id, false);
+                toast('Location unarchived.');
                 locations.reload();
               }}
             >

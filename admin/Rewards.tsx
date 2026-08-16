@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, type GameRewardsMeta } from './api';
-import { Card, Banner, Spinner, useAsync } from './ui';
+import { Card, Banner, EmptyState, PageHeader, Select, Spinner, Table, Th, Td, useAsync } from './ui';
 
 // Rewards & usage reporting. Since #157 tickets are the only player-facing
 // reward — golf achievements pay straight to a loyalty card and no counter
@@ -38,91 +38,79 @@ function AchievementRewards({ days }: { days: number }) {
       {summary.loading && <Spinner />}
       {summary.error && <Banner kind="error">{summary.error.message}</Banner>}
       {summary.data && summary.data.byAchievement.length === 0 && (
-        <p className="py-3 text-center text-sm text-slate-400">
-          No golf achievements earned in this window.
-        </p>
+        <EmptyState>No golf achievements earned in this window.</EmptyState>
       )}
       {summary.data && totals && summary.data.byAchievement.length > 0 && (
         <>
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full text-left text-xs">
-              <thead className="text-slate-500">
-                <tr className="border-b border-slate-200">
-                  <th className="px-3 py-2">Achievement</th>
-                  <th className="px-3 py-2 text-right">Earned</th>
-                  <th className="px-3 py-2 text-right">Banked to card</th>
-                  <th className="px-3 py-2 text-right">Pending</th>
-                  <th className="px-3 py-2 text-right">Unclaimed</th>
-                  <th className="px-3 py-2 text-right">Tickets paid</th>
+          <Card className="p-0">
+            <Table size="xs">
+              <thead>
+                <tr>
+                  <Th>Achievement</Th>
+                  <Th align="right">Earned</Th>
+                  <Th align="right">Banked to card</Th>
+                  <Th align="right">Pending</Th>
+                  <Th align="right">Unclaimed</Th>
+                  <Th align="right">Tickets paid</Th>
                 </tr>
               </thead>
               <tbody>
                 {summary.data.byAchievement.map((a) => (
-                  <tr key={a.achievement} className="border-b border-slate-100">
-                    <td className="px-3 py-1.5">{achLabel(a.achievement)}</td>
-                    <td className="px-3 py-1.5 text-right">{a.granted.toLocaleString()}</td>
-                    <td className="px-3 py-1.5 text-right">{a.cardClaims.toLocaleString()}</td>
-                    <td className="px-3 py-1.5 text-right">
-                      {a.pending > 0 ? a.pending.toLocaleString() : ''}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      {a.unclaimed > 0 ? a.unclaimed.toLocaleString() : ''}
-                    </td>
-                    <td className="px-3 py-1.5 text-right font-semibold">
+                  <tr key={a.achievement}>
+                    <Td>{achLabel(a.achievement)}</Td>
+                    <Td align="right">{a.granted.toLocaleString()}</Td>
+                    <Td align="right">{a.cardClaims.toLocaleString()}</Td>
+                    <Td align="right">{a.pending > 0 ? a.pending.toLocaleString() : ''}</Td>
+                    <Td align="right">{a.unclaimed > 0 ? a.unclaimed.toLocaleString() : ''}</Td>
+                    <Td align="right" className="font-semibold">
                       {a.tickets.toLocaleString()}
-                    </td>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="text-slate-600">
-                <tr className="border-t border-slate-200 font-semibold">
-                  <td className="px-3 py-2">Total</td>
-                  <td className="px-3 py-2 text-right">{totals.granted.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-right">{totals.cardClaims.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-right">
-                    {totals.pending > 0 ? totals.pending.toLocaleString() : ''}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {totals.unclaimed > 0 ? totals.unclaimed.toLocaleString() : ''}
-                  </td>
-                  <td className="px-3 py-2 text-right">{totals.tickets.toLocaleString()}</td>
+              <tfoot>
+                <tr className="font-semibold text-slate-600">
+                  <Td>Total</Td>
+                  <Td align="right">{totals.granted.toLocaleString()}</Td>
+                  <Td align="right">{totals.cardClaims.toLocaleString()}</Td>
+                  <Td align="right">{totals.pending > 0 ? totals.pending.toLocaleString() : ''}</Td>
+                  <Td align="right">{totals.unclaimed > 0 ? totals.unclaimed.toLocaleString() : ''}</Td>
+                  <Td align="right">{totals.tickets.toLocaleString()}</Td>
                 </tr>
               </tfoot>
-            </table>
+            </Table>
           </Card>
 
           {summary.data.rows.length > 0 && (
-            <Card className="overflow-x-auto p-0">
-              <table className="w-full text-left text-xs">
-                <thead className="text-slate-500">
-                  <tr className="border-b border-slate-200">
-                    <th className="px-3 py-2">Day</th>
-                    <th className="px-3 py-2">Venue</th>
-                    <th className="px-3 py-2">Achievement</th>
-                    <th className="px-3 py-2 text-right">Earned</th>
-                    <th className="px-3 py-2 text-right">Banked</th>
-                    <th className="px-3 py-2 text-right">Pending</th>
-                    <th className="px-3 py-2 text-right">Tickets</th>
+            <Card className="p-0">
+              <Table size="xs">
+                <thead>
+                  <tr>
+                    <Th>Day</Th>
+                    <Th>Venue</Th>
+                    <Th>Achievement</Th>
+                    <Th align="right">Earned</Th>
+                    <Th align="right">Banked</Th>
+                    <Th align="right">Pending</Th>
+                    <Th align="right">Tickets</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {summary.data.rows.map((r, i) => (
-                    <tr key={i} className="border-b border-slate-100">
-                      <td className="px-3 py-1.5 whitespace-nowrap">{r.day.slice(0, 10)}</td>
-                      <td className="px-3 py-1.5">{r.locationName ?? '—'}</td>
-                      <td className="px-3 py-1.5">{achLabel(r.achievement)}</td>
-                      <td className="px-3 py-1.5 text-right">{r.granted.toLocaleString()}</td>
-                      <td className="px-3 py-1.5 text-right">{r.cardClaims.toLocaleString()}</td>
-                      <td className="px-3 py-1.5 text-right">
-                        {r.pending > 0 ? r.pending.toLocaleString() : ''}
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-semibold">
+                    <tr key={i}>
+                      <Td className="whitespace-nowrap">{r.day.slice(0, 10)}</Td>
+                      <Td>{r.locationName ?? '—'}</Td>
+                      <Td>{achLabel(r.achievement)}</Td>
+                      <Td align="right">{r.granted.toLocaleString()}</Td>
+                      <Td align="right">{r.cardClaims.toLocaleString()}</Td>
+                      <Td align="right">{r.pending > 0 ? r.pending.toLocaleString() : ''}</Td>
+                      <Td align="right" className="font-semibold">
                         {r.tickets.toLocaleString()}
-                      </td>
+                      </Td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </Card>
           )}
         </>
@@ -158,41 +146,41 @@ function GameTicketIssuance({ days }: { days: number }) {
       {usage.loading && <Spinner />}
       {usage.error && <Banner kind="error">{usage.error.message}</Banner>}
       {usage.data && usage.data.rows.length === 0 && (
-        <p className="py-3 text-center text-sm text-slate-400">
-          No app tickets issued in this window.
-        </p>
+        <EmptyState>No app tickets issued in this window.</EmptyState>
       )}
       {usage.data && usage.data.rows.length > 0 && (
         <>
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full text-left text-xs">
-              <thead className="text-slate-500">
-                <tr className="border-b border-slate-200">
-                  <th className="px-3 py-2">Day</th>
-                  <th className="px-3 py-2">Venue</th>
-                  <th className="px-3 py-2">Game</th>
-                  <th className="px-3 py-2 text-right">Rounds</th>
-                  <th className="px-3 py-2 text-right">Cards</th>
-                  <th className="px-3 py-2 text-right">Capped</th>
-                  <th className="px-3 py-2 text-right">Pending</th>
-                  <th className="px-3 py-2 text-right">Tickets</th>
+          <Card className="p-0">
+            <Table size="xs">
+              <thead>
+                <tr>
+                  <Th>Day</Th>
+                  <Th>Venue</Th>
+                  <Th>Game</Th>
+                  <Th align="right">Rounds</Th>
+                  <Th align="right">Cards</Th>
+                  <Th align="right">Capped</Th>
+                  <Th align="right">Pending</Th>
+                  <Th align="right">Tickets</Th>
                 </tr>
               </thead>
               <tbody>
                 {usage.data.rows.map((r, i) => (
-                  <tr key={i} className="border-b border-slate-100">
-                    <td className="px-3 py-1.5 whitespace-nowrap">{r.day.slice(0, 10)}</td>
-                    <td className="px-3 py-1.5">{r.locationName}</td>
-                    <td className="px-3 py-1.5">{gameLabel(r.game)}</td>
-                    <td className="px-3 py-1.5 text-right">{r.rounds}</td>
-                    <td className="px-3 py-1.5 text-right">{r.cards}</td>
-                    <td className="px-3 py-1.5 text-right">{r.cappedRounds > 0 ? r.cappedRounds : ''}</td>
-                    <td className="px-3 py-1.5 text-right">{r.pendingRounds > 0 ? r.pendingRounds : ''}</td>
-                    <td className="px-3 py-1.5 text-right font-semibold">{r.tickets.toLocaleString()}</td>
+                  <tr key={i}>
+                    <Td className="whitespace-nowrap">{r.day.slice(0, 10)}</Td>
+                    <Td>{r.locationName}</Td>
+                    <Td>{gameLabel(r.game)}</Td>
+                    <Td align="right">{r.rounds}</Td>
+                    <Td align="right">{r.cards}</Td>
+                    <Td align="right">{r.cappedRounds > 0 ? r.cappedRounds : ''}</Td>
+                    <Td align="right">{r.pendingRounds > 0 ? r.pendingRounds : ''}</Td>
+                    <Td align="right" className="font-semibold">
+                      {r.tickets.toLocaleString()}
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </Card>
 
           {usage.data.topCards.length > 0 && (
@@ -222,22 +210,17 @@ export default function Rewards() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">Rewards &amp; usage</h1>
-        <select
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-          className="ml-auto rounded border border-slate-300 px-1.5 py-1 text-xs"
-        >
-          <option value={7}>Last 7 days</option>
-          <option value={30}>Last 30 days</option>
-          <option value={90}>Last 90 days</option>
-        </select>
-      </div>
-      <p className="-mt-2 text-xs text-slate-500">
-        Tickets are the only player-facing reward — golf achievements pay straight to a
-        loyalty card, so there are no counter codes to redeem.
-      </p>
+      <PageHeader
+        title="Rewards & usage"
+        description="Tickets are the only player-facing reward — golf achievements pay straight to a loyalty card, so there are no counter codes to redeem."
+        actions={
+          <Select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </Select>
+        }
+      />
 
       <AchievementRewards days={days} />
       <GameTicketIssuance days={days} />

@@ -10,3 +10,26 @@ body {
   background: #f1f5f9;
   color: #0f172a;
 }
+
+@keyframes ffc-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* Duration alone isn't enough: infinite animations (spin, pulse) would
+       still cycle every 0.01ms and flicker — cap the iteration count too. */
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

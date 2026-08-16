@@ -1,10 +1,11 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from './api';
-import { Button, Card, Banner, Spinner, Pill, useAsync } from './ui';
+import { BackLink, Button, Card, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
 
 export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { id = '' } = useParams();
   const nav = useNavigate();
+  const toast = useToast();
   const { data, error, loading, reload } = useAsync(() => api.getOrg(id), [id]);
 
   if (loading) return <Spinner />;
@@ -14,28 +15,34 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
   async function toggleArchive() {
     await api.archiveOrg(id, !org.archivedAt);
+    toast(org.archivedAt ? 'Org unarchived.' : 'Org archived.');
     reload();
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">{org.name}</h1>
-          <div className="text-xs text-slate-400">/{org.slug}</div>
-        </div>
-        {org.archivedAt && <Pill tone="amber">Archived</Pill>}
-        <div className="ml-auto flex gap-2">
-          <Link to={`/locations/new?orgId=${org.id}`}>
-            <Button>+ Location</Button>
-          </Link>
-          {isSuperAdmin && (
-            <Button variant={org.archivedAt ? 'ghost' : 'danger'} onClick={toggleArchive}>
-              {org.archivedAt ? 'Unarchive' : 'Archive'}
-            </Button>
-          )}
-        </div>
-      </div>
+      <BackLink to="/orgs">Orgs</BackLink>
+      <PageHeader
+        title={org.name}
+        titleExtra={
+          <>
+            <span className="text-xs text-slate-400">/{org.slug}</span>
+            {org.archivedAt && <Pill tone="amber">Archived</Pill>}
+          </>
+        }
+        actions={
+          <>
+            <Link to={`/locations/new?orgId=${org.id}`}>
+              <Button>+ Location</Button>
+            </Link>
+            {isSuperAdmin && (
+              <Button variant={org.archivedAt ? 'ghost' : 'danger'} onClick={toggleArchive}>
+                {org.archivedAt ? 'Unarchive' : 'Archive'}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold text-slate-700">Locations</h2>

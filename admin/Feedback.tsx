@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AdminFeedback, type AdminFeedbackStatus } from './api';
-import { Button, Card, Banner, Spinner, Pill, fmtDateTime } from './ui';
+import { Button, Card, Banner, EmptyState, PageHeader, Pill, Segmented, Spinner, fmtDateTime, useObjectUrl, useToast } from './ui';
 
 // Reviewer commentary — the operator side of the in-app feedback widget
 // (player side: the 💬 pill in the app's dev cluster). Every note arrives with
@@ -11,37 +11,11 @@ import { Button, Card, Banner, Spinner, Pill, fmtDateTime } from './ui';
 // and reversible. Delete is for notes that shouldn't persist at all (a
 // mis-file, a duplicate, a screenshot that caught something it shouldn't).
 
-// <img src> can't carry the admin auth header, so the screenshot is fetched
-// into an object URL (revoked on unmount so removed shots don't leak).
+// The thumbnail uses the shared authed-image hook (not BlobThumb) because a
+// loaded screenshot is clickable: it's the evidence, so it opens full size.
 function Screenshot({ id }: { id: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  const { url, failed } = useObjectUrl(() => api.fetchFeedbackScreenshot(id), [id]);
   const [expanded, setExpanded] = useState(false);
-
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    api.fetchFeedbackScreenshot(id).then(
-      (blob) => {
-        // Resolved after unmount: cleanup already ran, so revoke right here —
-        // assigning objectUrl instead would leak the blob for the SPA's life.
-        const u = URL.createObjectURL(blob);
-        if (cancelled) {
-          URL.revokeObjectURL(u);
-          return;
-        }
-        objectUrl = u;
-        setUrl(u);
-      },
-      () => {
-        if (!cancelled) setFailed(true);
-      }
-    );
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [id]);
 
   if (failed) {
     return (
@@ -93,6 +67,7 @@ function FeedbackRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const resolved = note.status === 'resolved';
 
   async function run(fn: () => Promise<void>) {
@@ -160,6 +135,7 @@ function FeedbackRow({
             }
             void run(async () => {
               await api.removeFeedback(note.id);
+              toast('Note deleted.');
               onRemoved();
             });
           }}
@@ -210,27 +186,22 @@ export default function Feedback() {
     void loadPage([]);
   }, [loadPage]);
 
-  const tabCls = (f: Filter) =>
-    `rounded-md px-3 py-1.5 text-sm font-medium ${
-      filter === f ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-300'
-    }`;
-
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Feedback</h1>
-      <p className="text-sm text-slate-500">
-        Notes filed by reviewers from inside the app — each one carries the screen it was written
-        on, the build it was written against, and a screenshot when the reviewer attached one.
-        Mark a note resolved once it's been dealt with (reversible), or delete it outright.
-      </p>
+      <PageHeader
+        title="Feedback"
+        description="Notes filed by reviewers from inside the app — each one carries the screen it was written on, the build it was written against, and a screenshot when the reviewer attached one. Mark a note resolved once it's been dealt with (reversible), or delete it outright."
+      />
 
-      <div className="flex gap-2">
-        {(['open', 'resolved', 'all'] as Filter[]).map((f) => (
-          <button key={f} type="button" className={tabCls(f)} onClick={() => setFilter(f)}>
-            {f === 'all' ? 'All' : f === 'open' ? 'Open' : 'Resolved'}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { value: 'open', label: 'Open' },
+          { value: 'resolved', label: 'Resolved' },
+          { value: 'all', label: 'All' },
+        ]}
+      />
 
       {error && <Banner kind="error">{error.message}</Banner>}
       {notes && (
@@ -255,9 +226,9 @@ export default function Feedback() {
             />
           ))}
           {notes.length === 0 && !loading && (
-            <p className="py-4 text-center text-sm text-slate-400">
+            <EmptyState>
               {filter === 'resolved' ? 'Nothing resolved yet.' : 'No feedback right now.'}
-            </p>
+            </EmptyState>
           )}
         </div>
       )}

@@ -8,7 +8,7 @@
 // server/routes/admin/syntheticBot.js.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type SyntheticBotParams, type SyntheticProjection } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, Pill, fmtDateTime, useAsync } from './ui';
+import { Button, Card, Field, Input, Banner, PageHeader, Pill, Select, Spinner, Table, Th, Td, fmtDateTime, useAsync } from './ui';
 
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
@@ -146,14 +146,16 @@ export default function SyntheticBot() {
           Couldn’t refresh status — showing last-known state, retrying… ({error.message})
         </Banner>
       )}
-      <div>
-        <h1 className="text-lg font-semibold">Synthetic player bot</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Drives synthetic rounds through the real production path (load/soak test, smoke test, demo
-          seed). Every round is tagged <code>synthetic</code> and lives under a reserved{' '}
-          <code>synthetic:&lt;run&gt;:&lt;uuid&gt;</code> client id, so a run is fully reversible.
-        </p>
-      </div>
+      <PageHeader
+        title="Synthetic player bot"
+        description={
+          <>
+            Drives synthetic rounds through the real production path (load/soak test, smoke test,
+            demo seed). Every round is tagged <code>synthetic</code> and lives under a reserved{' '}
+            <code>synthetic:&lt;run&gt;:&lt;uuid&gt;</code> client id, so a run is fully reversible.
+          </>
+        }
+      />
 
       {!keySet && (
         <Banner kind="error">
@@ -208,8 +210,8 @@ export default function SyntheticBot() {
       <Card>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Venue" hint="Scope the run to one venue, or play every live course.">
-            <select
-              className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
+            <Select
+              className="w-full"
               value={params.locationId}
               onChange={(e) => setParams((p) => ({ ...p, locationId: e.target.value }))}
             >
@@ -219,7 +221,7 @@ export default function SyntheticBot() {
                   {v.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Plays per course / sweep" hint="1–20 rounds per course each sweep.">
             <Input
@@ -314,43 +316,39 @@ export default function SyntheticBot() {
       </Card>
 
       {/* --- Courses the bot would play --- */}
-      <Card>
-        <div className="mb-2 font-medium">Courses ({courses.length})</div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-                <th className="py-1.5 pr-4">Venue</th>
-                <th className="py-1.5 pr-4">Course</th>
-                <th className="py-1.5 pr-4">Open now</th>
-                <th className="py-1.5 pr-4">Open hrs/wk</th>
-                <th className="py-1.5">Pars</th>
+      <Card className="p-0">
+        <div className="px-3 pt-3 font-medium">Courses ({courses.length})</div>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Venue</Th>
+              <Th>Course</Th>
+              <Th>Open now</Th>
+              <Th>Open hrs/wk</Th>
+              <Th>Pars</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {courses.map((c) => (
+              <tr key={c.courseId}>
+                <Td>{c.locationName}</Td>
+                <Td>{c.courseName}</Td>
+                <Td>{c.openNow ? <Pill tone="amber">open</Pill> : <Pill>closed</Pill>}</Td>
+                <Td>
+                  {c.weeklyOpenHours > 0 ? `${c.weeklyOpenHours.toFixed(0)}h` : <span className="text-amber-700">unset</span>}
+                </Td>
+                <Td>{c.parsKnown ? '✓' : <span className="text-slate-400">flat</span>}</Td>
               </tr>
-            </thead>
-            <tbody>
-              {courses.map((c) => (
-                <tr key={c.courseId} className="border-b border-slate-100">
-                  <td className="py-1.5 pr-4">{c.locationName}</td>
-                  <td className="py-1.5 pr-4">{c.courseName}</td>
-                  <td className="py-1.5 pr-4">
-                    {c.openNow ? <Pill tone="amber">open</Pill> : <Pill>closed</Pill>}
-                  </td>
-                  <td className="py-1.5 pr-4">
-                    {c.weeklyOpenHours > 0 ? `${c.weeklyOpenHours.toFixed(0)}h` : <span className="text-amber-700">unset</span>}
-                  </td>
-                  <td className="py-1.5">{c.parsKnown ? '✓' : <span className="text-slate-400">flat</span>}</td>
-                </tr>
-              ))}
-              {courses.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-3 text-slate-400">
-                    No live courses found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {courses.length === 0 && (
+              <tr>
+                <Td colSpan={5} className="py-3 text-center text-slate-400">
+                  No live courses found.
+                </Td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
       </Card>
     </div>
   );

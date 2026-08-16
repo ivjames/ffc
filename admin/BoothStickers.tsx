@@ -6,7 +6,7 @@ import {
   type AdminStickerCorner,
   type Location,
 } from './api';
-import { Button, Card, Banner, Spinner, Pill, fmtDateTime } from './ui';
+import { Button, Card, Banner, EmptyState, Field, Input, PageHeader, Pill, Select, Spinner, fmtDateTime, useToast } from './ui';
 
 const CORNER_LABEL: Record<AdminStickerCorner, string> = {
   tl: 'top-left',
@@ -106,6 +106,7 @@ async function prepareRaster(file: File): Promise<{ base64: string; mediaType: '
 function StickerCard({ sticker, onRemoved }: { sticker: AdminVenueSticker; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   return (
     <Card className="flex items-center gap-4">
       <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-slate-100 p-2">
@@ -140,6 +141,7 @@ function StickerCard({ sticker, onRemoved }: { sticker: AdminVenueSticker; onRem
           setError(null);
           try {
             await api.removeBoothSticker(sticker.id);
+            toast('Sticker removed.');
             onRemoved();
           } catch (err) {
             setError((err as Error).message);
@@ -167,6 +169,7 @@ export default function BoothStickers() {
   const [corner, setCorner] = useState<AdminStickerCorner>('tr');
   const [reloadKey, setReloadKey] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   useEffect(() => {
     api.listLocations().then(
@@ -253,6 +256,7 @@ export default function BoothStickers() {
         await api.uploadBoothSticker({ ...common, svg: await file.text() });
       }
       setLabel('');
+      toast('Sticker uploaded.');
       reloadStickers();
     } catch (err) {
       // Server rejection (dangerous/malformed SVG, non-PNG, too large) shows here.
@@ -264,24 +268,28 @@ export default function BoothStickers() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Booth stickers</h1>
-      <p className="text-sm text-slate-500">
-        Upload <strong>SVG</strong> or transparent <strong>PNG</strong> art for a venue.{' '}
-        <strong>Stickers</strong> are draggable decorations; <strong>frames</strong> overlay the
-        whole photo (proscenium/border); a <strong>watermark</strong> is branding forced into a
-        corner of every photo. Use a transparent background (SVG or PNG — not JPEG) so the photo
-        shows through. SVGs are validated on upload (scripts, event handlers, external references,
-        and entity/XXE payloads are rejected); everything is served and rendered as inert images.
-      </p>
+      <PageHeader
+        title="Booth stickers"
+        description={
+          <>
+            Upload <strong>SVG</strong> or transparent <strong>PNG</strong> art for a venue.{' '}
+            <strong>Stickers</strong> are draggable decorations; <strong>frames</strong> overlay the
+            whole photo (proscenium/border); a <strong>watermark</strong> is branding forced into a
+            corner of every photo. Use a transparent background (SVG or PNG — not JPEG) so the photo
+            shows through. SVGs are validated on upload (scripts, event handlers, external
+            references, and entity/XXE payloads are rejected); everything is served and rendered as
+            inert images.
+          </>
+        }
+      />
 
       {error && <Banner kind="error">{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
 
       <Card className="space-y-3">
-        <label className="block text-sm font-medium text-slate-600">
-          Venue
-          <select
-            className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        <Field label="Venue">
+          <Select
+            className="w-full"
             value={locationId}
             onChange={(e) => setLocationId(e.target.value)}
           >
@@ -290,47 +298,37 @@ export default function BoothStickers() {
                 {l.name}
               </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Field>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-sm font-medium text-slate-600">
-            Role
-            <select
-              className="mt-1 block rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={kind}
-              onChange={(e) => setKind(e.target.value as AdminStickerKind)}
-            >
+          <Field label="Role">
+            <Select value={kind} onChange={(e) => setKind(e.target.value as AdminStickerKind)}>
               <option value="sticker">Sticker</option>
               <option value="frame">Frame</option>
               <option value="watermark">Watermark</option>
-            </select>
-          </label>
+            </Select>
+          </Field>
           {kind === 'watermark' && (
-            <label className="text-sm font-medium text-slate-600">
-              Corner
-              <select
-                className="mt-1 block rounded-md border border-slate-300 px-3 py-2 text-sm"
-                value={corner}
-                onChange={(e) => setCorner(e.target.value as AdminStickerCorner)}
-              >
+            <Field label="Corner">
+              <Select value={corner} onChange={(e) => setCorner(e.target.value as AdminStickerCorner)}>
                 <option value="tr">Top-right</option>
                 <option value="tl">Top-left</option>
                 <option value="br">Bottom-right</option>
                 <option value="bl">Bottom-left</option>
-              </select>
-            </label>
+              </Select>
+            </Field>
           )}
-          <label className="flex-1 text-sm font-medium text-slate-600">
-            Label (optional)
-            <input
-              type="text"
-              value={label}
-              maxLength={100}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. House logo"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </label>
+          <div className="flex-1">
+            <Field label="Label (optional)">
+              <Input
+                type="text"
+                value={label}
+                maxLength={100}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g. House logo"
+              />
+            </Field>
+          </div>
           <input
             ref={fileRef}
             type="file"
@@ -355,9 +353,7 @@ export default function BoothStickers() {
             />
           ))}
           {stickers.length === 0 && !loading && (
-            <p className="py-4 text-center text-sm text-slate-400">
-              No stickers for this venue yet — upload one above.
-            </p>
+            <EmptyState>No stickers for this venue yet — upload one above.</EmptyState>
           )}
         </div>
       )}

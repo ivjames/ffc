@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AdminPhoto } from './api';
-import { Button, Card, Banner, Spinner, Pill, fmtDateTime } from './ui';
+import { BlobThumb, Button, Card, Banner, EmptyState, PageHeader, Pill, Segmented, Spinner, fmtDateTime, useToast } from './ui';
 
 // Hunt-photo review — the operator side of the scavenger-hunt photo pipeline.
 // Every stored photo is listed here (auto-moderation already blocked unsafe
@@ -13,52 +13,17 @@ import { Button, Card, Banner, Spinner, Pill, fmtDateTime } from './ui';
 
 type Filter = 'all' | 'people' | 'minors';
 
-// <img src> can't carry the admin auth header, so each thumbnail fetches its
-// bytes into an object URL (revoked on unmount so removed photos don't leak).
-function PhotoThumb({ id, alt }: { id: string; alt: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    api.fetchPhotoImage(id).then(
-      (blob) => {
-        // Resolved after unmount: cleanup already ran, so revoke right here —
-        // assigning objectUrl instead would leak the blob for the SPA's life.
-        const u = URL.createObjectURL(blob);
-        if (cancelled) {
-          URL.revokeObjectURL(u);
-          return;
-        }
-        objectUrl = u;
-        setUrl(u);
-      },
-      () => {
-        if (!cancelled) setFailed(true);
-      }
-    );
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [id]);
-  if (failed) {
-    return (
-      <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs text-slate-400">
-        unavailable
-      </div>
-    );
-  }
-  if (!url) return <div className="h-28 w-28 shrink-0 animate-pulse rounded-md bg-slate-100" />;
-  return <img src={url} alt={alt} className="h-28 w-28 shrink-0 rounded-md object-cover" />;
-}
-
 function PhotoRow({ photo, onRemoved }: { photo: AdminPhoto; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   return (
     <Card className="flex items-center gap-4">
-      <PhotoThumb id={photo.id} alt={`${photo.itemName} found by ${photo.playerTag}`} />
+      <BlobThumb
+        fetchBlob={() => api.fetchPhotoImage(photo.id)}
+        refetchKey={photo.id}
+        alt={`${photo.itemName} found by ${photo.playerTag}`}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{photo.itemName}</span>
@@ -83,6 +48,7 @@ function PhotoRow({ photo, onRemoved }: { photo: AdminPhoto; onRemoved: () => vo
           setError(null);
           try {
             await api.removePhoto(photo.id);
+            toast('Photo deleted.');
             onRemoved();
           } catch (err) {
             setError((err as Error).message);
@@ -135,32 +101,22 @@ export default function Photos() {
     void loadPage([]);
   }, [loadPage]);
 
-  const filterBtn = (value: Filter, label: string) => (
-    <button
-      type="button"
-      className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-        filter === value ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-200'
-      }`}
-      onClick={() => setFilter(value)}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Hunt photos</h1>
-      <p className="text-sm text-slate-500">
-        Every scavenger-hunt photo currently stored on the server. Photos delete themselves after
-        the retention window (default 30 days); delete one here to remove it immediately — e.g. when
-        a guest asks. The player keeps the find either way.
-      </p>
+      <PageHeader
+        title="Hunt photos"
+        description="Every scavenger-hunt photo currently stored on the server. Photos delete themselves after the retention window (default 30 days); delete one here to remove it immediately — e.g. when a guest asks. The player keeps the find either way."
+      />
 
-      <div className="flex gap-1">
-        {filterBtn('all', 'All')}
-        {filterBtn('people', 'With people')}
-        {filterBtn('minors', 'With minors')}
-      </div>
+      <Segmented
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { value: 'all', label: 'All' },
+          { value: 'people', label: 'With people' },
+          { value: 'minors', label: 'With minors' },
+        ]}
+      />
 
       {error && <Banner kind="error">{error.message}</Banner>}
       {photos && (
@@ -173,9 +129,9 @@ export default function Photos() {
             />
           ))}
           {photos.length === 0 && !loading && (
-            <p className="py-4 text-center text-sm text-slate-400">
+            <EmptyState>
               {filter === 'all' ? 'No photos stored right now.' : 'No photos match this filter.'}
-            </p>
+            </EmptyState>
           )}
         </div>
       )}

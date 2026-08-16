@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, type Announcement, type Location } from './api';
-import { Button, Card, Field, Input, Banner, Spinner, Pill, useAsync, fmtDateTime } from './ui';
+import { Button, Card, EmptyState, Field, Input, Banner, PageHeader, Pill, Select, Spinner, useAsync, useToast, fmtDateTime } from './ui';
 
 // Announcements / special updates (punchlist #1). Rows here go live to the
 // player app and TV board IMMEDIATELY (the app polls /api/announcements) —
@@ -37,6 +37,7 @@ function AnnouncementForm({
   const [endsAt, setEndsAt] = useState(toLocalInput(initial?.endsAt ?? null));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +53,7 @@ function AnnouncementForm({
         endsAt: fromLocalInput(endsAt),
         sortOrder: initial?.sortOrder ?? 0,
       });
+      toast(initial ? 'Announcement updated.' : 'Announcement published.');
       onDone();
     } catch (e) {
       setErr((e as Error).message);
@@ -77,18 +79,14 @@ function AnnouncementForm({
         label="Location"
         hint={isSuperAdmin ? 'Every location, or pin it to one venue.' : 'Pinned to one of your venues.'}
       >
-        <select
-          value={locationId}
-          onChange={(e) => setLocationId(e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-        >
+        <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="w-full">
           {isSuperAdmin && <option value="">All locations</option>}
           {locations.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Starts" hint="Blank = immediately.">
@@ -134,6 +132,7 @@ function windowState(a: Announcement): { label: string; tone: 'slate' | 'amber' 
 export default function Announcements({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<Announcement | null>(null);
+  const toast = useToast();
   const { data, error, loading, reload } = useAsync(
     async () => {
       const [announcements, locations] = await Promise.all([
@@ -155,16 +154,18 @@ export default function Announcements({ isSuperAdmin }: { isSuperAdmin: boolean 
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold">Announcements</h1>
-        <button
-          type="button"
-          className="ml-auto text-xs text-slate-500 underline"
-          onClick={() => setShowArchived((v) => !v)}
-        >
-          {showArchived ? 'Show live' : 'Show archived'}
-        </button>
-      </div>
+      <PageHeader
+        title="Announcements"
+        actions={
+          <button
+            type="button"
+            className="text-xs text-slate-500 underline hover:text-slate-700"
+            onClick={() => setShowArchived((v) => !v)}
+          >
+            {showArchived ? 'Show live' : 'Show archived'}
+          </button>
+        }
+      />
 
       <Banner kind="info">
         Announcements go live to the app and TV board immediately — no rebuild needed.
@@ -216,6 +217,7 @@ export default function Announcements({ isSuperAdmin }: { isSuperAdmin: boolean 
                 variant={a.archivedAt ? 'ghost' : 'danger'}
                 onClick={async () => {
                   await api.archiveAnnouncement(a.id, !a.archivedAt);
+                  toast(a.archivedAt ? 'Announcement unarchived.' : 'Announcement archived.');
                   reload();
                 }}
               >
@@ -225,9 +227,9 @@ export default function Announcements({ isSuperAdmin }: { isSuperAdmin: boolean 
           );
         })}
         {rows.length === 0 && (
-          <p className="py-4 text-center text-sm text-slate-400">
+          <EmptyState>
             {showArchived ? 'No archived announcements.' : 'No announcements yet.'}
-          </p>
+          </EmptyState>
         )}
       </div>
     </div>
