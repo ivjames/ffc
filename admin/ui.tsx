@@ -152,7 +152,7 @@ export function Segmented<T extends string>({
           key={o.value}
           type="button"
           aria-pressed={value === o.value}
-          className={`rounded-md px-3 py-1 text-sm font-medium transition ${
+          className={`rounded-md px-3 py-1 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
             value === o.value
               ? 'bg-white text-slate-900 shadow-sm'
               : 'text-slate-600 hover:text-slate-900'
@@ -173,6 +173,59 @@ export function EmptyState({ children, compact = false }: { children: ReactNode;
     <p className={compact ? 'py-2 text-center text-xs text-slate-400' : 'py-4 text-center text-sm text-slate-400'}>
       {children}
     </p>
+  );
+}
+
+/** Flush data table — pair with `<Card className="p-0">` so rows run edge to
+ *  edge. Row borders live here (first tbody row's top border doubles as the
+ *  header rule) so call sites don't repeat them. */
+export function Table({ size = 'sm', children }: { size?: 'sm' | 'xs'; children: ReactNode }) {
+  return (
+    <div className="overflow-x-auto">
+      <table
+        className={`w-full text-left ${size === 'xs' ? 'text-xs' : 'text-sm'} [&_tbody_tr]:border-t [&_tbody_tr]:border-slate-100 [&_tfoot_tr]:border-t [&_tfoot_tr]:border-slate-200`}
+      >
+        {children}
+      </table>
+    </div>
+  );
+}
+
+export function Th({
+  children,
+  align = 'left',
+  className = '',
+}: {
+  children?: ReactNode;
+  align?: 'left' | 'right';
+  className?: string;
+}) {
+  return (
+    <th
+      className={`px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 ${
+        align === 'right' ? 'text-right' : 'text-left'
+      } ${className}`}
+    >
+      {children}
+    </th>
+  );
+}
+
+export function Td({
+  children,
+  align = 'left',
+  className = '',
+  colSpan,
+}: {
+  children?: ReactNode;
+  align?: 'left' | 'right';
+  className?: string;
+  colSpan?: number;
+}) {
+  return (
+    <td colSpan={colSpan} className={`px-3 py-2 ${align === 'right' ? 'text-right tabular-nums' : ''} ${className}`}>
+      {children}
+    </td>
   );
 }
 

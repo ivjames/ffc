@@ -382,7 +382,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
                       key={item.to}
                       to={item.to}
                       aria-current={active ? 'page' : undefined}
-                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium ${
+                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
                         active
                           ? 'bg-slate-900 text-white'
                           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'

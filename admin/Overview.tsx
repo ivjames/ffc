@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type SeriesBucket } from './api';
-import { Button, Card, Input, PageHeader, Spinner, Banner, useAsync } from './ui';
+import { Button, Card, Input, PageHeader, Spinner, Banner, Table, Th, Td, useAsync } from './ui';
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
@@ -171,38 +171,38 @@ export default function Overview() {
 
       <TrendCharts />
 
-      <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">Per location (last 30 days)</h2>
-        <table className="w-full text-sm">
+      <Card className="p-0">
+        <h2 className="px-3 pt-3 text-sm font-semibold text-slate-700">Per location (last 30 days)</h2>
+        <Table>
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="pb-2">Location</th>
-              <th className="pb-2 text-right">Courses</th>
-              <th className="pb-2 text-right">Rounds · 30d</th>
+            <tr>
+              <Th>Location</Th>
+              <Th align="right">Courses</Th>
+              <Th align="right">Rounds · 30d</Th>
             </tr>
           </thead>
           <tbody>
             {data.perLocation.map((l) => (
-              <tr key={l.id} className="border-t border-slate-100">
-                <td className="py-2">
+              <tr key={l.id}>
+                <Td>
                   <Link to={`/locations/${l.id}`} className="font-medium text-slate-900 hover:underline">
                     {l.name}
                   </Link>
                   <span className="ml-2 text-xs text-slate-400">/{l.slug}</span>
-                </td>
-                <td className="py-2 text-right tabular-nums">{l.courses}</td>
-                <td className="py-2 text-right tabular-nums">{l.rounds30d}</td>
+                </Td>
+                <Td align="right">{l.courses}</Td>
+                <Td align="right">{l.rounds30d}</Td>
               </tr>
             ))}
             {data.perLocation.length === 0 && (
               <tr>
-                <td colSpan={3} className="py-4 text-center text-slate-400">
+                <Td colSpan={3} className="py-4 text-center text-slate-400">
                   No locations yet.
-                </td>
+                </Td>
               </tr>
             )}
           </tbody>
-        </table>
+        </Table>
       </Card>
 
       <CsvExport />
