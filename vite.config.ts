@@ -49,27 +49,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/favicon-32.png', 'icons/apple-touch-icon.png'],
-      manifest: {
-        name: 'Mini Golf Scorecard',
-        short_name: 'MiniGolf',
-        description: 'Offline scorecard for four themed 18-hole mini golf courses.',
-        theme_color: '#15803d',
-        background_color: '#052e16',
-        display: 'standalone',
-        orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
-        icons: [
-          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-          {
-            src: 'icons/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-        ],
-      },
+      // Multi-venue: the manifest is per-tenant, served by the API
+      // (GET /api/manifest.webmanifest, linked from index.html) so each org's
+      // subdomain installs under its own name/colors/icons. `false` skips only
+      // the static manifest emission — SW generation is unaffected.
+      manifest: false,
       workbox: {
         // Precache the app shell + all bundled assets (maps, icons) so the
         // whole PWA works offline. Course maps/rules ship in the build.
