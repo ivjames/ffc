@@ -305,8 +305,12 @@ async function setStatus(req, res, status) {
   try {
     if (status === "suspended") {
       // Guard the DEFAULT org: it backs every host whose first label matches
-      // no slug (the apex/staging host included), so suspending it blanks
-      // those hosts platform-wide. Demand an explicit ?force=1.
+      // no slug (the apex/staging host included), so suspending it takes all
+      // those hosts dark platform-wide — lib/tenant.js resolves a suspended
+      // default org to the same dark sentinel as a suspended subdomain (never
+      // to another client's org). Demand an explicit ?force=1. Unsuspend
+      // restores the fallback; either way hosts follow within the tenant
+      // cache's 30s TTL.
       const force = req.query.force === "1" || req.query.force === "true";
       const defaultSlug = process.env.DEFAULT_ORG_SLUG || "bullwinkles";
       const target = await pool.query(`select slug from org where id = $1`, [id]);
@@ -316,7 +320,8 @@ async function setStatus(req, res, status) {
           ok: false,
           error:
             `refusing to suspend the default org ('${defaultSlug}'): it serves every ` +
-            `unmatched host (apex/staging included), so suspending it blanks those hosts. ` +
+            `unmatched host (apex/staging included), so suspending it takes those hosts ` +
+            `dark (empty catalog, platform-default branding) until it is unsuspended. ` +
             `Pass ?force=1 to do it anyway.`,
         });
       }

@@ -2,15 +2,19 @@
 // deployed instance serves every client subdomain; the first DNS label of the
 // Host header is the candidate org slug. A label that matches NO org at all
 // falls back to DEFAULT_ORG_SLUG (so today's staging host `ffc.lab980.com`
-// keeps resolving to Bullwinkle's), then to the first live org; no live orgs
-// at all resolves to null and readers preserve their pre-org unfiltered
-// behavior.
+// keeps resolving to Bullwinkle's). Only when no org with that slug EXISTS at
+// all (fresh-install bootstrap: the seed org was renamed) does resolution fall
+// through to the first live org; no live orgs at all resolves to null and
+// readers preserve their pre-org unfiltered behavior.
 //
 // A label that matches an org that EXISTS but is not live (suspended or
 // archived) must NOT fall through to the default org — that would serve the
 // default tenant's brand and catalog on the suspended client's subdomain, a
 // cross-brand leak. It resolves to the distinct 'suspended' shape instead
-// (see resolveTenant), which every reader treats as "matches nothing".
+// (see resolveTenant), which every reader treats as "matches nothing". The
+// same rule guards the fallback itself: a DEFAULT org that exists but is
+// suspended/archived takes every unmatched host dark with it — it never hands
+// the apex/staging hosts to whichever OTHER client sorts first.
 import { pool } from "../db.js";
 
 const ORG_COLS = `id, slug, name, branding`;
@@ -29,11 +33,6 @@ export function clearTenantCache() {
   cache.clear();
 }
 
-async function liveOrgBySlug(slug) {
-  const db = await pool.query(`select ${ORG_COLS} from org where slug = $1 and ${LIVE}`, [slug]);
-  return db.rows[0] ?? null;
-}
-
 // Any org row for a slug, live or not — resolveTenant needs to tell "no such
 // org" (fallback) apart from "org exists but is suspended/archived" (the
 // subdomain goes dark, no fallback).
@@ -43,6 +42,17 @@ async function orgBySlug(slug) {
     [slug]
   );
   return db.rows[0] ?? null;
+}
+
+// Shape an orgBySlug row into a resolution: a live row resolves normally under
+// the given via; a suspended/archived row resolves to the dark SENTINEL (see
+// resolveTenant's doc comment) regardless of which path found it.
+function resolution(row, via) {
+  if (row.archivedAt == null && row.status === "active") {
+    const { status: _s, archivedAt: _a, ...org } = row;
+    return { org, via };
+  }
+  return { org: { id: null, slug: row.slug, name: null, branding: null }, via: "suspended" };
 }
 
 /**
@@ -71,18 +81,23 @@ export async function resolveTenant(req) {
 
   let value = null;
   const bySlug = label ? await orgBySlug(label) : null;
-  if (bySlug && bySlug.archivedAt == null && bySlug.status === "active") {
-    const { status: _s, archivedAt: _a, ...org } = bySlug;
-    value = { org, via: "host" };
-  } else if (bySlug) {
-    // The org exists but is suspended/archived: its subdomain goes DARK
-    // (empty catalog, default branding) instead of leaking the default org.
-    value = { org: { id: null, slug: bySlug.slug, name: null, branding: null }, via: "suspended" };
+  if (bySlug) {
+    // Exact slug match. A suspended/archived org's subdomain goes DARK (empty
+    // catalog, default branding) instead of leaking the default org.
+    value = resolution(bySlug, "host");
   } else {
-    const fallback = await liveOrgBySlug(process.env.DEFAULT_ORG_SLUG || "bullwinkles");
-    if (fallback) {
-      value = { org: fallback, via: "fallback" };
+    // No org matches the label: the default-org fallback. Looked up WITHOUT
+    // the live filter on purpose — a default org that exists but is
+    // suspended/archived resolves to the same dark sentinel as a suspended
+    // host match, so unmatched hosts (apex/staging included) go blank rather
+    // than falling through to the first live org, which would serve ANOTHER
+    // client's catalog, branding, and manifest there.
+    const byDefault = await orgBySlug(process.env.DEFAULT_ORG_SLUG || "bullwinkles");
+    if (byDefault) {
+      value = resolution(byDefault, "fallback");
     } else {
+      // No org with the default slug exists at all — fresh-install bootstrap
+      // (the seed org was renamed): fall back to the first live org.
       const first = await pool.query(
         `select ${ORG_COLS} from org where ${LIVE} order by sort_order, name limit 1`
       );
