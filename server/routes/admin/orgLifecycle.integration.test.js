@@ -221,3 +221,49 @@ test("bad and unknown ids answer 400/404", async () => {
   );
   assert.equal(unknown.status, 404);
 });
+
+test("archiving the DEFAULT org is guarded like suspend (400 without ?force=1)", async () => {
+  // The ordinary Archive button reaches the same platform-wide darkness as a
+  // forced suspend (lib/tenant.js resolves an archived default org to the
+  // dark sentinel), so it demands the same explicit force.
+  const res = await fetch(`${baseUrl}/api/admin/orgs/${defaultOrgId}/archive`, {
+    method: "POST",
+    headers: TOKEN_HEADERS,
+  });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(body.error, /default org/);
+  assert.match(body.error, /force=1/);
+
+  const row = await testQuery(`select archived_at from org where id = $1`, [defaultOrgId]);
+  assert.equal(row.rows[0].archived_at, null, "the default org was left unarchived");
+});
+
+test("?force=1 archives the default org; unarchive restores it (no force needed)", async () => {
+  const archive = await fetch(`${baseUrl}/api/admin/orgs/${defaultOrgId}/archive?force=1`, {
+    method: "POST",
+    headers: TOKEN_HEADERS,
+  });
+  assert.equal(archive.status, 200);
+  assert.notEqual((await archive.json()).org.archivedAt, null);
+  try {
+    // Non-default orgs stay unguarded: archive of the ordinary org proceeds.
+    const plain = await fetch(`${baseUrl}/api/admin/orgs/${orgId}/archive`, {
+      method: "POST",
+      headers: TOKEN_HEADERS,
+    });
+    assert.equal(plain.status, 200);
+    const restorePlain = await fetch(`${baseUrl}/api/admin/orgs/${orgId}/unarchive`, {
+      method: "POST",
+      headers: TOKEN_HEADERS,
+    });
+    assert.equal(restorePlain.status, 200);
+  } finally {
+    const restore = await fetch(`${baseUrl}/api/admin/orgs/${defaultOrgId}/unarchive`, {
+      method: "POST",
+      headers: TOKEN_HEADERS,
+    });
+    assert.equal(restore.status, 200);
+    assert.equal((await restore.json()).org.archivedAt, null);
+  }
+});

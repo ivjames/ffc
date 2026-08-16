@@ -173,11 +173,14 @@ async function reserveScan({
     // venue's gameplay budget. Distinct error string so the client (and ops)
     // can tell it from the per-round 429.
     if (venueCap !== null && locationId) {
+      // Count by the WRITE-TIME location stamp, not a live course join: a
+      // course moved between venues mid-window would otherwise drag its
+      // scans' budget along with it (draining the destination's cap and
+      // refunding the source's).
       const venueSpent = await client.query(
         `select count(*)::int as n
            from hunt_scan s
-           join course c on c.id = s.course_id
-          where c.location_id = $1
+          where s.location_id = $1
             and s.kind = 'verify'
             and s.created_at > now() - interval '24 hours'`,
         [locationId]
@@ -206,13 +209,14 @@ async function reserveScan({
     }
 
     // Room confirmed under the lock — consume it. org_id is the INVOICE
-    // stamp: the org that owns the venue right now, i.e. at bill time, so a
-    // later course/venue move can't re-bill this row to another client.
+    // stamp and location_id the VENUE-CAP stamp: both fixed at bill time, so
+    // a later course/venue move can't re-bill this row to another client or
+    // shift it between venues' rolling budgets.
     const ins = await client.query(
-      `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, org_id)
-         values ($1, $2, $3, $4, $5)
+      `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, org_id, location_id)
+         values ($1, $2, $3, $4, $5, $6)
        returning id`,
-      [roundClientId, playerTag, itemId, courseId, orgId]
+      [roundClientId, playerTag, itemId, courseId, orgId, locationId ?? null]
     );
     await client.query("commit");
     return { scanId: ins.rows[0].id };

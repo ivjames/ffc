@@ -147,14 +147,14 @@ before(async () => {
   //  - a verify scan older than the rolling 24h window;
   //  - an admin item-image screen row (operator spend, not gameplay).
   await testQuery(
-    `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, created_at)
-       values ('venue-cap-old-round', 'T01', $1, $2, now() - interval '25 hours')`,
-    [itemAId, courseAId]
+    `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, location_id, created_at)
+       values ('venue-cap-old-round', 'T01', $1, $2, $3, now() - interval '25 hours')`,
+    [itemAId, courseAId, locationAId]
   );
   await testQuery(
-    `insert into hunt_scan (kind, item_id, course_id, model, input_tokens, output_tokens, cost_usd)
-       values ('screen', $1, $2, 'mock-descriptor', 300, 20, 0.0001)`,
-    [itemAId, courseAId]
+    `insert into hunt_scan (kind, item_id, course_id, location_id, model, input_tokens, output_tokens, cost_usd)
+       values ('screen', $1, $2, $3, 'mock-descriptor', 300, 20, 0.0001)`,
+    [itemAId, courseAId, locationAId]
   );
 });
 
@@ -252,16 +252,16 @@ test("an in-flight reservation occupies the venue budget until it's released", a
 
   // Venue D (cap 2) with one billed scan: at cap-1.
   await testQuery(
-    `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, org_id, model, input_tokens, output_tokens, verified, flagged)
-       values ($1, 'T09', $2, $3, $4, 'claude-haiku-4-5', 1500, 80, true, false)`,
-    [`${roundD}-billed`, itemDId, courseDId, ORG_D_ID]
+    `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, org_id, location_id, model, input_tokens, output_tokens, verified, flagged)
+       values ($1, 'T09', $2, $3, $4, $5, 'claude-haiku-4-5', 1500, 80, true, false)`,
+    [`${roundD}-billed`, itemDId, courseDId, ORG_D_ID, locationDId]
   );
   // A concurrent request's reservation — committed by reserveScan, model call
   // still in flight: no model/tokens/verdict yet. It must count.
   const resv = await testQuery(
-    `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, org_id)
-       values ($1, 'T10', $2, $3, $4) returning id`,
-    [`${roundD}-inflight`, itemDId, courseDId, ORG_D_ID]
+    `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, org_id, location_id)
+       values ($1, 'T10', $2, $3, $4, $5) returning id`,
+    [`${roundD}-inflight`, itemDId, courseDId, ORG_D_ID, locationDId]
   );
 
   const blocked = await postVerify(verifyBody(itemDId, courseDId, roundD));
@@ -310,4 +310,64 @@ test("a failed provider call releases its reservation — nothing phantom is lef
   const retry = await postVerify(verifyBody(itemBId, courseBId, roundB));
   assert.equal(retry.status, 200);
   assert.equal((await retry.json()).verified, true);
+});
+
+test("moving a course between venues does not move its billed scans' budget", async () => {
+  // The cap counts the WRITE-TIME location stamp: a course relocated via the
+  // admin API mid-window must neither drain the destination venue's budget
+  // with spend incurred elsewhere nor refund the source venue's slots.
+  verifyItemInImageMock.mock.resetCalls();
+  const locE = await testQuery(
+    `insert into location (name, slug, hunt) values ($1, $2, '{"dailyScanCap": 1}'::jsonb) returning id`,
+    [`Venue Cap E ${stamp}`, `venue-cap-e-${stamp}`]
+  );
+  const locF = await testQuery(
+    `insert into location (name, slug, hunt) values ($1, $2, '{"dailyScanCap": 1}'::jsonb) returning id`,
+    [`Venue Cap F ${stamp}`, `venue-cap-f-${stamp}`]
+  );
+  const locEId = locE.rows[0].id;
+  const locFId = locF.rows[0].id;
+  const { courseId, itemId } = await makeCourseAndItem(locEId, "e");
+  try {
+    // One billed scan stamped to venue E — E is at its cap of 1.
+    await testQuery(
+      `insert into hunt_scan (round_client_id, player_tag, item_id, course_id, location_id, model, input_tokens, output_tokens, verified, flagged)
+         values ($1, 'T11', $2, $3, $4, 'claude-haiku-4-5', 1500, 80, true, false)`,
+      [`venue-cap-e-round-${stamp}`, itemId, courseId, locEId]
+    );
+    const atCap = await postVerify(verifyBody(itemId, courseId, `venue-cap-e2-round-${stamp}`));
+    assert.equal(atCap.status, 429, "venue E is at its cap");
+
+    // Relocate the course to venue F (what PATCH /api/admin/courses/:id does).
+    await testQuery(`update course set location_id = $2 where id = $1`, [courseId, locFId]);
+
+    // F's budget is untouched by E's history: the verify goes through and is
+    // stamped to F. Under the old live-join count, E's row would have counted
+    // against F here and this would 429.
+    const onF = await postVerify(verifyBody(itemId, courseId, `venue-cap-f-round-${stamp}`));
+    assert.equal(onF.status, 200, "destination venue is not blocked by spend incurred at the source");
+    assert.equal((await onF.json()).verified, true);
+
+    const stamps = await testQuery(
+      `select location_id, count(*)::int as n from hunt_scan
+        where course_id = $1 and kind = 'verify' group by location_id`,
+      [courseId]
+    );
+    const byLoc = Object.fromEntries(stamps.rows.map((r) => [r.location_id, r.n]));
+    assert.equal(byLoc[locEId], 1, "the pre-move scan stays on venue E's budget");
+    assert.equal(byLoc[locFId], 1, "the post-move scan lands on venue F's budget");
+
+    // And F's own cap now binds on F's own spend.
+    const fAtCap = await postVerify(verifyBody(itemId, courseId, `venue-cap-f2-round-${stamp}`));
+    assert.equal(fAtCap.status, 429);
+  } finally {
+    await testQuery(`delete from hunt_scan where course_id = $1`, [courseId]);
+    await testQuery(
+      `delete from hunt_find where item_id in (select id from hunt_item where course_id = $1)`,
+      [courseId]
+    );
+    await testQuery(`delete from course where id = $1`, [courseId]); // cascades hunt_item
+    await testQuery(`delete from location where id = $1`, [locEId]);
+    await testQuery(`delete from location where id = $1`, [locFId]);
+  }
 });
