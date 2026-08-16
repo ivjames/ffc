@@ -73,6 +73,10 @@ function merge(overrides: Record<string, unknown> | null | undefined): Branding 
 
 let org: OrgInfo | null = null;
 let branding: Branding = BRANDING_DEFAULTS;
+// True only when the org's RAW branding carries a themeColor — the merged
+// default (#15803d) must not count, or every tenant would lose the mode greys
+// (see applyThemeColorMeta).
+let themeColorExplicit = false;
 let revision = 0;
 const listeners = new Set<() => void>();
 
@@ -87,19 +91,61 @@ export function getOrg(): OrgInfo | null {
   return org;
 }
 
-// Reflect the resolved branding into the document chrome. Idempotent; no-op
-// under node (server-side tests import game modules with no DOM). The
-// theme-color meta is created if index.html ever ships without one.
-function applyToDocument(): void {
+/** Whether the current org EXPLICITLY set `themeColor` in its stored branding
+ *  (raw key present, not the merged default). Explicit → that color owns the
+ *  theme-color meta in both modes. */
+export function hasExplicitThemeColor(): boolean {
+  return themeColorExplicit;
+}
+
+// Mode greys for the theme-color meta — must match index.html's static
+// content and the values src/lib/mode.ts owned before multi-venue. Keyed by
+// <html data-theme>, which the index.html inline script sets before any
+// module runs.
+const MODE_THEME_COLOR: Record<'light' | 'dark', string> = {
+  dark: '#2f2f2f',
+  light: '#eaeaea',
+};
+
+// Current mode without importing mode.ts (which imports this module — a cycle
+// otherwise). The dataset attribute is authoritative; the OS query is only for
+// contexts where the inline script never ran (tests, embeds).
+function currentModeGrey(): string {
+  const attr = document.documentElement.dataset.theme;
+  if (attr === 'light' || attr === 'dark') return MODE_THEME_COLOR[attr];
+  const light =
+    typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(prefers-color-scheme: light)').matches;
+  return MODE_THEME_COLOR[light ? 'light' : 'dark'];
+}
+
+/** SOLE writer of `<meta name="theme-color">`. One rule: an explicit org
+ *  themeColor wins in both light and dark modes; without one the meta follows
+ *  the mode greys — pixel-identical to pre-multi-venue behavior. Called from
+ *  `setOrg` (boot + every hydrate) and from mode.ts after a mode change; the
+ *  callers never write the tag themselves, so event order can't flip-flop it.
+ *  Creates the meta if index.html ever ships without one; no-op without a
+ *  DOM. */
+export function applyThemeColorMeta(): void {
   if (typeof document === 'undefined') return;
-  document.title = branding.appName;
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta && document.head) {
     meta = document.createElement('meta');
     meta.setAttribute('name', 'theme-color');
     document.head.appendChild(meta);
   }
-  if (meta) meta.setAttribute('content', branding.themeColor);
+  if (meta) {
+    meta.setAttribute('content', themeColorExplicit ? branding.themeColor : currentModeGrey());
+  }
+}
+
+// Reflect the resolved branding into the document chrome. Idempotent; no-op
+// under node (server-side tests import game modules with no DOM).
+function applyToDocument(): void {
+  if (typeof document === 'undefined') return;
+  document.title = branding.appName;
+  applyThemeColorMeta();
 }
 
 /** Swap in the tenant org (null = defaults). Called by the content store at
@@ -108,6 +154,10 @@ function applyToDocument(): void {
 export function setOrg(next: OrgInfo | null): void {
   org = next;
   branding = merge(next?.branding);
+  // Same acceptance rule as merge(): only a non-empty string counts, so
+  // explicit always means "branding.themeColor came from the org".
+  const raw = next?.branding?.themeColor;
+  themeColorExplicit = typeof raw === 'string' && raw !== '';
   applyToDocument();
   revision += 1;
   listeners.forEach((cb) => cb());
