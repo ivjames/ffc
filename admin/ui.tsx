@@ -250,8 +250,18 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
   );
 }
 
-export function Pill({ children, tone = 'slate' }: { children: ReactNode; tone?: 'slate' | 'amber' }) {
-  const styles = tone === 'amber' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600';
+export function Pill({
+  children,
+  tone = 'slate',
+}: {
+  children: ReactNode;
+  tone?: 'slate' | 'amber' | 'red';
+}) {
+  const styles = {
+    slate: 'bg-slate-100 text-slate-600',
+    amber: 'bg-amber-100 text-amber-800',
+    red: 'bg-red-100 text-red-800',
+  }[tone];
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles}`}>{children}</span>;
 }
 

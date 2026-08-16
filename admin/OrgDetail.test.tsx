@@ -9,6 +9,8 @@ vi.mock('./api', () => ({
   api: {
     getOrg: vi.fn(),
     archiveOrg: vi.fn(),
+    suspendOrg: vi.fn(),
+    unsuspendOrg: vi.fn(),
     updateOrgBranding: vi.fn(),
     uploadBrandingAsset: vi.fn(),
   },
@@ -28,6 +30,10 @@ const DETAIL = { org: ORG, locations: [] };
 beforeEach(() => {
   vi.mocked(api.getOrg).mockReset().mockResolvedValue(DETAIL);
   vi.mocked(api.archiveOrg).mockReset();
+  vi.mocked(api.suspendOrg)
+    .mockReset()
+    .mockResolvedValue({ ok: true, org: { ...ORG, status: 'suspended' } });
+  vi.mocked(api.unsuspendOrg).mockReset().mockResolvedValue({ ok: true, org: ORG });
   vi.mocked(api.updateOrgBranding)
     .mockReset()
     .mockResolvedValue({ ok: true, org: ORG });
@@ -67,6 +73,85 @@ describe('OrgDetail — super_admin', () => {
     });
     renderOrgDetail(true);
     expect(await screen.findByRole('button', { name: 'Unarchive' })).toBeInTheDocument();
+  });
+});
+
+describe('OrgDetail — suspend lifecycle', () => {
+  test('confirmed Suspend calls the endpoint and re-renders the suspended state', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    // After the suspend, the reload sees the org suspended.
+    vi.mocked(api.getOrg)
+      .mockResolvedValueOnce(DETAIL)
+      .mockResolvedValue({ org: { ...ORG, status: 'suspended' }, locations: [] });
+    const user = userEvent.setup();
+    renderOrgDetail(true);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    expect(screen.queryByText('Suspended')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Suspend' }));
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/goes dark for players/));
+    await waitFor(() => expect(api.suspendOrg).toHaveBeenCalledWith('org-1'));
+    // Re-rendered from the reload: status badge + the verb flips.
+    expect(await screen.findByText('Suspended')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unsuspend' })).toBeInTheDocument();
+    confirm.mockRestore();
+  });
+
+  test('a declined confirm changes nothing', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const user = userEvent.setup();
+    renderOrgDetail(true);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    await user.click(screen.getByRole('button', { name: 'Suspend' }));
+    expect(api.suspendOrg).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  test('Unsuspend needs no confirm and calls the endpoint', async () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    vi.mocked(api.getOrg).mockResolvedValue({
+      org: { ...ORG, status: 'suspended' },
+      locations: [],
+    });
+    const user = userEvent.setup();
+    renderOrgDetail(true);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    expect(screen.getByText('Suspended')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Unsuspend' }));
+
+    expect(confirm).not.toHaveBeenCalled();
+    await waitFor(() => expect(api.unsuspendOrg).toHaveBeenCalledWith('org-1'));
+    confirm.mockRestore();
+  });
+
+  test('the default-org 400 surfaces inline (never auto-forced)', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.suspendOrg).mockRejectedValue(
+      new Error(
+        "refusing to suspend the default org ('bullwinkles'): it serves every unmatched host " +
+          '(apex/staging included), so suspending it blanks those hosts. Pass ?force=1 to do it anyway.'
+      )
+    );
+    const user = userEvent.setup();
+    renderOrgDetail(true);
+    await screen.findByRole('heading', { name: 'Test Org' });
+
+    await user.click(screen.getByRole('button', { name: 'Suspend' }));
+
+    expect(await screen.findByText(/refusing to suspend the default org/)).toBeInTheDocument();
+    // The failure never reloads and only ever hit the plain (no-force) call.
+    expect(api.suspendOrg).toHaveBeenCalledTimes(1);
+    expect(api.getOrg).toHaveBeenCalledTimes(1);
+    confirm.mockRestore();
+  });
+
+  test('org_admin sees no Suspend control', async () => {
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    expect(screen.queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Unsuspend' })).not.toBeInTheDocument();
   });
 });
 

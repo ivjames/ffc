@@ -55,6 +55,26 @@ describe('Orgs — super_admin', () => {
   });
 });
 
+describe('Orgs — status badge', () => {
+  test('a suspended org shows the Suspended pill; active orgs do not', async () => {
+    vi.mocked(api.listOrgs).mockResolvedValue([
+      ...ORGS,
+      {
+        id: 'org-2',
+        name: 'Dark Org',
+        slug: 'dark-org',
+        status: 'suspended',
+        sortOrder: 1,
+        archivedAt: null,
+        locationCount: 1,
+      },
+    ]);
+    renderOrgs(true);
+    await screen.findByText('Dark Org');
+    expect(screen.getAllByText('Suspended')).toHaveLength(1);
+  });
+});
+
 describe('Orgs — org_admin', () => {
   test('hides the "Create org" form and shows a restriction note instead', async () => {
     renderOrgs(false);

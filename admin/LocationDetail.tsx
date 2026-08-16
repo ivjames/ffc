@@ -132,6 +132,28 @@ function HoursEditor({
   );
 }
 
+// --- Hunt daily scan cap ------------------------------------------------------
+// Serializes the cap input into the save payload's `hunt` field (mirrors
+// server normalizeHunt): blank = unlimited → {} (what the column stores by
+// default), a number → { dailyScanCap: n }. 0 is meaningful and distinct from
+// blank: it turns the hunt OFF at this venue (the per-client kill switch).
+export function buildHuntPayload(dailyScanCap: string): { dailyScanCap?: number } {
+  const t = dailyScanCap.trim();
+  return t === '' ? {} : { dailyScanCap: Number(t) };
+}
+
+// Light client-side check only — the server (normalizeHunt) is the source of
+// truth and its 400 surfaces via the form's error banner either way.
+export function huntCapValidationError(dailyScanCap: string): string | null {
+  const t = dailyScanCap.trim();
+  if (t === '') return null;
+  const n = Number(t);
+  if (!Number.isInteger(n) || n < 0) {
+    return 'Daily scan cap must be a whole number ≥ 0 (0 turns the hunt off, blank = unlimited).';
+  }
+  return null;
+}
+
 function ParsGrid({ pars, onChange }: { pars: number[]; onChange: (p: number[]) => void }) {
   return (
     <div className="grid grid-cols-9 gap-1">
@@ -351,6 +373,8 @@ function LocationForm({
   const [perGameCaps, setPerGameCaps] = useState<Record<string, string>>(() =>
     Object.fromEntries(Object.entries(storedCaps?.perGame ?? {}).map(([k, v]) => [k, String(v)]))
   );
+  // Hunt vision-spend cap, edited as a string ('' = unlimited, '0' = hunt off).
+  const [huntScanCap, setHuntScanCap] = useState(location.hunt?.dailyScanCap?.toString() ?? '');
   const [hoursEnabled, setHoursEnabled] = useState(location.hours != null);
   const [hoursState, setHoursState] = useState<HoursState>(() => hoursToState(location.hours));
   const [busy, setBusy] = useState(false);
@@ -382,6 +406,11 @@ function LocationForm({
       setErr(hoursErr);
       return;
     }
+    const huntErr = huntCapValidationError(huntScanCap);
+    if (huntErr) {
+      setErr(huntErr);
+      return;
+    }
     setBusy(true);
     try {
       await api.saveLocation({
@@ -395,6 +424,7 @@ function LocationForm({
         menuUrl: menuUrl.trim() || null,
         orderingUrl: orderingUrl.trim() || null,
         hours: buildHoursPayload(hoursEnabled, hoursState),
+        hunt: buildHuntPayload(huntScanCap),
         pos:
           ordVendor === '' && loyVendor === ''
             ? null
@@ -525,6 +555,26 @@ function LocationForm({
               onPerGame={setPerGameCaps}
             />
           )}
+        </div>
+      </div>
+
+      {/* Hunt spend guardrail — the vision-cap sibling of the ticket economy
+          caps above: hunt verifications are billed API calls, so each venue
+          gets its own daily ceiling (CLAUDE.md cost visibility). */}
+      <div className="mt-3 border-t border-slate-200 pt-3">
+        <div className="mb-1 text-xs font-semibold text-slate-600">Scavenger hunt</div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field
+            label="Daily scan cap"
+            hint="Billed hunt photo scans per rolling 24h at this venue. Blank = unlimited; 0 = hunt disabled at this venue."
+          >
+            <Input
+              value={huntScanCap}
+              onChange={(e) => setHuntScanCap(e.target.value)}
+              placeholder="Unlimited"
+              inputMode="numeric"
+            />
+          </Field>
         </div>
       </div>
 

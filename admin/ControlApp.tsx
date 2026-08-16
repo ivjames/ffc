@@ -16,7 +16,9 @@ import BoothStickers from './BoothStickers';
 import Feedback from './Feedback';
 import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
+import HuntUsage from './HuntUsage';
 import SyntheticBot from './SyntheticBot';
+import Account from './Account';
 
 // ---------------------------------------------------------------------------
 // Nav model
@@ -94,6 +96,13 @@ const ICON_PATHS = {
       <rect x="3" y="4" width="18" height="4" rx="1" />
       <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
       <path d="M10 12h4" />
+    </>
+  ),
+  usage: (
+    // Receipt — the hunt-usage invoice view.
+    <>
+      <path d="M6 2.5h12V21l-2-1.4-2 1.4-2-1.4L10 21l-2-1.4L6 21V2.5z" />
+      <path d="M9 7.5h6M9 11h6M9 14.5h3.5" />
     </>
   ),
   synthetic: (
@@ -177,7 +186,12 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: 'Ops',
-    items: [{ to: '/feedback', label: 'Feedback', icon: 'feedback' }],
+    items: [
+      { to: '/feedback', label: 'Feedback', icon: 'feedback' },
+      // The invoice view (CLAUDE.md cost visibility). Every admin gets it —
+      // an org_admin's data is already scoped to their org server-side.
+      { to: '/hunt-usage', label: 'Hunt usage', icon: 'usage' },
+    ],
   },
 ];
 
@@ -403,12 +417,21 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
         </nav>
 
         <div className="border-t border-slate-100 px-4 py-3">
-          {user && (
-            <div className="mb-2 truncate text-xs text-slate-500" title={user.viaToken ? undefined : user.email ?? undefined}>
-              {user.viaToken ? 'Admin token' : user.email}
-              {!user.viaToken && user.role === 'org_admin' && ' · org admin'}
-            </div>
-          )}
+          {user &&
+            (user.viaToken ? (
+              // Token pseudo-auth has no account (no password to manage), so
+              // the identity line stays plain text — no Account link.
+              <div className="mb-2 truncate text-xs text-slate-500">Admin token</div>
+            ) : (
+              <Link
+                to="/account"
+                title={user.email ?? undefined}
+                className="mb-2 block truncate text-xs text-slate-500 hover:text-slate-900 hover:underline"
+              >
+                {user.email}
+                {user.role === 'org_admin' && ' · org admin'}
+              </Link>
+            ))}
           <Button variant="ghost" onClick={onLock} className="w-full">
             <svg
               viewBox="0 0 24 24"
@@ -472,6 +495,8 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/booth" element={<BoothPhotos />} />
             <Route path="/booth-stickers" element={<BoothStickers />} />
             <Route path="/feedback" element={<Feedback />} />
+            <Route path="/hunt-usage" element={<HuntUsage />} />
+            <Route path="/account" element={<Account user={user} />} />
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
             <Route path="*" element={<Overview />} />
