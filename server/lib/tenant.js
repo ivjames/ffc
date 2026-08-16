@@ -58,6 +58,9 @@ export async function resolveTenant(req) {
       if (first.rowCount > 0) value = { org: first.rows[0], via: "fallback" };
     }
   }
+  // Only completed resolutions are cached — a NEGATIVE result (null = no live
+  // orgs) included. A thrown DB error never reaches this line, so a transient
+  // failure can neither masquerade as "no orgs" nor poison the cache.
   cache.set(label, { value, expires: Date.now() + TTL_MS });
   return value;
 }
@@ -122,17 +125,20 @@ export async function findTenantLocation(locationId, tenant, { cols = "id", q = 
 
 /**
  * Middleware form: sets req.tenant (result of resolveTenant, or null). Mounted
- * per-route on the reads that need it (content, manifest, announcements) —
- * not globally. A resolution failure degrades to no tenant rather than 500ing
- * the read; the route's own query will surface a genuinely down DB.
+ * per-route on the reads and writes that need scoping — not globally. Fails
+ * CLOSED: null means a VERIFIED "no live orgs" (legacy unfiltered mode), so a
+ * resolution error must not degrade to it — every tenant filter treats null as
+ * unfiltered, and a transient DB blip would silently drop the org boundary.
+ * The error answers 500 here (and is never cached), so the next request
+ * re-resolves against a healthy DB.
  */
 export function tenant() {
-  return async (req, _res, next) => {
+  return async (req, res, next) => {
     try {
       req.tenant = await resolveTenant(req);
     } catch (err) {
       console.error("[tenant] resolution failed:", err);
-      req.tenant = null;
+      return res.status(500).json({ ok: false, error: "internal error" });
     }
     next();
   };

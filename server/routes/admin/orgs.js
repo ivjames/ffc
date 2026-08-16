@@ -239,9 +239,14 @@ router.post("/:id/branding/assets", express.json({ limit: "3mb" }), async (req, 
   const check = validateBrandAsset(kind, bytes);
   if (check.error) return res.status(check.status).json({ ok: false, error: check.error });
   try {
-    const org = await pool.query(`select id from org where id = $1`, [id]);
+    const org = await pool.query(`select id, branding from org where id = $1`, [id]);
     if (org.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
-    const { url } = await storeBrandAsset(id, kind, bytes, check.ext);
+    // The row's CURRENT branding tells storeBrandAsset which stored files are
+    // still referenced — it prunes superseded ones and enforces the per-org
+    // byte budget, 400ing when the org is over it.
+    const stored = await storeBrandAsset(id, kind, bytes, check.ext, org.rows[0].branding);
+    if (stored.error) return res.status(stored.status).json({ ok: false, error: stored.error });
+    const { url } = stored;
     await audit({
       action: "org.branding_asset",
       entity: "org",

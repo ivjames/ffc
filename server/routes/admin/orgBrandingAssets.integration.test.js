@@ -7,7 +7,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -23,9 +23,13 @@ process.env.APP_TOKEN = "brand-assets-test-token";
 // scratch dir BEFORE importing app.js.
 const ASSET_DIR = mkdtempSync(join(tmpdir(), "ffc-brand-assets-"));
 process.env.BRAND_ASSET_DIR = ASSET_DIR;
+// The org byte budget is read at import time too — pin a small override so
+// the budget tests don't need MiB-sized bodies (and the env knob is proven).
+process.env.BRAND_ASSET_ORG_BUDGET_BYTES = String(40 * 1024);
 
 const { app } = await import("../../app.js");
 const { hashPassword } = await import("../../lib/adminPasswords.js");
+const { BRAND_ASSET_ORG_BUDGET_BYTES } = await import("../../lib/brandAssets.js");
 
 let baseUrl;
 let close;
@@ -274,6 +278,117 @@ test("bad uuid -> 400, missing org -> 404 (and nothing is written)", async () =>
   );
   assert.equal(missing.status, 404);
   await assert.rejects(access(join(ASSET_DIR, "00000000-0000-4000-8000-000000000000")));
+});
+
+// --- Storage budget + prune-on-upload (PR #191 review, finding 4) ------------
+// Fresh org per test: pruning is mtime-ordered per kind, so these must not
+// share a dir with the uploads the earlier tests accumulated on org A.
+
+/** Distinct valid webp payloads at an exact byte size (sniffed on the
+ *  RIFF/WEBP header alone, so the tail is arbitrary padding). */
+function webpOfSize(size, fill) {
+  return Buffer.concat([
+    Buffer.from("RIFF", "latin1"),
+    Buffer.from([0x10, 0x00, 0x00, 0x00]),
+    Buffer.from("WEBP", "latin1"),
+    Buffer.alloc(size - 12, fill),
+  ]);
+}
+
+async function makePruneOrg(label) {
+  const s = `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const db = await testQuery(`insert into org (name, slug) values ($1, $2) returning id`, [
+    `Brand Assets ${s}`,
+    `brand-assets-${s}`,
+  ]);
+  orgIds.push(db.rows[0].id);
+  return db.rows[0].id;
+}
+
+const fileOf = (orgId, url) => join(ASSET_DIR, orgId, url.split("/").pop());
+
+/** Pin a stored file's mtime into the past — prune ordering must not depend
+ *  on how fast consecutive HTTP uploads land within the same millisecond. */
+async function backdate(orgId, url, msAgo) {
+  const when = new Date(Date.now() - msAgo);
+  await utimes(fileOf(orgId, url), when, when);
+}
+
+async function uploadOk(orgId, kind, bytes, msAgo) {
+  const res = await uploadAsset(asSuper, orgId, assetBody(kind, bytes));
+  assert.equal(res.status, 200, `${kind} upload should succeed`);
+  const { url } = await res.json();
+  if (msAgo !== undefined) await backdate(orgId, url, msAgo);
+  return url;
+}
+
+test("prune-on-upload: superseded unreferenced files past the 2-newest-per-kind grace window are deleted", async () => {
+  const orgId = await makePruneOrg("prune");
+  // A different kind's lone old file must never be swept by logo churn.
+  const badge = await uploadOk(orgId, "logoBadge", webpOfSize(64, 0xb0), 60_000);
+  const v1 = await uploadOk(orgId, "logo", webpOfSize(64, 1), 50_000);
+  const v2 = await uploadOk(orgId, "logo", webpOfSize(64, 2), 40_000);
+  const v3 = await uploadOk(orgId, "logo", webpOfSize(64, 3), 30_000);
+  const v4 = await uploadOk(orgId, "logo", webpOfSize(64, 4), 20_000);
+  // Nothing is referenced by org.branding, so only the grace window protects:
+  // the 2 newest logos survive, the older two are gone.
+  await assert.rejects(access(fileOf(orgId, v1)));
+  await assert.rejects(access(fileOf(orgId, v2)));
+  await access(fileOf(orgId, v3));
+  await access(fileOf(orgId, v4));
+  await access(fileOf(orgId, badge));
+});
+
+test("a file referenced by the org's current branding survives pruning regardless of age", async () => {
+  const orgId = await makePruneOrg("keep-ref");
+  const keeper = await uploadOk(orgId, "logo", webpOfSize(64, 10), 90_000);
+  const patched = await asSuper(`/api/admin/orgs/${orgId}/branding`, {
+    method: "PATCH",
+    body: JSON.stringify({ logoUrl: keeper }),
+  });
+  assert.equal(patched.status, 200);
+  const v2 = await uploadOk(orgId, "logo", webpOfSize(64, 11), 80_000);
+  const v3 = await uploadOk(orgId, "logo", webpOfSize(64, 12), 70_000);
+  const v4 = await uploadOk(orgId, "logo", webpOfSize(64, 13), 60_000);
+  // keeper is the OLDEST logo yet still on disk and served — it is the org's
+  // live logoUrl. The unreferenced middle upload aged out as usual.
+  await access(fileOf(orgId, keeper));
+  assert.equal((await fetch(`${baseUrl}${keeper}`)).status, 200);
+  await assert.rejects(access(fileOf(orgId, v2)));
+  await access(fileOf(orgId, v3));
+  await access(fileOf(orgId, v4));
+});
+
+test("budget: over-budget upload 400s when pruning frees nothing; rotation prunes to make room; dedupe is exempt", async () => {
+  assert.equal(BRAND_ASSET_ORG_BUDGET_BYTES, 40 * 1024, "env override is in effect");
+  const orgId = await makePruneOrg("budget");
+  const CHUNK = 8 * 1024; // 5 × 8 KiB fills the 40 KiB budget exactly
+  const logo1 = await uploadOk(orgId, "logo", webpOfSize(CHUNK, 21), 50_000);
+  const logo2 = await uploadOk(orgId, "logo", webpOfSize(CHUNK, 22), 40_000);
+  await uploadOk(orgId, "logoBadge", webpOfSize(CHUNK, 23), 30_000);
+  await uploadOk(orgId, "logoBadge", webpOfSize(CHUNK, 24), 20_000);
+  await uploadOk(orgId, "logoWordmark", webpOfSize(CHUNK, 25), 10_000);
+
+  // Every kind is inside its grace window and nothing is prunable, so a NEW
+  // wordmark (its kind holds only 1 — the incoming file just takes the second
+  // slot) would overflow the budget → 400 with the budget message.
+  const over = await uploadAsset(asSuper, orgId, assetBody("logoWordmark", webpOfSize(CHUNK, 26)));
+  assert.equal(over.status, 400);
+  assert.match((await over.json()).error, /storage budget/);
+
+  // Identical bytes dedupe to the existing name — no new bytes, so a full org
+  // still gets its idempotent re-upload.
+  const dedupe = await uploadAsset(asSuper, orgId, assetBody("logo", webpOfSize(CHUNK, 22)));
+  assert.equal(dedupe.status, 200);
+  assert.equal((await dedupe.json()).url, logo2);
+
+  // Rotating a kind already holding 2: the incoming file claims the newest
+  // grace slot, so the oldest unreferenced logo is pruned to make room and
+  // the upload fits.
+  const logo3 = await uploadOk(orgId, "logo", webpOfSize(CHUNK, 27));
+  await assert.rejects(access(fileOf(orgId, logo1)));
+  await access(fileOf(orgId, logo2));
+  await access(fileOf(orgId, logo3));
 });
 
 test("static serve: unknown file 404s as JSON, dotfiles are denied", async () => {

@@ -1,9 +1,13 @@
 // POST /api/hunt/verify when ANTHROPIC_API_KEY is unset: the vision-configured
-// check runs before any body validation or DB access, so this needs neither a
-// mock nor a real database.
+// check is the handler's first act — before any body validation — so an empty
+// body still gets the 503. The route's tenant() middleware runs ahead of the
+// handler and fails CLOSED on a DB error (lib/tenant.js), so this needs the
+// test database for resolution to succeed; no vision mock is needed.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { listenEphemeral } from "../test-support/testDb.js";
+import { TEST_DATABASE_URL, ensureSchema, listenEphemeral } from "../test-support/testDb.js";
+
+process.env.DATABASE_URL = TEST_DATABASE_URL;
 
 const { app } = await import("../app.js");
 
@@ -17,11 +21,14 @@ let baseUrl;
 let close;
 
 before(async () => {
+  await ensureSchema();
   ({ baseUrl, close } = await listenEphemeral(app));
 });
 
 after(async () => {
   if (close) await close();
+  const { pool } = await import("../db.js");
+  await pool.end();
 });
 
 test("POST /api/hunt/verify returns 503 when vision is not configured", async () => {

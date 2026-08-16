@@ -15,13 +15,27 @@
 // URLs) — and app.js additionally serves every asset with nosniff + a sandbox
 // CSP so even a direct navigation is inert.
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { validatePng } from "./pngInfo.js";
 
 // Brand marks are small; 1 MiB is generous for a logo/icon (the 512 icon is
 // the biggest legitimate file and sits well under this).
 export const MAX_BRAND_ASSET_BYTES = 1024 * 1024;
+
+// Per-org byte budget across ALL kinds. Content-hashed files would otherwise
+// accumulate forever (every distinct upload is a new immutable name); 5 MiB
+// holds a full set of realistically-sized marks plus the prune grace window
+// while keeping per-org disk bounded.
+export const BRAND_ASSET_ORG_BUDGET_BYTES =
+  Number(process.env.BRAND_ASSET_ORG_BUDGET_BYTES) > 0
+    ? Number(process.env.BRAND_ASSET_ORG_BUDGET_BYTES)
+    : 5 * 1024 * 1024;
+
+// Prune grace window: the newest N files of each kind survive even when no
+// branding URL references them — an uploaded-but-not-yet-saved URL must keep
+// working while the operator finishes filling out the branding form.
+const KEEP_NEWEST_PER_KIND = 2;
 
 // Where uploaded assets live. On a deployed droplet this MUST be a dir that
 // outlives deploys — bin/ffc ensures $APP_DIR/shared/brand-assets exists and
@@ -122,18 +136,119 @@ export function validateBrandAsset(kind, bytes) {
   return { error: "unsupported file type (PNG, JPEG, WebP, or SVG only)", status: 400 };
 }
 
+// A stored asset name: <kind>-<sha256-12>.<ext>. Anything else in the org's
+// dir was not written by storeBrandAsset and is never counted or pruned.
+const ASSET_NAME_RE = /^([A-Za-z0-9]+)-[0-9a-f]{12}\.[a-z0-9]+$/;
+
+/** Filenames in orgId's dir that the org's CURRENT branding URLs point at —
+ *  these are live and must never be pruned, whatever their age. */
+function referencedAssetNames(orgId, branding) {
+  const prefix = `/api/brand-assets/${orgId}/`;
+  const names = new Set();
+  if (branding && typeof branding === "object" && !Array.isArray(branding)) {
+    for (const value of Object.values(branding)) {
+      if (typeof value === "string" && value.startsWith(prefix)) {
+        names.add(value.slice(prefix.length));
+      }
+    }
+  }
+  return names;
+}
+
+/** The org's stored assets: [{ name, kind, size, mtimeMs }]. Missing dir = []. */
+async function listOrgAssets(orgId) {
+  const dir = join(BRAND_ASSET_DIR, orgId);
+  let entries;
+  try {
+    entries = await readdir(dir);
+  } catch (err) {
+    if (err.code === "ENOENT") return [];
+    throw err;
+  }
+  const files = [];
+  for (const name of entries) {
+    const m = ASSET_NAME_RE.exec(name);
+    if (!m || !BRAND_ASSET_KINDS.has(m[1])) continue;
+    const info = await stat(join(dir, name)).catch(() => null);
+    if (!info || !info.isFile()) continue;
+    files.push({ name, kind: m[1], size: info.size, mtimeMs: info.mtimeMs });
+  }
+  return files;
+}
+
+const totalBytes = (files) => files.reduce((sum, f) => sum + f.size, 0);
+
+/**
+ * Delete orgId's stored assets that are BOTH unreferenced by the org's current
+ * branding AND outside the per-kind grace window (the KEEP_NEWEST_PER_KIND
+ * newest by mtime). `incomingKind` — set when making room for an upload —
+ * counts the about-to-land file as that kind's newest, so an org at its budget
+ * can still rotate a mark. Returns the deleted filenames.
+ */
+export async function pruneBrandAssets(orgId, branding, { incomingKind } = {}) {
+  const referenced = referencedAssetNames(orgId, branding);
+  const byKind = new Map();
+  for (const f of await listOrgAssets(orgId)) {
+    if (!byKind.has(f.kind)) byKind.set(f.kind, []);
+    byKind.get(f.kind).push(f);
+  }
+  const pruned = [];
+  for (const [kind, group] of byKind) {
+    group.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    const keep = kind === incomingKind ? KEEP_NEWEST_PER_KIND - 1 : KEEP_NEWEST_PER_KIND;
+    for (const f of group.slice(keep)) {
+      if (referenced.has(f.name)) continue;
+      await rm(join(BRAND_ASSET_DIR, orgId, f.name), { force: true });
+      pruned.push(f.name);
+    }
+  }
+  return pruned;
+}
+
 /**
  * Persist a validated asset as <BRAND_ASSET_DIR>/<orgId>/<kind>-<sha256-12>.<ext>
- * and return its public URL. Content-hashed names make the file immutable —
- * app.js serves /api/brand-assets with a long immutable cache, and re-uploading
- * identical bytes lands on the same name (a harmless idempotent overwrite).
- * @returns {Promise<{ url: string, file: string }>}
+ * and return its public URL, or { error, status } when the org's byte budget
+ * is exhausted. Content-hashed names make the file immutable — app.js serves
+ * /api/brand-assets with a long immutable cache, and re-uploading identical
+ * bytes lands on the same name (a harmless idempotent overwrite that consumes
+ * no new budget). `branding` is the org's CURRENT stored branding: it defines
+ * the referenced (undeletable) set for both the budget prune and the
+ * prune-on-upload sweep of superseded files.
+ * @returns {Promise<{ url: string, file: string } | { error: string, status: number }>}
  */
-export async function storeBrandAsset(orgId, kind, bytes, ext) {
+export async function storeBrandAsset(orgId, kind, bytes, ext, branding) {
   const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 12);
   const file = `${kind}-${hash}.${ext}`;
   const dir = join(BRAND_ASSET_DIR, orgId);
   await mkdir(dir, { recursive: true });
+
+  // Budget gate — only a genuinely NEW file adds bytes. Over budget → prune
+  // superseded files first; reject only if that wasn't enough.
+  let files = await listOrgAssets(orgId);
+  if (!files.some((f) => f.name === file)) {
+    if (totalBytes(files) + bytes.length > BRAND_ASSET_ORG_BUDGET_BYTES) {
+      await pruneBrandAssets(orgId, branding, { incomingKind: kind });
+      files = await listOrgAssets(orgId);
+    }
+    if (totalBytes(files) + bytes.length > BRAND_ASSET_ORG_BUDGET_BYTES) {
+      const mib = (BRAND_ASSET_ORG_BUDGET_BYTES / (1024 * 1024)).toFixed(1).replace(/\.0$/, "");
+      return {
+        error: `this org's branding assets are over the ${mib} MiB storage budget — save the branding form (so unused uploads can be pruned) or remove some assets, then retry`,
+        status: 400,
+      };
+    }
+  }
+
   await writeFile(join(dir, file), bytes);
+
+  // Prune-on-upload keeps storage bounded without a cron: superseded files
+  // (unreferenced + outside the grace window) go now. Best-effort — the
+  // upload itself already succeeded.
+  try {
+    await pruneBrandAssets(orgId, branding);
+  } catch (err) {
+    console.error("[brandAssets] prune failed:", err);
+  }
+
   return { url: `/api/brand-assets/${orgId}/${file}`, file };
 }
