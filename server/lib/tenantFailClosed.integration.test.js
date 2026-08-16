@@ -9,11 +9,11 @@
 // The failure is simulated by monkey-patching pool.query to reject ONLY the
 // resolver's org lookups — the route's own queries stay healthy, so the old
 // fail-open behavior would have answered 200 with every tenant's rows.
-// Supertest sets the per-tenant Host header (node fetch strips it as
+// hostRequest sets the per-tenant Host header (node fetch strips it as
 // forbidden) — the tenantIsolation.integration.test.js pattern.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import request from "supertest";
+import { hostRequest } from "../test-support/hostRequest.js";
 import { TEST_DATABASE_URL, ensureSchema, testQuery } from "../test-support/testDb.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -55,7 +55,7 @@ after(async () => {
 });
 
 function get(path, hostLabel) {
-  return request(app).get(path).set("Host", `${hostLabel}.${DOMAIN}`);
+  return hostRequest(app, { path, host: `${hostLabel}.${DOMAIN}` });
 }
 
 test("a DB error during tenant resolution 500s the read — no unfiltered rows leak", async () => {

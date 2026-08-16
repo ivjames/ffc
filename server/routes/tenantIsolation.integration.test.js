@@ -2,7 +2,7 @@
 // endpoints that accept a course_id / location_id / tenant-owned row id must
 // treat a foreign tenant's id exactly like a nonexistent one — same status,
 // same body, no existence leak — and the fallback host must still see org-less
-// legacy rows. Uses supertest so the Host header can be set per request (node
+// legacy rows. Uses hostRequest so the Host header can be set per request (node
 // fetch strips it as forbidden), the tenant.integration.test.js pattern.
 //
 // lib/vision.js is mocked (the hunt.integration.test.js pattern) so the
@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm as rmDir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import request from "supertest";
+import { hostRequest } from "../test-support/hostRequest.js";
 import { TEST_DATABASE_URL, ensureSchema, testQuery } from "../test-support/testDb.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -66,9 +66,9 @@ let user; // signed-in player for shared-game create
 
 /** Request with a per-tenant Host header; cache cleared so every case
  *  re-resolves (the 30s TTL outlives a test run). */
-function req(method, path, hostLabel) {
+function req(method, path, hostLabel, { headers, body } = {}) {
   clearTenantCache();
-  return request(app)[method](path).set("Host", `${hostLabel}.${DOMAIN}`);
+  return hostRequest(app, { method, path, host: `${hostLabel}.${DOMAIN}`, headers, body });
 }
 
 async function insertCourse(name, locationId) {
@@ -208,18 +208,18 @@ test("rounds: own course syncs; a foreign course id reads as nonexistent; fallba
     scores: { 0: Array(18).fill(null) },
   });
 
-  const own = await req("post", "/api/rounds", slugA).send(body(courseAId, 1));
+  const own = await req("post", "/api/rounds", slugA, { body: body(courseAId, 1) });
   assert.equal(own.status, 200);
   assert.ok(own.body.roundId);
 
-  const foreign = await req("post", "/api/rounds", slugA).send(body(courseBId, 2));
+  const foreign = await req("post", "/api/rounds", slugA, { body: body(courseBId, 2) });
   assert.equal(foreign.status, 400);
   assert.equal(foreign.body.error, "courseId does not exist");
 
   // Fallback host: org-less legacy course still syncs; a real tenant's stays out.
-  const orgless = await req("post", "/api/rounds", fallbackLabel).send(body(courseNoneId, 3));
+  const orgless = await req("post", "/api/rounds", fallbackLabel, { body: body(courseNoneId, 3) });
   assert.equal(orgless.status, 200);
-  const stillForeign = await req("post", "/api/rounds", fallbackLabel).send(body(courseBId, 4));
+  const stillForeign = await req("post", "/api/rounds", fallbackLabel, { body: body(courseBId, 4) });
   assert.equal(stillForeign.status, 400);
 });
 
@@ -290,7 +290,7 @@ test("hunt verify: foreign course/item burns nothing and reads as nonexistent", 
     mediaType: "image/jpeg",
   });
 
-  const foreign = await req("post", "/api/hunt/verify", slugA).send(body(itemBId, courseBId));
+  const foreign = await req("post", "/api/hunt/verify", slugA, { body: body(itemBId, courseBId) });
   assert.equal(foreign.status, 400);
   assert.equal(foreign.body.error, "itemId does not exist on this course");
   const scans = await testQuery(`select count(*)::int as n from hunt_scan where item_id = $1`, [
@@ -298,13 +298,13 @@ test("hunt verify: foreign course/item burns nothing and reads as nonexistent", 
   ]);
   assert.equal(scans.rows[0].n, 0, "no vision spend metered for the foreign attempt");
 
-  const own = await req("post", "/api/hunt/verify", slugA).send(body(itemAId, courseAId));
+  const own = await req("post", "/api/hunt/verify", slugA, { body: body(itemAId, courseAId) });
   assert.equal(own.status, 200);
   assert.equal(own.body.verified, true);
 
-  const orgless = await req("post", "/api/hunt/verify", fallbackLabel).send(
-    body(itemNoneId, courseNoneId)
-  );
+  const orgless = await req("post", "/api/hunt/verify", fallbackLabel, {
+    body: body(itemNoneId, courseNoneId),
+  });
   assert.equal(orgless.status, 200);
   assert.equal(orgless.body.verified, true);
 });
@@ -331,12 +331,12 @@ test("stickers: a foreign location id answers like a venue with no sheet; assets
 test("booth upload: a foreign locationId attributes like an unknown one (stored null)", async () => {
   const body = (locationId) => ({ boothId, locationId, imageBase64: PNG_BASE64, mediaType: "image/jpeg" });
 
-  const foreign = await req("post", "/api/photos", slugA).send(body(locBId));
+  const foreign = await req("post", "/api/photos", slugA, { body: body(locBId) });
   assert.equal(foreign.status, 200);
   const fRow = await testQuery(`select location_id from booth_photo where id = $1`, [foreign.body.id]);
   assert.equal(fRow.rows[0].location_id, null, "foreign venue not planted in another tenant's review queue");
 
-  const own = await req("post", "/api/photos", slugA).send(body(locAId));
+  const own = await req("post", "/api/photos", slugA, { body: body(locAId) });
   assert.equal(own.status, 200);
   const oRow = await testQuery(`select location_id from booth_photo where id = $1`, [own.body.id]);
   assert.equal(oRow.rows[0].location_id, locAId);
@@ -352,18 +352,18 @@ test("game rewards: foreign location = 404 unknown; own location gets past the t
     tickets: 10,
     sessionId: `tenant-iso-${stamp}-award`,
   });
-  const foreign = await req("post", "/api/game-rewards/award", slugA).send(award(locBId));
+  const foreign = await req("post", "/api/game-rewards/award", slugA, { body: award(locBId) });
   assert.equal(foreign.status, 404);
   assert.equal(foreign.body.error, "unknown location");
   // Own venue (no POS configured): 403 "not enabled" proves the tenant gate
   // passed and the venue-config gate is what stopped it — not a 404.
-  const own = await req("post", "/api/game-rewards/award", slugA).send(award(locAId));
+  const own = await req("post", "/api/game-rewards/award", slugA, { body: award(locAId) });
   assert.equal(own.status, 403);
 
   const bonus = (locationId) => ({ locationId, playerId: "card-1", kind: "install" });
-  const foreignBonus = await req("post", "/api/game-rewards/bonus", slugA).send(bonus(locBId));
+  const foreignBonus = await req("post", "/api/game-rewards/bonus", slugA, { body: bonus(locBId) });
   assert.equal(foreignBonus.status, 404);
-  const ownBonus = await req("post", "/api/game-rewards/bonus", slugA).send(bonus(locAId));
+  const ownBonus = await req("post", "/api/game-rewards/bonus", slugA, { body: bonus(locAId) });
   assert.equal(ownBonus.status, 403);
 });
 
@@ -372,12 +372,14 @@ test("game rewards: foreign location = 404 unknown; own location gets past the t
 test("funnel beacon: a foreign locationId records the event with location null", async () => {
   const eventId1 = crypto.randomUUID();
   const eventId2 = crypto.randomUUID();
-  const res = await req("post", "/api/events", slugA).send({
-    deviceId,
-    events: [
-      { id: eventId1, name: "nudge_shown", locationId: locBId },
-      { id: eventId2, name: "nudge_shown", locationId: locAId },
-    ],
+  const res = await req("post", "/api/events", slugA, {
+    body: {
+      deviceId,
+      events: [
+        { id: eventId1, name: "nudge_shown", locationId: locBId },
+        { id: eventId2, name: "nudge_shown", locationId: locAId },
+      ],
+    },
   });
   assert.equal(res.status, 200);
   assert.equal(res.body.recorded, 2);
@@ -391,16 +393,12 @@ test("funnel beacon: a foreign locationId records the event with location null",
 });
 
 test("feedback: a foreign locationId files with location null", async () => {
-  const foreign = await req("post", "/api/feedback", slugA).send({
-    body: "tenant iso foreign",
-    deviceId,
-    locationId: locBId,
+  const foreign = await req("post", "/api/feedback", slugA, {
+    body: { body: "tenant iso foreign", deviceId, locationId: locBId },
   });
   assert.equal(foreign.status, 201);
-  const own = await req("post", "/api/feedback", slugA).send({
-    body: "tenant iso own",
-    deviceId,
-    locationId: locAId,
+  const own = await req("post", "/api/feedback", slugA, {
+    body: { body: "tenant iso own", deviceId, locationId: locAId },
   });
   assert.equal(own.status, 201);
   const rows = await testQuery(
@@ -415,16 +413,14 @@ test("feedback: a foreign locationId files with location null", async () => {
 // --- Announcement view beacon -------------------------------------------------------
 
 test("announcement views: a foreign pinned id is dropped like a nonexistent one; global rows count everywhere", async () => {
-  const foreign = await req("post", "/api/announcements/views", slugA).send({
-    deviceId,
-    ids: [annBId],
+  const foreign = await req("post", "/api/announcements/views", slugA, {
+    body: { deviceId, ids: [annBId] },
   });
   assert.equal(foreign.status, 200);
   assert.equal(foreign.body.recorded, 0, "another tenant's promo can't be view-stuffed by id");
 
-  const mixed = await req("post", "/api/announcements/views", slugB).send({
-    deviceId,
-    ids: [annBId, annGlobalId],
+  const mixed = await req("post", "/api/announcements/views", slugB, {
+    body: { deviceId, ids: [annBId, annGlobalId] },
   });
   assert.equal(mixed.status, 200);
   assert.equal(mixed.body.recorded, 2, "own pinned + global both count on the owning tenant");
@@ -433,22 +429,23 @@ test("announcement views: a foreign pinned id is dropped like a nonexistent one;
 // --- Shared games ----------------------------------------------------------------
 
 test("shared games: the course lookup is tenant-scoped; the social graph stays global", async () => {
-  const foreign = await req("post", "/api/games", slugA)
-    .set("Cookie", user.cookie)
-    .send({ courseId: courseBId, tag: "ZZQ" });
+  const foreign = await req("post", "/api/games", slugA, {
+    headers: { Cookie: user.cookie },
+    body: { courseId: courseBId, tag: "ZZQ" },
+  });
   assert.equal(foreign.status, 400);
   assert.equal(foreign.body.error, "courseId does not exist");
 
-  const own = await req("post", "/api/games", slugA)
-    .set("Cookie", user.cookie)
-    .send({ courseId: courseAId, tag: "ZZQ" });
+  const own = await req("post", "/api/games", slugA, {
+    headers: { Cookie: user.cookie },
+    body: { courseId: courseAId, tag: "ZZQ" },
+  });
   assert.equal(own.status, 200);
 
   // Deliberately global from here: the join code is the capability, so a
   // friend on ANY subdomain can join the game (player accounts are global).
-  const join = await req("post", "/api/games/join", slugB).send({
-    joinCode: own.body.game.joinCode,
-    tag: "ZZR",
+  const join = await req("post", "/api/games/join", slugB, {
+    body: { joinCode: own.body.game.joinCode, tag: "ZZR" },
   });
   assert.equal(join.status, 200);
 });

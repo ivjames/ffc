@@ -1,10 +1,10 @@
 // Integration coverage for multi-venue tenant resolution (MULTI-VENUE.md §1/§3):
 // Host-header → org on /api/content, the per-tenant /api/manifest.webmanifest,
-// and tenant scoping of the public announcements feed. Uses supertest so the
+// and tenant scoping of the public announcements feed. Uses hostRequest so the
 // Host header can be set per request (node fetch strips it as forbidden).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import request from "supertest";
+import { hostRequest } from "../test-support/hostRequest.js";
 import { TEST_DATABASE_URL, ensureSchema, testQuery } from "../test-support/testDb.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -33,7 +33,7 @@ const announcementIds = [];
 
 function get(path, hostLabel) {
   clearTenantCache(); // fresh resolution per case — the 30s TTL outlives a test run
-  return request(app).get(path).set("Host", `${hostLabel}.${DOMAIN}`);
+  return hostRequest(app, { path, host: `${hostLabel}.${DOMAIN}` });
 }
 
 async function insertOrg(name, slug, { branding = {}, archived = false, status = "active" } = {}) {
@@ -192,10 +192,12 @@ test("suspended tenant sees NO announcements — not even global rows", async ()
 test("suspended tenant's announcement-view beacon records nothing", async () => {
   const [globalId] = announcementIds;
   clearTenantCache();
-  const res = await request(app)
-    .post("/api/announcements/views")
-    .set("Host", `${slugSuspended}.${DOMAIN}`)
-    .send({ deviceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", ids: [globalId] });
+  const res = await hostRequest(app, {
+    method: "POST",
+    path: "/api/announcements/views",
+    host: `${slugSuspended}.${DOMAIN}`,
+    body: { deviceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", ids: [globalId] },
+  });
   assert.equal(res.status, 200);
   assert.equal(res.body.recorded, 0, "a global row's view is not recorded for an off venue");
 });

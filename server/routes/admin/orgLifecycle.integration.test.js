@@ -6,7 +6,7 @@
 // suspended org (dark subdomain) is covered in routes/tenant.integration.test.js.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import request from "supertest";
+import { hostRequest } from "../../test-support/hostRequest.js";
 import {
   TEST_DATABASE_URL,
   ensureSchema,
@@ -144,7 +144,7 @@ test("?force=1 overrides the default-org guard", async () => {
 // Tenant-side consequence of a force-suspended DEFAULT org: every unmatched
 // host goes DARK (empty catalog, platform-default manifest) — resolution must
 // NOT fall through to another live org, which would serve that client's
-// catalog and branding on the apex/staging hosts. Uses supertest against the
+// catalog and branding on the apex/staging hosts. Uses hostRequest against the
 // in-process app so the Host header can be set per request (node fetch strips
 // it as forbidden); this process's private DEFAULT_ORG_SLUG keeps the shared
 // schema-seeded default org out of it.
@@ -155,7 +155,7 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
 
   // Precondition: the unknown label falls back to the default org.
   clearTenantCache(); // fresh resolution per phase — the 30s TTL outlives a test run
-  const beforeRes = await request(app).get("/api/content").set("Host", unknownHost);
+  const beforeRes = await hostRequest(app, { path: "/api/content", host: unknownHost });
   assert.equal(beforeRes.status, 200);
   assert.equal(beforeRes.body.org.slug, DEFAULT_SLUG);
 
@@ -166,7 +166,7 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
   assert.equal(suspend.status, 200);
   try {
     clearTenantCache();
-    const content = await request(app).get("/api/content").set("Host", unknownHost);
+    const content = await hostRequest(app, { path: "/api/content", host: unknownHost });
     assert.equal(content.status, 200);
     assert.deepEqual(
       content.body,
@@ -174,14 +174,14 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
       "unmatched host is dark — the second live org is not served here"
     );
 
-    const manifest = await request(app).get("/api/manifest.webmanifest").set("Host", unknownHost);
+    const manifest = await hostRequest(app, { path: "/api/manifest.webmanifest", host: unknownHost });
     assert.equal(manifest.status, 200);
     const m = JSON.parse(manifest.text);
     assert.equal(m.name, BRANDING_DEFAULTS.appName, "manifest is all platform defaults");
     assert.equal(m.theme_color, BRANDING_DEFAULTS.themeColor);
 
     // The second org's OWN subdomain still resolves — only unmatched hosts dark.
-    const other = await request(app).get("/api/content").set("Host", otherHost);
+    const other = await hostRequest(app, { path: "/api/content", host: otherHost });
     assert.equal(other.status, 200);
     assert.equal(other.body.org.id, orgId);
   } finally {
@@ -194,7 +194,7 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
 
   // Unsuspend restores the default-org fallback for unmatched hosts.
   clearTenantCache();
-  const afterRes = await request(app).get("/api/content").set("Host", unknownHost);
+  const afterRes = await hostRequest(app, { path: "/api/content", host: unknownHost });
   assert.equal(afterRes.status, 200);
   assert.equal(afterRes.body.org.slug, DEFAULT_SLUG);
 });
