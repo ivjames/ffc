@@ -2,8 +2,15 @@
 
 Static marketing landing page for the platform apex domain (`infinicade.com`),
 for when the domain is purchased. Fully self-contained — one HTML file, inline
-CSS/SVG, no external requests — so it can be previewed by opening
-`index.html` directly in a browser.
+CSS/JS/SVG with the display fonts (Unbounded + Space Grotesk, both SIL OFL)
+embedded as data URIs — so it makes zero external requests and can be
+previewed by opening `index.html` directly in a browser.
+
+Interactive touches (all vanilla JS, all degrade gracefully without it, and
+all respect `prefers-reduced-motion`): a playable drag-to-putt mini golf ball
+in the hero, a live-reshuffling leaderboard mock, an AI-hunt verify loop, a
+ticket count-up, and a white-label venue switcher that re-skins a phone
+mockup per tenant.
 
 Deliberately **not** in `public/`: everything there ships inside the player
 PWA bundle and would be served on every tenant subdomain. This page belongs
