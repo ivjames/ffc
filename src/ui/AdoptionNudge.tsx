@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useInstallPrompt } from '../lib/pwaInstall';
 import { nudgeVisible, dismissNudge } from '../lib/nudgeMemory';
+import { usePos } from '../lib/pos';
 import { track } from '../lib/analytics';
 
 // Proactive adoption nudge for the Home screen: a single dismissible banner
@@ -14,22 +15,33 @@ import { track } from '../lib/analytics';
 
 type Kind = 'install' | 'signin';
 
-const COPY: Record<Kind, { icon: string; title: string; body: string; cta: string; to: string }> = {
+const COPY: Record<Kind, { icon: string; title: string; cta: string; to: string }> = {
   install: {
     icon: '📲',
     title: 'Add the app to your phone',
-    body: 'One tap — full screen, works offline, and it can buzz you when your food is ready.',
     cta: 'Install',
     to: '/install',
   },
   signin: {
     icon: '🏆',
     title: 'Save your scores & rewards',
-    body: 'Sign in to keep your rounds and tickets with you across every visit.',
     cta: 'Sign in',
     to: '/me/account',
   },
 };
+
+// The install pitch's food clause ("buzz you when your food is ready") is only
+// true where the venue has in-app ordering — a paid per-venue capability
+// (location.pos → usePos().ordering). Promising it at a venue that never
+// buzzes anyone is a white-label copy leak, so the clause is gated.
+function bodyFor(kind: Kind, hasOrdering: boolean): string {
+  if (kind === 'signin') {
+    return 'Sign in to keep your rounds and tickets with you across every visit.';
+  }
+  return hasOrdering
+    ? 'One tap — full screen, works offline, and it can buzz you when your food is ready.'
+    : 'One tap — full screen, works offline, no app store needed.';
+}
 
 export default function AdoptionNudge({
   signedIn,
@@ -45,6 +57,9 @@ export default function AdoptionNudge({
 }) {
   const navigate = useNavigate();
   const { installed } = useInstallPrompt();
+  // usePos re-resolves on content hydration, so enabling ordering in Master
+  // Control upgrades the pitch without a reload.
+  const hasOrdering = usePos().ordering != null;
 
   // Pick the first applicable, not-snoozed nudge. Install leads (it's the
   // prerequisite for push and the standalone experience); sign-in falls in
@@ -67,6 +82,7 @@ export default function AdoptionNudge({
 
   if (!kind || hidden) return null;
   const c = COPY[kind];
+  const body = bodyFor(kind, hasOrdering);
 
   return (
     <div
@@ -80,7 +96,7 @@ export default function AdoptionNudge({
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-fairway-50">{c.title}</div>
-          <div className="mt-0.5 text-xs text-fairway-100/70">{c.body}</div>
+          <div className="mt-0.5 text-xs text-fairway-100/70">{body}</div>
           <div className="mt-2 flex items-center gap-3">
             <button
               onClick={() => {

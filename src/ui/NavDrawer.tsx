@@ -8,6 +8,7 @@ import { isStandalone } from '../lib/pwaInstall';
 import { playClick } from '../lib/sound';
 import ThemeToggle from './ThemeToggle';
 import SoundToggle from './SoundToggle';
+import BrandLogo from './BrandLogo';
 
 // The global navigation drawer — the app's one persistent way to move between
 // the top-level sections (Home / Golf / Arcade / Food / Me). Opened by the
@@ -114,12 +115,17 @@ export default function NavDrawer() {
         }}
       >
         <div className="flex items-center justify-between px-4 pb-2 pt-4">
-          <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
-              {location ? 'You’re at' : 'Menu'}
-            </div>
-            <div className="truncate text-lg font-black text-fairway-50">
-              {location?.name ?? 'Family Fun Center'}
+          <div className="flex min-w-0 items-center gap-2.5">
+            {/* Tenant logo (badge cut suits the square slot) — explicit
+                branding only, nothing when the org hasn't uploaded one. */}
+            <BrandLogo prefer="badge" className="h-9 w-9 shrink-0 object-contain" />
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-fairway-400">
+                {location ? 'You’re at' : 'Menu'}
+              </div>
+              <div className="truncate text-lg font-black text-fairway-50">
+                {location?.name ?? 'Family Fun Center'}
+              </div>
             </div>
           </div>
           <button
