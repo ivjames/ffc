@@ -36,7 +36,7 @@ export function Button({
   return (
     <button
       {...props}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed ${styles} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed ${styles} ${className}`}
     />
   );
 }
@@ -67,7 +67,7 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 ${props.className ?? ''}`}
+      className={`w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-500 ${props.className ?? ''}`}
     />
   );
 }
@@ -82,7 +82,15 @@ export function Banner({ kind, children }: { kind: 'error' | 'info' | 'success';
 }
 
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
-  return <div className="py-8 text-center text-sm text-slate-500">{label}</div>;
+  return (
+    <div role="status" className="flex items-center justify-center gap-2 py-8 text-sm text-slate-500">
+      <svg viewBox="0 0 24 24" className="h-4 w-4 animate-spin" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+      {label}
+    </div>
+  );
 }
 
 export function Pill({ children, tone = 'slate' }: { children: ReactNode; tone?: 'slate' | 'amber' }) {
