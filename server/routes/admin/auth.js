@@ -101,17 +101,31 @@ sessionRouter.post("/me/password", async (req, res) => {
     if (!verifyPassword(currentPassword, result.rows[0].passwordHash)) {
       return res.status(401).json({ ok: false, error: "current password is incorrect" });
     }
-    await pool.query(`update admin_user set password_hash = $2 where id = $1`, [
-      id,
-      hashPassword(newPassword),
-    ]);
+    // One transaction: the rehash and the revocation are a single security
+    // action — a failure between them must not leave the password changed
+    // while stale (possibly stolen) sessions stay valid.
     // admin_session.id IS the cookie token (lib/adminSession.js), so "every
     // session but this one" is a keyed delete on the current cookie's value.
     const token = parseCookies(req)[SESSION_COOKIE_NAME];
-    const revoked = await pool.query(
-      `delete from admin_session where admin_user_id = $1 and id <> $2`,
-      [id, token]
-    );
+    const client = await pool.connect();
+    let revoked;
+    try {
+      await client.query("begin");
+      await client.query(`update admin_user set password_hash = $2 where id = $1`, [
+        id,
+        hashPassword(newPassword),
+      ]);
+      revoked = await client.query(
+        `delete from admin_session where admin_user_id = $1 and id <> $2`,
+        [id, token]
+      );
+      await client.query("commit");
+    } catch (err) {
+      await client.query("rollback").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
     // NO password material in the audit detail — only the revocation count.
     await audit({
       action: "admin.password_change",

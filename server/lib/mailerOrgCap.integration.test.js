@@ -5,7 +5,7 @@
 // OTP sends to the tenant resolved from the request's subdomain.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import request from "supertest";
+import { hostRequest } from "../test-support/hostRequest.js";
 import { TEST_DATABASE_URL, ensureSchema, testQuery } from "../test-support/testDb.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -137,10 +137,12 @@ test("request-code attributes its OTP send to the tenant resolved from the subdo
   clearTenantCache();
 
   const email = `cap-player-${stamp}@example.com`;
-  const res = await request(app)
-    .post("/api/auth/request-code")
-    .set("Host", `${ORG_C}.minigolf.example`)
-    .send({ email });
+  const res = await hostRequest(app, {
+    method: "POST",
+    path: "/api/auth/request-code",
+    host: `${ORG_C}.minigolf.example`,
+    body: { email },
+  });
   assert.equal(res.status, 200);
   assert.equal(res.body.ok, true);
 

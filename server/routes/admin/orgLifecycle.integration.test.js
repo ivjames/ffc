@@ -6,7 +6,7 @@
 // suspended org (dark subdomain) is covered in routes/tenant.integration.test.js.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import request from "supertest";
+import { hostRequest } from "../../test-support/hostRequest.js";
 import {
   TEST_DATABASE_URL,
   ensureSchema,
@@ -144,7 +144,7 @@ test("?force=1 overrides the default-org guard", async () => {
 // Tenant-side consequence of a force-suspended DEFAULT org: every unmatched
 // host goes DARK (empty catalog, platform-default manifest) — resolution must
 // NOT fall through to another live org, which would serve that client's
-// catalog and branding on the apex/staging hosts. Uses supertest against the
+// catalog and branding on the apex/staging hosts. Uses hostRequest against the
 // in-process app so the Host header can be set per request (node fetch strips
 // it as forbidden); this process's private DEFAULT_ORG_SLUG keeps the shared
 // schema-seeded default org out of it.
@@ -155,7 +155,7 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
 
   // Precondition: the unknown label falls back to the default org.
   clearTenantCache(); // fresh resolution per phase — the 30s TTL outlives a test run
-  const beforeRes = await request(app).get("/api/content").set("Host", unknownHost);
+  const beforeRes = await hostRequest(app, { path: "/api/content", host: unknownHost });
   assert.equal(beforeRes.status, 200);
   assert.equal(beforeRes.body.org.slug, DEFAULT_SLUG);
 
@@ -166,7 +166,7 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
   assert.equal(suspend.status, 200);
   try {
     clearTenantCache();
-    const content = await request(app).get("/api/content").set("Host", unknownHost);
+    const content = await hostRequest(app, { path: "/api/content", host: unknownHost });
     assert.equal(content.status, 200);
     assert.deepEqual(
       content.body,
@@ -174,14 +174,14 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
       "unmatched host is dark — the second live org is not served here"
     );
 
-    const manifest = await request(app).get("/api/manifest.webmanifest").set("Host", unknownHost);
+    const manifest = await hostRequest(app, { path: "/api/manifest.webmanifest", host: unknownHost });
     assert.equal(manifest.status, 200);
     const m = JSON.parse(manifest.text);
     assert.equal(m.name, BRANDING_DEFAULTS.appName, "manifest is all platform defaults");
     assert.equal(m.theme_color, BRANDING_DEFAULTS.themeColor);
 
     // The second org's OWN subdomain still resolves — only unmatched hosts dark.
-    const other = await request(app).get("/api/content").set("Host", otherHost);
+    const other = await hostRequest(app, { path: "/api/content", host: otherHost });
     assert.equal(other.status, 200);
     assert.equal(other.body.org.id, orgId);
   } finally {
@@ -194,7 +194,7 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
 
   // Unsuspend restores the default-org fallback for unmatched hosts.
   clearTenantCache();
-  const afterRes = await request(app).get("/api/content").set("Host", unknownHost);
+  const afterRes = await hostRequest(app, { path: "/api/content", host: unknownHost });
   assert.equal(afterRes.status, 200);
   assert.equal(afterRes.body.org.slug, DEFAULT_SLUG);
 });
@@ -220,4 +220,50 @@ test("bad and unknown ids answer 400/404", async () => {
     { method: "POST", headers: TOKEN_HEADERS }
   );
   assert.equal(unknown.status, 404);
+});
+
+test("archiving the DEFAULT org is guarded like suspend (400 without ?force=1)", async () => {
+  // The ordinary Archive button reaches the same platform-wide darkness as a
+  // forced suspend (lib/tenant.js resolves an archived default org to the
+  // dark sentinel), so it demands the same explicit force.
+  const res = await fetch(`${baseUrl}/api/admin/orgs/${defaultOrgId}/archive`, {
+    method: "POST",
+    headers: TOKEN_HEADERS,
+  });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(body.error, /default org/);
+  assert.match(body.error, /force=1/);
+
+  const row = await testQuery(`select archived_at from org where id = $1`, [defaultOrgId]);
+  assert.equal(row.rows[0].archived_at, null, "the default org was left unarchived");
+});
+
+test("?force=1 archives the default org; unarchive restores it (no force needed)", async () => {
+  const archive = await fetch(`${baseUrl}/api/admin/orgs/${defaultOrgId}/archive?force=1`, {
+    method: "POST",
+    headers: TOKEN_HEADERS,
+  });
+  assert.equal(archive.status, 200);
+  assert.notEqual((await archive.json()).org.archivedAt, null);
+  try {
+    // Non-default orgs stay unguarded: archive of the ordinary org proceeds.
+    const plain = await fetch(`${baseUrl}/api/admin/orgs/${orgId}/archive`, {
+      method: "POST",
+      headers: TOKEN_HEADERS,
+    });
+    assert.equal(plain.status, 200);
+    const restorePlain = await fetch(`${baseUrl}/api/admin/orgs/${orgId}/unarchive`, {
+      method: "POST",
+      headers: TOKEN_HEADERS,
+    });
+    assert.equal(restorePlain.status, 200);
+  } finally {
+    const restore = await fetch(`${baseUrl}/api/admin/orgs/${defaultOrgId}/unarchive`, {
+      method: "POST",
+      headers: TOKEN_HEADERS,
+    });
+    assert.equal(restore.status, 200);
+    assert.equal((await restore.json()).org.archivedAt, null);
+  }
 });

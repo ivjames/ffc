@@ -428,6 +428,11 @@ update location
 -- with the table: org is created just above, after hunt_scan.
 alter table hunt_scan add column if not exists org_id uuid references org(id);
 create index if not exists hunt_scan_org_idx on hunt_scan (org_id);
+-- Venue stamp for the rolling daily cap (routes/hunt.js reserveScan): like
+-- org_id it is fixed at bill time, so moving a course between venues cannot
+-- shift already-billed scans between the venues' 24h budgets.
+alter table hunt_scan add column if not exists location_id uuid references location(id);
+create index if not exists hunt_scan_location_idx on hunt_scan (location_id);
 
 -- Catch-up for scans metered before the stamp existed: attribute them to the
 -- venue's CURRENT org once — the best information available for old rows.
@@ -441,6 +446,9 @@ update hunt_scan
                    join location l on l.id = c.location_id
                   where c.id = hunt_scan.course_id)
  where org_id is null;
+update hunt_scan
+   set location_id = (select c.location_id from course c where c.id = hunt_scan.course_id)
+ where location_id is null;
 
 -- ---------------------------------------------------------------------------
 -- Player accounts (passwordless email sign-in), teams, and shared multi-device
