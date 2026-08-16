@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { setToken, clearToken, api, AuthError, ApiError, type CurrentUser } from './api';
-import { Button, Card, Field, Input, Banner, ADMIN_TZ_LABEL } from './ui';
+import { Button, Card, Field, Input, Banner, ToastProvider, ADMIN_TZ_LABEL } from './ui';
 import Overview from './Overview';
 import Orgs from './Orgs';
 import OrgDetail from './OrgDetail';
@@ -537,17 +537,19 @@ export default function ControlApp() {
     );
   }
   return (
-    <Shell
-      user={user}
-      onLock={() => {
-        clearToken();
-        setUser(null);
-        setAuthState('locked');
-        // Harmless no-op if there was no session (APP_TOKEN-only path) — but
-        // ends the server-side session if there was one, rather than leaving
-        // a still-valid cookie behind after "locking".
-        api.logout().catch(() => {});
-      }}
-    />
+    <ToastProvider>
+      <Shell
+        user={user}
+        onLock={() => {
+          clearToken();
+          setUser(null);
+          setAuthState('locked');
+          // Harmless no-op if there was no session (APP_TOKEN-only path) — but
+          // ends the server-side session if there was one, rather than leaving
+          // a still-valid cookie behind after "locking".
+          api.logout().catch(() => {});
+        }}
+      />
+    </ToastProvider>
   );
 }

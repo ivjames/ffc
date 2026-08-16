@@ -1,10 +1,11 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from './api';
-import { BackLink, Button, Card, Banner, PageHeader, Pill, Spinner, useAsync } from './ui';
+import { BackLink, Button, Card, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
 
 export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { id = '' } = useParams();
   const nav = useNavigate();
+  const toast = useToast();
   const { data, error, loading, reload } = useAsync(() => api.getOrg(id), [id]);
 
   if (loading) return <Spinner />;
@@ -14,6 +15,7 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
   async function toggleArchive() {
     await api.archiveOrg(id, !org.archivedAt);
+    toast(org.archivedAt ? 'Org unarchived.' : 'Org archived.');
     reload();
   }
 

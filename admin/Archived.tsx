@@ -1,9 +1,10 @@
 import { api } from './api';
-import { Button, Card, Banner, PageHeader, Spinner, useAsync, fmtDateTime, ADMIN_TZ_LABEL } from './ui';
+import { Button, Card, Banner, PageHeader, Spinner, useAsync, useToast, fmtDateTime, ADMIN_TZ_LABEL } from './ui';
 
 export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const orgs = useAsync(() => api.listOrgs(true), []);
   const locations = useAsync(() => api.listLocations({ archived: true }), []);
+  const toast = useToast();
 
   const archivedOrgs = orgs.data?.filter((o) => o.archivedAt) ?? [];
   const archivedLocations = locations.data?.filter((l) => l.archivedAt) ?? [];
@@ -38,6 +39,7 @@ export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                 variant="ghost"
                 onClick={async () => {
                   await api.archiveOrg(o.id, false);
+                  toast('Org unarchived.');
                   orgs.reload();
                 }}
               >
@@ -65,6 +67,7 @@ export default function Archived({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               variant="ghost"
               onClick={async () => {
                 await api.archiveLocation(l.id, false);
+                toast('Location unarchived.');
                 locations.reload();
               }}
             >

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AdminFeedback, type AdminFeedbackStatus } from './api';
-import { Button, Card, Banner, EmptyState, PageHeader, Pill, Segmented, Spinner, fmtDateTime, useObjectUrl } from './ui';
+import { Button, Card, Banner, EmptyState, PageHeader, Pill, Segmented, Spinner, fmtDateTime, useObjectUrl, useToast } from './ui';
 
 // Reviewer commentary — the operator side of the in-app feedback widget
 // (player side: the 💬 pill in the app's dev cluster). Every note arrives with
@@ -67,6 +67,7 @@ function FeedbackRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const resolved = note.status === 'resolved';
 
   async function run(fn: () => Promise<void>) {
@@ -134,6 +135,7 @@ function FeedbackRow({
             }
             void run(async () => {
               await api.removeFeedback(note.id);
+              toast('Note deleted.');
               onRemoved();
             });
           }}

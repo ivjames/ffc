@@ -7,7 +7,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
-import { useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
 // Master Control operates in a single HQ/operator timezone (Pacific), distinct
@@ -253,6 +253,77 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
 export function Pill({ children, tone = 'slate' }: { children: ReactNode; tone?: 'slate' | 'amber' }) {
   const styles = tone === 'amber' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600';
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles}`}>{children}</span>;
+}
+
+// --- Toasts -----------------------------------------------------------------
+// Transient confirmations ("Saved.", "Photo deleted.") that don't deserve a
+// layout-shifting banner. useToast() outside a provider is a no-op, so screens
+// stay renderable standalone (as the tests do). Errors that need reading or
+// acting on should stay inline — toasts are for outcomes, not diagnostics.
+
+type ToastKind = 'success' | 'error' | 'info';
+type ToastItem = { id: number; kind: ToastKind; message: string };
+/** Fire a toast: `toast('Saved.')` (success) or `toast(msg, 'error' | 'info')`. */
+export type ToastFn = (message: string, kind?: ToastKind) => void;
+
+const ToastContext = createContext<ToastFn>(() => {});
+
+export function useToast(): ToastFn {
+  return useContext(ToastContext);
+}
+
+const TOAST_DOT: Record<ToastKind, string> = {
+  success: 'bg-emerald-500',
+  error: 'bg-red-500',
+  info: 'bg-sky-500',
+};
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const nextId = useRef(1);
+
+  const dismiss = useCallback((id: number) => {
+    setToasts((cur) => cur.filter((t) => t.id !== id));
+  }, []);
+
+  const show = useCallback<ToastFn>(
+    (message, kind = 'success') => {
+      const id = nextId.current++;
+      // Keep the stack short — a burst of saves shouldn't wallpaper the corner.
+      setToasts((cur) => [...cur.slice(-3), { id, kind, message }]);
+      window.setTimeout(() => dismiss(id), 4500);
+    },
+    [dismiss]
+  );
+
+  return (
+    <ToastContext.Provider value={show}>
+      {children}
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-72 flex-col gap-2"
+      >
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            role="status"
+            className="pointer-events-auto flex items-start gap-2.5 rounded-lg bg-white p-3 text-sm shadow-lg ring-1 ring-slate-200 animate-[ffc-toast-in_150ms_ease-out]"
+          >
+            <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TOAST_DOT[t.kind]}`} />
+            <span className="flex-1 break-words text-slate-700">{t.message}</span>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={() => dismiss(t.id)}
+              className="-m-1 rounded p-1 leading-none text-slate-400 hover:text-slate-600"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
 }
 
 // The admin API requires an auth header, which <img src> can't carry — so

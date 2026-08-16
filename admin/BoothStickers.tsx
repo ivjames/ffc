@@ -6,7 +6,7 @@ import {
   type AdminStickerCorner,
   type Location,
 } from './api';
-import { Button, Card, Banner, EmptyState, Field, Input, PageHeader, Pill, Select, Spinner, fmtDateTime } from './ui';
+import { Button, Card, Banner, EmptyState, Field, Input, PageHeader, Pill, Select, Spinner, fmtDateTime, useToast } from './ui';
 
 const CORNER_LABEL: Record<AdminStickerCorner, string> = {
   tl: 'top-left',
@@ -106,6 +106,7 @@ async function prepareRaster(file: File): Promise<{ base64: string; mediaType: '
 function StickerCard({ sticker, onRemoved }: { sticker: AdminVenueSticker; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   return (
     <Card className="flex items-center gap-4">
       <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-slate-100 p-2">
@@ -140,6 +141,7 @@ function StickerCard({ sticker, onRemoved }: { sticker: AdminVenueSticker; onRem
           setError(null);
           try {
             await api.removeBoothSticker(sticker.id);
+            toast('Sticker removed.');
             onRemoved();
           } catch (err) {
             setError((err as Error).message);
@@ -167,6 +169,7 @@ export default function BoothStickers() {
   const [corner, setCorner] = useState<AdminStickerCorner>('tr');
   const [reloadKey, setReloadKey] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   useEffect(() => {
     api.listLocations().then(
@@ -253,6 +256,7 @@ export default function BoothStickers() {
         await api.uploadBoothSticker({ ...common, svg: await file.text() });
       }
       setLabel('');
+      toast('Sticker uploaded.');
       reloadStickers();
     } catch (err) {
       // Server rejection (dangerous/malformed SVG, non-PNG, too large) shows here.

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Org } from './api';
-import { Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync } from './ui';
+import { Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
 
 function OrgForm({ onSaved }: { onSaved: () => void }) {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   const autoSlug = (v: string) =>
     v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -20,6 +21,7 @@ function OrgForm({ onSaved }: { onSaved: () => void }) {
       await api.saveOrg({ name: name.trim(), slug: slug || autoSlug(name) });
       setName('');
       setSlug('');
+      toast('Org created.');
       onSaved();
     } catch (e) {
       setErr((e as Error).message);

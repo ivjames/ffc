@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, type Announcement, type Location } from './api';
-import { Button, Card, EmptyState, Field, Input, Banner, PageHeader, Pill, Select, Spinner, useAsync, fmtDateTime } from './ui';
+import { Button, Card, EmptyState, Field, Input, Banner, PageHeader, Pill, Select, Spinner, useAsync, useToast, fmtDateTime } from './ui';
 
 // Announcements / special updates (punchlist #1). Rows here go live to the
 // player app and TV board IMMEDIATELY (the app polls /api/announcements) —
@@ -37,6 +37,7 @@ function AnnouncementForm({
   const [endsAt, setEndsAt] = useState(toLocalInput(initial?.endsAt ?? null));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +53,7 @@ function AnnouncementForm({
         endsAt: fromLocalInput(endsAt),
         sortOrder: initial?.sortOrder ?? 0,
       });
+      toast(initial ? 'Announcement updated.' : 'Announcement published.');
       onDone();
     } catch (e) {
       setErr((e as Error).message);
@@ -130,6 +132,7 @@ function windowState(a: Announcement): { label: string; tone: 'slate' | 'amber' 
 export default function Announcements({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<Announcement | null>(null);
+  const toast = useToast();
   const { data, error, loading, reload } = useAsync(
     async () => {
       const [announcements, locations] = await Promise.all([
@@ -214,6 +217,7 @@ export default function Announcements({ isSuperAdmin }: { isSuperAdmin: boolean 
                 variant={a.archivedAt ? 'ghost' : 'danger'}
                 onClick={async () => {
                   await api.archiveAnnouncement(a.id, !a.archivedAt);
+                  toast(a.archivedAt ? 'Announcement unarchived.' : 'Announcement archived.');
                   reload();
                 }}
               >

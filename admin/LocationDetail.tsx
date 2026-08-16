@@ -10,7 +10,7 @@ import {
   type Location,
   type VenueHours,
 } from './api';
-import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Select, Spinner, useAsync, fmtDateTime } from './ui';
+import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Select, Spinner, useAsync, useToast, fmtDateTime } from './ui';
 
 const HOURS_DAY_LABELS: Record<HoursDayKey, string> = {
   mon: 'Mon',
@@ -160,6 +160,7 @@ function CourseCard({ course, onChanged }: { course: Course; onChanged: () => vo
   const [pars, setPars] = useState<number[]>(course.pars);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   const total = pars.reduce((a, b) => a + b, 0);
 
@@ -168,6 +169,7 @@ function CourseCard({ course, onChanged }: { course: Course; onChanged: () => vo
     setBusy(true);
     try {
       await api.patchCourse(course.id, { name: name.trim(), theme: theme.trim(), pars });
+      toast('Course saved.');
       onChanged();
     } catch (e) {
       setErr((e as Error).message);
@@ -177,6 +179,7 @@ function CourseCard({ course, onChanged }: { course: Course; onChanged: () => vo
   }
   async function archive() {
     await api.archiveCourse(course.id, true);
+    toast('Course archived.');
     onChanged();
   }
 
@@ -215,6 +218,7 @@ function AddCourse({ locationId, onAdded }: { locationId: string; onAdded: () =>
   const [theme, setTheme] = useState('blue');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -228,6 +232,7 @@ function AddCourse({ locationId, onAdded }: { locationId: string; onAdded: () =>
         pars: Array(18).fill(3),
       });
       setName('');
+      toast('Course added.');
       onAdded();
     } catch (e) {
       setErr((e as Error).message);
@@ -350,6 +355,7 @@ function LocationForm({
   const [hoursState, setHoursState] = useState<HoursState>(() => hoursToState(location.hours));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   // Only explicit overrides ship; all-blank collapses to "no caps object".
   function buildCaps() {
@@ -408,6 +414,7 @@ function LocationForm({
                       },
               },
       });
+      toast('Location saved.');
       onSaved();
     } catch (e) {
       setErr((e as Error).message);
@@ -532,6 +539,7 @@ function LocationForm({
 
 export default function LocationDetail() {
   const { id = '' } = useParams();
+  const toast = useToast();
   const { data, error, loading, reload } = useAsync(async () => {
     const [detail, allCourses, gameRewardsMeta] = await Promise.all([
       api.getLocation(id),
@@ -554,6 +562,7 @@ export default function LocationDetail() {
 
   async function toggleArchive() {
     await api.archiveLocation(id, !location.archivedAt);
+    toast(location.archivedAt ? 'Location unarchived.' : 'Location archived.');
     reload();
   }
 
@@ -606,6 +615,7 @@ export default function LocationDetail() {
                 variant="ghost"
                 onClick={async () => {
                   await api.archiveCourse(c.id, false);
+                  toast('Course unarchived.');
                   reload();
                 }}
               >

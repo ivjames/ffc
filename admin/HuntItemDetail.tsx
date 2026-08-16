@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, type HuntItem, type HuntItemImage, type ItemImageScan } from './api';
-import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, Textarea, fmtDateTime, useAsync } from './ui';
+import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, Textarea, fmtDateTime, useAsync, useToast } from './ui';
 import { ItemImageThumb } from './Hunt';
 
 // One hunt item: its prompt variables (name, hint, and the extra judge
@@ -108,8 +108,9 @@ function Loaded({
   const [active, setActive] = useState(item.active);
   const [countable, setCountable] = useState(item.countable);
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
+  const [saveError, setSaveError] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const toast = useToast();
 
   // Upload machinery: files screen one at a time; the tally accumulates the
   // exact billed tokens/cost of every screen this visit (rejections included).
@@ -123,7 +124,7 @@ function Loaded({
 
   async function save() {
     setSaving(true);
-    setSaveMsg(null);
+    setSaveError('');
     try {
       await api.patchHuntItem(item.id, {
         name: name.trim(),
@@ -134,13 +135,10 @@ function Loaded({
         active,
         countable,
       });
-      setSaveMsg({ kind: 'success', text: 'Saved.' });
+      toast('Saved.');
       reload();
     } catch (err) {
-      setSaveMsg({
-        kind: 'error',
-        text: err instanceof ApiError ? err.message : 'Save failed',
-      });
+      setSaveError(err instanceof ApiError ? err.message : 'Save failed');
     } finally {
       // Always clear here: an unchanged save reloads into the same `key`, so
       // no remount comes along to reset this state.
@@ -226,7 +224,7 @@ function Loaded({
             Countable (find as many as you can)
           </label>
         </div>
-        {saveMsg && <Banner kind={saveMsg.kind}>{saveMsg.text}</Banner>}
+        {saveError && <Banner kind="error">{saveError}</Banner>}
         <Button onClick={save} disabled={saving || !name.trim() || !slug.trim() || !sortOrderValid}>
           {saving ? 'Saving…' : 'Save'}
         </Button>
@@ -310,6 +308,7 @@ function Loaded({
             setDeleteError('');
             try {
               await api.deleteHuntItem(item.id);
+              toast('Item deleted.');
               onDeleted();
             } catch (err) {
               setDeleteError(err instanceof ApiError ? err.message : 'Delete failed');

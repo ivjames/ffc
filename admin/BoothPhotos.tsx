@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AdminBoothPhoto } from './api';
-import { BlobThumb, Button, Card, Banner, EmptyState, PageHeader, Spinner, fmtDateTime } from './ui';
+import { BlobThumb, Button, Card, Banner, EmptyState, PageHeader, Spinner, fmtDateTime, useToast } from './ui';
 
 // Photo-booth review — the operator side of the AI-free photo pipeline
 // (player side: the app's Photo Booth). Unlike hunt photos, NOTHING screened
@@ -15,6 +15,7 @@ import { BlobThumb, Button, Card, Banner, EmptyState, PageHeader, Spinner, fmtDa
 function BoothPhotoRow({ photo, onRemoved }: { photo: AdminBoothPhoto; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   return (
     <Card className="flex items-center gap-4">
       <BlobThumb fetchBlob={() => api.fetchBoothPhotoImage(photo.id)} refetchKey={photo.id} alt="Booth photo" />
@@ -36,6 +37,7 @@ function BoothPhotoRow({ photo, onRemoved }: { photo: AdminBoothPhoto; onRemoved
           setError(null);
           try {
             await api.removeBoothPhoto(photo.id);
+            toast('Photo deleted.');
             onRemoved();
           } catch (err) {
             setError((err as Error).message);

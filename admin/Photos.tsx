@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AdminPhoto } from './api';
-import { BlobThumb, Button, Card, Banner, EmptyState, PageHeader, Pill, Segmented, Spinner, fmtDateTime } from './ui';
+import { BlobThumb, Button, Card, Banner, EmptyState, PageHeader, Pill, Segmented, Spinner, fmtDateTime, useToast } from './ui';
 
 // Hunt-photo review — the operator side of the scavenger-hunt photo pipeline.
 // Every stored photo is listed here (auto-moderation already blocked unsafe
@@ -16,6 +16,7 @@ type Filter = 'all' | 'people' | 'minors';
 function PhotoRow({ photo, onRemoved }: { photo: AdminPhoto; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   return (
     <Card className="flex items-center gap-4">
       <BlobThumb
@@ -47,6 +48,7 @@ function PhotoRow({ photo, onRemoved }: { photo: AdminPhoto; onRemoved: () => vo
           setError(null);
           try {
             await api.removePhoto(photo.id);
+            toast('Photo deleted.');
             onRemoved();
           } catch (err) {
             setError((err as Error).message);
