@@ -27,7 +27,7 @@ const slugSuspended = `tenant-susp-${stamp}`;
 const ORG_A_BRANDING = { appName: "Org A Golf", themeColor: "#123abc" };
 
 let orgAId, orgBId, orgArchivedId, orgSuspendedId;
-let locAId, locBId, locArchivedOrgId, locOrglessId;
+let locAId, locBId, locArchivedOrgId, locSuspendedOrgId, locOrglessId;
 let courseAId, courseBId;
 const announcementIds = [];
 
@@ -70,6 +70,11 @@ before(async () => {
     `tenant-loc-arch-${stamp}`,
     orgArchivedId
   );
+  locSuspendedOrgId = await insertLocation(
+    `Tenant Loc Susp ${stamp}`,
+    `tenant-loc-susp-${stamp}`,
+    orgSuspendedId
+  );
   // Org-less safety-net row (the schema backfill only runs at migrate time).
   locOrglessId = await insertLocation(`Tenant Loc Orgless ${stamp}`, `tenant-loc-none-${stamp}`, null);
 
@@ -100,7 +105,7 @@ after(async () => {
   await testQuery(`delete from announcement where id = any($1::uuid[])`, [announcementIds]);
   await testQuery(`delete from course where id in ($1, $2)`, [courseAId, courseBId]);
   await testQuery(`delete from location where id = any($1::uuid[])`, [
-    [locAId, locBId, locArchivedOrgId, locOrglessId],
+    [locAId, locBId, locArchivedOrgId, locSuspendedOrgId, locOrglessId],
   ]);
   await testQuery(`delete from org where id = any($1::uuid[])`, [
     [orgAId, orgBId, orgArchivedId, orgSuspendedId],
@@ -151,20 +156,70 @@ test("unknown label falls back to the default org and sweeps in org-less locatio
   assert.ok(!locIds.includes(locAId) && !locIds.includes(locBId), "real tenants' rows still hidden");
 });
 
-test("an archived org's slug no longer resolves — falls back to the default org", async () => {
-  const res = await get("/api/content", slugArchived);
-  assert.equal(res.status, 200);
-  assert.equal(res.body.org.slug, DEFAULT_SLUG);
-  assert.ok(
-    !res.body.locations.some((l) => l.id === locArchivedOrgId),
-    "the archived org's location is not exposed via fallback"
-  );
-});
+// --- Suspended/archived tenants: the subdomain goes DARK, it does NOT fall
+// through to the default org (that would serve the default tenant's brand and
+// catalog on a suspended client's host — a cross-brand leak).
 
-test("a suspended org's slug no longer resolves either", async () => {
+test("a suspended org's subdomain serves an empty catalog, not the default org", async () => {
   const res = await get("/api/content", slugSuspended);
   assert.equal(res.status, 200);
-  assert.equal(res.body.org.slug, DEFAULT_SLUG);
+  assert.deepEqual(res.body, { org: null, locations: [], courses: [] });
+});
+
+test("an archived org's subdomain goes dark the same way", async () => {
+  const res = await get("/api/content", slugArchived);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { org: null, locations: [], courses: [] });
+});
+
+test("suspended tenant's manifest is all platform defaults", async () => {
+  const res = await get("/api/manifest.webmanifest", slugSuspended);
+  assert.equal(res.status, 200);
+  assert.match(res.headers["content-type"], /application\/manifest\+json/);
+  const manifest = JSON.parse(res.text);
+  assert.equal(manifest.name, BRANDING_DEFAULTS.appName);
+  assert.equal(manifest.short_name, BRANDING_DEFAULTS.shortName);
+  assert.equal(manifest.theme_color, BRANDING_DEFAULTS.themeColor);
+  assert.equal(manifest.background_color, BRANDING_DEFAULTS.backgroundColor);
+});
+
+test("suspended tenant sees NO announcements — not even global rows", async () => {
+  const res = await get("/api/announcements", slugSuspended);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, [], "the venue is off: global rows are hidden too");
+});
+
+test("suspended tenant's announcement-view beacon records nothing", async () => {
+  const [globalId] = announcementIds;
+  clearTenantCache();
+  const res = await request(app)
+    .post("/api/announcements/views")
+    .set("Host", `${slugSuspended}.${DOMAIN}`)
+    .send({ deviceId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", ids: [globalId] });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.recorded, 0, "a global row's view is not recorded for an off venue");
+});
+
+test("a guarded player route (GET /api/locations) matches nothing on a suspended host", async () => {
+  const res = await get("/api/locations", slugSuspended);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, [], "neither the suspended org's venues nor the default org's");
+});
+
+test("unsuspending restores the tenant's own resolution", async () => {
+  await testQuery(`update org set status = 'active' where id = $1`, [orgSuspendedId]);
+  try {
+    const res = await get("/api/content", slugSuspended);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.org.id, orgSuspendedId);
+    assert.ok(
+      res.body.locations.some((l) => l.id === locSuspendedOrgId),
+      "its own venue is back"
+    );
+  } finally {
+    await testQuery(`update org set status = 'suspended' where id = $1`, [orgSuspendedId]);
+    clearTenantCache();
+  }
 });
 
 test("manifest carries the tenant's branding with the spec MIME type", async () => {

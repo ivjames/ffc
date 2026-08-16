@@ -41,6 +41,12 @@ function sparseBranding(raw) {
 
 router.get("/", tenant(), async (req, res) => {
   const t = req.tenant;
+  // A suspended/archived org's subdomain serves an EMPTY catalog with no org —
+  // never the default org's brand and venues (lib/tenant.js). The client
+  // accepts empty-with-org-key payloads and shows its empty state (PR #191).
+  if (t?.via === "suspended") {
+    return res.json({ org: null, locations: [], courses: [] });
+  }
   const orgFilter =
     t == null
       ? ""
