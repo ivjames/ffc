@@ -4,7 +4,8 @@
 //
 // Multi-venue (MULTI-VENUE.md §3): the catalog is filtered to the tenant
 // resolved from the Host header, and the payload carries the tenant org (with
-// branding merged through the defaults) so the PWA can restyle itself. An
+// its SPARSE stored branding — the client merges its own defaults) so the PWA
+// can restyle itself. An
 // exact subdomain match filters strictly to that org; the fallback path (the
 // default org) also sweeps up org-less legacy rows as a safety net; no tenant
 // at all (no live orgs) preserves the pre-org unfiltered behavior.
@@ -15,9 +16,28 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { tenant } from "../lib/tenant.js";
-import { resolveBranding } from "../lib/branding.js";
+import { BRANDING_DEFAULTS } from "../lib/branding.js";
 
 export const router = Router();
+
+// Sparse projection of the stored branding: known keys with non-empty string
+// values, NO default-merging (resolveBranding's acceptance rule minus the
+// defaults). The wire format must preserve explicitness — the client pins the
+// theme-color meta only when the ORG set themeColor (src/lib/branding.ts
+// hasExplicitThemeColor), so a merged payload would make every org, even one
+// storing {}, look explicit and override the light/dark mode greys. The client
+// owns an identical BRANDING_DEFAULTS and merges in getBranding(). (The
+// manifest endpoint is the opposite case: no client-side merge, so it stays
+// server-resolved.)
+function sparseBranding(raw) {
+  const branding = {};
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const key of Object.keys(BRANDING_DEFAULTS)) {
+      if (typeof raw[key] === "string" && raw[key].length > 0) branding[key] = raw[key];
+    }
+  }
+  return branding;
+}
 
 router.get("/", tenant(), async (req, res) => {
   const t = req.tenant;
@@ -64,7 +84,7 @@ router.get("/", tenant(), async (req, res) => {
             id: t.org.id,
             slug: t.org.slug,
             name: t.org.name,
-            branding: resolveBranding(t.org.branding),
+            branding: sparseBranding(t.org.branding),
           }
         : null,
       locations: locations.rows,

@@ -109,18 +109,17 @@ after(async () => {
   await pool.end();
 });
 
-test("exact subdomain match: content is strictly that org's, with resolved branding", async () => {
+test("exact subdomain match: content is strictly that org's, with sparse branding", async () => {
   const res = await get("/api/content", slugA);
   assert.equal(res.status, 200);
   const body = res.body;
 
   assert.equal(body.org.id, orgAId);
   assert.equal(body.org.slug, slugA);
-  // Branding: stored keys win, everything else falls back to the defaults.
-  assert.equal(body.org.branding.appName, "Org A Golf");
-  assert.equal(body.org.branding.themeColor, "#123abc");
-  assert.equal(body.org.branding.shortName, BRANDING_DEFAULTS.shortName);
-  assert.equal(body.org.branding.icon512Url, BRANDING_DEFAULTS.icon512Url);
+  // Branding rides SPARSE — exactly the stored keys, no defaults merged in.
+  // The client owns the default-merge; server-merging would destroy the
+  // "did the org explicitly set themeColor?" signal.
+  assert.deepEqual(body.org.branding, ORG_A_BRANDING);
 
   const locIds = body.locations.map((l) => l.id);
   assert.ok(locIds.includes(locAId), "own location shown");
@@ -136,8 +135,9 @@ test("the two subdomains are symmetric (org B sees only org B)", async () => {
   const res = await get("/api/content", slugB);
   assert.equal(res.status, 200);
   assert.equal(res.body.org.id, orgBId);
-  // Empty stored branding resolves to the full default set.
-  assert.deepEqual(res.body.org.branding, { ...BRANDING_DEFAULTS });
+  // Empty stored branding round-trips as {} — the client falls back to its
+  // own BRANDING_DEFAULTS and the mode greys keep the theme-color meta.
+  assert.deepEqual(res.body.org.branding, {});
   const locIds = res.body.locations.map((l) => l.id);
   assert.ok(locIds.includes(locBId) && !locIds.includes(locAId) && !locIds.includes(locOrglessId));
 });

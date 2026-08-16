@@ -181,18 +181,21 @@ function orgOf(c: RawContent): GeneratedOrg | null {
   };
 }
 
-/** Shape-guard a parsed /api/content (or cache) before trusting it. Requires at
- *  least one location: `getCurrentLocationId()` falls back to `LOCATIONS[0].id`,
- *  so an empty catalog (fresh DB, or every venue archived) would crash every
- *  catalog consumer — and caching it would poison later offline reloads too. The
- *  build-time exporter rejects zero locations for the same reason; match it. */
+/** Shape-guard a parsed /api/content (or cache) before trusting it. A payload
+ *  carrying the `org` key (the tenant-aware shape, MULTI-VENUE.md §3) is valid
+ *  even with ZERO locations: a brand-new tenant, or one whose venues are all
+ *  archived, legitimately serves an empty catalog, and rejecting it would keep
+ *  the previously cached/baked catalog — ANOTHER tenant's venues and branding —
+ *  on that tenant's subdomain. Zero-location payloads WITHOUT the org key stay
+ *  rejected: legacy/garbled shapes where empty only ever meant a broken fetch. */
 export function isValidContent(c: unknown): c is RawContent {
   const v = c as RawContent | null;
   return (
     !!v &&
+    typeof v === 'object' &&
     Array.isArray(v.locations) &&
-    v.locations.length > 0 &&
     Array.isArray(v.courses) &&
+    (v.locations.length > 0 || 'org' in v) &&
     v.locations.every((l) => l && typeof l.id === 'string' && typeof l.name === 'string') &&
     v.courses.every((cs) => cs && typeof cs.id === 'string' && Array.isArray(cs.pars))
   );

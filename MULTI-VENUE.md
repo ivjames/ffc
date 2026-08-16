@@ -67,8 +67,11 @@ place client-side (`src/lib/branding.ts`). Validation rejects unknown keys.
   `org_id = tenant.id OR org_id IS NULL` (org-less rows are a safety net and
   appear only under the default org — resolution step 3/4 — never under a
   non-default tenant). Courses: only those belonging to the returned locations.
-  Payload gains `org: { id, slug, name, branding }` (branding fully resolved,
-  defaults merged). With no tenant (step 5): unfiltered + `org: null`.
+  Payload gains `org: { id, slug, name, branding }` (branding is the SPARSE
+  stored object — only the keys the org set; the client merges its own
+  defaults in `src/lib/branding.ts`, and sparseness is what lets it tell an
+  explicit `themeColor` from the default). With no tenant (step 5):
+  unfiltered + `org: null`.
 - **`GET /api/manifest.webmanifest`** — new, per-tenant PWA manifest
   (`application/manifest+json`): `name` = `appName`, `short_name` =
   `shortName`, `theme_color`, `background_color`, icons from

@@ -52,9 +52,10 @@ function renderLocation(l) {
   },`;
 }
 
-// The org rides in the payload with branding already resolved server-side;
-// only the fields the client types (id/slug/name/branding) are baked, and a
-// payload without a resolvable tenant bakes null.
+// The org rides in the payload with SPARSE branding (only the keys the org
+// stored — the client merges its own defaults, src/lib/branding.ts); only the
+// fields the client types (id/slug/name/branding) are baked, and a payload
+// without a resolvable tenant bakes null.
 function renderOrg(o) {
   if (!o || typeof o.id !== "string") return "null";
   return `{
