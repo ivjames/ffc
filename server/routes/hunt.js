@@ -22,7 +22,9 @@
 // the per-IP rate limit below (bounds burn *rate*), each round has a total scan
 // budget (HUNT_SCAN_CAP, default 60) and each player gets HUNT_ATTEMPT_CAP
 // (default 3) judged shots per non-countable item — together they bound total
-// spend per round to a hard number.
+// spend per round to a hard number. Per TENANT, location.hunt.dailyScanCap
+// (see resolveVenueDailyCap below) bounds a venue's total daily spend — the
+// per-client control the env-global knobs can't provide.
 import { Router } from "express";
 import express from "express";
 import { randomUUID } from "node:crypto";
@@ -88,6 +90,21 @@ function resolveAttemptCap() {
   if (raw === undefined || raw === "") return DEFAULT_ATTEMPT_CAP;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n >= 1 ? n : DEFAULT_ATTEMPT_CAP;
+}
+
+// --- Per-venue daily scan cap -------------------------------------------------
+// The two caps above are env-global: one knob for every tenant, and setting
+// HUNT_SCAN_CAP=0 kills the hunt platform-wide. This cap is the per-client
+// spend control: location.hunt.dailyScanCap (jsonb, validated in
+// lib/validateLocation.js normalizeHunt, set through the location upsert)
+// bounds a single venue's billed vision calls over a rolling 24h window.
+//   0       -> the hunt is disabled at this venue (per-client kill switch)
+//   absent  -> unlimited (pre-config behavior; the env-global caps still apply)
+// Read defensively: validation guarantees the shape on write, but rows edited
+// by hand must degrade to "unlimited", never to a crash or an accidental 0.
+function resolveVenueDailyCap(huntConfig) {
+  const cap = huntConfig?.dailyScanCap;
+  return Number.isInteger(cap) && cap >= 0 ? cap : null;
 }
 
 // Record one vision model call in hunt_scan — the metering row that backs the
@@ -354,7 +371,8 @@ router.post(
       // burn vision spend or write finds against another venue. Foreign and
       // nonexistent answer identically below.
       const itemRes = await pool.query(
-        `select i.id, i.name, i.hint, i.extra_prompt, i.countable
+        `select i.id, i.name, i.hint, i.extra_prompt, i.countable,
+                c.location_id as "locationId", l.hunt as "locationHunt"
            from hunt_item i
            join course c on c.id = i.course_id
            left join location l on l.id = c.location_id
@@ -368,6 +386,18 @@ router.post(
           .json({ ok: false, error: "itemId does not exist on this course" });
       }
       const item = itemRes.rows[0];
+
+      // Per-venue kill switch: dailyScanCap 0 means the venue's hunt is off —
+      // refuse before any gameplay logic (even dedupe replies would misleadingly
+      // present a live hunt). 403, not 429: this isn't a budget that resets, and
+      // the client surfaces the error string of any non-OK status as-is
+      // (src/features/hunt/api.ts throws body.error).
+      const venueCap = resolveVenueDailyCap(item.locationHunt);
+      if (venueCap === 0) {
+        return res
+          .status(403)
+          .json({ ok: false, error: "the hunt is not available at this venue" });
+      }
 
       // Anti-cheat / anti-farming: for a normal (one-off) item, if this player
       // already has a verified find for it in this round, don't re-credit it (and
@@ -404,6 +434,32 @@ router.post(
           ok: false,
           error: "scan limit reached for this round",
         });
+      }
+
+      // Per-venue daily budget: bound the venue's billed calls over a rolling
+      // 24h window, across ALL of its courses and rounds. Same counting
+      // semantics as the round budget above — every metered verify call
+      // (verdict or not) counts, because every one was billed; dedupe
+      // short-circuits never reach here. kind='verify' only: admin item-image
+      // screens ('screen' rows) are operator spend, not player spend, and
+      // must not eat the venue's gameplay budget. Distinct error string so
+      // the client (and ops) can tell it from the per-round 429.
+      if (venueCap !== null && item.locationId) {
+        const venueSpent = await pool.query(
+          `select count(*)::int as n
+             from hunt_scan s
+             join course c on c.id = s.course_id
+            where c.location_id = $1
+              and s.kind = 'verify'
+              and s.created_at > now() - interval '24 hours'`,
+          [item.locationId]
+        );
+        if (venueSpent.rows[0].n >= venueCap) {
+          return res.status(429).json({
+            ok: false,
+            error: "daily scan limit reached for this venue",
+          });
+        }
       }
 
       // Per-item attempt cap: after N judged misses on one item, stop paying

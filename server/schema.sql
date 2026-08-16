@@ -24,6 +24,15 @@ alter table location add column if not exists lng         double precision;
 alter table location add column if not exists geofence_km double precision;
 -- Per-venue timezone (venues can span regions, so this is NOT one global zone).
 alter table location add column if not exists tz          text;
+-- Per-venue hunt spend config (validated in lib/validateLocation.js,
+-- normalizeHunt — the pos.loyalty.gameRewardCaps idiom). Stored shape:
+--   { dailyScanCap: int >= 0 }
+-- dailyScanCap bounds the venue's billed vision calls over a rolling 24h
+-- window (enforced in routes/hunt.js); 0 disables the hunt at that venue
+-- entirely (the per-client kill switch); an absent key = unlimited, i.e.
+-- only the env-global HUNT_SCAN_CAP / HUNT_ATTEMPT_CAP bounds apply —
+-- exactly the pre-config behavior, so the '{}' default changes nothing.
+alter table location add column if not exists hunt jsonb not null default '{}';
 
 create table if not exists course (
   id          uuid primary key default gen_random_uuid(),
@@ -129,26 +138,46 @@ create unique index if not exists hunt_find_verified_unique
   on hunt_find (round_client_id, player_tag, item_id)
   where verified and not countable;
 
--- Vision-spend metering: one row per model call made by POST /api/hunt/verify,
--- successful verdict or not. This is the billing/budget record, separate from
--- hunt_find (the gameplay record): it backs the per-round scan cap (HUNT_SCAN_CAP
--- in routes/hunt.js) and monthly cost rollups per course/venue, reconcilable
--- against the Anthropic invoice via the token counts. `item_id` is SET NULL on
--- item deletion (billing history outlives curation edits); `course_id` is
--- denormalized at write time so rollups survive item deletion too.
+-- Vision-spend metering: one row per BILLED model call, whatever surface made
+-- it. This is the billing/budget record, separate from hunt_find (the gameplay
+-- record): it backs the per-round scan cap (HUNT_SCAN_CAP in routes/hunt.js),
+-- the per-venue daily cap (location.hunt.dailyScanCap), and monthly cost
+-- rollups per course/venue/org, reconcilable against the provider invoice via
+-- the token counts. `kind` discriminates the surfaces:
+--   'verify'  POST /api/hunt/verify — a player's judged shot (the original,
+--             and only, kind before item-image screening was metered)
+--   'screen'  admin item-image people-screen (routes/admin/huntItems.js) —
+--             an operator's vetting upload, not gameplay: no round, no player
+-- `item_id` is SET NULL on item deletion (billing history outlives curation
+-- edits); `course_id` is denormalized at write time so rollups survive item
+-- deletion too. `cost_usd` is stamped at write time for 'screen' rows only —
+-- the screen's provider (and rate) varies per call (lib/itemImageScreen.js),
+-- while 'verify' rows stay priced at read time from the rollup's Haiku
+-- constants (routes/admin/huntUsage.js), preserving repriceability.
 create table if not exists hunt_scan (
   id              uuid primary key default gen_random_uuid(),
-  round_client_id text not null,           -- device round id (the group)
-  player_tag      text not null,           -- [A-Z0-9]{3}, who scanned
+  kind            text not null default 'verify',  -- 'verify' | 'screen'
+  round_client_id text,                    -- device round id (the group); null for 'screen'
+  player_tag      text,                    -- [A-Z0-9]{3}, who scanned; null for 'screen'
   item_id         uuid references hunt_item(id) on delete set null,
   course_id       uuid,                    -- item's course at scan time (no FK: history)
-  model           text,                    -- model id that served the call
+  model           text,                    -- model/provider id that served the call
   input_tokens    int,                     -- from the API's usage object; null if unknown
   output_tokens   int,
+  cost_usd        double precision,        -- exact billed cost, 'screen' rows only
   verified        boolean,                 -- verdict outcome; null when no verdict (VISION_NO_OUTPUT)
   flagged         boolean,
   created_at      timestamptz not null default now()
 );
+
+-- For databases created before screen metering existed: add the discriminator
+-- and cost idempotently, and relax the two verify-only NOT NULLs that 'screen'
+-- rows (no round, no player) can't satisfy. Every pre-existing row IS a verify
+-- row, so the 'verify' default backfills history correctly.
+alter table hunt_scan add column if not exists kind text not null default 'verify';
+alter table hunt_scan add column if not exists cost_usd double precision;
+alter table hunt_scan alter column round_client_id drop not null;
+alter table hunt_scan alter column player_tag drop not null;
 
 create index if not exists hunt_scan_round_idx   on hunt_scan (round_client_id);
 create index if not exists hunt_scan_created_idx on hunt_scan (created_at);

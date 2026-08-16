@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeLocation, normalizePos, withLabel } from "./validateLocation.js";
+import { normalizeLocation, normalizePos, normalizeHunt, withLabel } from "./validateLocation.js";
 
 function validBody(overrides = {}) {
   return { name: "Upland", slug: "upland", ...overrides };
@@ -203,6 +203,37 @@ test("normalizePos validates apiBase as an http(s) URL", () => {
     normalizePos({ ordering: { vendor: "centeredge", apiBase: "ftp://x" } }).error,
     /pos\.ordering\.apiBase/
   );
+});
+
+test("normalizeHunt normalizes empty/absent config to {} (unlimited)", () => {
+  assert.deepEqual(normalizeHunt(undefined).value, {});
+  assert.deepEqual(normalizeHunt(null).value, {});
+  assert.deepEqual(normalizeHunt({}).value, {});
+  // An explicit null cap normalizes away entirely — stored as no cap at all.
+  assert.deepEqual(normalizeHunt({ dailyScanCap: null }).value, {});
+});
+
+test("normalizeHunt accepts an integer dailyScanCap >= 0 (0 = hunt disabled)", () => {
+  assert.deepEqual(normalizeHunt({ dailyScanCap: 240 }).value, { dailyScanCap: 240 });
+  assert.deepEqual(normalizeHunt({ dailyScanCap: 0 }).value, { dailyScanCap: 0 });
+});
+
+test("normalizeHunt rejects bad shapes, bad caps, and unknown keys", () => {
+  assert.match(normalizeHunt([]).error, /hunt must be an object/);
+  assert.match(normalizeHunt("240").error, /hunt must be an object/);
+  assert.match(normalizeHunt({ dailyScanCap: -1 }).error, /dailyScanCap/);
+  assert.match(normalizeHunt({ dailyScanCap: 2.5 }).error, /dailyScanCap/);
+  assert.match(normalizeHunt({ dailyScanCap: "many" }).error, /dailyScanCap/);
+  // A typo'd key must fail loudly, not silently store as "unlimited".
+  assert.match(normalizeHunt({ dailyScancap: 10 }).error, /unknown key "dailyScancap"/);
+});
+
+test("normalizeLocation carries hunt through (and rejects a bad one)", () => {
+  const ok = normalizeLocation(validBody({ hunt: { dailyScanCap: 50 } }));
+  assert.deepEqual(ok.row.hunt, { dailyScanCap: 50 });
+  // Omitted -> the column default (unlimited), so old callers change nothing.
+  assert.deepEqual(normalizeLocation(validBody()).row.hunt, {});
+  assert.equal(normalizeLocation(validBody({ hunt: { dailyScanCap: -3 } })).status, 400);
 });
 
 test("normalizeLocation carries pos through (and rejects a bad one)", () => {
