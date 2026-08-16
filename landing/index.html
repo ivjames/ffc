@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infinicade — the infinite arcade platform</title>
+<meta name="description" content="Infinicade is one platform for mini golf scorecards, arcade games, AI scavenger hunts, live leaderboards, and rewards — white-labeled for your venue.">
+<meta property="og:title" content="Infinicade">
+<meta property="og:description" content="One platform for mini golf, arcade games, scavenger hunts, and live leaderboards — white-labeled for your venue.">
+<meta property="og:type" content="website">
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%230a0e1f"/><path d="M18 32c0-6 4-10 9-10 7 0 11 20 18 20 5 0 9-4 9-10s-4-10-9-10c-7 0-11 20-18 20-5 0-9-4-9-10z" transform="translate(-4 0) scale(.92)" fill="none" stroke="%2322d3ee" stroke-width="5" stroke-linecap="round"/></svg>'>
+<style>
+  :root {
+    --bg: #070b18;
+    --bg-raise: #0d1226;
+    --ink: #e6ecff;
+    --ink-dim: #93a0c4;
+    --line: rgba(148, 163, 219, 0.16);
+    --cyan: #22d3ee;
+    --magenta: #e879f9;
+    --amber: #fbbf24;
+    --green: #34d399;
+    --radius: 18px;
+    --font-display: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --font-mono: "SF Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: 17px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- backdrop: synthwave grid + glow ---------- */
+  .backdrop {
+    position: fixed; inset: 0; z-index: -1; overflow: hidden;
+    background:
+      radial-gradient(1100px 520px at 50% -8%, rgba(34, 211, 238, 0.14), transparent 62%),
+      radial-gradient(900px 500px at 82% 12%, rgba(232, 121, 249, 0.10), transparent 60%),
+      radial-gradient(700px 420px at 12% 22%, rgba(52, 211, 153, 0.07), transparent 60%),
+      var(--bg);
+  }
+  .backdrop::after {
+    content: "";
+    position: absolute; left: -20%; right: -20%; bottom: -12%; height: 46%;
+    background:
+      linear-gradient(transparent, rgba(7, 11, 24, 0.2)),
+      repeating-linear-gradient(90deg, rgba(34, 211, 238, 0.12) 0 1px, transparent 1px 72px),
+      repeating-linear-gradient(0deg, rgba(34, 211, 238, 0.12) 0 1px, transparent 1px 44px);
+    transform: perspective(480px) rotateX(58deg);
+    transform-origin: top center;
+    mask-image: linear-gradient(transparent, #000 34%);
+    -webkit-mask-image: linear-gradient(transparent, #000 34%);
+  }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 26px 0 0;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: 0.04em; font-size: 19px; color: var(--ink); }
+  .brand:hover { text-decoration: none; }
+  .brand svg { display: block; }
+  nav { display: flex; gap: 26px; font-size: 15px; }
+  nav a { color: var(--ink-dim); }
+  nav a:hover { color: var(--ink); text-decoration: none; }
+  @media (max-width: 620px) { nav { display: none; } }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 96px 0 84px; text-align: center; }
+  .hero .sigil { margin: 0 auto 26px; width: 148px; }
+  .hero .sigil svg { width: 100%; height: auto; filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.55)) drop-shadow(0 0 46px rgba(232, 121, 249, 0.25)); }
+  .neon-path { stroke-dasharray: 320; animation: trace 6s linear infinite; }
+  @keyframes trace { to { stroke-dashoffset: -640; } }
+
+  h1 {
+    font-size: clamp(44px, 8vw, 84px);
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    line-height: 1.05;
+    background: linear-gradient(100deg, var(--cyan) 8%, #7dd3fc 34%, var(--magenta) 68%, var(--amber) 98%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .tagline {
+    margin: 20px auto 0; max-width: 640px;
+    font-size: clamp(18px, 2.6vw, 22px); color: var(--ink-dim);
+  }
+  .tagline strong { color: var(--ink); font-weight: 600; }
+
+  .cta-row { margin-top: 40px; display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 14px 30px; border-radius: 999px;
+    font-weight: 700; font-size: 16px; letter-spacing: 0.02em;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-2px); }
+  .btn-primary {
+    color: #04121a;
+    background: linear-gradient(120deg, var(--cyan), #67e8f9);
+    box-shadow: 0 0 24px rgba(34, 211, 238, 0.4);
+  }
+  .btn-primary:hover { box-shadow: 0 0 36px rgba(34, 211, 238, 0.6); }
+  .btn-ghost { color: var(--ink); border: 1px solid var(--line); background: rgba(13, 18, 38, 0.6); }
+  .btn-ghost:hover { border-color: rgba(232, 121, 249, 0.5); box-shadow: 0 0 24px rgba(232, 121, 249, 0.18); }
+
+  .ticker {
+    margin-top: 56px; font-family: var(--font-mono); font-size: 13px;
+    color: var(--ink-dim); letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .ticker .dot { color: var(--amber); padding: 0 10px; }
+
+  /* ---------- sections ---------- */
+  section { padding: 72px 0; }
+  .kicker {
+    font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--cyan); margin-bottom: 12px;
+  }
+  h2 { font-size: clamp(28px, 4.4vw, 40px); font-weight: 800; letter-spacing: 0.01em; line-height: 1.15; }
+  .section-intro { margin-top: 14px; max-width: 620px; color: var(--ink-dim); }
+
+  /* feature grid */
+  .grid { margin-top: 44px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 580px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: linear-gradient(180deg, rgba(20, 27, 54, 0.72), rgba(13, 18, 38, 0.72));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 26px 24px;
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(34, 211, 238, 0.45);
+    box-shadow: 0 12px 40px rgba(3, 8, 20, 0.6), 0 0 24px rgba(34, 211, 238, 0.10);
+  }
+  .card .icon {
+    width: 46px; height: 46px; border-radius: 12px;
+    display: grid; place-items: center; margin-bottom: 16px;
+    background: rgba(34, 211, 238, 0.10);
+    border: 1px solid rgba(34, 211, 238, 0.25);
+  }
+  .card:nth-child(3n+2) .icon { background: rgba(232, 121, 249, 0.10); border-color: rgba(232, 121, 249, 0.3); }
+  .card:nth-child(3n) .icon { background: rgba(251, 191, 36, 0.10); border-color: rgba(251, 191, 36, 0.3); }
+  .card h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .card p { font-size: 15px; color: var(--ink-dim); }
+
+  /* white-label strip */
+  .strip {
+    margin-top: 44px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: linear-gradient(120deg, rgba(34, 211, 238, 0.07), rgba(232, 121, 249, 0.07));
+    padding: 40px 32px;
+    display: grid; grid-template-columns: 1.1fr 1fr; gap: 36px; align-items: center;
+  }
+  @media (max-width: 780px) { .strip { grid-template-columns: 1fr; } }
+  .strip h3 { font-size: 24px; font-weight: 800; margin-bottom: 10px; }
+  .strip p { color: var(--ink-dim); font-size: 15.5px; }
+  .domain-stack { display: grid; gap: 12px; font-family: var(--font-mono); font-size: 15px; }
+  .domain {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: rgba(7, 11, 24, 0.75);
+    padding: 13px 18px; display: flex; align-items: center; gap: 12px;
+  }
+  .domain .lock { color: var(--green); font-size: 13px; }
+  .domain .slug { color: var(--amber); }
+  .domain .apex { color: var(--ink-dim); }
+  .domain:first-child .slug { color: var(--cyan); }
+  .domain:nth-child(2) .slug { color: var(--magenta); }
+
+  /* contact */
+  .contact { text-align: center; padding-bottom: 96px; }
+  .contact .card-lone {
+    margin: 40px auto 0; max-width: 560px;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: linear-gradient(180deg, rgba(20, 27, 54, 0.8), rgba(13, 18, 38, 0.8));
+    padding: 44px 36px;
+    box-shadow: 0 24px 80px rgba(3, 8, 20, 0.55);
+  }
+  .contact .card-lone p { color: var(--ink-dim); margin-bottom: 26px; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 28px 0 40px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+    color: var(--ink-dim); font-size: 14px;
+  }
+  footer .foot-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .neon-path { animation: none; }
+    .btn, .card { transition: none; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true"></div>
+
+<div class="wrap">
+  <header>
+    <a class="brand" href="#top" aria-label="Infinicade home">
+      <svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="14" fill="#0d1226" stroke="rgba(148,163,219,0.25)"/>
+        <path d="M14 32c0-6 4-10 9-10 7 0 11 20 18 20 5 0 9-4 9-10s-4-10-9-10c-7 0-11 20-18 20-5 0-9-4-9-10z"
+              fill="none" stroke="#22d3ee" stroke-width="4.5" stroke-linecap="round"/>
+      </svg>
+      INFINICADE
+    </a>
+    <nav aria-label="Sections">
+      <a href="#platform">Platform</a>
+      <a href="#white-label">White-label</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <div class="hero">
+      <div class="sigil" aria-hidden="true">
+        <svg viewBox="0 0 160 84">
+          <path class="neon-path" d="M30 42c0-14 10-24 22-24 18 0 38 48 56 48 12 0 22-10 22-24s-10-24-22-24c-18 0-38 48-56 48-12 0-22-10-22-24z"
+                fill="none" stroke="#22d3ee" stroke-width="6" stroke-linecap="round"/>
+          <path d="M30 42c0-14 10-24 22-24 18 0 38 48 56 48 12 0 22-10 22-24s-10-24-22-24c-18 0-38 48-56 48-12 0-22-10-22-24z"
+                fill="none" stroke="rgba(232,121,249,0.35)" stroke-width="13" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h1>INFINICADE</h1>
+      <p class="tagline">
+        The <strong>infinite arcade platform</strong> — mini golf scorecards, arcade
+        games, AI scavenger hunts, and live leaderboards, all under
+        <strong>your venue's brand</strong>.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#contact">Get early access</a>
+        <a class="btn btn-ghost" href="#platform">See the platform</a>
+      </div>
+      <p class="ticker">
+        insert coin <span class="dot">●</span> player one ready <span class="dot">●</span> infinicade.com
+      </p>
+    </div>
+
+    <section id="platform">
+      <p class="kicker">The platform</p>
+      <h2>Everything a fun center runs on, in one place</h2>
+      <p class="section-intro">
+        Guests play from their own phones — no app-store download, no account
+        wall. Staff run it all from one back office.
+      </p>
+      <div class="grid">
+        <div class="card">
+          <div class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="13" r="2.4"/><path d="M12 2v8.6M8 4l4-2 4 2"/><path d="M4.5 20a8 8 0 0 1 15 0"/>
+            </svg>
+          </div>
+          <h3>Offline-first scorecards</h3>
+          <p>A touch-first mini golf scorecard that keeps working with zero bars on the back nine — every stroke saved instantly, synced when the signal returns.</p>
+        </div>
+        <div class="card">
+          <div class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e879f9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M7 8h4M7 11h7"/>
+            </svg>
+          </div>
+          <h3>Live TV leaderboards</h3>
+          <p>Boards update the moment a round finishes. Point any screen at a URL and get a venue-wide display wall — players, teams, and daily champs.</p>
+        </div>
+        <div class="card">
+          <div class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 8l3-3h12l3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/><path d="M9 5l1.2-2h3.6L15 5"/>
+            </svg>
+          </div>
+          <h3>AI scavenger hunts</h3>
+          <p>Themed photo hunts across the course, verified by a vision model in seconds — with built-in anti-cheat and family-safe auto-moderation.</p>
+        </div>
+        <div class="card">
+          <div class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="3" width="16" height="18" rx="3"/><circle cx="9" cy="13" r="1.6"/><path d="M14 12h3M15.5 10.5v3"/><path d="M9 7h6"/>
+            </svg>
+          </div>
+          <h3>Arcade mini-games</h3>
+          <p>Skee-ball, high striker, axe throw, darts, and more — browser-native games that award real tickets through your existing card system.</p>
+        </div>
+        <div class="card">
+          <div class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e879f9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l2.5 5.3 5.5.8-4 4 1 5.6-5-2.8-5 2.8 1-5.6-4-4 5.5-.8z"/>
+            </svg>
+          </div>
+          <h3>Rewards &amp; loyalty</h3>
+          <p>Achievements, redemption codes, ticket payouts with per-game and daily caps — wired into POS loyalty and food &amp; drink ordering.</p>
+        </div>
+        <div class="card">
+          <div class="icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>
+            </svg>
+          </div>
+          <h3>Master Control</h3>
+          <p>One back office for courses, announcements, rewards, branding, and reporting — publish a promo to every guest's phone without a rebuild.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="white-label">
+      <p class="kicker">White-label</p>
+      <h2>Your brand on the marquee</h2>
+      <div class="strip">
+        <div>
+          <h3>One platform, every venue its own arcade</h3>
+          <p>
+            Each venue gets its own subdomain, colors, logos, and app identity —
+            guests install <em>your</em> arcade to their home screen. New venue
+            onboarding is a row in the back office, not a new deployment.
+          </p>
+        </div>
+        <div class="domain-stack" aria-label="Example venue subdomains">
+          <div class="domain"><span class="lock">🔒</span><span><span class="slug">yourvenue</span><span class="apex">.infinicade.com</span></span></div>
+          <div class="domain"><span class="lock">🔒</span><span><span class="slug">boardwalk-fun</span><span class="apex">.infinicade.com</span></span></div>
+          <div class="domain"><span class="lock">🔒</span><span><span class="slug">putters-cove</span><span class="apex">.infinicade.com</span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact" class="contact">
+      <p class="kicker">Player one, press start</p>
+      <h2>Bring Infinicade to your venue</h2>
+      <div class="card-lone">
+        <p>
+          We're onboarding a small set of early venues. If you run a mini golf
+          course, family fun center, or arcade, we'd love to talk.
+        </p>
+        <a class="btn btn-primary" href="mailto:hello@infinicade.com?subject=Infinicade%20early%20access">hello@infinicade.com</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span class="foot-brand">
+      <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="14" fill="#0d1226" stroke="rgba(148,163,219,0.25)"/>
+        <path d="M14 32c0-6 4-10 9-10 7 0 11 20 18 20 5 0 9-4 9-10s-4-10-9-10c-7 0-11 20-18 20-5 0-9-4-9-10z"
+              fill="none" stroke="#22d3ee" stroke-width="4.5" stroke-linecap="round"/>
+      </svg>
+      Infinicade
+    </span>
+    <span>© 2026 Infinicade · The infinite arcade platform</span>
+  </footer>
+</div>
+</body>
+</html>
