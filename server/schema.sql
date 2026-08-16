@@ -154,6 +154,10 @@ create unique index if not exists hunt_find_verified_unique
 -- the screen's provider (and rate) varies per call (lib/itemImageScreen.js),
 -- while 'verify' rows stay priced at read time from the rollup's Haiku
 -- constants (routes/admin/huntUsage.js), preserving repriceability.
+-- `org_id` (added below the org section — org doesn't exist yet at this point
+-- in the file, the location.org_id ordering) is the INVOICE stamp: the org
+-- that owned the venue when the call was billed, written at insert time so
+-- moving a course/venue to another org never re-bills history.
 create table if not exists hunt_scan (
   id              uuid primary key default gen_random_uuid(),
   kind            text not null default 'verify',  -- 'verify' | 'screen'
@@ -413,6 +417,29 @@ on conflict (id) do nothing;
 -- reassignment through Master Control is never overwritten.
 update location
    set org_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+ where org_id is null;
+
+-- hunt_scan invoice attribution (see the hunt_scan section above): the org
+-- that owned the venue at BILL time, stamped on insert by routes/hunt.js and
+-- routes/admin/huntItems.js. The hunt-usage rollup groups invoices by this
+-- stamp, not by the live course→location→org chain, so an admin moving a
+-- course to another location (or a location to another org) can't silently
+-- re-bill historical spend to the destination client. Lives here rather than
+-- with the table: org is created just above, after hunt_scan.
+alter table hunt_scan add column if not exists org_id uuid references org(id);
+create index if not exists hunt_scan_org_idx on hunt_scan (org_id);
+
+-- Catch-up for scans metered before the stamp existed: attribute them to the
+-- venue's CURRENT org once — the best information available for old rows.
+-- Safe to run every migrate: guarded on `org_id is null`, so re-runs are
+-- cheap and a stamped row is never rewritten by a later course/org move.
+-- Rows whose course no longer resolves (or whose venue has no org) stay
+-- null — unattributed spend, super_admin-visible only in the rollup.
+update hunt_scan
+   set org_id = (select l.org_id
+                   from course c
+                   join location l on l.id = c.location_id
+                  where c.id = hunt_scan.course_id)
  where org_id is null;
 
 -- ---------------------------------------------------------------------------

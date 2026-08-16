@@ -68,22 +68,26 @@ const ITEM_COLS = `i.id, i.course_id as "courseId", i.slug, i.name, i.hint,
 
 // Meter one billed people-screen call into hunt_scan as a kind='screen' row —
 // the CLAUDE.md rule: every model call's exact billed tokens must be
-// persisted, not just echoed on the response. course_id attributes the spend
-// to the item's venue/org in the hunt-usage rollup; round/player stay null
-// (an operator upload, not gameplay). cost_usd is stamped here because the
-// screen's provider — and rate — varies per call (lib/itemImageScreen.js
-// picks the cheapest configured descriptor), unlike verify rows, which are
-// priced at read time from the rollup's fixed Haiku constants. Metering must
-// never break the upload flow (routes/hunt.js recordScan precedent).
-async function recordScreenScan({ itemId, courseId, scan }) {
+// persisted, not just echoed on the response. org_id is the write-time
+// INVOICE stamp (the org that owns the item's venue right now, i.e. at bill
+// time — the hunt-usage rollup attributes by this stamp, so a later course/
+// venue move never re-bills the spend to another client); course_id keeps
+// the venue-level view; round/player stay null (an operator upload, not
+// gameplay). cost_usd is stamped here because the screen's provider — and
+// rate — varies per call (lib/itemImageScreen.js picks the cheapest
+// configured descriptor), unlike verify rows, which are priced at read time
+// from the rollup's fixed Haiku constants. Metering must never break the
+// upload flow (routes/hunt.js finalizeScan precedent).
+async function recordScreenScan({ itemId, courseId, orgId, scan }) {
   try {
     await pool.query(
       `insert into hunt_scan
-         (kind, item_id, course_id, model, input_tokens, output_tokens, cost_usd)
-       values ('screen', $1, $2, $3, $4, $5, $6)`,
+         (kind, item_id, course_id, org_id, model, input_tokens, output_tokens, cost_usd)
+       values ('screen', $1, $2, $3, $4, $5, $6, $7)`,
       [
         itemId,
         courseId,
+        orgId,
         scan?.provider ?? null,
         scan?.inputTokens ?? null,
         scan?.outputTokens ?? null,
@@ -356,7 +360,7 @@ router.post("/:id/images", express.json({ limit: "16mb" }), async (req, res) => 
     const scan = await screenItemImage({ imageBase64, mediaType });
     // Meter the call we just paid for before the accept/reject branch — the
     // tokens are billed whether or not the upload is stored.
-    await recordScreenScan({ itemId: item.id, courseId: item.courseId, scan });
+    await recordScreenScan({ itemId: item.id, courseId: item.courseId, orgId: item.orgId, scan });
     const scanOut = {
       provider: scan.provider,
       inputTokens: scan.inputTokens,

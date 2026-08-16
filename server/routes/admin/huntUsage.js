@@ -9,13 +9,23 @@
 //   screen — admin item-image people-screens (routes/admin/huntItems.js),
 //            priced at write time (hunt_scan.cost_usd — the screen's provider
 //            and rate vary per call, so token math here would be wrong).
-// Rows carry the venue's org (orgId/orgName), and `orgSummary` pre-aggregates
-// per org per month, so a per-client invoice needs zero client-side math.
+// Rows carry the org that was BILLED (orgId/orgName — hunt_scan.org_id, the
+// stamp written at insert time by both metering paths), and `orgSummary`
+// pre-aggregates per org per month, so a per-client invoice needs zero
+// client-side math. Attribution deliberately does NOT ride the live
+// course→location→org chain: an admin moving a course to another location
+// (or a venue to another org) must never re-bill historical spend to the
+// destination client. The location columns DO stay on the live chain — an
+// operational "where does this course live now" view, not the invoice.
 //
-// Org-scoping: an org_admin sees only their own org's venues (via
-// location.org_id, same rule as overview.js). Scans whose course/venue no
-// longer resolves (item deleted, then course deleted) appear with a null
-// location for super_admins only — an org_admin can't claim unattributed spend.
+// Un-finalized verify reservations (routes/hunt.js reserveScan — rows whose
+// token/cost fields are all still null) are excluded outright: nothing was
+// billed yet, so they'd only surface as zero-cost phantom scan counts.
+//
+// Org-scoping: an org_admin sees only their own org's scans (via the
+// hunt_scan.org_id stamp). Scans with a null stamp (org-less venue at bill
+// time, or pre-stamp rows whose course no longer resolves) appear for
+// super_admins only — an org_admin can't claim unattributed spend.
 import { Router } from "express";
 import { pool } from "../../db.js";
 import { orgScope } from "../../lib/adminAuth.js";
@@ -49,7 +59,7 @@ router.get("/", async (req, res) => {
     const result = await pool.query(
       `
       select date_trunc('month', s.created_at)::date as month,
-             l.org_id as org_id,
+             s.org_id as org_id,
              o.name   as org_name,
              l.id   as location_id,
              l.name as location_name,
@@ -61,12 +71,13 @@ router.get("/", async (req, res) => {
              coalesce(sum(s.output_tokens), 0)  as output_tokens,
              coalesce(sum(s.cost_usd), 0)       as stored_cost_usd
         from hunt_scan s
+        left join org      o on o.id = s.org_id
         left join course   c on c.id = s.course_id
         left join location l on l.id = c.location_id
-        left join org      o on o.id = l.org_id
        where s.created_at >= date_trunc('month', now()) - ($2::int - 1) * interval '1 month'
-         and ($1::uuid is null or l.org_id = $1)
-       group by 1, l.org_id, o.name, l.id, l.name, l.slug, s.kind
+         and ($1::uuid is null or s.org_id = $1)
+         and (s.input_tokens is not null or s.output_tokens is not null or s.cost_usd is not null)
+       group by 1, s.org_id, o.name, l.id, l.name, l.slug, s.kind
        order by 1 desc, l.name asc nulls last
     `,
       [scope, months]
@@ -87,7 +98,9 @@ router.get("/", async (req, res) => {
         : (inputTokens * INPUT_USD_PER_MTOK + outputTokens * OUTPUT_USD_PER_MTOK) / 1e6;
 
       const monthKey = r.month instanceof Date ? r.month.toISOString() : String(r.month);
-      const rowKey = `${monthKey}|${r.location_id}`;
+      // org_id in the key: a venue reassigned to another org mid-month keeps
+      // one row per billed org — invoice lines must never merge across clients.
+      const rowKey = `${monthKey}|${r.location_id}|${r.org_id}`;
       let row = rowByKey.get(rowKey);
       if (!row) {
         row = {
@@ -119,9 +132,10 @@ router.get("/", async (req, res) => {
       row[isScreen ? "screenCostUsd" : "verifyCostUsd"] += costUsd;
       row.apiCostUsd += costUsd;
 
-      // Per-org per-month invoice line. Unattributed spend (org null — the
-      // venue no longer resolves) folds under orgId null, super_admin-only
-      // by the $1 filter above.
+      // Per-org per-month invoice line, keyed on the write-time stamp.
+      // Unattributed spend (stamp null — an org-less venue at bill time, or
+      // a pre-stamp row whose course no longer resolves) folds under orgId
+      // null, super_admin-only by the $1 filter above.
       const orgKey = `${monthKey}|${r.org_id}`;
       let org = orgByKey.get(orgKey);
       if (!org) {

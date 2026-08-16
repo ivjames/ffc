@@ -44,6 +44,7 @@ const { app } = await import("../../app.js");
 
 let baseUrl;
 let close;
+let orgId;
 let locationId;
 let courseId;
 
@@ -66,9 +67,16 @@ const uploadBody = (extra = {}) => ({
 before(async () => {
   await ensureSchema();
   ({ baseUrl, close } = await listenEphemeral(app));
+  // The venue is org-owned so the screen-metering test can assert the
+  // write-time org stamp (invoice attribution) on the hunt_scan row.
+  const org = await testQuery(
+    `insert into org (name, slug) values ($1, $2) returning id`,
+    [`Hunt Admin Org ${stamp}`, `hunt-admin-org-${stamp}`]
+  );
+  orgId = org.rows[0].id;
   const loc = await testQuery(
-    `insert into location (name, slug) values ($1, $2) returning id`,
-    [`Hunt Admin Venue ${stamp}`, `hunt-admin-test-${stamp}`]
+    `insert into location (name, slug, org_id) values ($1, $2, $3) returning id`,
+    [`Hunt Admin Venue ${stamp}`, `hunt-admin-test-${stamp}`, orgId]
   );
   locationId = loc.rows[0].id;
   const course = await testQuery(
@@ -88,6 +96,7 @@ after(async () => {
   await testQuery(`delete from hunt_item where course_id = $1`, [courseId]);
   await testQuery(`delete from course where id = $1`, [courseId]);
   await testQuery(`delete from location where id = $1`, [locationId]);
+  await testQuery(`delete from org where id = $1`, [orgId]);
   await testQuery(`delete from admin_audit where entity in ('hunt_item', 'hunt_item_image')`);
   await rmDir(imageDir, { recursive: true, force: true });
   const { pool } = await import("../../db.js");
@@ -206,9 +215,11 @@ test("image upload screens for people, stores the file, and returns the scan bur
 
   // The billed screen is PERSISTED as a hunt_scan kind='screen' row with the
   // exact token fields — not just echoed on the response (CLAUDE.md metering
-  // rule; the hunt-usage rollup attributes it to the item's org via course_id).
+  // rule) — and org_id stamped at write time, so the hunt-usage rollup bills
+  // the org that owned the venue when the call happened, however the course
+  // is reassigned later.
   const meter = await testQuery(
-    `select kind, round_client_id, player_tag, course_id, model,
+    `select kind, round_client_id, player_tag, course_id, org_id, model,
             input_tokens, output_tokens, cost_usd
        from hunt_scan where item_id = $1`,
     [id]
@@ -218,6 +229,7 @@ test("image upload screens for people, stores the file, and returns the scan bur
   assert.equal(meter.rows[0].round_client_id, null, "an admin screen has no round");
   assert.equal(meter.rows[0].player_tag, null, "an admin screen has no player");
   assert.equal(meter.rows[0].course_id, courseId);
+  assert.equal(meter.rows[0].org_id, orgId, "the invoice org is stamped at write time");
   assert.equal(meter.rows[0].model, "mock-descriptor");
   assert.equal(meter.rows[0].input_tokens, 300);
   assert.equal(meter.rows[0].output_tokens, 20);

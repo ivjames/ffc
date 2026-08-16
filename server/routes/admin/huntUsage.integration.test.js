@@ -37,24 +37,26 @@ function api(path, opts = {}) {
   });
 }
 
-// One metered verify scan; 1500 in / 80 out mirrors a realistic Haiku verdict call.
-function insertScan({ roundClientId, createdAt = "now()" }) {
+// One metered verify scan; 1500 in / 80 out mirrors a realistic Haiku verdict
+// call. org_id is stamped like the real write path (routes/hunt.js
+// reserveScan) — the rollup attributes invoices by this stamp.
+function insertScan({ roundClientId, createdAt = "now()", scanCourseId = courseId, scanOrgId = orgId }) {
   return testQuery(
     `insert into hunt_scan
-       (round_client_id, player_tag, course_id, model, input_tokens, output_tokens, verified, flagged, created_at)
-     values ($1, 'T01', $2, 'claude-haiku-4-5', 1500, 80, true, false, ${createdAt})`,
-    [roundClientId, courseId]
+       (round_client_id, player_tag, course_id, org_id, model, input_tokens, output_tokens, verified, flagged, created_at)
+     values ($1, 'T01', $2, $3, 'claude-haiku-4-5', 1500, 80, true, false, ${createdAt})`,
+    [roundClientId, scanCourseId, scanOrgId]
   );
 }
 
 // One metered admin people-screen (routes/admin/huntItems.js writes these):
-// kind='screen', no round/player, exact cost stamped at write time.
-function insertScreen({ cost = 0.0002 }) {
+// kind='screen', no round/player, exact cost + org stamped at write time.
+function insertScreen({ cost = 0.0002, scanCourseId = courseId, scanOrgId = orgId }) {
   return testQuery(
     `insert into hunt_scan
-       (kind, course_id, model, input_tokens, output_tokens, cost_usd)
-     values ('screen', $1, 'gemini-3.1-flash-lite', 300, 20, $2)`,
-    [courseId, cost]
+       (kind, course_id, org_id, model, input_tokens, output_tokens, cost_usd)
+     values ('screen', $1, $2, 'gemini-3.1-flash-lite', 300, 20, $3)`,
+    [scanCourseId, scanOrgId, cost]
   );
 }
 
@@ -213,5 +215,102 @@ test("an org_admin sees only their own org's rows and summary", async () => {
     await testQuery(`delete from admin_session where admin_user_id = $1`, [user.rows[0].id]);
     await testQuery(`delete from admin_user where id = $1`, [user.rows[0].id]);
     await testQuery(`delete from org where id = $1`, [otherOrg.rows[0].id]);
+  }
+});
+
+test("invoice attribution sticks to the org billed at scan time, not the course's current home", async () => {
+  // Org A owns the venue when the spend happens; the course is then moved to
+  // a venue in org B (the admin course-upsert can do exactly this). The
+  // historical scans must stay on A's invoice — attribution reads the
+  // write-time hunt_scan.org_id stamp, never the live course→location→org
+  // chain — while the row's location columns follow the move (operational
+  // view of where the course lives NOW).
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const orgA = await testQuery(
+    `insert into org (name, slug) values ($1, $2) returning id`,
+    [`Usage Move Org A ${stamp}`, `usage-move-a-${stamp}`]
+  );
+  const orgB = await testQuery(
+    `insert into org (name, slug) values ($1, $2) returning id`,
+    [`Usage Move Org B ${stamp}`, `usage-move-b-${stamp}`]
+  );
+  const orgAId = orgA.rows[0].id;
+  const orgBId = orgB.rows[0].id;
+  const locA = await testQuery(
+    `insert into location (name, slug, org_id) values ($1, $2, $3) returning id`,
+    [`Usage Move Venue A ${stamp}`, `usage-move-va-${stamp}`, orgAId]
+  );
+  const locB = await testQuery(
+    `insert into location (name, slug, org_id) values ($1, $2, $3) returning id`,
+    [`Usage Move Venue B ${stamp}`, `usage-move-vb-${stamp}`, orgBId]
+  );
+  const course = await testQuery(
+    `insert into course (name, theme, pars, location_id) values ($1, 'test', $2, $3) returning id`,
+    [`Usage Move Course ${stamp}`, Array(18).fill(3), locA.rows[0].id]
+  );
+  const movedCourseId = course.rows[0].id;
+  try {
+    // Spend recorded while org A owns the venue — one verify, one screen,
+    // both stamped org A (as the write paths do).
+    await insertScan({
+      roundClientId: `usage-move-round-${stamp}`,
+      scanCourseId: movedCourseId,
+      scanOrgId: orgAId,
+    });
+    await insertScreen({ cost: 0.0003, scanCourseId: movedCourseId, scanOrgId: orgAId });
+
+    // The admin moves the course to org B's venue.
+    await testQuery(`update course set location_id = $2 where id = $1`, [
+      movedCourseId,
+      locB.rows[0].id,
+    ]);
+
+    const body = await (await api("/api/admin/hunt-usage?months=1")).json();
+
+    const aSummary = body.orgSummary.find((s) => s.orgId === orgAId);
+    assert.ok(aSummary, "org A keeps its invoice line after the course moves away");
+    assert.equal(aSummary.scans, 2);
+    assert.equal(aSummary.verifyScans, 1);
+    assert.equal(aSummary.screenScans, 1, "screen spend is stamped and sticky too");
+    assert.equal(
+      body.orgSummary.find((s) => s.orgId === orgBId),
+      undefined,
+      "the destination org is never billed for spend that predates the move"
+    );
+
+    // The per-venue row: invoice org from the stamp, location from the live
+    // chain — the course now lives at venue B, billed to A.
+    const row = body.rows.find((r) => r.orgId === orgAId);
+    assert.ok(row);
+    assert.equal(row.locationId, locB.rows[0].id);
+    assert.equal(row.scans, 2);
+  } finally {
+    await testQuery(`delete from hunt_scan where course_id = $1`, [movedCourseId]);
+    await testQuery(`delete from course where id = $1`, [movedCourseId]);
+    await testQuery(`delete from location where id in ($1, $2)`, [locA.rows[0].id, locB.rows[0].id]);
+    await testQuery(`delete from org where id in ($1, $2)`, [orgAId, orgBId]);
+  }
+});
+
+test("un-finalized verify reservations (no tokens billed yet) are invisible to the rollup", async () => {
+  // routes/hunt.js inserts the hunt_scan row BEFORE the model call as a cap
+  // reservation — model/token/cost fields all null until finalized. Nothing
+  // was billed, so the rollup must not count it as a scan (a crash orphan
+  // would otherwise surface as a phantom zero-cost line item forever).
+  const resv = await testQuery(
+    `insert into hunt_scan (round_client_id, player_tag, course_id, org_id)
+       values ('usage-reservation-round', 'T01', $1, $2) returning id`,
+    [courseId, orgId]
+  );
+  try {
+    const body = await (await api("/api/admin/hunt-usage?months=1")).json();
+    const mine = body.rows.filter((r) => r.locationId === locationId);
+    assert.equal(mine.length, 1);
+    assert.equal(mine[0].scans, 7, "the tokenless reservation adds no scan");
+    const summary = body.orgSummary.find((s) => s.orgId === orgId);
+    assert.equal(summary.scans, 7);
+    assert.equal(summary.huntRounds, 2, "the reservation's round doesn't count either");
+  } finally {
+    await testQuery(`delete from hunt_scan where id = $1`, [resv.rows[0].id]);
   }
 });
