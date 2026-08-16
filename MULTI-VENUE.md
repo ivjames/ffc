@@ -109,13 +109,31 @@ place client-side (`src/lib/branding.ts`). Validation rejects unknown keys.
   updated. Client DNS = one CNAME/A per org slug under the platform domain (or
   a wildcard DNS record).
 
-## 6. Deferred (follow-ups, out of scope here)
+## 6. Follow-ups
 
-- Tenant filtering on remaining player reads that can cross venues by guessed
-  IDs (leaderboards by course id, shared games). Low risk — IDs are UUIDs —
-  but should be swept before the second real client onboards.
+Addressed since the initial build:
+
+- **Cross-tenant reads/writes via guessed or stale UUIDs — done.** Every
+  player-facing router is swept (see `server/routes/tenantIsolation.
+  integration.test.js`): a foreign-tenant id behaves exactly like a
+  nonexistent one, with the same host/fallback/no-org semantics as
+  `/api/content` (helpers: `tenantOrgFilter`/`findTenantCourse`/
+  `findTenantLocation` in `server/lib/tenant.js`). Deliberately global, per
+  the accounts decision: auth, teams/invites, and shared-game join/play via
+  join-code and participant-token capabilities.
+- **Branding asset upload — done.** `POST /api/admin/orgs/:id/branding/assets`
+  (base64 JSON, validated in `server/lib/brandAssets.js`; icons must be PNG at
+  exactly 192²/512²), stored content-hashed under `BRAND_ASSET_DIR` and served
+  at `/api/brand-assets/...` through the existing `/api/` proxy. Master
+  Control's Branding card has an Upload button per field. In production set
+  `BRAND_ASSET_DIR=$APP_DIR/shared/brand-assets` in `server/.env` (`ffc
+  deploy` creates the directory).
+- **theme-color meta contention — done.** `src/lib/branding.ts` is the single
+  writer: an org with an explicit `themeColor` owns the status-bar color in
+  both modes; otherwise the pre-multi-venue light/dark greys apply unchanged.
+
+Still deferred (need operator decisions):
+
 - Per-org custom domains (client brings `play.theirdomain.com`) — needs
   per-domain cert issuance; the tenant resolver would match on full host.
-- Media upload for logos/icons in Master Control (today: URL fields; assets
-  can be served from `/brand/` or any HTTPS host).
 - Per-org email sender identity for OTP mails.
