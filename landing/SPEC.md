@@ -66,8 +66,11 @@ Both faces are embedded variable woff2 (SIL OFL), declared with weight ranges:
 
 Scale:
 
-- **h1 (wordmark):** `clamp(36px, 9vw, 118px)` w800, lh 0.98, uppercase.
-  Content is exactly `INFINICADE` in the accent gradient + a lime `.`
+- **h1 (hero headline):** `clamp(30px, 6.4vw, 84px)` w800, lh 1.02, uppercase.
+  A value-prop headline, not the brand — "EVERY GAME." in ink over
+  "ONE PLATFORM." in the accent gradient + accent `.`; the brand name
+  appears only in the nav, eyebrow, and footer (operator decision,
+  2026-08-17: no wordmark hero).
 - **h2:** `clamp(30px, 5vw, 54px)` w800, uppercase; one word per heading may
   take the lime→cyan gradient via `<em>`.
 - **Cell h3:** 16px w700. **Kicker:** 12px, 0.28em tracking, cyan, `▶ `
