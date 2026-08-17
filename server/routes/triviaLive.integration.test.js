@@ -409,6 +409,45 @@ test("both players at a table can still be told apart from the room", async () =
   }
 });
 
+test("a max-length name still disambiguates instead of 500ing", async () => {
+  // Appending " (2)" and THEN truncating to the 32-char limit hands back the
+  // original name, so the "disambiguated" insert collides with the row it was
+  // meant to differ from. The base has to be trimmed to make room.
+  const { joinCode } = await createSession();
+  const longName = "X".repeat(32); // exactly MAX_ENTRANT_NAME
+  const first = await join(joinCode, longName);
+  const second = await join(joinCode, longName);
+  assert.notEqual(second.entrant.id, first.entrant.id);
+  assert.notEqual(second.entrant.name, first.entrant.name);
+  assert.ok(second.entrant.name.length <= 32, "and stays within the column's limit");
+});
+
+test("an answer racing the host's reveal cannot roll the room back", async () => {
+  // The participant lookup resolves the session as it was a moment ago. If the
+  // host advances in the gap, a naive handler scores an answer against a closed
+  // question and then rebroadcasts a stale status: "question", yanking every
+  // phone in the room back out of the reveal.
+  const { id, hostToken, joinCode } = await createSession({ config: { speedBonus: false } });
+  const racer = await join(joinCode, "Racer");
+  await advance(id, hostToken); // -> question
+
+  // Fire the answer and the advance together; whichever order they land in,
+  // the session must end up revealed and the board must stay consistent.
+  const [answerRes] = await Promise.all([
+    post(`/api/trivia/sessions/${id}/answer`, {
+      participant: racer.participantToken,
+      choice: await correctChoice(id),
+    }),
+    advance(id, hostToken), // -> reveal
+  ]);
+
+  const view = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+  assert.equal(view.session.status, "reveal", "the room stays revealed");
+  // The answer either landed before the close (200) or was refused (409) —
+  // both are correct. What must NOT happen is a 500 or a rolled-back status.
+  assert.ok([200, 409].includes(answerRes.status), `unexpected ${answerRes.status}`);
+});
+
 test("a venue cannot deal another client's questions", async () => {
   // A question owned by some other org must never enter this venue's bank.
   const org = await testQuery(

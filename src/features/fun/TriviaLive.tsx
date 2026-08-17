@@ -94,6 +94,8 @@ export default function TriviaLive() {
   // tap a second choice.
   const [pending, setPending] = useState<number | null>(null);
   const lastStatus = useRef<string | null>(null);
+  // Which question index has already played its reveal sound.
+  const soundedIndex = useRef<number | null>(null);
 
   const sessionId = stored?.sessionId ?? routeSession ?? null;
 
@@ -121,36 +123,73 @@ export default function TriviaLive() {
     };
   }, [sessionId, stored?.participantToken]);
 
-  // Sound on the transitions that matter — the reveal is the moment of the
-  // whole format, so it gets the fanfare/buzz.
+  // A new question opening is a status transition, so it can be keyed on one.
   useEffect(() => {
     const status = snapshot?.session.status ?? null;
-    if (status === lastStatus.current) return;
-    if (lastStatus.current !== null) {
-      if (status === 'question') playDing();
-      else if (status === 'reveal') {
-        const mine = snapshot?.myAnswer;
-        if (mine?.correct) playFanfare();
-        else if (mine) playBuzz();
-      }
+    if (status !== lastStatus.current && lastStatus.current !== null && status === 'question') {
+      playDing();
     }
     lastStatus.current = status;
-    // Only the status transition drives sound; the rest of the snapshot churns
-    // constantly (the answered counter) and must not re-fire it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot?.session.status]);
 
-  // Clear the optimistic lock on every new question.
+  // The reveal verdict is NOT a status transition: at the instant the status
+  // flips, this phone still holds the viewer-neutral broadcast and doesn't yet
+  // know whether it was right. Firing the fanfare there played it before the
+  // answer was known (and, for a player whose result never arrived, played
+  // nothing at all). So the sound waits for the personalized result and fires
+  // once per question, tracked by index.
+  useEffect(() => {
+    const index = snapshot?.session.currentIndex ?? null;
+    const mine = snapshot?.myAnswer;
+    if (snapshot?.session.status !== 'reveal' || index === null) return;
+    if (mine?.correct === undefined) return;
+    if (soundedIndex.current === index) return;
+    soundedIndex.current = index;
+    if (mine.correct) playFanfare();
+    else playBuzz();
+  }, [snapshot?.session.status, snapshot?.session.currentIndex, snapshot?.myAnswer]);
+
+  // Clear the optimistic lock on every new QUESTION — and only that.
   //
-  // Keying this on `myAnswer` alone was a soft-lock: broadcast frames are
-  // viewer-neutral (built without an entrantId), so `myAnswer` is null on the
-  // stream and the effect never fired. `locked` falls back to `pending`, so a
-  // player who answered question one had every button disabled for the rest of
-  // the game and could only escape by reloading. The question index is the
-  // thing that actually means "this is a fresh question".
+  // The underlying constraint: broadcast frames are viewer-neutral (built
+  // without an entrantId), so `myAnswer` is always null on the stream. Two
+  // things follow, and getting either wrong breaks the round:
+  //
+  //   Keying the clear on `myAnswer` never fires, so `pending` sticks and
+  //   every button stays disabled for the rest of the game.
+  //   Keying it on `status` fires at the reveal, wiping the only record this
+  //   phone has of what it picked — so a player who answered is told "didn't
+  //   answer in time" and loses their highlight.
+  //
+  // The question INDEX is the only thing that actually means "this is a fresh
+  // question", so that alone drives the reset. Correctness at the reveal comes
+  // from the personalized refetch below, not from the stream.
   useEffect(() => {
     setPending(null);
-  }, [snapshot?.session.currentIndex, snapshot?.session.status]);
+  }, [snapshot?.session.currentIndex]);
+
+  // At the reveal, pull this phone's OWN result. The stream can't carry it
+  // (one frame serves the whole room), but the snapshot endpoint is
+  // participant-scoped and already returns choice, correctness, and points —
+  // so one small request per question turns "somebody got it right" into
+  // "you got it right". Skipped for a player who didn't answer: there is
+  // nothing personal to fetch, and forty idle phones needn't all ask.
+  const answeredThisQuestion = snapshot?.myAnswer != null || pending !== null;
+  useEffect(() => {
+    if (!sessionId || !stored?.participantToken) return;
+    if (snapshot?.session.status !== 'reveal') return;
+    if (!answeredThisQuestion) return;
+    if (snapshot?.myAnswer?.correct !== undefined) return; // already personalized
+    let live = true;
+    void fetchSnapshot(sessionId, { participant: stored.participantToken }).then((r) => {
+      if (live && r.ok) setSnapshot(r as unknown as TriviaSnapshot);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, stored?.participantToken, snapshot?.session.status, snapshot?.session.currentIndex]);
 
   const doJoin = useCallback(async () => {
     setError(null);
@@ -445,9 +484,11 @@ function LiveBody({
         <p className="mt-3 text-center text-sm font-bold text-fairway-50">
           {myAnswer?.correct
             ? `Correct! +${myAnswer.points ?? 0}`
-            : myAnswer
+            : myAnswer?.correct === false
               ? 'Not this time.'
-              : "Didn't answer in time."}
+              : locked !== null
+                ? 'Checking your answer…'
+                : "Didn't answer in time."}
         </p>
       )}
 

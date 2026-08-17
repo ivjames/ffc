@@ -136,10 +136,12 @@ async function loadBoard(sessionId) {
   return result.rows.map((row, i) => ({ ...row, rank: i + 1 }));
 }
 
-async function currentQuestionRow(session) {
+/** `q` lets the answer path read inside its own transaction — using the pool
+ *  there would read outside the row lock it is holding. */
+async function currentQuestionRow(session, q = pool) {
   const id = session.questionIds?.[session.currentIndex];
   if (!id) return null;
-  const result = await pool.query(
+  const result = await q.query(
     `select id, category, prompt, choices, answer from trivia_question where id = $1`,
     [id]
   );
@@ -386,7 +388,12 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
         let candidate = name;
         if (existing.rowCount > 0) {
           for (let n = 2; n <= MAX_ENTRANTS + 1; n++) {
-            const suffixed = `${name} (${n})`.slice(0, MAX_ENTRANT_NAME);
+            // Trim the BASE to make room for the suffix, never the joined
+            // string: slicing afterwards gives a max-length name back its
+            // original 32 characters, so the "disambiguated" name collides
+            // with the one it was meant to differ from and the insert 500s.
+            const suffix = ` (${n})`;
+            const suffixed = name.slice(0, MAX_ENTRANT_NAME - suffix.length) + suffix;
             const taken = await client.query(
               `select 1 from trivia_entrant where session_id = $1 and name = $2`,
               [session.id, suffixed]
@@ -517,19 +524,40 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
   if (!Number.isInteger(choice) || choice < 0 || choice > 5) {
     return res.status(400).json({ ok: false, error: "choice must be a choice index" });
   }
-  if (ctx.status !== "question") {
-    return res.status(409).json({ ok: false, error: "no question is open" });
-  }
-
+  // The participant lookup above resolved the session as it was a moment ago.
+  // Everything that decides whether this answer counts is re-read below under
+  // a row lock, because the host can advance between the two.
+  const client = await pool.connect();
   try {
-    const row = await currentQuestionRow(ctx);
-    if (!row) return res.status(409).json({ ok: false, error: "no question is open" });
+    await client.query("begin");
+    // Lock the session row for the duration. `advance` UPDATEs the same row,
+    // so the two serialize: an answer either lands wholly before the host
+    // closes the question or is refused. Without this, an answer could be
+    // scored against a question that had already been revealed — and, worse,
+    // the broadcast below would republish a stale `status: "question"` and roll
+    // every phone in the room back out of the reveal.
+    const locked = await client.query(
+      `select ${SESSION_COLS} from trivia_session s where s.id = $1 for update`,
+      [ctx.id]
+    );
+    const session = locked.rows[0];
+    if (!session || session.status !== "question") {
+      await client.query("rollback");
+      return res.status(409).json({ ok: false, error: "no question is open" });
+    }
+
+    const row = await currentQuestionRow(session, client);
+    if (!row) {
+      await client.query("rollback");
+      return res.status(409).json({ ok: false, error: "no question is open" });
+    }
     if (choice >= row.choices.length) {
+      await client.query("rollback");
       return res.status(400).json({ ok: false, error: "choice is out of range" });
     }
 
     // Server clock, always: elapsed comes from asked_at, never the request.
-    const msElapsed = ctx.askedAt ? Date.now() - new Date(ctx.askedAt).getTime() : 0;
+    const msElapsed = session.askedAt ? Date.now() - new Date(session.askedAt).getTime() : 0;
 
     // The countdown has to actually close answers. Checking only "has the host
     // advanced?" meant the configured question length was decorative: while a
@@ -539,44 +567,51 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
     //
     // The grace window is for the network, not the player: a tap at 19.9s on a
     // busy venue wifi must not be thrown away by its own latency.
-    const deadlineMs = ctx.config.questionSeconds * 1000 + ANSWER_GRACE_MS;
-    if (ctx.askedAt && msElapsed > deadlineMs) {
+    const deadlineMs = session.config.questionSeconds * 1000 + ANSWER_GRACE_MS;
+    if (session.askedAt && msElapsed > deadlineMs) {
+      await client.query("rollback");
       return res.status(409).json({ ok: false, error: "time's up on that question" });
     }
 
     const correct = choice === row.answer;
-    const points = scoreAnswer(correct, msElapsed, ctx.config);
+    const points = scoreAnswer(correct, msElapsed, session.config);
 
     // ON CONFLICT DO NOTHING against the (session, entrant, question) primary
     // key IS the one-answer-per-team rule: at a table where three people tap,
     // the first lands and the rest are refused. Without it a team could
     // brute-force every choice.
-    const inserted = await pool.query(
+    const inserted = await client.query(
       `insert into trivia_answer
          (session_id, entrant_id, question_index, choice, correct, points, ms_elapsed, answered_by)
        values ($1, $2, $3, $4, $5, $6, $7, $8)
        on conflict (session_id, entrant_id, question_index) do nothing
        returning choice`,
-      [ctx.id, ctx.entrantId, ctx.currentIndex, choice, correct, points, msElapsed, ctx.participantId]
+      [session.id, ctx.entrantId, session.currentIndex, choice, correct, points, msElapsed, ctx.participantId]
     );
     if (inserted.rowCount === 0) {
+      await client.query("rollback");
       return res.status(409).json({ ok: false, error: "already answered" });
     }
 
     if (points > 0) {
-      await pool.query(`update trivia_entrant set score = score + $1 where id = $2`, [
+      await client.query(`update trivia_entrant set score = score + $1 where id = $2`, [
         points,
         ctx.entrantId,
       ]);
     }
+    await client.query("commit");
 
     // Tell the room how many have locked in — but not who, and not whether
-    // this one was right: the question is still open.
-    await broadcast(ctx);
+    // this one was right: the question is still open. Broadcast the session as
+    // re-read under the lock, never the one the request arrived with.
+    await broadcast(session);
     return res.json({ ok: true, locked: choice });
   } catch (err) {
+    await client.query("rollback").catch(() => {});
     console.error("[trivia] answer error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
+  } finally {
+    client.release();
   }
 });
 
