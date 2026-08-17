@@ -61,44 +61,53 @@ Three further wins worth naming:
    badge is a venue-economics question needing sign-off. Unpaid, the catalog is
    ours to iterate on freely.
 
-### The golf payout — open, leaning toward removal
+### The golf payout — removed
 
 Punchlist #8 was explicitly *"Rewards/tickets tie in"*, so pulling tickets off
-golf entirely is a real reversal of a venue ask. It is nevertheless the current
-direction, and there's a better argument for it than simplicity.
+golf reverses a venue ask. It was done anyway, and the argument is stronger than
+simplicity.
 
 **Golf scores are entirely self-reported.** The scorecard is a number pad on a
-device the group controls; nothing verifies that a 1 on hole 7 was a 1. Today
-that types-in-a-small-number gesture is worth 100 tickets. Measured honestly,
-this is the *weakest* trust surface in the whole ticket economy — weaker than
-the client-scored mini-games, which at least run in our own code and are capped
-server-side per round. The hunt is the one golf-side achievement with real
-verification behind it (a vision model judges a photo, with anti-cheat flags),
-and it's the cheapest of the three.
+device the group controls; nothing verifies that a 1 on hole 7 was a 1. That
+gesture used to be worth 100 tickets. Measured honestly, it was the *weakest*
+trust surface in the whole ticket economy — weaker than the client-scored
+mini-games, which at least run in our own code and are capped server-side per
+round. The hunt is the one golf-side achievement with real verification behind
+it (a vision model judges a photo, with anti-cheat flags), and it was the
+cheapest of the three.
 
-So the integrity case and the simplicity case point the same way: **paying
-tickets for self-reported scores is the part worth removing**, and it happens to
-be the part that constrains the badge catalog.
+The integrity case and the simplicity case pointed the same way, so the whole
+payout lane is gone:
 
-What comes out with it: `POST /api/rewards/claim`, `src/lib/pos/golfRewards.ts`,
-the golf half of `server/lib/dailyTickets.js`, `reward_grant`'s payout columns
-(`tickets_awarded`, `card_player_id`, `pos_transaction_id`, `redeemed_at`), the
-claim/settle logic in `src/features/scorecard/Summary.tsx`, and Master Control's
-golf issuance rollup (`server/routes/admin/rewards.js`, `admin/Rewards.tsx`).
-Golf stops feeding the ticket economy; mini-games and adoption bonuses still do.
+- `POST /api/rewards/claim` — deleted; `GET /api/rewards` is now the entire
+  player-facing surface, and it is read-only.
+- `src/lib/pos/golfRewards.ts` — deleted, with its `deviceOwnsSlot` rule. That
+  rule existed only because claiming every slot on a shared round would pay each
+  reward onto every card; with no payout, every player's badge simply shows on
+  every device, like the scorecard above it.
+- `reward_grant`'s payout columns (`redeemed_at`, `tickets_awarded`,
+  `card_player_id`, `pos_transaction_id`) — dropped. A grant is now a pure
+  record of "this round earned this".
+- `server/lib/dailyTickets.js` — no longer a union across two ledgers. The
+  per-card daily cap now sums `game_ticket_award` alone.
+- The claim/settle logic in `src/features/scorecard/Summary.tsx` — replaced by a
+  plain badge list.
+- Master Control's rollup — reframed from payout reporting to issuance: how many
+  of each achievement players are earning, with no claimed/unclaimed or ticket
+  columns.
 
-**If the tie-in needs to survive in some form**, the least-bad version is to move
-it off achievements and onto the round itself: *finish a round, earn N tickets*.
-It's easier to explain at the counter, doesn't distort play toward one scoring
-outcome, and caps trivially. It carries the same self-reporting weakness, but
-with a far lower ceiling — farming it means manufacturing whole rounds rather
-than typing a low number — and `reward_grant` is reusable nearly as-is, one
-grant per completed round instead of one per achievement.
+Tickets now come only from the mini-game proxy and the one-time adoption
+bonuses. **Achievements pay nothing, and there is no second class of them.**
 
-**Recommendation:** pull tickets from golf achievements either way. Treat
-round-completion tickets as a separate, later question to settle with the venue
-rather than a blocker on the badge catalog — the catalog no longer depends on
-how that lands.
+**Still open, and now independent:** whether golf should feed the ticket economy
+some other way. The least-bad version is to attach tickets to the round rather
+than to an achievement — *finish a round, earn N tickets*. It's easier to explain
+at the counter, doesn't distort play toward one scoring outcome, and caps
+trivially. It carries the same self-reporting weakness but with a far lower
+ceiling: farming it means manufacturing whole rounds rather than typing a low
+number. `reward_grant` is reusable nearly as-is, one grant per completed round
+instead of one per achievement. That's a conversation with the venue, not a
+blocker — the badge catalog no longer depends on how it lands.
 
 ---
 
@@ -338,10 +347,12 @@ and it costs nothing to be playful here.
    persist an earned-set alongside the rounds, or (better, for signed-in players)
    sync earned badges to the account so the wall follows the player across
    devices. This is the one piece of new persistence worth building.
-5. **`reward_grant` stops being the achievement store.** If the round-based
-   payout above is adopted, `reward_grant` keeps existing for that and
-   achievements stop touching it entirely — a clean separation rather than a
-   deletion.
+5. **`reward_grant` is now a record, not a voucher.** With the payout columns
+   dropped it holds exactly `(round, player_index, player_tag, achievement,
+   created_at)`. That's a fine home for the server-detected achievements (the
+   **S** rows), and it costs nothing to keep granting into it. If round-completion
+   tickets ever land, give them their own grant row rather than re-attaching
+   value to an achievement — the separation is the point.
 
 ## Suggested first slate
 

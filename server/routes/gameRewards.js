@@ -92,8 +92,10 @@ router.post("/award", tenant(), async (req, res) => {
         duplicate = true;
         await client.query("commit");
       } else {
-        // One shared daily pool: count golf achievement claims too, so games
-        // and golf draw down the same per-card budget (lib/dailyTickets.js).
+        // Today's spend for this card at this venue (lib/dailyTickets.js).
+        // Mini-games are now the only lane that draws on the budget — golf
+        // achievements pay nothing — but the sum stays behind that module so a
+        // future earning lane joins the cap rather than bypassing it.
         const spent = await dailySpentTickets(client, {
           locationId,
           cardId: playerId,

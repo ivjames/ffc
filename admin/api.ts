@@ -199,16 +199,13 @@ export type Announcement = {
   viewLastSeenAt?: string | null;
 };
 
-// Golf achievement rewards reporting (admin `/rewards/summary`). Since #157 the
-// app pays achievements straight to a loyalty card as tickets and shows no
-// counter codes, so Master Control reports on issuance instead of redeeming it.
+// Golf achievement issuance reporting (admin `/rewards/summary`). Achievements
+// pay nothing — no tickets, no card credit, no counter codes — so this reports
+// only on what players are earning. There is no claimed/unclaimed state and no
+// ticket column: a grant carries no value to bank.
 export type RewardAchievementTotal = {
   achievement: string;
   granted: number; // achievements earned in the window
-  cardClaims: number; // banked to a card with the vendor credit confirmed
-  pending: number; // banked but the vendor credit hasn't confirmed yet
-  unclaimed: number; // earned but not yet banked to a card
-  tickets: number; // tickets paid out across the confirmed card claims
 };
 
 export type RewardSummaryRow = {
@@ -217,9 +214,6 @@ export type RewardSummaryRow = {
   locationName: string | null;
   achievement: string;
   granted: number;
-  cardClaims: number;
-  pending: number;
-  tickets: number;
 };
 
 export type RewardSummary = {

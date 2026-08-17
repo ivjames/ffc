@@ -783,11 +783,14 @@ update location set hours = '{
   "sun":{"open":"11:00","close":"22:00"}}'::jsonb
  where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' and hours is null;
 
--- Rewards (punchlist #8 tier 1). One row per earned achievement, granted
--- server-side when a completed round syncs; achievements pay out as tickets on
--- the player's loyalty card (see the redeemed_* columns below). Keyed by
--- player_index (positional, like score) because tags can repeat within a round;
--- player_tag is denormalized for display. Cascade with the round like score does.
+-- Achievements (punchlist #8 tier 1). One row per earned achievement, granted
+-- server-side when a completed round syncs. Keyed by player_index (positional,
+-- like score) because tags can repeat within a round; player_tag is
+-- denormalized for display. Cascade with the round like score does.
+--
+-- A grant is a pure RECORD, not a voucher: achievements pay nothing (see
+-- lib/rewards.js). It's read by the player's round summary and by Master
+-- Control's issuance rollup, and that's all.
 create table if not exists reward_grant (
   id           uuid primary key default gen_random_uuid(),
   round_id     uuid not null references round(id) on delete cascade,
@@ -795,39 +798,25 @@ create table if not exists reward_grant (
   player_tag   text not null,            -- [A-Z0-9]{3} at grant time
   achievement  text not null,            -- hole_in_one | under_par | hunt_master
   created_at   timestamptz not null default now(),
-  redeemed_at  timestamptz,              -- set once, when banked to a loyalty card
   unique (round_id, player_index, achievement)
 );
-create index if not exists reward_grant_round_idx    on reward_grant (round_id);
-create index if not exists reward_grant_redeemed_idx on reward_grant (redeemed_at) where redeemed_at is null;
+create index if not exists reward_grant_round_idx on reward_grant (round_id);
 
--- A grant is claimed exactly once, when it's banked to a loyalty card: the app
--- credits it server-side, sets redeemed_at (the single consume point), and
--- records the value paid + the vendor tx so a re-opened summary settles from
--- the row instead of crediting again.
-alter table reward_grant add column if not exists tickets_awarded   int;   -- tickets paid on a card claim
-alter table reward_grant add column if not exists card_player_id    text;  -- the loyalty card credited
-alter table reward_grant add column if not exists pos_transaction_id text; -- vendor tx id (null until credited)
--- The counter-redemption flow is retired: codes are no longer minted, Master
--- Control reports on issuance instead of redeeming it, and a card claim is the
--- only lane — so redeemed_at alone marks a claimed grant. Drop its columns (a
--- grant's identity is its UUID; achievements pay out only as tickets).
+-- The counter-redemption flow was retired first (codes stopped being minted and
+-- Master Control reported on issuance rather than redeeming it), leaving a card
+-- claim as the only payout lane. That lane is now retired too: golf scores are
+-- self-reported, so paying tickets against them was the weakest trust surface
+-- in the ticket economy. Every payout column goes with it — a grant carries no
+-- value to bank, so there is nothing to consume, credit, or settle.
 alter table reward_grant drop column if exists code;
 alter table reward_grant drop column if exists redeemed_by;
--- All existing reward_grant data is test data, so clear the table before
--- dropping the lane marker — this leaves no historical counter redemption for
--- the claim route to misread once redeemed_via is gone (a card claim for the
--- same round could otherwise re-credit a prize already handed out at the
--- counter). Guarded on redeemed_via's existence so it fires exactly ONCE, on
--- the upgrade that drops the column, and never on a later schema re-apply
--- (schema.sql re-runs in full when its content changes) or a fresh DB.
-do $$ begin
-  if exists (select 1 from information_schema.columns
-             where table_name = 'reward_grant' and column_name = 'redeemed_via') then
-    delete from reward_grant;
-  end if;
-end $$;
 alter table reward_grant drop column if exists redeemed_via;
+alter table reward_grant drop column if exists redeemed_at;
+alter table reward_grant drop column if exists tickets_awarded;
+alter table reward_grant drop column if exists card_player_id;
+alter table reward_grant drop column if exists pos_transaction_id;
+-- Indexed the unclaimed-grant lookup the claim path did; nothing queries it now.
+drop index if exists reward_grant_redeemed_idx;
 
 -- Photo auto-moderation (unblocks people-in-photos + the social photo share).
 -- Every hunt photo is classified in the SAME vision call that verifies the
