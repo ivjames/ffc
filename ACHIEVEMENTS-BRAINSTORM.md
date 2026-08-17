@@ -1,23 +1,27 @@
 # Achievements — Brainstorm & Expansion Catalog
 
 Last updated: 2026-08-17. A candidate catalog for growing the app's
-achievements from the current three into a real badge wall. **Nothing here is
-built** — this is the menu to pick from.
+achievements from the current three into a real badge wall. The catalog itself
+is **not built** — it's the menu to pick from. The premise underneath it is:
+the ticket payout has been removed, in code, and achievements now pay nothing.
 
-**Premise: achievements pay no tickets.** They are a collection and status
-layer, not a currency. That decision is what makes the rest of this document
-possible, so the reasoning is up front. Companion docs:
-[`post-meeting-punchlist.md`](./post-meeting-punchlist.md) (#8, the
-rewards/ticket tie-in these came out of) and [`HUNT-PRICING.md`](./HUNT-PRICING.md).
+Companion docs: [`post-meeting-punchlist.md`](./post-meeting-punchlist.md) (#8,
+the rewards/ticket tie-in these came out of — now retired) and
+[`HUNT-PRICING.md`](./HUNT-PRICING.md).
 
 ## Where we are today
 
-Three achievements, granted server-side when a completed round first syncs
-(`server/routes/rounds.js` → `server/lib/rewards.js`), one `reward_grant` row
-per `(round, player_index, achievement)`, paid out as loyalty-card tickets at
-100 / 50 / 75 for `hole_in_one` / `under_par` / `hunt_master`. The player-facing
-wall is `src/features/me/Achievements.tsx`, which re-derives earned state from
+Three achievements — `hole_in_one`, `under_par`, `hunt_master` — granted
+server-side when a completed round first syncs (`server/routes/rounds.js` →
+`server/lib/rewards.js`), one `reward_grant` row per
+`(round, player_index, achievement)`. They are **badges: they pay nothing.**
+The round summary lists them, and the player-facing wall is
+`src/features/me/Achievements.tsx`, which re-derives earned state from
 locally-stored rounds so it works offline and signed-out.
+
+They used to pay 100 / 50 / 75 tickets onto a loyalty card. That lane is gone —
+the reasoning is [below](#the-golf-payout--removed), and it's what frees the
+rest of this document.
 
 ---
 
@@ -53,10 +57,10 @@ Three further wins worth naming:
    already does for two of the three. No new endpoints, no grant logic in the
    sync path, no idempotency keys, no issuance pollution from synthetic bot
    rounds.
-2. **Fairness stops mattering.** Under-par on the Blue Course is not the same
-   feat as under-par on Dragon's Hollow, and pricing that honestly is genuinely
-   hard. A badge doesn't need to be fair — it needs to be fun. Nobody complains
-   that a rare badge is rare.
+2. **Fairness stops mattering.** Courses differ wildly in difficulty, so
+   under-par on a gentle one is nothing like under-par on a brutal one, and
+   pricing that honestly is genuinely hard. A badge doesn't need to be fair — it
+   needs to be fun. Nobody complains that a rare badge is rare.
 3. **It becomes a product decision, not a business one.** While badges pay, every
    badge is a venue-economics question needing sign-off. Unpaid, the catalog is
    ours to iterate on freely.
@@ -128,6 +132,29 @@ and becomes *"where can we detect it?"* Three detection sites:
 Legend below: **L** local · **S** server · **N** needs new tracking.
 ★ marks the ones worth building first.
 
+### The naming rule: no badge names a course, venue, or theme
+
+The catalog ships **with the app**, and the app is white-label — one client owns
+several venues, each with its own courses, and the next client's are different.
+A "Dragon Slayer" badge for finishing Dragon's Hollow under par is dead weight at
+any deployment without a Dragon's Hollow, and there is no good answer for what it
+should say there.
+
+So: **an achievement may describe what a player did, never where they did it.**
+Anything that would name a course, a venue, a theme, or a specific hunt item is
+out. The generic form is almost always better anyway — "beat your own best on
+that course" works everywhere, scales to a hundred courses, and needs no
+editing when a venue re-themes a course or opens a new one.
+
+This costs less than it sounds. Course flavor still comes through the course
+*themes already in the data* (`course.theme` drives the app's skinning), and
+the exploration impulse behind per-course badges is fully covered by New Ground,
+Course Collector, Grand Slam, and Nemesis — none of which need to know a single
+course's name.
+
+Four theme badges (Dragon Slayer, Yeehaw, Golden State, Old School) were cut
+under this rule.
+
 ---
 
 ## Golf — scoring & skill
@@ -181,7 +208,7 @@ device.
 
 Anti-achievements. These only work *because* nothing pays — a badge for playing
 badly would be perverse if it minted tickets, and it's delightful when it
-doesn't. Bullwinkle's is a family venue; leaning into the bad rounds is on-brand.
+doesn't. These are family venues; leaning into the bad rounds suits the room.
 
 | Name | How to earn | |
 |---|---|---|
@@ -196,17 +223,18 @@ doesn't. Bullwinkle's is a family venue; leaning into the bad rounds is on-brand
 
 ## Courses & venues
 
+Every badge here is written against a course's *shape*, never its identity — see
+[the naming rule](#the-naming-rule-no-badge-names-a-course-venue-or-theme).
+
 | Name | How to earn | |
 |---|---|---|
-| Dragon Slayer 🐉 | Finish Dragon's Hollow under par | L |
-| Yeehaw 🤠 | Finish the Western course under par | L |
-| Golden State ☀️ | Finish the California course under par | L |
-| Old School 🕰️ | Finish the Classic course under par | L |
+| New Ground 🧭 | Play a course you've never played before | L |
 | Course Collector 🗂️ | Play every course at one venue | L |
-| ★ Road Trip 🚗 | Play a round at all three venues | L |
+| ★ Road Trip 🚗 | Play a round at three different venues | L |
 | Grand Slam 🏆 | Under par on every course at one venue | L |
 | ★ Course Record 👑 | Beat the best recorded score on that course | S |
 | Personal Best 📊 | Beat your own best on that course | L |
+| Nemesis 😤 | Finally finish under par on the course you've gone over par on most | L |
 | Night Owl 🦉 | Start a round in the last hour before close | S |
 | Early Bird 🐤 | Start within an hour of opening | S |
 | Marathon 🏃 | Two full rounds in one day | L |
@@ -214,6 +242,10 @@ doesn't. Bullwinkle's is a family venue; leaning into the bad rounds is on-brand
 
 `location.hours` and `lib/venueHours.js` already exist, so the time-of-day pair
 is a lookup, not new infrastructure.
+
+Road Trip is the one badge here that assumes a deployment's *scale* rather than
+its content — a single-venue client can never earn it. That's a display problem,
+not a catalog problem: see the note on hiding unreachable badges below.
 
 ## Scavenger hunt
 
@@ -354,15 +386,29 @@ and it costs nothing to be playful here.
    **S** rows), and it costs nothing to keep granting into it. Nothing in this
    table carries value any more, and nothing should: golf's ticket lane is
    closed, not paused.
+6. **Hide badges a deployment can't reach.** The naming rule keeps course and
+   venue *names* out of the catalog, but a few badges still assume a deployment's
+   shape — Road Trip wants three venues, Course Collector wants more than one
+   course, the fun-zone badges want the arcade tiles. A single-venue client
+   showing a permanently grey "play at three venues" badge looks broken, not
+   aspirational. Give each catalog entry an optional reachability predicate
+   evaluated against the deployment's own data (venue count, course count,
+   whether the venue sells the hunt), and omit unreachable badges from the wall
+   and from the "*N* of *M*" count. Data-driven, so nobody edits the catalog per
+   client — which is the same instinct as the naming rule, applied to scale
+   instead of content.
 
 ## Suggested first slate
 
-Ship the **local golf badges** — scoring, round shape, wipeouts, courses: about
-fifty entries, all pure arithmetic over data already in IndexedDB, all working
-offline and signed-out, no backend change of any kind. That takes the wall from
-3 badges to ~50 with no migration, no new endpoint, and no trust surface.
+The catalog is **103 entries**: 63 local, 20 server, 20 needing new tracking.
 
-Then, in order: the **hunt badges** (server-side but nearly free — the columns
-already exist), the **fun-zone counter** (one small local store, unlocks fourteen
-more), and finally **account-synced earned state** so the wall survives a cleared
-cache.
+Ship the **48 local golf badges** first — scoring (22), round shape (10),
+wipeouts (8), and the local half of courses & venues (8). All of it is pure
+arithmetic over data already in IndexedDB, works offline and signed-out, and
+needs no migration, no new endpoint, and no trust surface. That alone takes the
+wall from 3 badges to 48.
+
+Then, in order: the **11 hunt badges** (server-side but nearly free — the
+columns already exist), the **fun-zone counter** (one small local store,
+unlocking 13 more), and finally **account-synced earned state** so the wall
+survives a cleared cache.
