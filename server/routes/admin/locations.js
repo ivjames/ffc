@@ -20,6 +20,7 @@ import {
   LOCATION_RETURN_COLS,
 } from "../../lib/validateLocation.js";
 import { COURSE_RETURN_COLS } from "../../lib/validateCourse.js";
+import { moduleStatus } from "../../lib/modules.js";
 
 export const router = Router();
 
@@ -69,7 +70,15 @@ router.get("/:id", async (req, res) => {
         order by sort_order, name`,
       [id]
     );
-    return res.json({ location: withLabel(loc.rows[0]), courses: courses.rows });
+    // Module status is computed, not stored: whether a module is LIVE depends
+    // on its entitlement, its vendor wiring, and its dependencies together.
+    // Sending it resolved (with the reason it isn't live) keeps that one rule
+    // on the server instead of re-implementing it in the admin bundle.
+    return res.json({
+      location: withLabel(loc.rows[0]),
+      modules: moduleStatus(loc.rows[0]),
+      courses: courses.rows,
+    });
   } catch (err) {
     console.error("[admin/locations] get error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
@@ -138,31 +147,33 @@ router.post("/", async (req, res) => {
     let db;
     if (row.id) {
       db = await pool.query(
-        `insert into location (id, name, slug, lat, lng, geofence_km, tz, sort_order, menu_url, ordering_url, pos, hours, hunt, org_id)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        `insert into location (id, name, slug, lat, lng, geofence_km, tz, sort_order, menu_url, ordering_url, pos, modules, hours, hunt, org_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          on conflict (id) do update set
            name = excluded.name, slug = excluded.slug, lat = excluded.lat,
            lng = excluded.lng, geofence_km = excluded.geofence_km,
            tz = excluded.tz, sort_order = excluded.sort_order,
            menu_url = excluded.menu_url, ordering_url = excluded.ordering_url,
-           pos = excluded.pos, hours = excluded.hours, hunt = excluded.hunt,
+           pos = excluded.pos, modules = excluded.modules,
+           hours = excluded.hours, hunt = excluded.hunt,
            org_id = coalesce(excluded.org_id, location.org_id)
          returning ${LOCATION_RETURN_COLS}`,
-        [row.id, row.name, row.slug, row.lat, row.lng, row.geofenceKm, row.tz, row.sortOrder, row.menuUrl, row.orderingUrl, row.pos, row.hours, row.hunt, row.orgId]
+        [row.id, row.name, row.slug, row.lat, row.lng, row.geofenceKm, row.tz, row.sortOrder, row.menuUrl, row.orderingUrl, row.pos, row.modules ?? {}, row.hours, row.hunt, row.orgId]
       );
     } else {
       db = await pool.query(
-        `insert into location (name, slug, lat, lng, geofence_km, tz, sort_order, menu_url, ordering_url, pos, hours, hunt, org_id)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `insert into location (name, slug, lat, lng, geofence_km, tz, sort_order, menu_url, ordering_url, pos, modules, hours, hunt, org_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          on conflict (slug) do update set
            name = excluded.name, lat = excluded.lat, lng = excluded.lng,
            geofence_km = excluded.geofence_km, tz = excluded.tz,
            sort_order = excluded.sort_order,
            menu_url = excluded.menu_url, ordering_url = excluded.ordering_url,
-           pos = excluded.pos, hours = excluded.hours, hunt = excluded.hunt,
+           pos = excluded.pos, modules = excluded.modules,
+           hours = excluded.hours, hunt = excluded.hunt,
            org_id = coalesce(excluded.org_id, location.org_id)
          returning ${LOCATION_RETURN_COLS}`,
-        [row.name, row.slug, row.lat, row.lng, row.geofenceKm, row.tz, row.sortOrder, row.menuUrl, row.orderingUrl, row.pos, row.hours, row.hunt, row.orgId]
+        [row.name, row.slug, row.lat, row.lng, row.geofenceKm, row.tz, row.sortOrder, row.menuUrl, row.orderingUrl, row.pos, row.modules ?? {}, row.hours, row.hunt, row.orgId]
       );
     }
     await audit({

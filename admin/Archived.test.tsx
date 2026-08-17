@@ -33,6 +33,7 @@ const ARCHIVED_LOCATION = {
   menuUrl: null,
   orderingUrl: null,
   pos: null,
+  modules: null,
   hours: null,
   hunt: {},
   sortOrder: 0,

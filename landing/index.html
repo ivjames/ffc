@@ -281,13 +281,14 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--cyan), var(
   grid-template-areas:
     "phone board board"
     "phone hunt tickets"
-    "games games control";
+    "games games food"
+    "control control control";
 }
 @media (max-width: 940px) {
-  .bento { grid-template-columns: 1fr 1fr; grid-template-areas: "phone board" "phone hunt" "tickets control" "games games"; }
+  .bento { grid-template-columns: 1fr 1fr; grid-template-areas: "phone board" "phone hunt" "tickets food" "games games" "control control"; }
 }
 @media (max-width: 620px) {
-  .bento { grid-template-columns: 1fr; grid-template-areas: "phone" "board" "hunt" "tickets" "games" "control"; }
+  .bento { grid-template-columns: 1fr; grid-template-areas: "phone" "board" "hunt" "tickets" "games" "food" "control"; }
 }
 .cell {
   position: relative; overflow: hidden;
@@ -305,6 +306,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--cyan), var(
 .cell-hunt    { box-shadow: 0 12px 36px rgba(16, 20, 60, 0.07), 0 30px 80px -30px rgba(0, 196, 234, 0.32); }
 .cell-tickets { box-shadow: 0 12px 36px rgba(16, 20, 60, 0.07), 0 30px 80px -30px rgba(182, 240, 0, 0.40); }
 .cell-games   { box-shadow: 0 12px 36px rgba(16, 20, 60, 0.07), 0 30px 80px -30px rgba(255, 46, 115, 0.32); }
+.cell-food    { box-shadow: 0 12px 36px rgba(16, 20, 60, 0.07), 0 30px 80px -30px rgba(255, 138, 0, 0.34); }
 .cell-control { box-shadow: 0 12px 36px rgba(16, 20, 60, 0.07), 0 30px 80px -30px rgba(109, 53, 255, 0.35); }
 .cell h3 { font-family: var(--display); font-size: 16px; font-weight: 700; letter-spacing: 0.02em; margin-bottom: 8px; }
 .cell p { font-size: 14.5px; color: var(--dim); max-width: 40ch; }
@@ -417,6 +419,37 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--cyan), var(
 .g-icon:hover { transform: translateY(-6px) rotate(-3deg); border-color: var(--coral); box-shadow: 0 10px 30px rgba(255, 46, 115, 0.2); }
 .g-icon:nth-child(2n):hover { border-color: var(--cyan); box-shadow: 0 10px 30px rgba(0, 196, 234, 0.2); }
 @media (max-width: 720px) { .cell-games { flex-direction: column; align-items: flex-start; } }
+
+/* food & drink mock — a mid-round order ticket moving through its states */
+.cell-food { grid-area: food; }
+.order-slip {
+  border: 1px solid var(--line); border-radius: 14px; background: #f7f8ff;
+  padding: 12px 14px; margin-bottom: 14px;
+}
+.order-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--ink); }
+.order-line + .order-line { margin-top: 6px; }
+.order-line b { font-variant-numeric: tabular-nums; font-weight: 700; }
+.order-line span.qty { color: var(--dim); font-weight: 700; margin-right: 6px; }
+.order-total {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line);
+  font-size: 13px; font-weight: 800; color: var(--ink);
+}
+.order-state {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 11px;
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 800;
+  color: var(--dim);
+}
+.order-state i {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--lime);
+  box-shadow: 0 0 0 0 rgba(182, 240, 0, 0.65); animation: orderPulse 2s ease-out infinite;
+}
+@keyframes orderPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(182, 240, 0, 0.65); }
+  70%  { box-shadow: 0 0 0 9px rgba(182, 240, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(182, 240, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .order-state i { animation: none; } }
 
 /* control mock */
 .cell-control { grid-area: control; }
@@ -604,7 +637,8 @@ footer .logo { font-size: 12px; color: var(--ink); }
       <p class="section-intro reveal">
         Guests play from the phone already in their pocket. Staff run
         everything from one back office. Nothing to install, nothing to sync
-        by hand.
+        by hand. Every module below is sold <strong>à la carte</strong> — switch
+        one on for a venue and it's live on the next refresh, no redeploy.
       </p>
 
       <div class="bento">
@@ -669,16 +703,31 @@ footer .logo { font-size: 12px; color: var(--ink); }
           </div>
         </div>
 
+        <div class="cell cell-food reveal">
+          <span class="tag">06 · Food &amp; drink</span>
+          <div class="order-slip" aria-hidden="true">
+            <div class="order-line"><span><span class="qty">2×</span>Basket of fries</span><b>$11.00</b></div>
+            <div class="order-line"><span><span class="qty">1×</span>Moose Burger</span><b>$14.50</b></div>
+            <div class="order-line"><span><span class="qty">2×</span>Root beer float</span><b>$13.00</b></div>
+            <div class="order-total"><span>Hole 7 · runner delivery</span><span>$38.50</span></div>
+          </div>
+          <div class="body-copy">
+            <div class="order-state" aria-hidden="true"><i></i> Order in the kitchen</div>
+            <h3>Order without leaving the hole</h3>
+            <p>Native in-app F&amp;B ordering straight into the venue's POS — guests order mid-round, staff work the same ticket queue they already use.</p>
+          </div>
+        </div>
+
         <div class="cell cell-control reveal">
-          <span class="tag">06 · Back office</span>
+          <span class="tag">07 · Back office</span>
           <div class="switches" aria-hidden="true">
-            <div class="sw on"><span>announcements</span><i></i></div>
+            <div class="sw on"><span>arcade</span><i></i></div>
             <div class="sw on" id="swRewards"><span>rewards</span><i></i></div>
             <div class="sw on"><span>food &amp; drink</span><i></i></div>
           </div>
           <div class="body-copy">
             <h3>Master Control</h3>
-            <p>Courses, promos, branding, reporting — publish to every guest's phone without a rebuild.</p>
+            <p>Courses, promos, branding, reporting — and the module switches themselves. Turn a venue's rewards or F&amp;B on and off without touching its POS integration.</p>
           </div>
         </div>
       </div>

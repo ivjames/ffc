@@ -46,6 +46,13 @@ export type GeneratedLocation = {
       gameRewardCaps?: { dailyPerCard: number | null; perGame: Record<string, number> };
     } | null;
   } | null;
+  // Resolved a la carte module entitlements (server/lib/modules.js) — the
+  // FINAL on/off per module, with vendor wiring and dependencies already
+  // folded in, so the client never re-derives them. Optional: the baked
+  // snapshot predates it, and a cached payload from an older server won't
+  // carry it — absent must read as "derive from pos", the pre-modules
+  // behavior (src/lib/modules.ts).
+  modules?: Record<string, boolean>;
   orgId: string | null;
 };
 

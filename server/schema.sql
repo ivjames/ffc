@@ -1189,3 +1189,15 @@ create index if not exists game_score_user_idx on game_score (app_user_id, game,
 -- filter on `synthetic = true`, and the default (synthetic-included) board
 -- query never touches it. Mirrors round_synthetic_idx.
 create index if not exists game_score_synthetic_idx on game_score (synthetic) where synthetic;
+
+-- À la carte module entitlements (lib/modules.js). Separates WHAT A VENUE
+-- BOUGHT from the vendor wiring that makes it work: until now the only way to
+-- switch the rewards surface off was to delete the POS credentials, and the
+-- separately-sellable line items (F&B ordering, rewards card, game tickets)
+-- were invisible as such.
+--
+-- SPARSE and back-compatible: '{}' — the value every existing venue gets —
+-- means "derive from the venue's existing config exactly as before", so this
+-- column changes nothing until an operator sets a module explicitly. A module
+-- is live only when it is entitled here AND its vendor block is configured.
+alter table location add column if not exists modules jsonb not null default '{}';

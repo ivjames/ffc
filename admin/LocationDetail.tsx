@@ -11,6 +11,7 @@ import {
   type VenueHours,
 } from './api';
 import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Select, Spinner, useAsync, useToast, fmtDateTime } from './ui';
+import LocationModules from './LocationModules';
 
 const HOURS_DAY_LABELS: Record<HoursDayKey, string> = {
   mon: 'Mon',
@@ -441,6 +442,11 @@ function LocationForm({
         orderingUrl: orderingUrl.trim() || null,
         hours: buildHoursPayload(hoursEnabled, hoursState),
         hunt: buildHuntPayload(huntScanCap, huntVenueMode),
+        // This form is replace-not-merge across the whole record, and modules
+        // are edited in their OWN panel — so they have to be carried through
+        // verbatim here, or saving an unrelated field (a menu URL, a phone
+        // number) would silently reset the venue's entitlements.
+        modules: location.modules ?? null,
         pos:
           ordVendor === '' && loyVendor === ''
             ? null
@@ -635,6 +641,7 @@ export default function LocationDetail() {
     ]);
     return {
       location: detail.location,
+      modules: detail.modules,
       courses: detail.courses,
       archivedCourses: allCourses.filter((c) => c.archivedAt),
       gameRewardsMeta,
@@ -644,7 +651,7 @@ export default function LocationDetail() {
   if (loading) return <Spinner />;
   if (error) return <Banner kind="error">{error.message}</Banner>;
   if (!data) return null;
-  const { location, courses, archivedCourses, gameRewardsMeta } = data;
+  const { location, modules, courses, archivedCourses, gameRewardsMeta } = data;
 
   async function toggleArchive() {
     await api.archiveLocation(id, !location.archivedAt);
@@ -671,6 +678,10 @@ export default function LocationDetail() {
           </Button>
         }
       />
+
+      {/* Modules first: what the venue bought frames everything below it —
+          the POS wiring inside LocationForm exists to serve these. */}
+      <LocationModules location={location} modules={modules} onSaved={reload} />
 
       <LocationForm location={location} gameRewardsMeta={gameRewardsMeta} onSaved={reload} />
 

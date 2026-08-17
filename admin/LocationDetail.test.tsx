@@ -156,6 +156,7 @@ const LOCATION: Location = {
   menuUrl: null,
   orderingUrl: null,
   pos: null,
+  modules: null,
   hours: null,
   hunt: {},
   orgId: 'org-1',
@@ -163,7 +164,7 @@ const LOCATION: Location = {
 };
 
 beforeEach(() => {
-  vi.mocked(api.getLocation).mockReset().mockResolvedValue({ location: LOCATION, courses: [] });
+  vi.mocked(api.getLocation).mockReset().mockResolvedValue({ location: LOCATION, courses: [], modules: [] });
   vi.mocked(api.listLocationCourses).mockReset().mockResolvedValue([]);
   vi.mocked(api.gameRewardsMeta).mockReset().mockRejectedValue(new Error('unavailable'));
   vi.mocked(api.saveLocation)
@@ -203,6 +204,7 @@ describe('LocationDetail — hunt daily scan cap', () => {
     vi.mocked(api.getLocation).mockResolvedValue({
       location: { ...LOCATION, hunt: { dailyScanCap: 250 } },
       courses: [],
+      modules: [],
     });
     const user = userEvent.setup();
     renderLocationDetail();
@@ -221,6 +223,7 @@ describe('LocationDetail — hunt daily scan cap', () => {
     vi.mocked(api.getLocation).mockResolvedValue({
       location: { ...LOCATION, hunt: { dailyScanCap: 250 } },
       courses: [],
+      modules: [],
     });
     const user = userEvent.setup();
     renderLocationDetail();
