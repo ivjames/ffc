@@ -226,6 +226,21 @@ test("normalizeHunt rejects bad shapes, bad caps, and unknown keys", () => {
   assert.match(normalizeHunt({ dailyScanCap: "many" }).error, /dailyScanCap/);
   // A typo'd key must fail loudly, not silently store as "unlimited".
   assert.match(normalizeHunt({ dailyScancap: 10 }).error, /unknown key "dailyScancap"/);
+  // ...or, for the mode flag, as "off".
+  assert.match(normalizeHunt({ venuemode: true }).error, /unknown key "venuemode"/);
+  assert.match(normalizeHunt({ venueMode: "yes" }).error, /venueMode/);
+});
+
+test("normalizeHunt stores venueMode only when on (false is the default)", () => {
+  assert.deepEqual(normalizeHunt({ venueMode: true }).value, { venueMode: true });
+  assert.deepEqual(normalizeHunt({ venueMode: false }).value, {});
+  assert.deepEqual(normalizeHunt({ venueMode: null }).value, {});
+  // The two settings are independent: the course-free hunt can be on at a
+  // venue that also caps its daily spend.
+  assert.deepEqual(normalizeHunt({ dailyScanCap: 100, venueMode: true }).value, {
+    dailyScanCap: 100,
+    venueMode: true,
+  });
 });
 
 test("normalizeLocation carries hunt through (and rejects a bad one)", () => {

@@ -16,6 +16,7 @@ import Privacy from './features/privacy/Privacy';
 import TvLeaderboard from './features/tv/TvLeaderboard';
 import TvWall from './features/tv/TvWall';
 import Hunt from './features/hunt/Hunt';
+import HuntEntry from './features/hunt/HuntEntry';
 import PhotoBooth from './features/photos/PhotoBooth';
 import PuttGolf from './features/putt/PuttGolf';
 import FunZone from './features/fun/FunZone';
@@ -86,7 +87,10 @@ const REDIRECTS: [from: string, to: string][] = [
   ['/play', '/golf/play'],
   ['/courses', '/golf/courses'],
   ['/rules', '/golf/rules'],
-  ['/hunt', '/golf/hunt'],
+  // NOTE: /hunt is deliberately absent — it's a live route (HuntEntry), not a
+  // redirect, because the course-free venue hunt claims it where a venue runs
+  // one. HuntEntry forwards to /golf/hunt everywhere else, preserving exactly
+  // what the redirect used to do.
   ['/fun', '/arcade'],
   ['/putt', '/arcade/putt'],
   // Photo booth and the challenge spinner are not arcade features — the booth
@@ -198,6 +202,12 @@ export default function App() {
             general venue activity, not an arcade game: top-level and not
             geofenced (matches its pre-restructure behavior). */}
         <Route path="/photos" element={<PhotoBooth />} />
+        {/* Course-free scavenger hunt — a standalone venue activity for sites
+            without mini golf (and a park-wide extra at ones with it). Not
+            geofenced, matching the photo booth and the on-course hunt: the
+            venue's own list is the thing that scopes it. HuntEntry decides
+            whether this venue has one, forwarding to /golf/hunt if not. */}
+        <Route path="/hunt" element={<HuntEntry />} />
 
         {/* ── Me section ────────────────────────────────────────────────── */}
         <Route path="/me" element={<MeHome />} />

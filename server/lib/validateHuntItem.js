@@ -3,7 +3,8 @@
 
 import { UUID_RE } from "./validateLocation.js";
 
-export const HUNT_ITEM_RETURN_COLS = `id, course_id as "courseId", slug, name,
+export const HUNT_ITEM_RETURN_COLS = `id, course_id as "courseId",
+  location_id as "locationId", slug, name,
   hint, extra_prompt as "extraPrompt", sort_order as "sortOrder", active, countable`;
 
 // Same shape as the seeded slugs: lowercase, digits, hyphens, no leading/trailing
@@ -27,15 +28,31 @@ function optionalText(value, max) {
 /**
  * Validate a full hunt-item shape (create, or an existing row merged with a
  * PATCH body); returns { row } or { error }.
+ *
+ * An item belongs to exactly one owner — a course (the original on-course
+ * hunt) or a location (the course-free venue hunt) — mirroring the
+ * hunt_item_one_owner check constraint. Enforcing it here too means the API
+ * answers 400 with a readable message instead of leaking a constraint
+ * violation as a 500.
  */
 export function normalizeHuntItem(body) {
   if (body == null || typeof body !== "object") {
     return { error: "body must be an object" };
   }
-  const { courseId, slug, name } = body;
+  const { courseId, locationId, slug, name } = body;
 
-  if (typeof courseId !== "string" || !UUID_RE.test(courseId)) {
+  const hasCourse = courseId !== undefined && courseId !== null;
+  const hasLocation = locationId !== undefined && locationId !== null;
+  if (hasCourse === hasLocation) {
+    return {
+      error: "exactly one of courseId (course hunt) or locationId (venue hunt) is required",
+    };
+  }
+  if (hasCourse && (typeof courseId !== "string" || !UUID_RE.test(courseId))) {
     return { error: "courseId must be a uuid" };
+  }
+  if (hasLocation && (typeof locationId !== "string" || !UUID_RE.test(locationId))) {
+    return { error: "locationId must be a uuid" };
   }
   if (typeof slug !== "string" || !SLUG_RE.test(slug)) {
     return { error: "slug must be 1..40 chars of a-z, 0-9, and hyphens" };
@@ -69,7 +86,8 @@ export function normalizeHuntItem(body) {
 
   return {
     row: {
-      courseId,
+      courseId: hasCourse ? courseId : null,
+      locationId: hasLocation ? locationId : null,
       slug,
       name: name.trim(),
       hint,

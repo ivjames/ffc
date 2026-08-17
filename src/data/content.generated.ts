@@ -26,6 +26,10 @@ export type GeneratedLocation = {
   menuUrl: string | null;
   orderingUrl: string | null;
   hours: VenueHours | null;
+  // Course-free scavenger hunt availability, derived server-side (venueMode on
+  // + at least one active venue item). Optional: the baked snapshot predates
+  // it, and a cached payload from an older server won't carry it.
+  venueHunt?: boolean;
   // POS integration add-on (per-venue, set in Master Control). Structurally
   // matches PosConfig in src/lib/pos/types.ts (capabilities decoupled — each
   // names its own vendor); kept inline so this generated file stays

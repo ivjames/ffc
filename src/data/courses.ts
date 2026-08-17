@@ -138,6 +138,7 @@ function buildLocations(raw: GeneratedLocation[]): LocationSeed[] {
     menuUrl: l.menuUrl ?? undefined,
     orderingUrl: l.orderingUrl ?? undefined,
     pos: l.pos ?? undefined,
+    venueHunt: l.venueHunt ?? undefined,
   }));
 }
 

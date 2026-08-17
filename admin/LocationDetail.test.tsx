@@ -72,16 +72,28 @@ describe('buildHoursPayload', () => {
 
 describe('buildHuntPayload', () => {
   test('blank = unlimited → {} (the column default; clears any stored cap)', () => {
-    expect(buildHuntPayload('')).toEqual({});
-    expect(buildHuntPayload('   ')).toEqual({});
+    expect(buildHuntPayload('', false)).toEqual({});
+    expect(buildHuntPayload('   ', false)).toEqual({});
   });
 
   test('0 is distinct from blank: hunt off at this venue', () => {
-    expect(buildHuntPayload('0')).toEqual({ dailyScanCap: 0 });
+    expect(buildHuntPayload('0', false)).toEqual({ dailyScanCap: 0 });
   });
 
   test('a positive cap ships as the integer', () => {
-    expect(buildHuntPayload('250')).toEqual({ dailyScanCap: 250 });
+    expect(buildHuntPayload('250', false)).toEqual({ dailyScanCap: 250 });
+  });
+
+  test('venueMode ships only when on — false is the default, so it stays unwritten', () => {
+    expect(buildHuntPayload('', true)).toEqual({ venueMode: true });
+    expect(buildHuntPayload('', false)).toEqual({});
+  });
+
+  test('cap and venue mode ride together (the payload replaces the stored object)', () => {
+    expect(buildHuntPayload('250', true)).toEqual({ dailyScanCap: 250, venueMode: true });
+    // The kill switch wins over the mode flag server-side; both still ship, so
+    // turning the cap to 0 never silently drops the venue-hunt setting.
+    expect(buildHuntPayload('0', true)).toEqual({ dailyScanCap: 0, venueMode: true });
   });
 });
 

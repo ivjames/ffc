@@ -47,6 +47,7 @@ function renderLocation(l) {
     menuUrl: ${lit(l.menuUrl)},
     orderingUrl: ${lit(l.orderingUrl)},
     hours: ${lit(l.hours)},
+    venueHunt: ${lit(l.venueHunt ?? false)},
     pos: ${lit(l.pos)},
     orgId: ${lit(l.orgId)},
   },`;
@@ -107,6 +108,10 @@ export type GeneratedLocation = {
   menuUrl: string | null;
   orderingUrl: string | null;
   hours: VenueHours | null;
+  // Course-free scavenger hunt availability, derived server-side (venueMode on
+  // + at least one active venue item). Optional: an older snapshot or a cached
+  // payload from a server that predates it simply won't carry the key.
+  venueHunt?: boolean;
   // POS integration add-on (per-venue, set in Master Control). Structurally
   // matches PosConfig in src/lib/pos/types.ts (capabilities decoupled — each
   // names its own vendor); kept inline so this generated file stays

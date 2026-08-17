@@ -495,23 +495,45 @@ delete that photo" path), and stored photos **age out automatically** after
 row keeps its credit, only the image goes. Nothing is displayed publicly; the
 player-facing disclosure of the whole pipeline is the app's `/privacy` page.
 
-The hunt is a **play-time** activity: every find is tied to a group's in-progress
-round (`roundClientId` is required on verify), so it isn't an open invitation to
-wander the course during others' games. A future expansion is at most new
-**zones** — each a course-like area with its own list, so the shape is unchanged.
+**Two modes.** A hunt list hangs off exactly one owner (`hunt_item`'s
+`hunt_item_one_owner` check constraint), and that picks the mode:
+
+| | Course hunt | Venue hunt (course-free) |
+|---|---|---|
+| Owner | `hunt_item.course_id` | `hunt_item.location_id` |
+| Params | `?course=` / `courseId` | `?location=` / `locationId` |
+| Group key | the in-progress round's `clientId` | a venue-hunt session id the device mints |
+| Availability | any course with items | opt-in: `location.hunt.venueMode` **and** ≥1 active item |
+| Player entry | `/golf/hunt` (needs a round) | `/hunt` (no round needed) |
+
+The **course hunt** is a play-time activity: every find is tied to a group's
+in-progress round, so it isn't an open invitation to wander the course during
+others' games. The **venue hunt** is the park-wide option for sites with no
+mini golf (and a second list at sites that have one) — there's no round to
+gate it, so the per-venue `dailyScanCap` is the spend control that matters
+there.
+
+Everything downstream of item lookup is mode-blind and shared: judging,
+moderation, dedupe, photo storage, progress, sharing, and every spend cap.
+`roundClientId` is simply "the group key" in both modes — it was never a FK to
+`round`, which is why the two modes needed no divergence below this line.
 
 #### `GET /api/hunt/photo-retention`
 Public: `{days}` — the venue's actual `HUNT_PHOTO_RETENTION_DAYS` (`<= 0` =
 sweep disabled). Read live by the app's `/privacy` page so the player-facing
 retention disclosure can never contradict the server's configuration.
 
-#### `GET /api/hunt/items?course=<uuid>`
-The list is scoped to a course (a round is one course), so `course` is required.
-→ `200` array of that course's active items:
+#### `GET /api/hunt/items?course=<uuid>` | `?location=<uuid>`
+The list is scoped to its owner, so **exactly one** of `course` / `location` is
+required (neither or both → `400`).
+→ `200` array of that list's active items:
 ```json
 [ { "id": "<uuid>", "slug": "ship", "name": "A pirate ship or shipwreck", "hint": "The hull ramp is on hole 5." } ]
 ```
-Missing/invalid `course` → `400`.
+Missing/invalid owner → `400`. A `location` whose venue has `venueMode` off (or
+is archived, or belongs to another tenant) answers `200 []` — the same answer a
+list with no items gives, so "not offered here" never leaks venue configuration
+across tenants.
 
 #### `GET /api/hunt/progress?round=<clientId>`
 A group's verified finds so far (`round` is the device round id — §4 `LocalRound.clientId`).
@@ -545,16 +567,23 @@ decoded image itself is capped at 10 MB.
 Request:
 ```json
 {
-  "itemId": "<uuid, must exist and be active on this course>",
+  "itemId": "<uuid, must exist and be active on this list>",
   "courseId": "<uuid — the round's course; the item must belong to it>",
+  "locationId": "<uuid — instead of courseId, for the venue hunt>",
   "playerTag": "ABC",
-  "roundClientId": "<device round id — required, the group's in-progress round>",
+  "roundClientId": "<the group key — the round's clientId, or a venue-hunt session id>",
   "imageBase64": "<base64 image bytes, no data: prefix>",
   "mediaType": "image/jpeg"
 }
 ```
-- `roundClientId`: required — the hunt runs during gameplay only.
-- `courseId`: required — the item is looked up scoped to this course.
+- `roundClientId`: required in both modes — it's the group key every find,
+  dedupe check and spend cap is scoped by. On a course hunt it's the
+  in-progress round's clientId (the hunt runs during gameplay only); on a venue
+  hunt it's the session id the device mints when a group starts hunting.
+- `courseId` / `locationId`: **exactly one**, and the item is looked up scoped
+  to it — an item from another list is a `400`. A `locationId` whose venue has
+  `venueMode` off is refused the same way, so switching the venue hunt off
+  stops spend immediately, mid-session included.
 - `mediaType`: one of `image/jpeg|png|webp|gif`; decoded image ≤ 10 MB.
 - If the player already has a verified find for this item in this round, the call
   short-circuits (`alreadyFound: true`) without a model call.
@@ -565,7 +594,8 @@ Request:
 
 Cost controls: every model call is metered into `hunt_scan` — the API's exact
 `input_tokens`/`output_tokens` (what Anthropic bills), the model id, and the
-item's `course_id` for monthly per-venue cost rollups. On top of the per-IP
+item's `course_id` for monthly per-venue cost rollups (null on a venue hunt,
+where the row's `location_id` stamp carries the attribution). On top of the per-IP
 rate limit, each player gets `HUNT_ATTEMPT_CAP` (default 3) judged shots per
 non-countable item per round, and each round has a total scan budget
 (`HUNT_SCAN_CAP`, default 240 — the legitimate max of 4 players × 20 items ×

@@ -5,6 +5,25 @@
 //   GET  /api/hunt/progress?round=<id>   -> a group's findings so far
 //   GET  /api/hunt/photo/:findId?round=  -> a group's own verified photo (share)
 //
+// TWO MODES, one pipeline. A hunt list hangs off either a course or a venue
+// (hunt_item's exactly-one-owner constraint), and that ownership is the only
+// real difference between them:
+//
+//   COURSE hunt (the original) — `?course=` / `courseId`. A themed list played
+//     during a mini-golf round, walked hole to hole. The group key is the
+//     device round's clientId.
+//   VENUE hunt (course-free)   — `?location=` / `locationId`. A park-wide list
+//     for venues with no mini golf, or a second list alongside one. There's no
+//     round to hang off, so the group key is a venue-hunt session id the
+//     client generates the same way. Opt-in per venue via
+//     location.hunt.venueMode (lib/validateLocation.js normalizeHunt).
+//
+// Everything downstream of item lookup — judging, moderation, dedupe, storage,
+// the spend caps, metering — is mode-blind and shared. `roundClientId` is the
+// GROUP KEY in both modes (a round's clientId on course hunts, a session id in
+// venue mode): opaque, client-generated, never a FK, so hunt_find/hunt_scan and
+// the progress/photo reads needed no mode awareness at all.
+//
 // Photos are stored on the droplet disk (HUNT_UPLOAD_DIR) and the vision call is
 // proxied server-side (server/lib/vision.js) so the model API key never reaches
 // the browser. Every photo is AUTO-MODERATED in the same vision call that
@@ -318,26 +337,51 @@ router.get("/photo-retention", (_req, res) => {
   res.json({ days: resolvePhotoRetentionDays() });
 });
 
-// --- GET /api/hunt/items?course=<uuid> -------------------------------------
-// Each course has its own themed list, so the caller must say which course.
-// Tenant-scoped: a foreign tenant's course id answers like a nonexistent one
-// (an empty list — that's what a course with no items returns today).
+// --- GET /api/hunt/items?course=<uuid> | ?location=<uuid> -------------------
+// The list of things to find. Exactly one owner param says which hunt:
+// `course` for the on-course list, `location` for the venue-wide one.
+//
+// Tenant-scoped: a foreign tenant's id answers like a nonexistent one (an
+// empty list — that's what an owner with no items returns today). A venue with
+// venueMode off answers the same way, so "this venue doesn't offer the
+// course-free hunt" is indistinguishable from "this venue doesn't exist"
+// across tenants, and the client renders one empty state for both.
 router.get("/items", tenant(), async (req, res) => {
-  const course = req.query.course;
-  if (typeof course !== "string" || !UUID_RE.test(course)) {
-    return res.status(400).json({ ok: false, error: "course (uuid) is required" });
+  const { course, location } = req.query;
+  const hasCourse = course !== undefined;
+  const hasLocation = location !== undefined;
+  if (hasCourse === hasLocation) {
+    return res
+      .status(400)
+      .json({ ok: false, error: "exactly one of course or location (uuid) is required" });
+  }
+  const owner = hasCourse ? course : location;
+  if (typeof owner !== "string" || !UUID_RE.test(owner)) {
+    return res
+      .status(400)
+      .json({ ok: false, error: `${hasCourse ? "course" : "location"} must be a uuid` });
   }
   try {
-    const result = await pool.query(
-      `select i.id, i.slug, i.name, i.hint, i.countable
-         from hunt_item i
-         join course c on c.id = i.course_id
-         left join location l on l.id = c.location_id
-        where i.active = true and i.course_id = $1
-          ${tenantOrgFilter(req.tenant, "l.org_id", "$2")}
-        order by i.sort_order asc, i.name asc`,
-      [course, ...tenantParams(req.tenant)]
-    );
+    // Two shapes of the same read. The course variant reaches its venue
+    // through the course; the venue variant owns the location directly and
+    // additionally requires venueMode to be on.
+    const sql = hasCourse
+      ? `select i.id, i.slug, i.name, i.hint, i.countable
+           from hunt_item i
+           join course c on c.id = i.course_id
+           left join location l on l.id = c.location_id
+          where i.active = true and i.course_id = $1
+            ${tenantOrgFilter(req.tenant, "l.org_id", "$2")}
+          order by i.sort_order asc, i.name asc`
+      : `select i.id, i.slug, i.name, i.hint, i.countable
+           from hunt_item i
+           join location l on l.id = i.location_id
+          where i.active = true and i.location_id = $1
+            and l.archived_at is null
+            and coalesce((l.hunt ->> 'venueMode')::boolean, false) = true
+            ${tenantOrgFilter(req.tenant, "l.org_id", "$2")}
+          order by i.sort_order asc, i.name asc`;
+    const result = await pool.query(sql, [owner, ...tenantParams(req.tenant)]);
     return res.json(result.rows);
   } catch (err) {
     console.error("[hunt] items error:", err);
@@ -448,24 +492,39 @@ router.post(
     }
 
     const body = req.body ?? {};
-    const { itemId, courseId, playerTag, roundClientId, imageBase64, mediaType } = body;
+    const { itemId, courseId, locationId, playerTag, roundClientId, imageBase64, mediaType } =
+      body;
 
     // itemId — must look like a uuid; existence checked below.
     if (typeof itemId !== "string" || !UUID_RE.test(itemId)) {
       return res.status(400).json({ ok: false, error: "itemId must be a uuid" });
     }
-    // courseId — the round's course. The item must belong to it, so a client
-    // can't submit an item from a different course's list against this round.
-    if (typeof courseId !== "string" || !UUID_RE.test(courseId)) {
+    // The hunt's owner — exactly one, and it selects the mode (see the header).
+    // The item must belong to it, so a client can't submit an item from
+    // another list against this session.
+    const hasCourse = courseId !== undefined && courseId !== null;
+    const hasLocation = locationId !== undefined && locationId !== null;
+    if (hasCourse === hasLocation) {
+      return res.status(400).json({
+        ok: false,
+        error: "exactly one of courseId or locationId is required",
+      });
+    }
+    if (hasCourse && (typeof courseId !== "string" || !UUID_RE.test(courseId))) {
       return res.status(400).json({ ok: false, error: "courseId must be a uuid" });
+    }
+    if (hasLocation && (typeof locationId !== "string" || !UUID_RE.test(locationId))) {
+      return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
     }
     // playerTag — same rule as scorecard tags.
     if (!isValidTag(playerTag)) {
       return res.status(400).json({ ok: false, error: "playerTag is invalid" });
     }
-    // roundClientId — required. The hunt is a play-time activity: every find is
-    // tied to the group's in-progress round, so a submission without one is
-    // rejected (a broader park-wide mode would relax this).
+    // roundClientId — required in both modes: it's the GROUP KEY every find,
+    // dedupe check and spend cap is scoped by. On a course hunt it's the
+    // in-progress round's clientId (the hunt is a play-time activity there);
+    // on a venue hunt it's the device's venue-hunt session id, which the
+    // client mints when the group starts a hunt. Same opaque-string contract.
     if (
       typeof roundClientId !== "string" ||
       roundClientId.length === 0 ||
@@ -496,25 +555,44 @@ router.post(
     }
 
     try {
-      // Item must exist, be active, and belong to the round's course — and the
-      // course must belong to this tenant, so a foreign course/item pair can't
-      // burn vision spend or write finds against another venue. Foreign and
-      // nonexistent answer identically below.
+      // Item must exist, be active, and belong to the hunt the client named —
+      // and that hunt must belong to this tenant, so a foreign owner/item pair
+      // can't burn vision spend or write finds against another venue. Foreign
+      // and nonexistent answer identically below.
+      //
+      // The venue variant also requires venueMode: an operator who switches
+      // the course-free hunt back off must stop paying for it immediately,
+      // even from clients still holding a live session and item ids. It reads
+      // as "that item isn't in this hunt", the same answer a stale item id
+      // gets, rather than advertising the venue's configuration.
       const itemRes = await pool.query(
-        `select i.id, i.name, i.hint, i.extra_prompt, i.countable,
-                c.location_id as "locationId", l.hunt as "locationHunt",
-                l.org_id as "orgId"
-           from hunt_item i
-           join course c on c.id = i.course_id
-           left join location l on l.id = c.location_id
-          where i.id = $1 and i.course_id = $2 and i.active = true
-            ${tenantOrgFilter(req.tenant, "l.org_id", "$3")}`,
-        [itemId, courseId, ...tenantParams(req.tenant)]
+        hasCourse
+          ? `select i.id, i.name, i.hint, i.extra_prompt, i.countable,
+                    c.location_id as "locationId", l.hunt as "locationHunt",
+                    l.org_id as "orgId"
+               from hunt_item i
+               join course c on c.id = i.course_id
+               left join location l on l.id = c.location_id
+              where i.id = $1 and i.course_id = $2 and i.active = true
+                ${tenantOrgFilter(req.tenant, "l.org_id", "$3")}`
+          : `select i.id, i.name, i.hint, i.extra_prompt, i.countable,
+                    l.id as "locationId", l.hunt as "locationHunt",
+                    l.org_id as "orgId"
+               from hunt_item i
+               join location l on l.id = i.location_id
+              where i.id = $1 and i.location_id = $2 and i.active = true
+                and l.archived_at is null
+                and coalesce((l.hunt ->> 'venueMode')::boolean, false) = true
+                ${tenantOrgFilter(req.tenant, "l.org_id", "$3")}`,
+        [itemId, hasCourse ? courseId : locationId, ...tenantParams(req.tenant)]
       );
       if (itemRes.rowCount === 0) {
-        return res
-          .status(400)
-          .json({ ok: false, error: "itemId does not exist on this course" });
+        return res.status(400).json({
+          ok: false,
+          error: hasCourse
+            ? "itemId does not exist on this course"
+            : "itemId does not exist in this venue's hunt",
+        });
       }
       const item = itemRes.rows[0];
 
@@ -562,7 +640,11 @@ router.post(
         roundClientId,
         playerTag,
         itemId,
-        courseId,
+        // Venue hunts have no course, so the metering row's course_id is null
+        // and location_id carries the whole venue attribution. Both the daily
+        // venue cap and the hunt-usage rollup read location_id first for
+        // exactly this reason.
+        courseId: hasCourse ? courseId : null,
         orgId: item.orgId,
         countable: item.countable,
         locationId: item.locationId,

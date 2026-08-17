@@ -132,14 +132,28 @@ function HoursEditor({
   );
 }
 
-// --- Hunt daily scan cap ------------------------------------------------------
-// Serializes the cap input into the save payload's `hunt` field (mirrors
-// server normalizeHunt): blank = unlimited → {} (what the column stores by
-// default), a number → { dailyScanCap: n }. 0 is meaningful and distinct from
-// blank: it turns the hunt OFF at this venue (the per-client kill switch).
-export function buildHuntPayload(dailyScanCap: string): { dailyScanCap?: number } {
+// --- Hunt config --------------------------------------------------------------
+// Serializes the hunt fields into the save payload's `hunt` field (mirrors
+// server normalizeHunt).
+//
+// dailyScanCap: blank = unlimited → {} (what the column stores by default), a
+// number → { dailyScanCap: n }. 0 is meaningful and distinct from blank: it
+// turns the hunt OFF at this venue (the per-client kill switch).
+//
+// venueMode: the course-free hunt's on/off switch. Only the `true` case is
+// written, matching the server's normalization — `false` is the default, so
+// storing it would just be noise. The payload REPLACES the stored object
+// (replace-not-merge, like pos/hours), so both fields must be sent together
+// every save or the omitted one silently clears.
+export function buildHuntPayload(
+  dailyScanCap: string,
+  venueMode: boolean
+): { dailyScanCap?: number; venueMode?: boolean } {
   const t = dailyScanCap.trim();
-  return t === '' ? {} : { dailyScanCap: Number(t) };
+  return {
+    ...(t === '' ? {} : { dailyScanCap: Number(t) }),
+    ...(venueMode ? { venueMode: true } : {}),
+  };
 }
 
 // Light client-side check only — the server (normalizeHunt) is the source of
@@ -375,6 +389,8 @@ function LocationForm({
   );
   // Hunt vision-spend cap, edited as a string ('' = unlimited, '0' = hunt off).
   const [huntScanCap, setHuntScanCap] = useState(location.hunt?.dailyScanCap?.toString() ?? '');
+  // The course-free venue hunt's on/off switch.
+  const [huntVenueMode, setHuntVenueMode] = useState(location.hunt?.venueMode === true);
   const [hoursEnabled, setHoursEnabled] = useState(location.hours != null);
   const [hoursState, setHoursState] = useState<HoursState>(() => hoursToState(location.hours));
   const [busy, setBusy] = useState(false);
@@ -424,7 +440,7 @@ function LocationForm({
         menuUrl: menuUrl.trim() || null,
         orderingUrl: orderingUrl.trim() || null,
         hours: buildHoursPayload(hoursEnabled, hoursState),
-        hunt: buildHuntPayload(huntScanCap),
+        hunt: buildHuntPayload(huntScanCap, huntVenueMode),
         pos:
           ordVendor === '' && loyVendor === ''
             ? null
@@ -576,6 +592,26 @@ function LocationForm({
             />
           </Field>
         </div>
+        {/* The course-free hunt. Off everywhere until a venue opts in; the
+            player-facing tile additionally needs at least one active item on
+            the venue's list, so switching this on with an empty list shows
+            players nothing (curate it under Hunt → "<venue> · venue-wide"). */}
+        <label className="mt-2 flex items-start gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={huntVenueMode}
+            onChange={(e) => setHuntVenueMode(e.target.checked)}
+          />
+          <span>
+            Venue-wide hunt
+            <span className="block text-xs text-slate-500">
+              Lets players run a park-wide hunt without a mini-golf round — for venues
+              with no course. Needs at least one active item on the venue's list. The
+              daily scan cap above still applies.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="mt-2">

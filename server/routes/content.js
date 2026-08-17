@@ -69,10 +69,20 @@ router.get("/", tenant(), async (req, res) => {
   try {
     const [locations, courses] = await Promise.all([
       pool.query(
+        // `venueHunt` is the course-free hunt's PLAYER-FACING availability, so
+        // Home can show (or hide) its tile from the catalog it already loads,
+        // with no extra round trip. Both halves must hold: the operator
+        // switched venueMode on AND the venue's list has at least one active
+        // item — a tile that opens an empty hunt is a dead end, so a staged
+        // list simply isn't advertised until it has something in it. The raw
+        // hunt config (spend caps) stays server-side; only this boolean ships.
         `select l.id, l.name, l.slug, l.lat, l.lng, l.geofence_km as "geofenceKm",
                 l.tz, l.sort_order as "sortOrder",
                 l.menu_url as "menuUrl", l.ordering_url as "orderingUrl",
-                l.pos, l.hours, l.org_id as "orgId"
+                l.pos, l.hours, l.org_id as "orgId",
+                (coalesce((l.hunt ->> 'venueMode')::boolean, false)
+                 and exists (select 1 from hunt_item hi
+                              where hi.location_id = l.id and hi.active)) as "venueHunt"
            from location l
           where l.archived_at is null ${orgFilter}
           order by l.sort_order, l.name`,
