@@ -7,6 +7,19 @@
 // through to the first live org; no live orgs at all resolves to null and
 // readers preserve their pre-org unfiltered behavior.
 //
+// PLATFORM_FQDN narrows that fallback. The wildcard vhost answers EVERY
+// subdomain of the platform domain, so without it a typo'd or unconfigured
+// subdomain (typo.ffc.lab980.com) would serve the default org's full catalog
+// and brand. With PLATFORM_FQDN set (e.g. "ffc.lab980.com"):
+//   - the apex itself, and www. in front of it, keep the default-org fallback
+//     (today's staging behavior, org-less legacy sweep included);
+//   - any OTHER subdomain of it whose label matches no org goes DARK — the
+//     same sentinel as a suspended org, so every reader serves empty;
+//   - hosts outside the platform domain (localhost, tests, a future
+//     bring-your-own custom domain) keep the fallback.
+// Unset = legacy behavior everywhere: every unmatched host falls back. Read
+// per request, like the other live-tunable envs.
+//
 // A label that matches an org that EXISTS but is not live (suspended or
 // archived) must NOT fall through to the default org — that would serve the
 // default tenant's brand and catalog on the suspended client's subdomain, a
@@ -61,8 +74,12 @@ function resolution(row, via) {
  *     through resolveBranding() before use)
  *   - via: 'host' when the subdomain label matched a LIVE org slug exactly;
  *     'suspended' when the label matched an org that exists but is suspended
- *     or archived; else 'fallback' (default-org path — steps 3/4). Readers use
- *     via to decide whether org-less legacy rows are in scope (fallback only).
+ *     or archived — AND for an unknown subdomain of PLATFORM_FQDN (no org at
+ *     all carries the label): both are "this host serves nothing", and
+ *     sharing the via keeps every reader's suspended short-circuit covering
+ *     the unknown case too; else 'fallback' (default-org path — steps 3/4).
+ *     Readers use via to decide whether org-less legacy rows are in scope
+ *     (fallback only).
  *
  * The 'suspended' shape keeps `org` a non-null SENTINEL — { id: null, slug,
  * name: null, branding: null } — so readers that pass `tenant.org.id` into
@@ -76,7 +93,25 @@ export async function resolveTenant(req) {
   const host = String(req.hostname || "").toLowerCase().replace(/:\d+$/, "");
   const label = host.split(".")[0];
 
-  const hit = cache.get(label);
+  // Host classification against PLATFORM_FQDN (see header comment). Only a
+  // strict subdomain counts — the apex and www. are the platform's own front
+  // door and keep the default-org fallback; anything not under the platform
+  // domain at all (localhost, custom domains) is out of scope. Case handled
+  // by the lowercase above; PLATFORM_FQDN unset disables the whole check.
+  const platform = (process.env.PLATFORM_FQDN || "").trim().toLowerCase();
+  const platformSub =
+    platform !== "" &&
+    host !== platform &&
+    host !== `www.${platform}` &&
+    host.endsWith(`.${platform}`);
+
+  // The cache key carries the host CLASS, not just the first label: the same
+  // label resolves differently on a platform subdomain (typo.<platform> →
+  // dark) than on the apex or a foreign host (→ default-org fallback), so the
+  // two must not share an entry. Unknown-subdomain dark results are cached
+  // like any other completed resolution (errors still never are).
+  const key = platformSub ? `${label}|sub` : label;
+  const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) return hit.value;
 
   let value = null;
@@ -85,6 +120,16 @@ export async function resolveTenant(req) {
     // Exact slug match. A suspended/archived org's subdomain goes DARK (empty
     // catalog, default branding) instead of leaking the default org.
     value = resolution(bySlug, "host");
+  } else if (platformSub) {
+    // An UNCONFIGURED subdomain of the platform domain: no org carries this
+    // label, so it must go dark, never fall back — the fallback would hang
+    // the default org's brand and catalog on every typo'd/junk subdomain the
+    // wildcard vhost answers. Same sentinel (and same via) as a suspended
+    // org ON PURPOSE: readers that short-circuit on via === 'suspended'
+    // (content, announcements) treat it identically without knowing about
+    // this path, and every shape-keyed reader compares against the NULL org
+    // id and matches nothing.
+    value = { org: { id: null, slug: label, name: null, branding: null }, via: "suspended" };
   } else {
     // No org matches the label: the default-org fallback. Looked up WITHOUT
     // the live filter on purpose — a default org that exists but is
@@ -109,7 +154,7 @@ export async function resolveTenant(req) {
   // the TTL, same as any other org edit). A thrown DB error never reaches this
   // line, so a transient failure can neither masquerade as "no orgs" nor
   // poison the cache.
-  cache.set(label, { value, expires: Date.now() + TTL_MS });
+  cache.set(key, { value, expires: Date.now() + TTL_MS });
   return value;
 }
 

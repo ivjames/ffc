@@ -370,6 +370,15 @@ cmd_deploy(){
   # server/.env should point BRAND_ASSET_DIR here so uploads never live inside
   # anything a release/reset churns.
   mkdir -p "$APP_DIR/shared/brand-assets"
+  # Tenancy heads-up — READS server/.env the same way the test gate reads
+  # DATABASE_URL (this script never writes .env, by design). A warning, not a
+  # die: the API runs fine without it, but with the wildcard vhost live every
+  # unconfigured subdomain serves the DEFAULT org's brand and catalog until
+  # PLATFORM_FQDN is set (MULTI-VENUE.md §1; see server/.env.example).
+  local platform_fqdn
+  platform_fqdn="$(grep -E '^PLATFORM_FQDN=' "$APP_DIR/server/.env" 2>/dev/null | cut -d= -f2- || true)"
+  [ -n "$platform_fqdn" ] \
+    || log "WARNING: no PLATFORM_FQDN in server/.env — unknown client subdomains (typo.$FQDN etc.) will serve the default org until it is set (see server/.env.example)."
   run_server_tests      # the gate: red aborts with production untouched
   build_release
   cmd_migrate           # apply any new schema before the new code serves

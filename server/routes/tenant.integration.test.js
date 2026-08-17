@@ -266,6 +266,89 @@ test("DEFAULT_ORG_SLUG naming a NONEXISTENT org still bootstraps to the first li
   }
 });
 
+// --- PLATFORM_FQDN: unknown subdomains of the platform domain fail out DARK
+// (operator-reported from the staging rehearsal: the wildcard vhost answers
+// EVERY subdomain, so typo.ffc.lab980.com was serving the default org's full
+// catalog and brand). The apex and www. keep the default-org fallback — they
+// ARE the staging host — as do hosts outside the platform domain entirely
+// (dev boxes, tests, a future custom client domain). Unset pins the legacy
+// fallback-everywhere behavior, which is why every other test in this file
+// runs without it.
+
+const PLATFORM = `ffc.${DOMAIN}`;
+
+// Full-host variant of get() — these cases exercise the host CLASS (apex vs
+// subdomain vs foreign domain), not just the first label.
+function getAtHost(path, host) {
+  clearTenantCache();
+  return hostRequest(app, { path, host });
+}
+
+test("PLATFORM_FQDN set: apex/www keep the default org, unknown subdomains go dark", async () => {
+  process.env.PLATFORM_FQDN = PLATFORM;
+  try {
+    // The apex's own first label ("ffc") matches no slug → default-org
+    // fallback exactly as before, org-less legacy sweep included.
+    const apex = await getAtHost("/api/content", PLATFORM);
+    assert.equal(apex.status, 200);
+    assert.equal(apex.body.org.slug, DEFAULT_SLUG);
+    assert.ok(
+      apex.body.locations.map((l) => l.id).includes(locOrglessId),
+      "apex keeps the org-less legacy sweep"
+    );
+
+    const www = await getAtHost("/api/content", `www.${PLATFORM}`);
+    assert.equal(www.status, 200);
+    assert.equal(www.body.org.slug, DEFAULT_SLUG);
+
+    // An unconfigured subdomain is DARK — the suspended-org shape, never the
+    // default org's catalog.
+    const dark = await getAtHost("/api/content", `typo-${stamp}.${PLATFORM}`);
+    assert.equal(dark.status, 200);
+    assert.deepEqual(dark.body, { org: null, locations: [], courses: [] });
+
+    // ...case-insensitively (Host headers arrive in any case)...
+    const shouty = await getAtHost("/api/content", `TYPO-${stamp}.FFC.${DOMAIN.toUpperCase()}`);
+    assert.equal(shouty.status, 200);
+    assert.deepEqual(shouty.body, { org: null, locations: [], courses: [] });
+
+    // ...and its manifest is all platform defaults, not the default org's.
+    const manifest = await getAtHost("/api/manifest.webmanifest", `typo-${stamp}.${PLATFORM}`);
+    assert.equal(manifest.status, 200);
+    const m = JSON.parse(manifest.text);
+    assert.equal(m.name, BRANDING_DEFAULTS.appName);
+    assert.equal(m.theme_color, BRANDING_DEFAULTS.themeColor);
+
+    // A REAL org's subdomain of the platform domain still resolves.
+    const own = await getAtHost("/api/content", `${slugA}.${PLATFORM}`);
+    assert.equal(own.status, 200);
+    assert.equal(own.body.org.id, orgAId);
+
+    // Hosts OUTSIDE the platform domain keep today's fallback — dev boxes and
+    // the future bring-your-own-domain path.
+    const local = await getAtHost("/api/content", "localhost");
+    assert.equal(local.status, 200);
+    assert.equal(local.body.org.slug, DEFAULT_SLUG);
+    const foreign = await getAtHost("/api/content", `nope-${stamp}.${DOMAIN}`);
+    assert.equal(foreign.status, 200);
+    assert.equal(foreign.body.org.slug, DEFAULT_SLUG);
+  } finally {
+    delete process.env.PLATFORM_FQDN;
+    clearTenantCache();
+  }
+});
+
+test("PLATFORM_FQDN unset: an unknown platform subdomain still falls back (legacy pin)", async () => {
+  assert.equal(process.env.PLATFORM_FQDN, undefined, "the legacy case IS the unset case");
+  const res = await getAtHost("/api/content", `typo-${stamp}.${PLATFORM}`);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.org.slug, DEFAULT_SLUG);
+  assert.ok(
+    res.body.locations.map((l) => l.id).includes(locOrglessId),
+    "full fallback semantics, org-less sweep included"
+  );
+});
+
 test("unsuspending restores the tenant's own resolution", async () => {
   await testQuery(`update org set status = 'active' where id = $1`, [orgSuspendedId]);
   try {
