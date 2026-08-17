@@ -178,6 +178,29 @@ test("a challenge round also lands on the venue's high score board", async () =>
   );
 });
 
+test("a challenge round is not its own previous best", async () => {
+  // Two paths write the same (game, sessionId) board row — this one and
+  // POST /api/game-scores — and both are idempotent. If the challenge write
+  // lands first, an unfiltered previous-best read sees the round that just
+  // happened and reports it as the score to beat, silently suppressing the
+  // personal-best celebration depending on which request won.
+  const a = await player("PBS");
+  const challenge = await create(a.cookie);
+  const shared = sid();
+  await call("POST", `/${challenge.id}/play`, { score: 500, sessionId: shared }, a.cookie);
+
+  // Now the board write for the same round arrives (the end screen's own post).
+  const res = await fetch(`${baseUrl}/api/game-scores`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: a.cookie },
+    body: JSON.stringify({ locationId, game: "skeeball", score: 500, sessionId: shared }),
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.previousBest, null, "this round is not the score it had to beat");
+  assert.equal(body.isPersonalBest, true, "so the celebration still fires");
+});
+
 test("a stranger can neither read nor play someone else's challenge", async () => {
   const a = await player("OWN");
   const stranger = await player("NOS");
@@ -221,6 +244,26 @@ test("an expired challenge cannot be joined or played", async () => {
   assert.equal(play.status, 409);
 });
 
+test("the list expires stale challenges instead of offering a round that will be refused", async () => {
+  // The TTL is applied lazily, and /mine was the one read that never applied
+  // it — so a week-old challenge kept its stored 'open' status, sorted into
+  // the Open section, and offered a "Play your round" button that /play then
+  // refused with a 409.
+  const a = await player("MEX");
+  const stale = await create(a.cookie);
+  await testQuery(`update challenge set expires_at = now() - interval '1 day' where id = $1`, [
+    stale.id,
+  ]);
+
+  const { challenges } = await (await call("GET", "/mine", null, a.cookie)).json();
+  const listed = challenges.find((c) => c.challenge.id === stale.id);
+  assert.equal(listed.challenge.status, "expired");
+
+  // Persisted, not merely reported: the row itself is settled now.
+  const row = await testQuery(`select status from challenge where id = $1`, [stale.id]);
+  assert.equal(row.rows[0].status, "expired");
+});
+
 test("/mine lists both sides' challenges, open ones first", async () => {
   const a = await player("MIN");
   const b = await player("MIO");
@@ -241,6 +284,27 @@ test("/mine lists both sides' challenges, open ones first", async () => {
   const firstClosed = statuses.findIndex((s) => s !== "open");
   if (lastOpen !== -1 && firstClosed !== -1) {
     assert.ok(lastOpen < firstClosed, `open challenges come first, got ${statuses.join(",")}`);
+  }
+});
+
+test("an open challenge stops working if the venue loses the arcade module", async () => {
+  // Entitlements are rechecked on every mutation, not assumed from creation:
+  // a challenge is open for a week, so it easily outlives the module.
+  const a = await player("ENT");
+  const b = await player("ENU");
+  const challenge = await create(a.cookie);
+
+  await testQuery(`update location set modules = $1::jsonb where id = $2`, [
+    JSON.stringify({ arcade: false }),
+    locationId,
+  ]);
+  try {
+    const join = await call("POST", "/join", { inviteCode: challenge.inviteCode }, b.cookie);
+    assert.equal(join.status, 403);
+    const play = await call("POST", `/${challenge.id}/play`, { score: 10, sessionId: sid() }, a.cookie);
+    assert.equal(play.status, 403);
+  } finally {
+    await testQuery(`update location set modules = '{}'::jsonb where id = $1`, [locationId]);
   }
 });
 

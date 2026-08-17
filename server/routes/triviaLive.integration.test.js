@@ -147,6 +147,46 @@ test("a player mid-question never receives the answer; the host always does", as
   assert.equal(typeof hostView.question.answer, "number", "the host reads it out");
 });
 
+test("the answer is absent from the player's SSE FRAME, not just their render", async () => {
+  // The REST snapshot test above proves the payload shape; this proves the
+  // wire. Publishing one `{player, host}` frame to a shared channel put the
+  // correct answer in front of every phone in the room — the client picking
+  // `payload.player` is a rendering choice, and anyone can open devtools.
+  const { id, hostToken, joinCode } = await createSession();
+  const { participantToken } = await join(joinCode, "Wiretap");
+
+  const frames = [];
+  const controller = new AbortController();
+  const stream = fetch(
+    `${baseUrl}/api/trivia/sessions/${id}/events?participant=${participantToken}`,
+    { signal: controller.signal }
+  ).then(async (res) => {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        frames.push(decoder.decode(value, { stream: true }));
+      }
+    } catch {
+      // aborted below — that's the exit path
+    }
+  });
+
+  // Let the stream open, then move the game into a live question.
+  await new Promise((r) => setTimeout(r, 150));
+  await advance(id, hostToken);
+  await new Promise((r) => setTimeout(r, 250));
+  controller.abort();
+  await stream;
+
+  const wire = frames.join("");
+  assert.ok(wire.includes('"prompt"'), `expected the question on the wire, got: ${wire.slice(0, 300)}`);
+  assert.ok(!wire.includes('"answer"'), "the answer index must never reach a player's stream");
+  assert.ok(!wire.includes('"host"'), "and neither must the host payload");
+});
+
 test("the answer appears to players only once the question closes", async () => {
   const { id, hostToken, joinCode } = await createSession();
   const { participantToken } = await join(joinCode, "Patient");
@@ -227,6 +267,35 @@ test("one answer per TEAM, however many phones are at the table", async () => {
   assert.equal(view.board.find((e) => e.name === "Table 4").score, BASE_POINTS);
 });
 
+test("a solo player's entrant cannot be joined by someone else in the room", async () => {
+  const { id, hostToken, joinCode } = await createSession({ config: { speedBonus: false } });
+  const victim = await join(joinCode, "Dana");
+  // The rival is an ordinary participant — and every phone in the room is sent
+  // the full board, entrant ids included, so knowing Dana's id takes no
+  // privilege at all. Only the `is_team` clause stands between that and
+  // minting a token bound to her entrant.
+  await join(joinCode, "Rival");
+
+  const stolen = await post("/api/trivia/sessions/join", {
+    joinCode,
+    entrantId: victim.entrant.id,
+  });
+  assert.equal(stolen.status, 404, "a solo entrant is not something you can join");
+
+  // And the consequence that made it worth a test: one entrant answers once,
+  // so a successful theft would let the rival spend Dana's turn on a wrong
+  // choice before she ever taps.
+  await advance(id, hostToken);
+  const answer = await correctChoice(id);
+  const hers = await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: victim.participantToken,
+    choice: answer,
+  });
+  assert.equal(hers.status, 200);
+  const view = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+  assert.equal(view.board.find((e) => e.name === "Dana").score, BASE_POINTS);
+});
+
 test("answers are refused outside an open question", async () => {
   const { id, hostToken, joinCode } = await createSession();
   const { participantToken } = await join(joinCode, "Eager");
@@ -245,6 +314,51 @@ test("answers are refused outside an open question", async () => {
     choice: 0,
   });
   assert.equal(late.status, 409, "the buzzer has gone");
+});
+
+test("the countdown actually closes answers, not just the host advancing", async () => {
+  // With only a status check, the configured question length was decorative:
+  // while a host chatted before hitting reveal, the timer sat at 0:00 on every
+  // phone and answers were still accepted — which deletes the speed bonus as a
+  // mechanic, because waiting costs nothing.
+  const { id, hostToken, joinCode } = await createSession({
+    config: { questionSeconds: 5, speedBonus: false },
+  });
+  const late = await join(joinCode, "Late");
+  await advance(id, hostToken); // -> question
+
+  // Backdate the question's open time past its window + grace, leaving the
+  // session in 'question' exactly as a slow host would.
+  await testQuery(
+    `update trivia_session set asked_at = now() - interval '30 seconds' where id = $1`,
+    [id]
+  );
+
+  const res = await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: late.participantToken,
+    choice: await correctChoice(id),
+  });
+  assert.equal(res.status, 409);
+  assert.match((await json(res)).error, /time/i);
+
+  const view = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+  assert.equal(view.board.find((e) => e.name === "Late").score, 0, "a late answer scores nothing");
+});
+
+test("an answer inside the window is still accepted despite network slack", async () => {
+  // The deadline carries a grace allowance; a tap that landed in time must not
+  // be thrown away by its own latency.
+  const { id, hostToken, joinCode } = await createSession({
+    config: { questionSeconds: 20, speedBonus: false },
+  });
+  const onTime = await join(joinCode, "OnTime");
+  await advance(id, hostToken);
+
+  const res = await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: onTime.participantToken,
+    choice: await correctChoice(id),
+  });
+  assert.equal(res.status, 200);
 });
 
 test("the host walks the state machine to a final board", async () => {
@@ -284,16 +398,172 @@ test("host controls require the host token — a participant token will not do",
   assert.equal(noToken.status, 404);
 });
 
-test("a bad join code, and a full-name collision, behave sensibly", async () => {
+test("a bad join code 404s", async () => {
   const bad = await post("/api/trivia/sessions/join", { joinCode: "ZZZZZZ", name: "Nobody" });
   assert.equal(bad.status, 404);
+});
 
-  // Two phones typing the same table name join the SAME table rather than
-  // colliding on the unique constraint.
+test("a name collision merges only when BOTH sides mean 'that table'", async () => {
   const { joinCode } = await createSession();
-  const one = await join(joinCode, "Same Name");
-  const two = await join(joinCode, "Same Name");
-  assert.equal(one.entrant.id, two.entrant.id);
+
+  // Two people who happen to share a name are two players, not one table.
+  // Merging them would pool their scores and — because one entrant may answer
+  // once — make the second one's answer bounce with "already answered".
+  const soloA = await join(joinCode, "Same Name");
+  const soloB = await join(joinCode, "Same Name");
+  assert.notEqual(soloA.entrant.id, soloB.entrant.id, "two solo players stay separate");
+  assert.notEqual(soloB.entrant.name, soloA.entrant.name, "and are told apart on the board");
+
+  // A second phone sitting down at an existing TABLE is the case that merges,
+  // and only when both sides say so.
+  const { joinCode: code2 } = await createSession();
+  const table = await join(code2, "Table 7", { isTeam: true });
+  const alsoTable = await join(code2, "Table 7", { isTeam: true });
+  assert.equal(alsoTable.entrant.id, table.entrant.id, "same table, one score");
+
+  // A solo player who types an existing table's name is not joining it.
+  const notTable = await join(code2, "Table 7");
+  assert.notEqual(notTable.entrant.id, table.entrant.id);
+});
+
+test("both players at a table can still be told apart from the room", async () => {
+  // Regression guard for the disambiguation: names must stay unique per
+  // session, or the board shows two identical rows.
+  const { joinCode } = await createSession();
+  const names = new Set();
+  for (let i = 0; i < 3; i++) {
+    const r = await join(joinCode, "Dave");
+    assert.ok(!names.has(r.entrant.name), `duplicate name issued: ${r.entrant.name}`);
+    names.add(r.entrant.name);
+  }
+});
+
+test("a max-length name still disambiguates instead of 500ing", async () => {
+  // Appending " (2)" and THEN truncating to the 32-char limit hands back the
+  // original name, so the "disambiguated" insert collides with the row it was
+  // meant to differ from. The base has to be trimmed to make room.
+  const { joinCode } = await createSession();
+  const longName = "X".repeat(32); // exactly MAX_ENTRANT_NAME
+  const first = await join(joinCode, longName);
+  const second = await join(joinCode, longName);
+  assert.notEqual(second.entrant.id, first.entrant.id);
+  assert.notEqual(second.entrant.name, first.entrant.name);
+  assert.ok(second.entrant.name.length <= 32, "and stays within the column's limit");
+});
+
+test("an answer racing the host's reveal cannot roll the room back", async () => {
+  // The participant lookup resolves the session as it was a moment ago. If the
+  // host advances in the gap, a naive handler scores an answer against a closed
+  // question and then rebroadcasts a stale status: "question", yanking every
+  // phone in the room back out of the reveal.
+  const { id, hostToken, joinCode } = await createSession({ config: { speedBonus: false } });
+  const racer = await join(joinCode, "Racer");
+  await advance(id, hostToken); // -> question
+
+  // Fire the answer and the advance together; whichever order they land in,
+  // the session must end up revealed and the board must stay consistent.
+  const [answerRes] = await Promise.all([
+    post(`/api/trivia/sessions/${id}/answer`, {
+      participant: racer.participantToken,
+      choice: await correctChoice(id),
+    }),
+    advance(id, hostToken), // -> reveal
+  ]);
+
+  const view = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+  assert.equal(view.session.status, "reveal", "the room stays revealed");
+  // The answer either landed before the close (200) or was refused (409) —
+  // both are correct. What must NOT happen is a 500 or a rolled-back status.
+  assert.ok([200, 409].includes(answerRes.status), `unexpected ${answerRes.status}`);
+});
+
+test("a running room stops if the venue loses the arcade module", async () => {
+  const { id, hostToken, joinCode } = await createSession();
+  const seated = await join(joinCode, "Seated");
+  await advance(id, hostToken); // -> question
+
+  await testQuery(`update location set modules = $1::jsonb where id = $2`, [
+    JSON.stringify({ arcade: false }),
+    locationId,
+  ]);
+  try {
+    // Joining, answering, and advancing all mutate a room that outlives its
+    // create call, so each rechecks rather than trusting setup.
+    const late = await post("/api/trivia/sessions/join", { joinCode, name: "TooLate" });
+    assert.equal(late.status, 403);
+
+    const answered = await post(`/api/trivia/sessions/${id}/answer`, {
+      participant: seated.participantToken,
+      choice: 0,
+    });
+    assert.equal(answered.status, 403);
+
+    const stepped = await advance(id, hostToken);
+    assert.equal(stepped.status, 403);
+  } finally {
+    await testQuery(`update location set modules = '{}'::jsonb where id = $1`, [locationId]);
+  }
+});
+
+test("a session past its TTL expires even for clients that never re-join", async () => {
+  // expireIfStale used to run only on join/snapshot, and a room's clients hold
+  // an SSE connection rather than re-fetching — so the TTL never fired for the
+  // people actually in the game, and a host could resume a day-old session.
+  const { id, hostToken, joinCode } = await createSession();
+  const seated = await join(joinCode, "Overnight");
+  await advance(id, hostToken); // -> question
+
+  await testQuery(
+    `update trivia_session set created_at = now() - interval '13 hours' where id = $1`,
+    [id]
+  );
+
+  const answered = await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: seated.participantToken,
+    choice: 0,
+  });
+  assert.equal(answered.status, 409);
+  const stepped = await advance(id, hostToken);
+  assert.equal(stepped.status, 409);
+});
+
+test("a stale advance cannot resurrect a room the host just ended", async () => {
+  // The host taps "next question" and then "End early" before the first lands.
+  // An unpredicated update would write its stale next-state over 'final'.
+  const { id, hostToken, joinCode } = await createSession();
+  await join(joinCode, "Witness");
+  await advance(id, hostToken); // -> question
+
+  const [, ended] = await Promise.all([
+    advance(id, hostToken),
+    post(`/api/trivia/sessions/${id}/end`, { host: hostToken }),
+  ]);
+  assert.equal(ended.status, 200);
+
+  const view = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+  assert.equal(view.session.status, "final", "the room stays closed");
+});
+
+test("expiry reaches the room, not just the request that noticed it", async () => {
+  // The phones hold an SSE connection, so a 409 that nobody broadcasts leaves
+  // them rendering a live-looking question where every tap is dead.
+  const { id, hostToken, joinCode } = await createSession();
+  const seated = await join(joinCode, "Stranded");
+  await advance(id, hostToken);
+  await testQuery(
+    `update trivia_session set created_at = now() - interval '13 hours' where id = $1`,
+    [id]
+  );
+
+  await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: seated.participantToken,
+    choice: 0,
+  });
+
+  const view = await json(
+    await fetch(`${baseUrl}/api/trivia/sessions/${id}?participant=${seated.participantToken}`)
+  );
+  assert.equal(view.session.status, "abandoned", "the session really is closed");
 });
 
 test("a venue cannot deal another client's questions", async () => {

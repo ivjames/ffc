@@ -7,6 +7,7 @@ import {
   fetchSnapshot,
   submitAnswer,
   subscribeSession,
+  mergeSnapshot,
   type TriviaSnapshot,
 } from '../../lib/triviaLiveApi';
 
@@ -93,7 +94,12 @@ export default function TriviaLive() {
   // lands — at a table, the wait between tap and confirmation is where people
   // tap a second choice.
   const [pending, setPending] = useState<number | null>(null);
+  // Question index whose personalized reveal result has landed. Until it
+  // matches, the reveal cannot yet say whether THIS phone was right.
+  const [personalizedIndex, setPersonalizedIndex] = useState<number | null>(null);
   const lastStatus = useRef<string | null>(null);
+  // Which question index has already played its reveal sound.
+  const soundedIndex = useRef<number | null>(null);
 
   const sessionId = stored?.sessionId ?? routeSession ?? null;
 
@@ -104,7 +110,13 @@ export default function TriviaLive() {
     let live = true;
     void fetchSnapshot(sessionId, { participant: stored.participantToken }).then((r) => {
       if (!live) return;
-      if (r.ok) setSnapshot(r as unknown as TriviaSnapshot);
+      // Freshness applies to this one-time GET as much as to the stream: if the
+      // host advances while it's in flight, a newer SSE frame can render first
+      // and this slower response would otherwise restore the old question.
+      if (r.ok) {
+        const next = r as unknown as TriviaSnapshot;
+        setSnapshot((prev) => mergeSnapshot(prev, next));
+      }
       // A token for a game that has ended or been cleaned up: drop it rather
       // than leaving the player staring at a spinner forever.
       else if (r.status === 404) {
@@ -113,7 +125,9 @@ export default function TriviaLive() {
       }
     });
     const stop = subscribeSession(sessionId, { participant: stored.participantToken }, (s) => {
-      if (live) setSnapshot(s);
+      // Drop stale frames, and never let a viewer-neutral one wipe this
+      // phone's own reveal result (see mergeSnapshot).
+      if (live) setSnapshot((prev) => mergeSnapshot(prev, s));
     });
     return () => {
       live = false;
@@ -121,29 +135,90 @@ export default function TriviaLive() {
     };
   }, [sessionId, stored?.participantToken]);
 
-  // Sound on the transitions that matter — the reveal is the moment of the
-  // whole format, so it gets the fanfare/buzz.
+  // A new question opening is a status transition, so it can be keyed on one.
   useEffect(() => {
     const status = snapshot?.session.status ?? null;
-    if (status === lastStatus.current) return;
-    if (lastStatus.current !== null) {
-      if (status === 'question') playDing();
-      else if (status === 'reveal') {
-        const mine = snapshot?.myAnswer;
-        if (mine?.correct) playFanfare();
-        else if (mine) playBuzz();
-      }
+    if (status !== lastStatus.current && lastStatus.current !== null && status === 'question') {
+      playDing();
     }
     lastStatus.current = status;
-    // Only the status transition drives sound; the rest of the snapshot churns
-    // constantly (the answered counter) and must not re-fire it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot?.session.status]);
 
-  // Clear the optimistic lock once the server's own answer lands.
+  // The reveal verdict is NOT a status transition: at the instant the status
+  // flips, this phone still holds the viewer-neutral broadcast and doesn't yet
+  // know whether it was right. Firing the fanfare there played it before the
+  // answer was known (and, for a player whose result never arrived, played
+  // nothing at all). So the sound waits for the personalized result and fires
+  // once per question, tracked by index.
   useEffect(() => {
-    if (snapshot?.myAnswer) setPending(null);
-  }, [snapshot?.myAnswer]);
+    const index = snapshot?.session.currentIndex ?? null;
+    const mine = snapshot?.myAnswer;
+    if (snapshot?.session.status !== 'reveal' || index === null) return;
+    if (mine?.correct === undefined) return;
+    if (soundedIndex.current === index) return;
+    soundedIndex.current = index;
+    if (mine.correct) playFanfare();
+    else playBuzz();
+  }, [snapshot?.session.status, snapshot?.session.currentIndex, snapshot?.myAnswer]);
+
+  // Clear the optimistic lock on every new QUESTION — and only that.
+  //
+  // The underlying constraint: broadcast frames are viewer-neutral (built
+  // without an entrantId), so `myAnswer` is always null on the stream. Two
+  // things follow, and getting either wrong breaks the round:
+  //
+  //   Keying the clear on `myAnswer` never fires, so `pending` sticks and
+  //   every button stays disabled for the rest of the game.
+  //   Keying it on `status` fires at the reveal, wiping the only record this
+  //   phone has of what it picked — so a player who answered is told "didn't
+  //   answer in time" and loses their highlight.
+  //
+  // The question INDEX is the only thing that actually means "this is a fresh
+  // question", so that alone drives the reset. Correctness at the reveal comes
+  // from the personalized refetch below, not from the stream.
+  useEffect(() => {
+    setPending(null);
+  }, [snapshot?.session.currentIndex]);
+
+  // At the reveal, pull this phone's OWN result. The stream can't carry it
+  // (one frame serves the whole room), but the snapshot endpoint is
+  // participant-scoped and already returns choice, correctness, and points —
+  // so one small request per question turns "somebody got it right" into
+  // "you got it right".
+  //
+  // Unconditional at the reveal, deliberately. Gating it on local state
+  // ("did I see a pending choice?") looks like a cheap optimization and
+  // silently breaks the two cases where the phone has no local record but an
+  // answer exists on the server: a player who reloaded after answering, and
+  // the other devices at a table whose teammate answered for them. Both would
+  // be told "didn't answer in time". The request is small; being right about
+  // whose answer it was matters more than skipping it.
+  useEffect(() => {
+    if (!sessionId || !stored?.participantToken) return;
+    if (snapshot?.session.status !== 'reveal') return;
+    if (snapshot?.myAnswer?.correct !== undefined) return; // already personalized
+    let live = true;
+    const index = snapshot.session.currentIndex;
+    void fetchSnapshot(sessionId, { participant: stored.participantToken }).then((r) => {
+      if (!live || !r.ok) return;
+      const next = r as unknown as TriviaSnapshot;
+      // Same merge as every other path: if the host moved on while this was in
+      // flight, restoring the old reveal would leave this phone a question
+      // behind until somebody else answered. And personalization only counts
+      // as done if the state we actually kept is still that question.
+      setSnapshot((prev) => mergeSnapshot(prev, next));
+      // Marked outside the updater — an updater must stay pure, and React may
+      // call it twice. Guarded on the response still being ABOUT the question
+      // we asked for: if the host moved on, `resultKnown` compares against the
+      // new index and won't match anyway, so this can't mislabel anything.
+      if (next.session.currentIndex === index) setPersonalizedIndex(index);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, stored?.participantToken, snapshot?.session.status, snapshot?.session.currentIndex]);
 
   const doJoin = useCallback(async () => {
     setError(null);
@@ -277,6 +352,7 @@ export default function TriviaLive() {
           entrantCount={entrantCount}
           myAnswer={myAnswer}
           locked={locked}
+          resultKnown={personalizedIndex === session.currentIndex}
           myEntrantId={stored.entrantId}
           myScore={me?.score ?? 0}
           myRank={me?.rank ?? null}
@@ -303,6 +379,7 @@ function LiveBody({
   entrantCount,
   myAnswer,
   locked,
+  resultKnown,
   myEntrantId,
   myScore,
   myRank,
@@ -315,6 +392,9 @@ function LiveBody({
   entrantCount: number;
   myAnswer: TriviaSnapshot['myAnswer'];
   locked: number | null;
+  /** The personalized reveal result for THIS question has landed. Until it
+   *  has, the phone genuinely doesn't know whether it was right. */
+  resultKnown: boolean;
   myEntrantId: string;
   myScore: number;
   myRank: number | null;
@@ -360,7 +440,11 @@ function LiveBody({
     return <p className="text-center text-sm text-fairway-100/70">Waiting for the next question…</p>;
   }
 
-  const open = session.status === 'question';
+  // Answers close when the countdown does, not when the host gets round to
+  // hitting reveal — the server enforces the same deadline, so leaving the
+  // buttons live at 0:00 would only produce taps it then refuses.
+  const expired = left <= 0;
+  const open = session.status === 'question' && !expired;
   const revealed = session.status === 'reveal';
 
   return (
@@ -374,7 +458,7 @@ function LiveBody({
         </span>
       </div>
 
-      {open && (
+      {session.status === 'question' && (
         <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-fairway-800">
           <div
             className="h-full rounded-full bg-fairway-400 transition-[width] duration-100 ease-linear"
@@ -425,13 +509,20 @@ function LiveBody({
           Locked in — waiting for the room…
         </p>
       )}
+      {session.status === 'question' && expired && locked === null && (
+        <p className="mt-3 text-center text-sm text-fairway-100/70">
+          Time's up — no answer in.
+        </p>
+      )}
       {revealed && (
         <p className="mt-3 text-center text-sm font-bold text-fairway-50">
           {myAnswer?.correct
             ? `Correct! +${myAnswer.points ?? 0}`
-            : myAnswer
+            : myAnswer?.correct === false
               ? 'Not this time.'
-              : "Didn't answer in time."}
+              : resultKnown
+                ? "Didn't answer in time."
+                : 'Checking your answer…'}
         </p>
       )}
 

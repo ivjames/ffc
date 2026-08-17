@@ -29,6 +29,7 @@ import { pool } from "../db.js";
 import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
+import { moduleLive, locationModuleLive } from "../lib/modules.js";
 import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
@@ -37,6 +38,7 @@ import {
   MAX_QUESTIONS,
   DEFAULT_QUESTIONS,
   MAX_ENTRANTS,
+  MAX_ENTRANT_NAME,
   normalizeConfig,
   normalizeEntrantName,
   publicQuestion,
@@ -49,6 +51,11 @@ export const router = Router();
 // A session left running this long is over — the host closed the laptop, the
 // night ended. Checked lazily on access, like shared_game (no cron needed).
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+// Slack past the question's deadline before an answer is refused. Covers the
+// round trip on venue wifi, so a tap that landed in time isn't rejected by its
+// own latency; short enough that it can't be played as extra thinking time.
+const ANSWER_GRACE_MS = 1500;
 
 const joinLimit = makeRateLimit({ windowMs: 60_000, max: 60, name: "trivia join limit" });
 const answerLimit = makeRateLimit({
@@ -129,10 +136,12 @@ async function loadBoard(sessionId) {
   return result.rows.map((row, i) => ({ ...row, rank: i + 1 }));
 }
 
-async function currentQuestionRow(session) {
+/** `q` lets the answer path read inside its own transaction — using the pool
+ *  there would read outside the row lock it is holding. */
+async function currentQuestionRow(session, q = pool) {
   const id = session.questionIds?.[session.currentIndex];
   if (!id) return null;
-  const result = await pool.query(
+  const result = await q.query(
     `select id, category, prompt, choices, answer from trivia_question where id = $1`,
     [id]
   );
@@ -201,14 +210,41 @@ async function buildSnapshot(session, { forHost, entrantId = null }) {
   };
 }
 
-/** Push the new state to every connected device. Host and player streams get
- *  different payloads, so the fan-out sends both and each stream picks. */
+/**
+ * SSE channel for one audience of one session.
+ *
+ * The two audiences are SEPARATE CHANNELS, not one channel carrying both
+ * payloads. That distinction is the whole answer-secrecy guarantee on the
+ * stream: lib/gameBus.js fans a published frame out to every subscriber on the
+ * channel, so a single `{player, host}` frame would put the correct answer on
+ * the wire to every phone in the room. The client selecting `payload.player`
+ * is a rendering choice, not a security boundary — anyone can open devtools
+ * and read the frame.
+ */
+function channelFor(sessionId, forHost) {
+  return `trivia:${sessionId}:${forHost ? "host" : "player"}`;
+}
+
+/** Push the new state to every connected device, each audience on its own
+ *  channel so a player connection never receives the host payload. */
 async function broadcast(session) {
   const [playerView, hostView] = await Promise.all([
     buildSnapshot(session, { forHost: false }),
     buildSnapshot(session, { forHost: true }),
   ]);
-  publish(session.id, "state", { player: playerView, host: hostView });
+  publish(channelFor(session.id, false), "state", { player: playerView });
+  publish(channelFor(session.id, true), "state", { host: hostView });
+}
+
+/** Re-read a session and push its CURRENT state to the room. For the paths
+ *  that change status as a side effect (expiry) and would otherwise leave
+ *  every connected phone rendering a state that no longer exists. */
+async function broadcastById(sessionId) {
+  const result = await pool.query(
+    `select ${SESSION_COLS} from trivia_session s where s.id = $1`,
+    [sessionId]
+  );
+  if (result.rows[0]) await broadcast(result.rows[0]);
 }
 
 // --- Create -----------------------------------------------------------------
@@ -226,8 +262,16 @@ router.post("/sessions", requireUser, tenant(), async (req, res) => {
   if (configCheck.error) return res.status(400).json({ ok: false, error: configCheck.error });
 
   try {
-    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, org_id" });
+    const loc = await findTenantLocation(locationId, req.tenant, {
+      cols: "id, org_id, pos, modules",
+    });
     if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
+    // The venue's plan has to include the arcade before we record arcade work
+    // for it (lib/modules.js). The client route guard keeps players out of the
+    // UI; this keeps a hand-rolled request out of the data.
+    if (!moduleLive(loc, "arcade")) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     // The bank this venue can draw on: the platform pack (org_id null) plus
     // this org's own questions, plus any written specifically for this venue.
@@ -305,12 +349,28 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
       await client.query("commit");
       return res.status(409).json({ ok: false, error: "that game has ended" });
     }
+    // A trivia room outlives its create call by a whole evening, so the
+    // entitlement is rechecked on every join rather than assumed from setup.
+    if (!(await locationModuleLive(client, session.locationId, "arcade"))) {
+      await client.query("rollback");
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     let entrant;
     if (typeof entrantId === "string" && UUID_RE.test(entrantId)) {
+      // TEAMS ONLY, and that clause is a security boundary rather than a
+      // nicety. Every phone in the room is sent the full board, entrant ids
+      // included, so without `is_team` any participant could join as another
+      // SOLO player: the token minted below is bound to whatever entrant is
+      // named here, and one entrant answers once, so the impersonator could
+      // answer first and spend the victim's turn on a wrong choice.
+      //
+      // A team is different in kind, not degree: it is a table that several
+      // devices are meant to share, and holding the join code is exactly the
+      // claim to sit at one.
       const existing = await client.query(
         `select id, name, is_team as "isTeam" from trivia_entrant
-          where id = $1 and session_id = $2`,
+          where id = $1 and session_id = $2 and is_team = true`,
         [entrantId, session.id]
       );
       entrant = existing.rows[0];
@@ -327,17 +387,58 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
         await client.query("rollback");
         return res.status(409).json({ ok: false, error: "this game is full" });
       }
-      // A name already on the board means "join that table", not "collide" —
-      // which is also what the unique constraint would otherwise turn into a
-      // confusing 500 for whoever typed second.
-      const created = await client.query(
-        `insert into trivia_entrant (session_id, name, is_team)
-         values ($1, $2, $3)
-         on conflict (session_id, name) do update set name = excluded.name
-         returning id, name, is_team as "isTeam"`,
-        [session.id, name, Boolean(req.body?.isTeam)]
+      // A name collision means two different things depending on intent, and
+      // guessing wrong is costly either way:
+      //
+      //   Both sides say TEAM  -> "I'm sitting at that table". Merge: one
+      //                           entrant, one score, one answer per question.
+      //   Either side is SOLO  -> two people who happen to both be called Dave.
+      //                           Merging them would pool their scores AND make
+      //                           the one-answer-per-entrant rule refuse the
+      //                           second Dave's answer with "already answered",
+      //                           which is baffling from his side of the room.
+      //
+      // So solo joiners get a distinct entrant, disambiguated rather than
+      // rejected — a walk-up player in a loud bar should not be sent back to
+      // retype their name because a stranger shares it.
+      const wantsTeam = Boolean(req.body?.isTeam);
+      const existing = await client.query(
+        `select id, name, is_team as "isTeam" from trivia_entrant
+          where session_id = $1 and name = $2`,
+        [session.id, name]
       );
-      entrant = created.rows[0];
+      if (existing.rowCount > 0 && wantsTeam && existing.rows[0].isTeam) {
+        entrant = existing.rows[0];
+      } else {
+        // Find a free name. Bounded by MAX_ENTRANTS, so the loop cannot run
+        // away even if a whole room shares one name.
+        let candidate = name;
+        if (existing.rowCount > 0) {
+          for (let n = 2; n <= MAX_ENTRANTS + 1; n++) {
+            // Trim the BASE to make room for the suffix, never the joined
+            // string: slicing afterwards gives a max-length name back its
+            // original 32 characters, so the "disambiguated" name collides
+            // with the one it was meant to differ from and the insert 500s.
+            const suffix = ` (${n})`;
+            const suffixed = name.slice(0, MAX_ENTRANT_NAME - suffix.length) + suffix;
+            const taken = await client.query(
+              `select 1 from trivia_entrant where session_id = $1 and name = $2`,
+              [session.id, suffixed]
+            );
+            if (taken.rowCount === 0) {
+              candidate = suffixed;
+              break;
+            }
+          }
+        }
+        const created = await client.query(
+          `insert into trivia_entrant (session_id, name, is_team)
+           values ($1, $2, $3)
+           returning id, name, is_team as "isTeam"`,
+          [session.id, candidate, wantsTeam]
+        );
+        entrant = created.rows[0];
+      }
     }
 
     const participant = await client.query(
@@ -371,19 +472,25 @@ router.get("/sessions/:id", async (req, res) => {
   const { id } = req.params;
   const hostToken = typeof req.query.host === "string" ? req.query.host : null;
   try {
+    // expireIfStale can CHANGE the status, so the snapshot has to be built
+    // from the effective one — building it from the row we loaded a moment ago
+    // tells a reconnecting host the expired game is live, and then refuses
+    // their very next tap. Cheap to apply: the status is all that moved.
     if (hostToken) {
       const session = await loadHostSession(id, hostToken);
       if (!session) return res.status(404).json({ ok: false, error: "unknown session" });
-      await expireIfStale(session);
-      return res.json({ ok: true, ...(await buildSnapshot(session, { forHost: true })) });
+      const status = await expireIfStale(session);
+      const effective = { ...session, status };
+      return res.json({ ok: true, ...(await buildSnapshot(effective, { forHost: true })) });
     }
     const ctx = await loadParticipant(id, req.query.participant);
     if (!ctx) return res.status(404).json({ ok: false, error: "unknown session" });
-    await expireIfStale(ctx);
+    const status = await expireIfStale(ctx);
+    const effective = { ...ctx, status };
     return res.json({
       ok: true,
       entrant: { id: ctx.entrantId, name: ctx.entrantName },
-      ...(await buildSnapshot(ctx, { forHost: false, entrantId: ctx.entrantId })),
+      ...(await buildSnapshot(effective, { forHost: false, entrantId: ctx.entrantId })),
     });
   } catch (err) {
     console.error("[trivia] snapshot error:", err);
@@ -426,7 +533,9 @@ router.get("/sessions/:id/events", async (req, res) => {
   });
   res.flushHeaders?.();
 
-  const unsubscribe = subscribe(id, res);
+  // Subscribe to THIS audience's channel only — a player connection is never
+  // on the host channel, so the answer cannot reach it even as unread bytes.
+  const unsubscribe = subscribe(channelFor(id, forHost), res);
   req.on("close", unsubscribe);
 
   // Open with the current state so a device that connects mid-question isn't
@@ -448,52 +557,124 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
   if (!Number.isInteger(choice) || choice < 0 || choice > 5) {
     return res.status(400).json({ ok: false, error: "choice must be a choice index" });
   }
-  if (ctx.status !== "question") {
-    return res.status(409).json({ ok: false, error: "no question is open" });
-  }
-
+  // The participant lookup above resolved the session as it was a moment ago.
+  // Everything that decides whether this answer counts is re-read below under
+  // a row lock, because the host can advance between the two.
+  const client = await pool.connect();
   try {
-    const row = await currentQuestionRow(ctx);
-    if (!row) return res.status(409).json({ ok: false, error: "no question is open" });
+    await client.query("begin");
+    // Lock the session row for the duration. `advance` UPDATEs the same row,
+    // so the two serialize: an answer either lands wholly before the host
+    // closes the question or is refused. Without this, an answer could be
+    // scored against a question that had already been revealed — and, worse,
+    // the broadcast below would republish a stale `status: "question"` and roll
+    // every phone in the room back out of the reveal.
+    const locked = await client.query(
+      `select ${SESSION_COLS} from trivia_session s where s.id = $1 for update`,
+      [ctx.id]
+    );
+    const session = locked.rows[0];
+    if (!session || session.status !== "question") {
+      await client.query("rollback");
+      return res.status(409).json({ ok: false, error: "no question is open" });
+    }
+    // Expiry is enforced HERE too, not only on join/snapshot. A room whose
+    // clients stay connected over SSE never re-joins and never re-fetches, so
+    // the 12-hour TTL would otherwise never fire for the people still in it —
+    // a session left overnight could be resumed and scored indefinitely.
+    if ((await expireIfStale(session, client)) === "abandoned") {
+      await client.query("commit");
+      // Tell the room. Without this the phones sit on the old question
+      // forever, and the player UI treats the 409 as "a teammate got there
+      // first" — so the game looks live and every tap is dead.
+      await broadcastById(session.id);
+      return res.status(409).json({ ok: false, error: "that game has ended" });
+    }
+    // And the module: a room outlives its create call, so the entitlement is
+    // rechecked on every scoring mutation.
+    if (!(await locationModuleLive(client, session.locationId, "arcade"))) {
+      await client.query("rollback");
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
+
+    const row = await currentQuestionRow(session, client);
+    if (!row) {
+      await client.query("rollback");
+      return res.status(409).json({ ok: false, error: "no question is open" });
+    }
     if (choice >= row.choices.length) {
+      await client.query("rollback");
       return res.status(400).json({ ok: false, error: "choice is out of range" });
     }
 
     // Server clock, always: elapsed comes from asked_at, never the request.
-    const msElapsed = ctx.askedAt ? Date.now() - new Date(ctx.askedAt).getTime() : 0;
+    const msElapsed = session.askedAt ? Date.now() - new Date(session.askedAt).getTime() : 0;
+
+    // The countdown has to actually close answers. Checking only "has the host
+    // advanced?" meant the configured question length was decorative: while a
+    // host chatted before hitting reveal, the timer sat at 0:00 on every phone
+    // and answers were still accepted — which quietly deletes the speed bonus
+    // as a mechanic, since waiting costs nothing.
+    //
+    // The grace window is for the network, not the player: a tap at 19.9s on a
+    // busy venue wifi must not be thrown away by its own latency.
+    const deadlineMs = session.config.questionSeconds * 1000 + ANSWER_GRACE_MS;
+    if (session.askedAt && msElapsed > deadlineMs) {
+      await client.query("rollback");
+      return res.status(409).json({ ok: false, error: "time's up on that question" });
+    }
+
     const correct = choice === row.answer;
-    const points = scoreAnswer(correct, msElapsed, ctx.config);
+    const points = scoreAnswer(correct, msElapsed, session.config);
 
     // ON CONFLICT DO NOTHING against the (session, entrant, question) primary
     // key IS the one-answer-per-team rule: at a table where three people tap,
     // the first lands and the rest are refused. Without it a team could
     // brute-force every choice.
-    const inserted = await pool.query(
+    const inserted = await client.query(
       `insert into trivia_answer
          (session_id, entrant_id, question_index, choice, correct, points, ms_elapsed, answered_by)
        values ($1, $2, $3, $4, $5, $6, $7, $8)
        on conflict (session_id, entrant_id, question_index) do nothing
        returning choice`,
-      [ctx.id, ctx.entrantId, ctx.currentIndex, choice, correct, points, msElapsed, ctx.participantId]
+      [session.id, ctx.entrantId, session.currentIndex, choice, correct, points, msElapsed, ctx.participantId]
     );
     if (inserted.rowCount === 0) {
+      await client.query("rollback");
       return res.status(409).json({ ok: false, error: "already answered" });
     }
 
     if (points > 0) {
-      await pool.query(`update trivia_entrant set score = score + $1 where id = $2`, [
+      await client.query(`update trivia_entrant set score = score + $1 where id = $2`, [
         points,
         ctx.entrantId,
       ]);
     }
+    await client.query("commit");
 
     // Tell the room how many have locked in — but not who, and not whether
     // this one was right: the question is still open.
-    await broadcast(ctx);
+    //
+    // Re-read AFTER the commit, not the row we held under the lock. The lock
+    // orders the two writes but is released by the commit, so a host advance
+    // waiting on it can update to 'reveal' and publish in the gap before this
+    // line runs — and publishing the locked (now stale) row last would drag
+    // the whole room back out of the reveal. Reading fresh shrinks that to a
+    // race we can't win here at all; the client drops out-of-order frames
+    // outright (isFresh in src/lib/triviaLiveApi.ts), which is what actually
+    // closes it.
+    const latest = await pool.query(
+      `select ${SESSION_COLS} from trivia_session s where s.id = $1`,
+      [session.id]
+    );
+    await broadcast(latest.rows[0] ?? session);
     return res.json({ ok: true, locked: choice });
   } catch (err) {
+    await client.query("rollback").catch(() => {});
     console.error("[trivia] answer error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
+  } finally {
+    client.release();
   }
 });
 
@@ -513,6 +694,16 @@ router.post("/sessions/:id/advance", async (req, res) => {
   }
 
   try {
+    // The host can sit on a lobby or a reveal indefinitely, and their own
+    // screen holds an SSE connection rather than re-fetching — so without this
+    // the TTL never fires for the one person who can restart the game.
+    if ((await expireIfStale(session)) === "abandoned") {
+      await broadcastById(session.id);
+      return res.status(409).json({ ok: false, error: "that game has ended" });
+    }
+    if (!(await locationModuleLive(pool, session.locationId, "arcade"))) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
     let next;
     if (session.status === "lobby") {
       next = { status: "question", currentIndex: 0, askedAt: new Date() };
@@ -526,14 +717,30 @@ router.post("/sessions/:id/advance", async (req, res) => {
           : { status: "question", currentIndex: following, askedAt: new Date() };
     }
 
+    // Predicated on the status this transition was computed FROM. A host who
+    // taps "End early" while an advance is still in flight would otherwise have
+    // the slower advance write its stale next-state over 'final' and resurrect
+    // a room they just closed — the transition is only valid if nothing else
+    // moved the session in the meantime.
     const updated = await pool.query(
       `update trivia_session
           set status = $1, current_index = $2, asked_at = $3,
               ended_at = case when $1 = 'final' then now() else ended_at end
-        where id = $4
+        where id = $4 and status = $5
         returning ${SESSION_FIELDS}`,
-      [next.status, next.currentIndex, next.askedAt, session.id]
+      [next.status, next.currentIndex, next.askedAt, session.id, session.status]
     );
+    if (updated.rowCount === 0) {
+      // Someone else moved it. Answer with where the game actually IS rather
+      // than an error the host can do nothing about.
+      const current = await pool.query(
+        `select ${SESSION_COLS} from trivia_session s where s.id = $1`,
+        [session.id]
+      );
+      const now = current.rows[0];
+      if (!now) return res.status(404).json({ ok: false, error: "unknown session" });
+      return res.json({ ok: true, ...(await buildSnapshot(now, { forHost: true })) });
+    }
     const fresh = updated.rows[0];
     await broadcast(fresh);
     return res.json({ ok: true, ...(await buildSnapshot(fresh, { forHost: true })) });

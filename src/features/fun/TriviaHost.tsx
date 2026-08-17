@@ -10,6 +10,7 @@ import {
   advance,
   endSession,
   subscribeSession,
+  mergeSnapshot,
   type TriviaSnapshot,
 } from '../../lib/triviaLiveApi';
 
@@ -78,14 +79,21 @@ export default function TriviaHost() {
     let live = true;
     void fetchSnapshot(host.sessionId, { host: host.hostToken }).then((r) => {
       if (!live) return;
-      if (r.ok) setSnapshot(r as unknown as TriviaSnapshot);
+      // Merged, not assigned: the lobby is where a host screen opens and also
+      // where players are arriving, so the stream can land a joiner while this
+      // request is still out. Assigning would drop them, and nothing
+      // re-broadcasts until the next join — leaving the host reading a roster
+      // that is quietly one table short.
+      if (r.ok) setSnapshot((prev) => mergeSnapshot(prev, r as unknown as TriviaSnapshot));
       else if (r.status === 404) {
         saveHost(null);
         setHost(null);
       }
     });
     const stop = subscribeSession(host.sessionId, { host: host.hostToken }, (s) => {
-      if (live) setSnapshot(s);
+      // A late answer-broadcast must not drag the host's screen back out of
+      // the reveal it just advanced to (see mergeSnapshot).
+      if (live) setSnapshot((prev) => mergeSnapshot(prev, s));
     });
     return () => {
       live = false;
@@ -120,12 +128,29 @@ export default function TriviaHost() {
     const res = await advance(host.sessionId, host.hostToken);
     setBusy(false);
     if (!res.ok) setError(res.error);
-    else setSnapshot(res as unknown as TriviaSnapshot);
+    // Merged for the same reason as the initial fetch — the advance response
+    // is the newest state of the GAME, but a join broadcast can still overtake
+    // it on the wire.
+    else setSnapshot((prev) => mergeSnapshot(prev, res as unknown as TriviaSnapshot));
   }, [host]);
 
   async function finish() {
     if (!host) return;
-    await endSession(host.sessionId, host.hostToken);
+    const res = await endSession(host.sessionId, host.hostToken);
+    // The host token is the ONLY capability that can drive this room, and it
+    // exists on this device alone. Clearing it because the request failed —
+    // venue wifi dropping mid-tap is the normal case, not the exotic one —
+    // leaves a live session nobody can advance or end, with the room stuck
+    // until lazy expiry. So it goes only on a definitive answer: success, or a
+    // 404 meaning the session is already gone.
+    if (!res.ok && res.status !== 404) {
+      setError(
+        res.error === 'offline'
+          ? "Couldn't reach the game to close it — check your signal and try again."
+          : res.error,
+      );
+      return;
+    }
     saveHost(null);
     setHost(null);
     setSnapshot(null);
@@ -323,7 +348,14 @@ export default function TriviaHost() {
         )}
 
         {!done && (
-          <button onClick={finish} className="mt-4 w-full text-center text-xs text-fairway-400">
+          // Disabled while an advance is in flight: the server refuses a stale
+          // transition anyway, but letting the host tap both at once invites a
+          // race they'd have to understand to recover from.
+          <button
+            onClick={finish}
+            disabled={busy}
+            className="mt-4 w-full text-center text-xs text-fairway-400 disabled:opacity-40"
+          >
             End early
           </button>
         )}

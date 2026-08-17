@@ -171,6 +171,44 @@ export function moduleStatus(location) {
 }
 
 /**
+ * Is one module live at this venue? The server-side half of the entitlement,
+ * for write paths that must not accept work for a module the venue's plan
+ * doesn't include — recording an arcade score, opening a trivia session,
+ * issuing a challenge.
+ *
+ * A route guard in the client (features/shared/ModuleGate.tsx) keeps players
+ * out of the UI; this keeps a hand-rolled request out of the data. Neither is
+ * load-bearing alone: hiding a nav tile does nothing about a bookmark, and a
+ * client-side redirect does nothing about curl.
+ *
+ * @param {{ pos?: object|null, modules?: object|null }} location
+ * @param {string} key
+ */
+export function moduleLive(location, key) {
+  return resolveModules(location)[key] === true;
+}
+
+/**
+ * The same test, for a handler that holds an activity id rather than a
+ * location row — an open challenge, a running trivia session.
+ *
+ * Entitlements have to be rechecked on every MUTATION, not just at creation.
+ * A challenge lives for a week and a trivia room for a night, so checking only
+ * the create handler leaves an activity that outlives the module: rounds keep
+ * scoring and players keep joining something the venue switched off days ago.
+ *
+ * `q` is a pool or a transaction client, so a caller already holding a row
+ * lock can read inside it.
+ *
+ * Fails CLOSED: a location that has vanished resolves to "not entitled".
+ */
+export async function locationModuleLive(q, locationId, key) {
+  if (!locationId) return false;
+  const result = await q.query(`select pos, modules from location where id = $1`, [locationId]);
+  return result.rows[0] ? moduleLive(result.rows[0], key) : false;
+}
+
+/**
  * Validate + normalize a `modules` object from an admin write. Sparse and
  * replace-not-merge, matching how pos/hours/branding already behave: only the
  * keys an operator set are stored, and an absent key keeps deriving from the

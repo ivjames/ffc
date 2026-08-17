@@ -46,7 +46,6 @@ import RingToss from './features/fun/RingToss';
 import MilkBottle from './features/fun/MilkBottle';
 import WaterGunRace from './features/fun/WaterGunRace';
 import Pinball from './features/fun/Pinball';
-import CoinPusher from './features/fun/CoinPusher';
 import Food from './features/food/Food';
 import Checkout from './features/food/Checkout';
 import OrderStatusScreen from './features/food/OrderStatus';
@@ -61,6 +60,7 @@ import TenantUnavailable from './features/shared/TenantUnavailable';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import GeofenceGate from './features/shared/GeofenceGate';
+import ModuleGate from './features/shared/ModuleGate';
 import AccountGate from './features/shared/AccountGate';
 import { BuildStamp } from './ui/BuildStamp';
 import FeedbackButton from './ui/FeedbackButton';
@@ -160,7 +160,13 @@ export default function App() {
         <Route path="/golf/courses/:id/map" element={<CourseMap />} />
         <Route path="/golf/rules" element={<Rules />} />
         {/* AI scavenger hunt — a golf-round activity. */}
-        <Route path="/golf/hunt" element={<Hunt />} />
+        {/* The hunt is a separately-sold module, and its verifications are
+            billable vision calls — so both entry points are gated, not just
+            the Home tile. The on-course links in GolfHome/Scorecard reach
+            /golf/hunt directly. */}
+        <Route element={<ModuleGate module="hunt" />}>
+          <Route path="/golf/hunt" element={<Hunt />} />
+        </Route>
         {/* Player-facing leaderboard (the /tv board is phone-friendly and doubles
             as the venue display; /tv stays below for TVs/QRs). */}
         <Route path="/golf/leaderboard" element={<TvLeaderboard />} />
@@ -172,6 +178,10 @@ export default function App() {
             venue lacks the ordering add-on (src/lib/pos). The photo booth is
             deliberately NOT gated (it's below, outside this group). */}
         <Route element={<GeofenceGate />}>
+          {/* The arcade is a separately-sold module, so its routes sit behind
+              the entitlement gate too — hiding the nav tile did nothing about a
+              bookmark or a printed QR code. */}
+          <Route element={<ModuleGate module="arcade" />}>
           <Route path="/arcade" element={<FunZone />} />
           {/* Every mini-game's high score board for this venue, in one screen. */}
           <Route path="/arcade/scores" element={<HighScores />} />
@@ -207,7 +217,7 @@ export default function App() {
           <Route path="/arcade/bottles" element={<MilkBottle />} />
           <Route path="/arcade/watergun" element={<WaterGunRace />} />
           <Route path="/arcade/pinball" element={<Pinball />} />
-          <Route path="/arcade/pusher" element={<CoinPusher />} />
+          </Route>
           {/* Native F&B ordering — POS-integration add-on, rendered only for
               venues with a paid config (src/lib/pos); each screen redirects home
               when its capability is off. */}
@@ -224,7 +234,9 @@ export default function App() {
             geofenced, matching the photo booth and the on-course hunt: the
             venue's own list is the thing that scopes it. HuntEntry decides
             whether this venue has one, forwarding to /golf/hunt if not. */}
-        <Route path="/hunt" element={<HuntEntry />} />
+        <Route element={<ModuleGate module="hunt" />}>
+          <Route path="/hunt" element={<HuntEntry />} />
+        </Route>
 
         {/* ── Me section ────────────────────────────────────────────────── */}
         {/* The hub itself stays open — signed out it is the sign-in pitch, and

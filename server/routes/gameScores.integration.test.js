@@ -102,6 +102,38 @@ test("recording requires an account", async () => {
   assert.equal(res.status, 401);
 });
 
+test("a venue without the arcade module refuses arcade writes", async () => {
+  // Hiding the nav tile is presentation; this is the enforcement. A bookmark,
+  // a printed QR code, or plain curl must not hand a venue a module its plan
+  // doesn't include.
+  const { cookie } = await player("MOD");
+  const off = await testQuery(
+    `insert into location (name, slug, tz, modules) values ($1, $2, 'UTC', $3::jsonb) returning id`,
+    [`NoArcade ${Date.now()}`, `no-arcade-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+     JSON.stringify({ arcade: false })]
+  );
+  const offId = off.rows[0].id;
+  locationIds.push(offId);
+
+  const res = await post(
+    { locationId: offId, game: "skeeball", score: 100, sessionId: session() },
+    cookie
+  );
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /arcade/i);
+});
+
+test("a venue with no modules object keeps working — the legacy default is on", async () => {
+  // Back-compat is the load-bearing property: every existing location has
+  // modules '{}', and must behave exactly as before the column existed.
+  const { cookie } = await player("LEG");
+  const res = await post(
+    { locationId, game: "skeeball", score: 111, sessionId: session() },
+    cookie
+  );
+  assert.equal(res.status, 200);
+});
+
 test("a foreign venue id 404s rather than writing to its board", async () => {
   const { cookie } = await player("BBB");
   const res = await post(

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import GameHighScore from './GameHighScore';
@@ -755,6 +756,10 @@ export default function GoKarts() {
   const [best, setBest] = useState<number>(Infinity);
   // One id per played round — the ticket award's idempotency key.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  // A head-to-head challenge names the circuit — the boards are per track, so
+  // a round driven on any other one could not be submitted for it.
+  const [searchParams] = useSearchParams();
+  const challengeTrack = TRACKS.find((t) => t.id === searchParams.get('variant')) ?? null;
 
   const racing = phase === 'countdown' || phase === 'race';
   useFitCanvas(canvasRef, W, H, racing);
@@ -916,6 +921,13 @@ export default function GoKarts() {
   }, []);
 
   // —— Track picker —————————————————————————————————————————————————————————
+  // Arrived from a head-to-head challenge on a specific circuit: start that
+  // one instead of offering the picker, so the round can actually count.
+  if (phase === 'select' && challengeTrack) {
+    startRace(challengeTrack);
+    return null;
+  }
+
   if (phase === 'select') {
     return (
       <Screen>

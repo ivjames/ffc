@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { useFitCanvas } from '../fun/useFitCanvas';
 import GameHighScore from '../fun/GameHighScore';
@@ -471,6 +472,9 @@ export default function PuttGolf() {
 
   const [mode, setMode] = useState<Mode | null>(null);
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  // Challenges are always on the fixed course; endless has no comparable score.
+  const [searchParams] = useSearchParams();
+  const challengeMode = searchParams.get('variant');
   const [phase, setPhase] = useState<Phase>('aim');
   const [holeIndex, setHoleIndex] = useState(0);
   const [strokes, setStrokes] = useState(0);
@@ -737,6 +741,14 @@ export default function PuttGolf() {
             : '';
 
   // Mode picker — the entry screen.
+  // A challenge is always on the fixed course (endless has no comparable
+  // score), so skip the mode picker rather than letting the player choose a
+  // mode their round can't be submitted under.
+  if (mode === null && challengeMode === 'course') {
+    beginRound('course');
+    return null;
+  }
+
   if (mode === null) {
     return (
       <Screen>

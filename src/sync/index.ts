@@ -149,13 +149,13 @@ export function courseBoardsStreamUrl(opts: CourseBoardOpts): string {
   return apiUrl(`/api/leaderboard/courses/stream?${courseBoardsQuery(opts)}`);
 }
 
-/** Rewards earned by a round (punchlist #8 tier 1), fetched by the round's
- *  unguessable clientId once it has synced. */
+/** Achievements earned by a round (punchlist #8 tier 1), fetched by the round's
+ *  unguessable clientId once it has synced. Badges only — achievements pay no
+ *  tickets, so there is nothing to claim and no redemption state to carry. */
 export type RewardRow = {
   playerIndex: number;
   playerTag: string;
   achievement: string;
-  redeemedAt: string | null;
 };
 
 export async function fetchRewards(clientId: string): Promise<RewardRow[]> {

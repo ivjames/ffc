@@ -6,6 +6,7 @@ import { formatScore } from '../../lib/gameScores';
 import {
   fetchChallenge,
   subscribeChallenge,
+  mergeChallenge,
   sideLabel,
   type ChallengeView,
 } from '../../lib/challengesApi';
@@ -35,7 +36,9 @@ export default function ChallengeDetail() {
     let live = true;
     void fetchChallenge(id).then((r) => {
       if (!live) return;
-      if (r.ok) setView(r as unknown as ChallengeView);
+      // Merged, not assigned: the stream may already have delivered the
+      // opponent joining or the result landing while this was in flight.
+      if (r.ok) setView((prev) => mergeChallenge(prev, r as unknown as ChallengeView));
       else setError(r.status === 404 ? "That challenge isn't yours to see." : r.error);
     });
     return () => {
@@ -47,7 +50,7 @@ export default function ChallengeDetail() {
   // it just never fires.
   useEffect(() => {
     if (!id || !me) return;
-    return subscribeChallenge(id, me.id, setView);
+    return subscribeChallenge(id, me.id, (next) => setView((prev) => mergeChallenge(prev, next)));
   }, [id, me]);
 
   if (error) {

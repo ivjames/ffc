@@ -26,6 +26,7 @@ import { pool } from "../db.js";
 import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
+import { moduleLive, locationModuleLive } from "../lib/modules.js";
 import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
@@ -158,8 +159,14 @@ router.post("/", requireUser, createLimit, tenant(), async (req, res) => {
   if (variantCheck.error) return res.status(400).json({ ok: false, error: variantCheck.error });
 
   try {
-    const loc = await findTenantLocation(locationId, req.tenant);
+    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, pos, modules" });
     if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
+    // The venue's plan has to include the arcade before we record arcade work
+    // for it (lib/modules.js). The client route guard keeps players out of the
+    // UI; this keeps a hand-rolled request out of the data.
+    if (!moduleLive(loc, "arcade")) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     const expires = new Date(Date.now() + CHALLENGE_TTL_DAYS * 24 * 60 * 60 * 1000);
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -216,6 +223,12 @@ router.post("/join", requireUser, joinLimit, async (req, res) => {
       await client.query("rollback");
       return res.status(409).json({ ok: false, error: "someone already took this challenge" });
     }
+    // Rechecked here, not just at create: a challenge is open for a week, so
+    // the venue can lose the arcade module long after it was issued.
+    if (!(await locationModuleLive(client, challenge.locationId, "arcade"))) {
+      await client.query("rollback");
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     const claimed = await client.query(
       `update challenge set opponent_id = $1 where id = $2 returning ${COLS.replace(/c\./g, "")}`,
@@ -258,6 +271,11 @@ router.post("/:id/play", requireUser, async (req, res) => {
     }
     if ((await expireIfStale(challenge)) !== "open") {
       return res.status(409).json({ ok: false, error: "that challenge is closed" });
+    }
+    // Same recheck as join — this writes a challenge_entry AND a board row, so
+    // it must not run for a venue that no longer has the module.
+    if (!(await locationModuleLive(pool, challenge.locationId, "arcade"))) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
     }
 
     // ON CONFLICT DO NOTHING against (challenge, user) IS the one-round rule:
@@ -322,6 +340,17 @@ router.post("/:id/play", requireUser, async (req, res) => {
 
 router.get("/mine", requireUser, async (req, res) => {
   try {
+    // Expire this player's stale rows before reading them. The TTL is only
+    // ever applied lazily, so without this the list is the one place a
+    // week-old challenge still reads as Open: it sorts into the Open section
+    // with a "Play your round" button that `/play` then refuses. One
+    // set-based update rather than a call per row — the list holds 50.
+    await pool.query(
+      `update challenge set status = 'expired'
+        where status = 'open' and expires_at <= now()
+          and (created_by = $1 or opponent_id = $1)`,
+      [req.user.id]
+    );
     const result = await pool.query(
       `select ${COLS} from challenge c
         where (c.created_by = $1 or c.opponent_id = $1)

@@ -1,10 +1,20 @@
-// Rewards (punchlist #8 tier 1) — achievement computation + payout pricing.
+// Achievements (punchlist #8 tier 1) — computation only.
 //
 // Achievements are granted server-side when a completed round first syncs
-// (routes/rounds.js), one reward_grant row per (player, achievement), and pay
-// out as tickets on the player's loyalty card. Pure functions here so the
-// rules are unit-testable without a DB. (No redemption codes are minted — the
-// grant's identity is its UUID; see routes/rounds.js.)
+// (routes/rounds.js), one reward_grant row per (player, achievement). Pure
+// functions here so the rules are unit-testable without a DB.
+//
+// Achievements PAY NOTHING. They are a status/collection layer, not a currency:
+// no tickets, no loyalty-card credit, no redemption codes. Golf scores are
+// entirely self-reported — the scorecard is a number pad on a device the group
+// controls, with nothing verifying that a 1 was a 1 — so paying tickets against
+// them was the weakest trust surface in the ticket economy, weaker even than
+// the client-scored mini-games (which are at least capped server-side per
+// round). Tickets now come only from the mini-game proxy (lib/gameRewards.js)
+// and the one-time adoption bonuses (lib/adoptionBonus.js).
+//
+// A grant is therefore a pure record of "this round earned this", read by the
+// player's summary and Master Control's issuance rollup.
 
 // The venue-facing catalog. Labels are what staff see in Master Control; the
 // player app carries its own copy of the same labels (src/features/rewards).
@@ -13,21 +23,6 @@ export const ACHIEVEMENTS = {
   under_par: "Under Par",
   hunt_master: "Hunt Master",
 };
-
-// Tickets a card claim pays per achievement — the SERVER-SIDE source of truth.
-// The claim endpoint (routes/rewards.js) derives the payout from the stored
-// grant's achievement, so a tampered request can't mint tickets without an
-// achievement or over-pay one; the client never sends an amount.
-export const ACHIEVEMENT_TICKETS = {
-  hole_in_one: 100,
-  under_par: 50,
-  hunt_master: 75,
-};
-
-/** Tickets for an achievement (0 for an unknown/unpriced one → never paid). */
-export function achievementTickets(achievement) {
-  return ACHIEVEMENT_TICKETS[achievement] ?? 0;
-}
 
 /**
  * Score-based achievements for one synced round.

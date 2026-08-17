@@ -62,6 +62,7 @@ import {
 } from "../lib/vision.js";
 import { resolvePhotoRetentionDays } from "../lib/photoRetention.js";
 import { tenant, tenantOrgFilter, tenantParams } from "../lib/tenant.js";
+import { moduleLive } from "../lib/modules.js";
 
 export const router = Router();
 
@@ -595,6 +596,19 @@ router.post(
         });
       }
       const item = itemRes.rows[0];
+
+      // Module entitlement, checked before anything billable happens. A hunt
+      // verification is a paid vision call, so a venue whose plan doesn't
+      // include the hunt must not be able to run them from a bookmarked URL or
+      // an on-course link the nav no longer shows (lib/modules.js). Read from
+      // the item's own location so it holds for both hunt shapes.
+      const moduleRow = await pool.query(
+        `select pos, modules from location where id = $1`,
+        [item.locationId]
+      );
+      if (moduleRow.rows[0] && !moduleLive(moduleRow.rows[0], "hunt")) {
+        return res.status(403).json({ ok: false, error: "the scavenger hunt is not enabled here" });
+      }
 
       // Per-venue kill switch: dailyScanCap 0 means the venue's hunt is off —
       // refuse before any gameplay logic (even dedupe replies would misleadingly

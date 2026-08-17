@@ -121,9 +121,24 @@ export default function GameHighScore({
     if (!active) return;
     if (challengeAttempted.current === sessionId) return;
     challengeAttempted.current = sessionId;
-    clearActiveChallenge();
     void playChallenge(active.challengeId, { score, detail, sessionId }).then((r) => {
-      if (r.ok) setChallenge(r as unknown as ChallengeView);
+      if (r.ok) {
+        setChallenge(r as unknown as ChallengeView);
+        clearActiveChallenge();
+        return;
+      }
+      // A DEFINITIVE refusal settles the challenge as far as this round is
+      // concerned — already played, not your challenge, closed — so disarm.
+      if (r.status === 409 || r.status === 403 || r.status === 404) {
+        clearActiveChallenge();
+        return;
+      }
+      // Anything else (offline, 5xx) means the server never consumed the
+      // player's one attempt. Clearing here would silently detach a round they
+      // actually played, so keep the marker armed and let the guard reset so a
+      // remount can retry. The submit is idempotent on sessionId, so a retry
+      // that turns out to have landed is harmless.
+      challengeAttempted.current = null;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, game, variant, score, sessionId]);
