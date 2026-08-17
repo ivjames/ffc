@@ -26,7 +26,7 @@ import { pool } from "../db.js";
 import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
-import { moduleLive } from "../lib/modules.js";
+import { moduleLive, locationModuleLive } from "../lib/modules.js";
 import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
@@ -223,6 +223,12 @@ router.post("/join", requireUser, joinLimit, async (req, res) => {
       await client.query("rollback");
       return res.status(409).json({ ok: false, error: "someone already took this challenge" });
     }
+    // Rechecked here, not just at create: a challenge is open for a week, so
+    // the venue can lose the arcade module long after it was issued.
+    if (!(await locationModuleLive(client, challenge.locationId, "arcade"))) {
+      await client.query("rollback");
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     const claimed = await client.query(
       `update challenge set opponent_id = $1 where id = $2 returning ${COLS.replace(/c\./g, "")}`,
@@ -265,6 +271,11 @@ router.post("/:id/play", requireUser, async (req, res) => {
     }
     if ((await expireIfStale(challenge)) !== "open") {
       return res.status(409).json({ ok: false, error: "that challenge is closed" });
+    }
+    // Same recheck as join — this writes a challenge_entry AND a board row, so
+    // it must not run for a venue that no longer has the module.
+    if (!(await locationModuleLive(pool, challenge.locationId, "arcade"))) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
     }
 
     // ON CONFLICT DO NOTHING against (challenge, user) IS the one-round rule:

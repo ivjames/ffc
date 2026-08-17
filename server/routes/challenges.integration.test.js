@@ -267,6 +267,27 @@ test("/mine lists both sides' challenges, open ones first", async () => {
   }
 });
 
+test("an open challenge stops working if the venue loses the arcade module", async () => {
+  // Entitlements are rechecked on every mutation, not assumed from creation:
+  // a challenge is open for a week, so it easily outlives the module.
+  const a = await player("ENT");
+  const b = await player("ENU");
+  const challenge = await create(a.cookie);
+
+  await testQuery(`update location set modules = $1::jsonb where id = $2`, [
+    JSON.stringify({ arcade: false }),
+    locationId,
+  ]);
+  try {
+    const join = await call("POST", "/join", { inviteCode: challenge.inviteCode }, b.cookie);
+    assert.equal(join.status, 403);
+    const play = await call("POST", `/${challenge.id}/play`, { score: 10, sessionId: sid() }, a.cookie);
+    assert.equal(play.status, 403);
+  } finally {
+    await testQuery(`update location set modules = '{}'::jsonb where id = $1`, [locationId]);
+  }
+});
+
 test("a bad invite code 404s", async () => {
   const { cookie } = await player("BAD");
   const res = await call("POST", "/join", { inviteCode: "ZZZZZZ" }, cookie);

@@ -128,7 +128,21 @@ export default function TriviaHost() {
 
   async function finish() {
     if (!host) return;
-    await endSession(host.sessionId, host.hostToken);
+    const res = await endSession(host.sessionId, host.hostToken);
+    // The host token is the ONLY capability that can drive this room, and it
+    // exists on this device alone. Clearing it because the request failed —
+    // venue wifi dropping mid-tap is the normal case, not the exotic one —
+    // leaves a live session nobody can advance or end, with the room stuck
+    // until lazy expiry. So it goes only on a definitive answer: success, or a
+    // 404 meaning the session is already gone.
+    if (!res.ok && res.status !== 404) {
+      setError(
+        res.error === 'offline'
+          ? "Couldn't reach the game to close it — check your signal and try again."
+          : res.error,
+      );
+      return;
+    }
     saveHost(null);
     setHost(null);
     setSnapshot(null);

@@ -448,6 +448,56 @@ test("an answer racing the host's reveal cannot roll the room back", async () =>
   assert.ok([200, 409].includes(answerRes.status), `unexpected ${answerRes.status}`);
 });
 
+test("a running room stops if the venue loses the arcade module", async () => {
+  const { id, hostToken, joinCode } = await createSession();
+  const seated = await join(joinCode, "Seated");
+  await advance(id, hostToken); // -> question
+
+  await testQuery(`update location set modules = $1::jsonb where id = $2`, [
+    JSON.stringify({ arcade: false }),
+    locationId,
+  ]);
+  try {
+    // Joining, answering, and advancing all mutate a room that outlives its
+    // create call, so each rechecks rather than trusting setup.
+    const late = await post("/api/trivia/sessions/join", { joinCode, name: "TooLate" });
+    assert.equal(late.status, 403);
+
+    const answered = await post(`/api/trivia/sessions/${id}/answer`, {
+      participant: seated.participantToken,
+      choice: 0,
+    });
+    assert.equal(answered.status, 403);
+
+    const stepped = await advance(id, hostToken);
+    assert.equal(stepped.status, 403);
+  } finally {
+    await testQuery(`update location set modules = '{}'::jsonb where id = $1`, [locationId]);
+  }
+});
+
+test("a session past its TTL expires even for clients that never re-join", async () => {
+  // expireIfStale used to run only on join/snapshot, and a room's clients hold
+  // an SSE connection rather than re-fetching — so the TTL never fired for the
+  // people actually in the game, and a host could resume a day-old session.
+  const { id, hostToken, joinCode } = await createSession();
+  const seated = await join(joinCode, "Overnight");
+  await advance(id, hostToken); // -> question
+
+  await testQuery(
+    `update trivia_session set created_at = now() - interval '13 hours' where id = $1`,
+    [id]
+  );
+
+  const answered = await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: seated.participantToken,
+    choice: 0,
+  });
+  assert.equal(answered.status, 409);
+  const stepped = await advance(id, hostToken);
+  assert.equal(stepped.status, 409);
+});
+
 test("a venue cannot deal another client's questions", async () => {
   // A question owned by some other org must never enter this venue's bank.
   const org = await testQuery(

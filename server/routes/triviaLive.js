@@ -29,7 +29,7 @@ import { pool } from "../db.js";
 import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
-import { moduleLive } from "../lib/modules.js";
+import { moduleLive, locationModuleLive } from "../lib/modules.js";
 import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
@@ -338,6 +338,12 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
       await client.query("commit");
       return res.status(409).json({ ok: false, error: "that game has ended" });
     }
+    // A trivia room outlives its create call by a whole evening, so the
+    // entitlement is rechecked on every join rather than assumed from setup.
+    if (!(await locationModuleLive(client, session.locationId, "arcade"))) {
+      await client.query("rollback");
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     let entrant;
     if (typeof entrantId === "string" && UUID_RE.test(entrantId)) {
@@ -545,6 +551,20 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
       await client.query("rollback");
       return res.status(409).json({ ok: false, error: "no question is open" });
     }
+    // Expiry is enforced HERE too, not only on join/snapshot. A room whose
+    // clients stay connected over SSE never re-joins and never re-fetches, so
+    // the 12-hour TTL would otherwise never fire for the people still in it —
+    // a session left overnight could be resumed and scored indefinitely.
+    if ((await expireIfStale(session, client)) === "abandoned") {
+      await client.query("commit");
+      return res.status(409).json({ ok: false, error: "that game has ended" });
+    }
+    // And the module: a room outlives its create call, so the entitlement is
+    // rechecked on every scoring mutation.
+    if (!(await locationModuleLive(client, session.locationId, "arcade"))) {
+      await client.query("rollback");
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     const row = await currentQuestionRow(session, client);
     if (!row) {
@@ -643,6 +663,15 @@ router.post("/sessions/:id/advance", async (req, res) => {
   }
 
   try {
+    // The host can sit on a lobby or a reveal indefinitely, and their own
+    // screen holds an SSE connection rather than re-fetching — so without this
+    // the TTL never fires for the one person who can restart the game.
+    if ((await expireIfStale(session)) === "abandoned") {
+      return res.status(409).json({ ok: false, error: "that game has ended" });
+    }
+    if (!(await locationModuleLive(pool, session.locationId, "arcade"))) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
     let next;
     if (session.status === "lobby") {
       next = { status: "question", currentIndex: 0, askedAt: new Date() };
