@@ -21,7 +21,12 @@ import {
   mailFrom,
   isMailDeliveryConfigured,
   maskRecipient,
+  mailConfigWarnings,
+  resolveDailyCap,
+  resolveGlobalDailyCap,
+  resolveSendingDomains,
 } from "../../lib/mailer.js";
+import { pool } from "../../db.js";
 import { normalizeEmail } from "../../lib/validateUser.js";
 import { appOrigin } from "../../lib/appOrigin.js";
 
@@ -43,8 +48,24 @@ const PROVIDER_NOTES = {
   smtp: "Delivered over SMTP_URL via nodemailer.",
 };
 
-router.get("/status", (req, res) => {
+// The multi-org half of the preflight needs a count, and a diagnostics screen
+// that can't reach the database should say so rather than quietly dropping a
+// check (null = not counted, which mailConfigWarnings treats as "don't guess").
+async function liveOrgCount() {
+  try {
+    const result = await pool.query(
+      `select count(*)::int as n from org where archived_at is null and status = 'active'`
+    );
+    return result.rows[0].n;
+  } catch (err) {
+    console.error("[admin/mail] live org count failed:", err);
+    return null;
+  }
+}
+
+router.get("/status", async (req, res) => {
   const provider = process.env.MAIL_PROVIDER || "console";
+  const orgs = await liveOrgCount();
   res.json({
     ok: true,
     provider,
@@ -65,7 +86,19 @@ router.get("/status", (req, res) => {
     linkOrigin: appOrigin(req),
     publicAppUrl: process.env.PUBLIC_APP_URL || null,
     platformFqdn: process.env.PLATFORM_FQDN || null,
-    dailyCap: Number(process.env.MAIL_DAILY_CAP) || 500,
+    // Via the resolvers, not Number(env), so the screen reports the cap the
+    // mailer will ACTUALLY enforce — blank means the default, and an explicit
+    // "0" is a kill switch that `Number(x) || 500` would have hidden as 500.
+    dailyCap: resolveDailyCap(),
+    globalDailyCap: resolveGlobalDailyCap(),
+    // What the MAIL_FROM domain is checked against (explicit
+    // MAIL_SENDING_DOMAINS, else inferred from the platform's own hosts).
+    sendingDomains: resolveSendingDomains(),
+    liveOrgCount: orgs,
+    // The startup preflight's findings, recomputed live: an operator who has
+    // just changed .env and restarted should be able to confirm the fix here
+    // instead of going back to the pm2 log.
+    warnings: mailConfigWarnings({ liveOrgCount: orgs }),
   });
 });
 

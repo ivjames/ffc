@@ -581,6 +581,39 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 // --- Endpoints --------------------------------------------------------------
+/** One thing wrong with the outbound-mail config, as the server's preflight
+ *  sees it (server/lib/mailer.js mailConfigWarnings). `fix` is the point — a
+ *  diagnostic that only names the problem leaves the DNS work guesswork. */
+export type MailWarning = { code: string; message: string; fix: string };
+
+export type MailStatus = {
+  ok: true;
+  provider: string;
+  note: string;
+  /** Whether ANY delivery happens. False on the console provider — which still
+   *  reports successful "sends", which is exactly why this is separate. */
+  delivers: boolean;
+  from: string;
+  /** Whether the provider's credential is present. Never its value. */
+  credentialSet: boolean;
+  /** The origin magic links built for THIS request would point at. */
+  linkOrigin: string;
+  publicAppUrl: string | null;
+  platformFqdn: string | null;
+  dailyCap: number;
+  globalDailyCap: number;
+  sendingDomains: string[];
+  liveOrgCount: number | null;
+  warnings: MailWarning[];
+};
+
+/** A test send's outcome. A FAILED send comes back HTTP 200 with ok:false and
+ *  the provider's raw error — the request worked, the send didn't — so this is
+ *  a union the caller must branch on, never an exception. */
+export type MailTestResult =
+  | { ok: true; provider: string; delivered: boolean; id: string | null; note: string }
+  | { ok: false; provider: string; delivered: false; error: string };
+
 export const api = {
   overview: () => req<Overview>('GET', '/overview'),
 
@@ -901,4 +934,10 @@ export const api = {
   syntheticStart: (params: SyntheticBotParams) =>
     req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/start', params),
   syntheticStop: () => req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/stop'),
+
+  // Outbound-mail diagnostics (super_admin only — the server 403s everyone
+  // else). Both are plain req() calls: a failed SEND is an HTTP 200 with
+  // ok:false, so it arrives as a value to render, not an ApiError to catch.
+  mailStatus: () => req<MailStatus>('GET', '/mail/status'),
+  mailTest: (to: string) => req<MailTestResult>('POST', '/mail/test', { to }),
 };

@@ -1,6 +1,7 @@
 // Head-to-head challenges — two players, one arcade game, scores compared.
 //
 //   POST /api/challenges                  {locationId, game, variant?} -> inviteCode
+//   POST /api/challenges/:id/invite       {email}        mail the code to someone
 //   POST /api/challenges/join             {inviteCode}   claim as the opponent
 //   POST /api/challenges/:id/play         {score, detail?, sessionId}
 //   GET  /api/challenges/:id
@@ -30,6 +31,9 @@ import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { isScoredGame, scoredGame, normalizeVariant, isBetter, MAX_SCORE } from "../lib/gameScores.js";
+import { sendMail } from "../lib/mailer.js";
+import { appOrigin, escapeHtml } from "../lib/appOrigin.js";
+import { normalizeEmail } from "../lib/validateUser.js";
 
 export const router = Router();
 
@@ -45,10 +49,20 @@ const createLimit = makeRateLimit({
   name: "challenge create limit",
 });
 const joinLimit = makeRateLimit({ windowMs: 60_000, max: 30, name: "challenge join limit" });
+// Tighter than create: this one puts mail in someone else's inbox on the
+// challenger's say-so, and a challenge only ever needs one opponent. Keyed by
+// user (an unauthenticated caller never reaches it — requireUser runs first).
+const inviteLimit = makeRateLimit({
+  windowMs: 60_000,
+  max: 5,
+  keyFn: (req) => req.user?.id ?? null,
+  name: "challenge invite limit",
+});
 
 export function resetChallengeRateLimits() {
   createLimit.reset();
   joinLimit.reset();
+  inviteLimit.reset();
 }
 
 const COLS = `c.id, c.location_id as "locationId", c.game, c.variant,
@@ -179,6 +193,89 @@ router.post("/", requireUser, createLimit, tenant(), async (req, res) => {
     }
   } catch (err) {
     console.error("[challenges] create error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// --- Invite by email --------------------------------------------------------
+// The invite code's only delivery path used to be the player's own voice —
+// fine across a table, useless for "I'll get you back tomorrow", which is the
+// asynchronous half of the feature. So: one email, carrying a link that
+// pre-fills the code on the join screen (/arcade/challenges?code=…), built
+// from the tenant origin like every other emailed link (lib/appOrigin.js).
+//
+// Deliberately NOT a friend graph: nothing is stored about the address, and no
+// account has to exist at it. It is the same six characters, in an envelope.
+router.post("/:id/invite", requireUser, inviteLimit, tenant(), async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!email) return res.status(400).json({ ok: false, error: "email must be a valid address" });
+
+  try {
+    const challenge = await loadChallenge(req.params.id);
+    // 404 for a non-party, matching GET /:id — a stranger who guessed an id
+    // must not learn it exists, let alone be able to mail its code out.
+    if (!challenge || !isParty(challenge, req.user.id)) {
+      return res.status(404).json({ ok: false, error: "unknown challenge" });
+    }
+    // Only the challenger invites: the opponent joining is what CLOSES the
+    // slot, so an opponent mailing the code out could only ever mislead the
+    // recipient into a "someone already took this challenge" dead end.
+    if (challenge.createdBy !== req.user.id) {
+      return res.status(403).json({ ok: false, error: "only the challenger can send invites" });
+    }
+    if ((await expireIfStale(challenge)) !== "open") {
+      return res.status(409).json({ ok: false, error: "that challenge is closed" });
+    }
+    if (challenge.opponentId) {
+      return res.status(409).json({ ok: false, error: "someone already took this challenge" });
+    }
+
+    const meta = scoredGame(challenge.game);
+    const gameLabel = meta?.label ?? challenge.game;
+    const from = req.user.displayName || req.user.defaultTag || "A player";
+    const link = `${appOrigin(req)}/arcade/challenges?code=${challenge.inviteCode}`;
+    const days = CHALLENGE_TTL_DAYS;
+
+    const result = await sendMail({
+      to: email,
+      kind: "challenge_invite",
+      // Same per-org cap attribution as sign-in and team invites: a busy venue
+      // must not spend another venue's mail budget (lib/mailer.js).
+      orgSlug: req.tenant?.org?.slug ?? null,
+      subject: `${from} challenged you to ${gameLabel}`,
+      text: [
+        `${from} played ${gameLabel} and wants to see you beat it.`,
+        ``,
+        `Open this to take the challenge:`,
+        link,
+        ``,
+        `Or enter the code by hand in the app: ${challenge.inviteCode}`,
+        ``,
+        `One round each — your first score is the one that counts.`,
+        `The challenge expires in ${days} days.`,
+      ].join("\n"),
+      // The challenger's display name is text they chose, so it is escaped —
+      // the same rule the team invite follows.
+      html: [
+        `<p><b>${escapeHtml(from)}</b> played ${escapeHtml(gameLabel)} and wants to see you beat it.</p>`,
+        `<p><a href="${link}">Take the challenge</a></p>`,
+        `<p>Or enter the code by hand in the app: <b>${challenge.inviteCode}</b></p>`,
+        `<p>One round each — your first score is the one that counts.`,
+        ` The challenge expires in ${days} days.</p>`,
+      ].join("\n"),
+    });
+
+    if (!result.ok) {
+      // Unlike sign-in — where a mailer failure must stay hidden, because the
+      // response would otherwise reveal whether an address has an account —
+      // there is nothing to leak here: the sender typed the address and is
+      // waiting to hear whether it went. Telling them is what lets them fall
+      // back to reading the code aloud, which still works.
+      return res.status(502).json({ ok: false, error: "could not send that invite" });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[challenges] invite error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });

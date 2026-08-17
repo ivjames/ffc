@@ -21,6 +21,7 @@ import HuntUsage from './HuntUsage';
 import SyntheticBot from './SyntheticBot';
 import Signups from './Signups';
 import ProvisionSite from './ProvisionSite';
+import Mail from './Mail';
 import Account from './Account';
 
 // ---------------------------------------------------------------------------
@@ -123,6 +124,14 @@ const ICON_PATHS = {
       <path d="M9 13v2M15 13v2" />
     </>
   ),
+  mail: (
+    // Envelope with a check — "is outbound mail actually working".
+    <>
+      <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7" />
+      <path d="m3 7.5 9 6 9-6" />
+      <path d="m3 19 2.5 2.5L10 17" />
+    </>
+  ),
   provision: (
     <>
       {/* Storefront with a plus — "stand up a new site" */}
@@ -220,11 +229,14 @@ const SYNTHETIC_ITEM: NavItem = { to: '/synthetic', label: 'Synthetic', icon: 's
 const PROVISION_ITEM: NavItem = { to: '/provision', label: 'Provision site', icon: 'provision' };
 // Landing-page launch signups — a platform-level list, so super_admin only.
 const SIGNUPS_ITEM: NavItem = { to: '/signups', label: 'Signups', icon: 'signups' };
+// Outbound-mail diagnostics: sends to arbitrary addresses and prints the
+// provider's raw errors, so super_admin only (the server enforces it too).
+const MAIL_ITEM: NavItem = { to: '/mail', label: 'Mail', icon: 'mail' };
 
 // Extra nav items appended per section for super_admins only.
 const SUPER_ADMIN_EXTRAS: Record<string, NavItem[]> = {
   Venues: [PROVISION_ITEM],
-  Ops: [SIGNUPS_ITEM, SYNTHETIC_ITEM],
+  Ops: [MAIL_ITEM, SIGNUPS_ITEM, SYNTHETIC_ITEM],
 };
 
 function itemActive(item: NavItem, pathname: string): boolean {
@@ -573,6 +585,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/hunt-usage" element={<HuntUsage />} />
             <Route path="/account" element={<Account user={user} />} />
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
+            {isSuperAdmin && <Route path="/mail" element={<Mail />} />}
             {isSuperAdmin && <Route path="/signups" element={<Signups />} />}
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
             {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}

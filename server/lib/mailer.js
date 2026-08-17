@@ -57,13 +57,186 @@ export function mailFrom() {
   return process.env.MAIL_FROM || "FFC <noreply@localhost>";
 }
 
-/** Log a startup warning when production has no real mail provider. */
-export function warnIfConsoleMailer() {
-  if (isProd() && provider() === "console") {
-    console.warn(
-      "[mailer] MAIL_PROVIDER is unset/console in production — sign-in emails are not delivered, and production neither logs codes nor returns them over HTTP (both are dev-only), so EMAIL SIGN-IN IS EFFECTIVELY DISABLED until a real provider is set"
-    );
+// --- Startup preflight ------------------------------------------------------
+// Mail misconfiguration is the silent kind: nothing throws, nothing 500s, the
+// send just never arrives. Resend answers 403 for an unverified sending domain
+// and the app's only symptom is a player saying "I never got the code" a week
+// later. So the checks below name the SPECIFIC configurations that look fine
+// and deliver nothing, and each one carries its fix — the operator wiring DNS
+// should not have to infer what the server objected to.
+
+/** Domain out of a MAIL_FROM, which is either "a@b.com" or "Name <a@b.com>".
+ *  Null when there is no parseable address at all. */
+export function mailFromDomain(raw = mailFrom()) {
+  const angled = String(raw).match(/<([^>]*)>/);
+  const addr = (angled ? angled[1] : String(raw)).trim();
+  const at = addr.lastIndexOf("@");
+  if (at < 1 || at === addr.length - 1) return null;
+  return addr.slice(at + 1).toLowerCase();
+}
+
+/**
+ * The domains this deploy is expected to send from. MAIL_SENDING_DOMAINS is
+ * the explicit answer (comma-separated — Resend verifies domains one at a
+ * time, and a deploy may legitimately have more than one verified); with it
+ * unset we infer from the hosts this platform already answers on, which is
+ * right for the ordinary case where mail@ the platform domain is what got
+ * verified. Empty means "nothing to compare against" — the check then stays
+ * quiet rather than inventing a false positive.
+ */
+export function resolveSendingDomains() {
+  const explicit = String(process.env.MAIL_SENDING_DOMAINS || "")
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+  if (explicit.length) return explicit;
+  const inferred = [];
+  const fqdn = String(process.env.PLATFORM_FQDN || "").trim().toLowerCase();
+  if (fqdn) inferred.push(fqdn);
+  try {
+    const host = new URL(process.env.PUBLIC_APP_URL).hostname.toLowerCase();
+    if (host && host !== "localhost" && !inferred.includes(host)) inferred.push(host);
+  } catch {
+    // PUBLIC_APP_URL unset or unparseable — nothing to infer from it.
   }
+  return inferred;
+}
+
+/** A sending domain covers `domain` when it IS that domain or a parent of it,
+ *  because verifying example.com in Resend also authorises mail.example.com. */
+function domainCovered(domain, sendingDomains) {
+  return sendingDomains.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
+/**
+ * Every mail misconfiguration this deploy can detect from config alone, as
+ * `{ code, message, fix }`. Pure and parameterised so both the startup log and
+ * the Master Control mail screen report the SAME findings — an operator who
+ * fixes what the screen shows must not be left with a warning still in the log.
+ *
+ * @param {{ liveOrgCount?: number|null }} ctx liveOrgCount null = not counted
+ *   (the caller had no database), which suppresses the multi-org check rather
+ *   than guessing.
+ */
+export function mailConfigWarnings({ liveOrgCount = null } = {}) {
+  const warnings = [];
+  const p = provider();
+
+  if (isProd() && p === "console") {
+    warnings.push({
+      code: "console_in_production",
+      message:
+        "MAIL_PROVIDER is unset/console in production — sign-in emails are not delivered, and production neither logs codes nor returns them over HTTP (both are dev-only), so EMAIL SIGN-IN IS EFFECTIVELY DISABLED.",
+      fix: "Set MAIL_PROVIDER=resend (plus RESEND_API_KEY and MAIL_FROM) in server/.env and restart.",
+    });
+  }
+  if (p === "resend" && !process.env.RESEND_API_KEY) {
+    warnings.push({
+      code: "resend_key_missing",
+      message:
+        'MAIL_PROVIDER=resend but RESEND_API_KEY is unset — every send fails with "RESEND_API_KEY is not set" and callers that ignore the result (sign-in, team invites) report success anyway.',
+      fix: "Put the Resend API key in server/.env as RESEND_API_KEY and restart.",
+    });
+  }
+  if (p === "smtp" && !process.env.SMTP_URL) {
+    warnings.push({
+      code: "smtp_url_missing",
+      message: 'MAIL_PROVIDER=smtp but SMTP_URL is unset — every send fails with "SMTP_URL is not set".',
+      fix: "Set SMTP_URL in server/.env (and `npm i nodemailer` in server/ — it is not a package dependency), then restart.",
+    });
+  }
+
+  // MAIL_FROM only matters once something actually delivers; on console the
+  // default placeholder is correct and warning about it would be noise.
+  if (p !== "console") {
+    const from = mailFromDomain();
+    const sendingDomains = resolveSendingDomains();
+    if (!from) {
+      warnings.push({
+        code: "mail_from_unparseable",
+        message: `MAIL_FROM (${mailFrom()}) has no parseable address — the provider will reject every send.`,
+        fix: 'Set MAIL_FROM to "FFC <noreply@your-verified-domain>" and restart.',
+      });
+    } else if (from === "localhost") {
+      warnings.push({
+        code: "mail_from_default",
+        message:
+          "MAIL_FROM is still the built-in noreply@localhost default while a real provider is configured — no provider will accept it.",
+        fix: "Set MAIL_FROM to an address on the domain verified with the provider, and restart.",
+      });
+    } else if (sendingDomains.length && !domainCovered(from, sendingDomains)) {
+      warnings.push({
+        code: "mail_from_domain_mismatch",
+        message: `MAIL_FROM sends as @${from}, which is not ${sendingDomains.join(" or ")} — if that domain is not verified with the provider, sends are rejected (Resend answers 403) and nothing in the app says so.`,
+        fix: `Either point MAIL_FROM at a ${sendingDomains[0]} address, or set MAIL_SENDING_DOMAINS to the domain(s) you actually verified.`,
+      });
+    }
+  }
+
+  // The failure this one catches is invisible by construction: links still get
+  // built, they just all point at PUBLIC_APP_URL. A player at venue B clicks a
+  // link, signs in on venue A's host (the session cookie is host-only), and is
+  // still signed out where they started — see lib/appOrigin.js.
+  if (!String(process.env.PLATFORM_FQDN || "").trim() && liveOrgCount != null && liveOrgCount > 1) {
+    warnings.push({
+      code: "platform_fqdn_unset_multi_org",
+      message: `PLATFORM_FQDN is unset with ${liveOrgCount} live orgs — no venue subdomain is a recognised host, so EVERY tenant's magic links and invites are built against the PUBLIC_APP_URL fallback (${configuredAppUrlForWarning()}) instead of the venue the player is using.`,
+      fix: "Set PLATFORM_FQDN to the platform's own FQDN (e.g. ffc.lab980.com) and restart.",
+    });
+  }
+
+  return warnings;
+}
+
+/** PUBLIC_APP_URL as the warning should quote it. Kept local rather than
+ *  importing appOrigin.js, which would make this module's import graph depend
+ *  on Express request handling. */
+function configuredAppUrlForWarning() {
+  return (process.env.PUBLIC_APP_URL || "http://localhost:5173").replace(/\/$/, "");
+}
+
+/** Count live orgs (the multi-tenant check's input). Null when the database
+ *  can't answer — a preflight must never be the reason a boot fails. */
+async function countLiveOrgs() {
+  try {
+    const result = await pool.query(
+      `select count(*)::int as n from org where archived_at is null and status = 'active'`
+    );
+    return result.rows[0].n;
+  } catch (err) {
+    console.error("[mailer] preflight could not count live orgs:", err?.message || err);
+    return null;
+  }
+}
+
+let preflightLogged = false;
+
+/**
+ * Run the preflight at startup and log what it finds — once per process, as
+ * one block. Once, because a warning repeated per request is a warning nobody
+ * reads; as a block, because the point is that the operator sees the whole
+ * list and its fixes without hunting through interleaved request logs.
+ */
+export async function runMailPreflight() {
+  const warnings = mailConfigWarnings({ liveOrgCount: await countLiveOrgs() });
+  if (!warnings.length || preflightLogged) return warnings;
+  preflightLogged = true;
+  const lines = warnings.map((w, i) => `  ${i + 1}. ${w.message}\n     FIX: ${w.fix}`);
+  console.warn(
+    [
+      `[mailer] ==== OUTBOUND MAIL PREFLIGHT: ${warnings.length} problem(s) ====`,
+      `[mailer] provider=${provider()} from=${mailFrom()}`,
+      ...lines,
+      "[mailer] Verify with Master Control -> Ops -> Mail (super_admin), which runs these same checks and can send a test message.",
+      "[mailer] ================================================",
+    ].join("\n")
+  );
+  return warnings;
+}
+
+/** Test seam: the once-per-process latch above would make a second test silent. */
+export function resetMailPreflightLatch() {
+  preflightLogged = false;
 }
 
 /** MAIL_DAILY_CAP with .env.example semantics: blank/unset/garbage means the

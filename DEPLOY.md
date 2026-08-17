@@ -197,23 +197,13 @@ ffc vhost        # apex returns to the player vhost automatically
 
 Two features lean on infrastructure beyond the code:
 
-- **Outbound email** (sign-in links + codes, team invites): set
-  `MAIL_PROVIDER=resend` + `RESEND_API_KEY` + `MAIL_FROM` in `server/.env`.
-  **Before flipping to `resend`, verify the sending domain in Resend (SPF +
-  DKIM DNS records)** — unverified domains don't deliver, silently. Until then
-  the default `console` provider logs codes to the pm2 log (fine for dev,
-  warned-about in production).
+- **Outbound email** (sign-in codes + magic links, team invites, challenge
+  invites, admin password resets): see the go-live runbook below. It is its own
+  section because turning this on is the one deploy step that fails
+  *silently* — nothing throws, nothing 500s, the mail just never arrives.
 
-  Then **confirm it works before a player finds out for you**: as a
-  super_admin, `GET /api/admin/mail/status` reports the provider, whether its
-  credential is set, the `MAIL_FROM`, and the origin magic links will actually
-  point at; `POST /api/admin/mail/test {"to":"you@example.com"}` sends one real
-  message and reports the provider's own error text if it fails. A green
-  `status` with a failing `test` almost always means the `MAIL_FROM` domain
-  isn't the one verified in Resend.
-
-  `PUBLIC_APP_URL` is now a **fallback**, not the link origin. Emailed links
-  are built from the host the request arrived on, so each venue's players get
+  `PUBLIC_APP_URL` is a **fallback**, not the link origin. Emailed links are
+  built from the host the request arrived on, so each venue's players get
   links to their own subdomain — which matters because the session cookie is
   host-only, and a link to another venue's host signs a player in there and
   leaves them signed out at their own. Set `PLATFORM_FQDN` (it is what makes a
@@ -228,6 +218,108 @@ Two features lean on infrastructure beyond the code:
   ~30 s, raise it for `/api/` or the streams will cycle (EventSource
   auto-reconnects, so it degrades rather than breaks — each reconnect re-syncs
   from a full snapshot).
+
+### Transactional email — go-live runbook
+
+Do these in order. **Every step names the symptom you get if you skip it**,
+because the failure mode of misconfigured Resend is silence: the app reports
+success, the log says nothing, and the first sign of trouble is a player who
+"never got the code" — reported days later, to somebody else.
+
+Two surfaces do the checking, both **super_admin only**:
+
+- **Master Control -> Ops -> Mail** — the whole procedure with no shell. Shows
+  the provider, whether the credential is set, `MAIL_FROM`, the domains
+  `MAIL_FROM` is checked against, the resolved link origin,
+  `PLATFORM_FQDN`/`PUBLIC_APP_URL`, the caps, and any config problems *with
+  their fix*. Sends a test message to a typed address and prints the provider's
+  raw error verbatim when it fails.
+- **The API underneath it**, if you'd rather curl: `GET /api/admin/mail/status`
+  and `POST /api/admin/mail/test {"to":"you@example.com"}`.
+
+The same checks run at **startup**: the API logs an `OUTBOUND MAIL PREFLIGHT`
+block to the pm2 log (`ffc logs`) listing every problem it can see from config
+alone, each with its fix. A clean boot logs nothing.
+
+**1. Verify the sending domain in Resend (SPF + DKIM). Operator job — this
+cannot be done from the app.** In the Resend dashboard add the domain you will
+send from, then publish the TXT records it gives you (an SPF record and a DKIM
+key) in that domain's DNS. Wait for Resend to show the domain **Verified**.
+*Symptom if skipped:* every send is rejected `403 ... domain is not verified`.
+Nothing in the app surfaces it — the mailer logs the failure and callers that
+can't leak (sign-in) return their usual uniform response. The admin test send
+is the only place you will see that 403 text.
+
+**2. Set the env.** In `server/.env`:
+
+```
+MAIL_PROVIDER=resend
+RESEND_API_KEY=re_...            # from the Resend dashboard
+MAIL_FROM=FFC <noreply@ffc.lab980.com>   # @ the domain verified in step 1
+MAIL_SENDING_DOMAINS=            # only if MAIL_FROM's domain != PLATFORM_FQDN
+PLATFORM_FQDN=ffc.lab980.com     # what makes a venue subdomain a link host
+PUBLIC_APP_URL=https://bullwinkles.ffc.lab980.com   # fallback origin
+```
+
+*Symptoms if skipped or wrong:*
+- `MAIL_PROVIDER` left unset — no mail at all, and in production the code is
+  neither logged nor returned over HTTP (both are dev-only), so **email sign-in
+  is effectively disabled**. Preflight: `console_in_production`.
+- `RESEND_API_KEY` missing — every send fails with `RESEND_API_KEY is not set`,
+  and sign-in/team invites report success anyway. Preflight:
+  `resend_key_missing`.
+- `MAIL_FROM` on a domain you didn't verify — the step-1 403, invisibly.
+  Preflight: `mail_from_domain_mismatch`. If you verified a domain unrelated to
+  `PLATFORM_FQDN`, name it in `MAIL_SENDING_DOMAINS` so the check knows.
+- `PLATFORM_FQDN` unset on a multi-venue instance — **the nastiest one**,
+  because mail still sends. No venue subdomain is a recognised link host, so
+  every tenant's magic links are built against `PUBLIC_APP_URL`. A player at
+  venue B clicks their link, signs in on venue A's host (the session cookie is
+  host-only), and is still signed out where they started. Preflight:
+  `platform_fqdn_unset_multi_org`.
+
+**3. Restart and read the preflight.** `ffc restart`, then `ffc logs`. A clean
+config logs nothing about mail; anything else prints the block described above.
+*Symptom if skipped:* you discover a typo'd env var at step 5 instead of now.
+
+**4. Check status.** Master Control -> Ops -> Mail (or `GET
+/api/admin/mail/status`). Confirm: provider `resend`, credential **set**,
+`MAIL_FROM` on the verified domain, link origin pointing at the venue host you
+loaded the console from, `PLATFORM_FQDN` set, and **no warnings**. *Symptom if
+skipped:* you send a test that fails for a reason the status line would have
+told you in one glance.
+
+**5. Send a test message** to an address you can actually open, from the same
+screen. Then check the inbox **and the spam folder**.
+- Green, and the mail arrives -> the pipe works.
+- Green, no mail, not in spam -> check Resend's own delivery log; the API
+  accepted it and something downstream dropped it.
+- Green, lands in **spam** -> DNS is incomplete (usually a missing DMARC record,
+  or SPF published on the wrong subdomain). Fix DNS, don't touch the app.
+- **Red, with the provider's error text** -> read it. `domain is not verified`
+  means step 1 isn't finished. `Invalid API key` means the key is wrong or was
+  pasted with a trailing newline. `You can only send testing emails to your own
+  address` means the Resend account is still in test mode.
+- Green but "nothing was actually delivered" -> `MAIL_PROVIDER` is still
+  `console`. The env didn't take; check you restarted.
+
+**6. Confirm a real sign-in on a tenant subdomain** — the end-to-end check, and
+the only one that exercises the link origin. Open
+`https://<venue>.<PLATFORM_FQDN>` in a private window, sign in with an email
+address, and click the link **from that mail** (not the code).
+- You land signed in on `<venue>.<PLATFORM_FQDN>` -> done.
+- You land on a *different* venue's host, or the apex, and are signed out ->
+  `PLATFORM_FQDN` is unset or wrong; the link fell back to `PUBLIC_APP_URL`.
+- No mail, though step 5 delivered -> the send was dropped by a cap. Check
+  `MAIL_DAILY_CAP` (per org, rolling 24h) and `MAIL_GLOBAL_DAILY_CAP` on the
+  status screen; an explicit `0` is a kill switch, and the mailer logs
+  `daily send cap reached` when it bites.
+
+**What retires itself once this is live.** While `MAIL_PROVIDER` is unset the
+dev sign-in **bypass** is on: `/api/auth/request-code` hands the code straight
+back in its response so the app can sign in with no inbox. It is checked per
+request, so setting a real provider retires it with no restart — and it never
+runs in production regardless.
 
 ## Routine redeploys
 

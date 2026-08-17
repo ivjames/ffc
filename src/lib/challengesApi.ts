@@ -72,6 +72,21 @@ export function playChallenge(
   return call<ChallengeView>(`/${id}/play`, { method: 'POST', body: JSON.stringify(input) });
 }
 
+/**
+ * Mail the invite code to someone. Challenger-only and open-challenges-only
+ * (the server enforces both), and deliberately NOT a friend graph: nothing is
+ * stored about the address, and no account has to exist at it — it is the same
+ * six characters, in an envelope. A send failure comes back as an error rather
+ * than a silent ok, because reading the code aloud still works and the player
+ * needs to know to fall back to it.
+ */
+export function inviteToChallenge(id: string, email: string) {
+  return call<Record<string, never>>(`/${id}/invite`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
 export function fetchChallenge(id: string) {
   return call<ChallengeView>(`/${id}`);
 }

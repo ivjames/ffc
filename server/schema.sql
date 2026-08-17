@@ -609,7 +609,9 @@ update auth_code set profile = profile - 'phone' where profile ? 'phone';
 create table if not exists mail_send (
   id         uuid primary key default gen_random_uuid(),
   recipient  text not null,
-  kind       text not null,                 -- 'otp' | 'team_invite'
+  kind       text not null,                 -- 'otp' | 'team_invite' |
+                                            --   'challenge_invite' | 'admin_password' |
+                                            --   'admin_test'
   org_slug   text,                          -- resolved tenant at send time; null =
                                             --   no resolvable tenant (shared pool)
   created_at timestamptz not null default now()

@@ -42,6 +42,7 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `MAIL_FROM`         | From header for outbound mail, e.g. `FFC <noreply@example.com>`. Default `FFC <noreply@localhost>`. |
 | `RESEND_API_KEY`    | API key when `MAIL_PROVIDER=resend`. The sending domain must be verified (SPF/DKIM) in Resend first — see DEPLOY.md. |
 | `SMTP_URL`          | SMTP connection URL when `MAIL_PROVIDER=smtp`, e.g. `smtps://user:pass@smtp.example.com`. |
+| `MAIL_SENDING_DOMAINS` | Comma-separated domains actually verified with the provider. Read only by the startup preflight and the admin mail screen, which warn when `MAIL_FROM` sends as a domain that is not one of these (or a subdomain of one) — the single most common way Resend "works" and delivers nothing. Unset = inferred from `PLATFORM_FQDN` / `PUBLIC_APP_URL`'s host. |
 | `MAIL_DAILY_CAP`    | Max outbound emails per rolling 24 h across all kinds, metered in the `mail_send` table (the `hunt_scan` spend-cap precedent applied to email). Rows older than 24 h are pruned on every send — `mail_send` is a rate-limit ledger, not a permanent log of recipient addresses. Default `500`. Read per send. |
 | `PUBLIC_APP_URL`    | **Fallback** origin for emailed links (magic links, team invites). Links are normally built from the host the request arrived on, so each venue's players get links to their own subdomain — the session cookie is host-only, so a link to another venue's host signs a player in *there* and leaves them signed out at their own. This value is used when the request's host isn't a recognised one (`PLATFORM_FQDN` and its subdomains, or this URL's own host); an unrecognised `Host` never appears in an outbound link, which is what stops the sign-in form being usable as a phishing relay. Default `http://localhost:5173`. See `lib/appOrigin.js`. |
 
@@ -438,6 +439,8 @@ no domain history hangs off an account.)
 | `GET  /api/admin/feedback/:id/screenshot` | the attached screenshot's bytes, when the reviewer sent one (same scoping) |
 | `POST /api/admin/feedback/:id/status` | triage: `{ "status": "open" \| "resolved" }`. Reversible — resolving stamps who/when, re-opening clears both; audited |
 | `POST /api/admin/feedback/:id/remove` | hard-delete the note and its screenshot (a note carries no credit worth keeping); audited |
+| `GET  /api/admin/mail/status` | outbound-mail diagnostics: provider, whether its credential is **set** (never its value), `MAIL_FROM`, the domains that must be verified with the provider, the origin emailed links would point at, `PLATFORM_FQDN`/`PUBLIC_APP_URL`, the caps, and the startup preflight's findings each with its fix — **super_admin only** |
+| `POST /api/admin/mail/test` | send one real message to `{ "to": … }` and report the outcome; a failed SEND is an HTTP **200 with `ok:false`** carrying the provider's raw error (the request succeeded, the delivery didn't — a masked error would leave the operator where they started). Audited with the recipient masked — **super_admin only** |
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of

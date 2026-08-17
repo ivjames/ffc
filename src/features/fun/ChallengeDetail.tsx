@@ -6,6 +6,7 @@ import { formatScore } from '../../lib/gameScores';
 import {
   fetchChallenge,
   subscribeChallenge,
+  inviteToChallenge,
   sideLabel,
   type ChallengeView,
 } from '../../lib/challengesApi';
@@ -20,7 +21,10 @@ import { startChallengeRound } from './Challenges';
 //
 // The invite code is the whole sharing mechanism. No friend graph, no address
 // book, no "connect your contacts": you read six characters to the person
-// across the table, or paste them into whatever app you already talk in.
+// across the table, or paste them into whatever app you already talk in — or,
+// for the asynchronous half of the feature ("I'll get you back tomorrow"),
+// have the server mail it, which is the one case where reciting the code
+// across a table doesn't work because there is no table.
 
 export default function ChallengeDetail() {
   const { id = '' } = useParams();
@@ -29,6 +33,9 @@ export default function ChallengeDetail() {
   const [view, setView] = useState<ChallengeView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteState, setInviteState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -101,6 +108,26 @@ export default function ChallengeDetail() {
     }
   }
 
+  async function sendInvite() {
+    if (!challenge.inviteCode || !inviteEmail.trim()) return;
+    setInviteError(null);
+    setInviteState('sending');
+    const res = await inviteToChallenge(challenge.id, inviteEmail.trim());
+    if (res.ok) {
+      setInviteState('sent');
+      setInviteEmail('');
+      return;
+    }
+    setInviteState('idle');
+    // The code is still on screen, so a failed send is a fallback prompt rather
+    // than a dead end — say what to do next, not just what went wrong.
+    setInviteError(
+      res.status === 0
+        ? "You're offline — read them the code instead."
+        : `${res.error}. Send them the code instead.`,
+    );
+  }
+
   return (
     <Screen>
       <TopBar title="Challenge" back="/arcade/challenges" />
@@ -161,6 +188,47 @@ export default function ChallengeDetail() {
             <button onClick={share} className="text-sm font-semibold text-fairway-400">
               {copied ? 'Copied ✓' : 'Share the challenge →'}
             </button>
+
+            {/* Only the challenger can send this — the opponent joining is what
+                closes the slot, so an invite from them leads nowhere. */}
+            {challenger.isYou &&
+              (inviteState === 'sent' ? (
+                <p className="mt-4 border-t border-fairway-800/60 pt-4 text-sm text-fairway-100/80">
+                  Sent. They'll get a link that fills the code in for them.
+                </p>
+              ) : (
+                <div className="mt-4 border-t border-fairway-800/60 pt-4">
+                  <label
+                    htmlFor="challenge-invite-email"
+                    className="text-xs uppercase tracking-[0.2em] text-fairway-400"
+                  >
+                    Or email it to them
+                  </label>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      id="challenge-invite-email"
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="their@email.com"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="min-w-0 flex-1 rounded-xl border border-fairway-700 bg-fairway-900/60 px-3 py-2.5 text-sm text-fairway-50"
+                    />
+                    <button
+                      onClick={sendInvite}
+                      disabled={inviteState === 'sending' || !inviteEmail.trim()}
+                      className="shrink-0 rounded-xl border border-fairway-700 px-4 text-sm font-semibold text-fairway-100 disabled:opacity-40"
+                    >
+                      {inviteState === 'sending' ? 'Sending…' : 'Send'}
+                    </button>
+                  </div>
+                  {inviteError && (
+                    <p className="mt-2 text-left text-xs text-red-200">{inviteError}</p>
+                  )}
+                </div>
+              ))}
           </div>
         )}
       </Content>

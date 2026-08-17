@@ -21,6 +21,8 @@ vi.mock('./api', async () => {
       huntUsage: vi.fn(),
       listLaunchSignups: vi.fn(),
       exportLaunchSignupsCsv: vi.fn(),
+      mailStatus: vi.fn(),
+      mailTest: vi.fn(),
     },
   };
 });
@@ -318,6 +320,7 @@ describe('nav gating', () => {
     expect(screen.getByRole('link', { name: 'Provision site' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Synthetic' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Signups' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Mail' })).toBeInTheDocument();
   });
 
   test('org_admin does not see the super-admin-only nav items', async () => {
@@ -327,6 +330,7 @@ describe('nav gating', () => {
     expect(screen.queryByRole('link', { name: 'Provision site' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Synthetic' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Signups' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Mail' })).not.toBeInTheDocument();
   });
 
   test('super_admin sees Signups in Ops and /signups renders the page', async () => {
@@ -339,6 +343,19 @@ describe('nav gating', () => {
 
     expect(await screen.findByRole('heading', { name: 'Launch signups' })).toBeInTheDocument();
     expect(api.listLaunchSignups).toHaveBeenCalledOnce();
+  });
+
+  test('super_admin sees Mail in Ops and /mail renders the diagnostics', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: SUPER_ADMIN_USER });
+    vi.mocked(api.mailStatus).mockRejectedValue(new Error('nope')); // the page's own render is Mail.test.tsx's job
+    const user = userEvent.setup();
+    renderApp();
+    await screen.findByText('FFC · Master Control');
+
+    await user.click(screen.getByRole('link', { name: 'Mail' }));
+
+    expect(await screen.findByRole('heading', { name: 'Mail' })).toBeInTheDocument();
+    expect(api.mailStatus).toHaveBeenCalledOnce();
   });
 });
 
