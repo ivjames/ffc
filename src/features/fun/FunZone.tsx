@@ -40,6 +40,13 @@ const TILES: Tile[] = [
     earns: true,
   },
   {
+    to: '/arcade/trivia/live',
+    emoji: '🎤',
+    title: 'Live Trivia',
+    blurb: 'Join the room game — solo or as a table.',
+    accent: '#8b5cf6',
+  },
+  {
     to: '/arcade/putt',
     emoji: '⛳️',
     title: 'Arcade Putt',

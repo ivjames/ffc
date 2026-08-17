@@ -30,6 +30,7 @@ import { router as launchSignupsRouter } from "./launchSignups.js";
 import { router as provisionRouter } from "./provision.js";
 import { router as syntheticBotRouter } from "./syntheticBot.js";
 import { router as mailRouter } from "./mail.js";
+import { router as triviaQuestionsRouter } from "./triviaQuestions.js";
 import {
   router as visionBakeoffRouter,
   publicRouter as visionBakeoffPublicRouter,
@@ -46,6 +47,9 @@ router.use(requireAdminAuth); // everything below needs APP_TOKEN or a session
 router.use(authSessionRouter); // POST /logout, GET /me
 // Outbound-email diagnostics (super_admin only, guarded inside the router).
 router.use("/mail", mailRouter);
+// Live-trivia question bank (org-scoped inside the router; the platform pack
+// is read-only to org admins).
+router.use("/trivia", triviaQuestionsRouter);
 router.use("/users", usersRouter);
 router.use("/orgs", orgsRouter);
 router.use("/locations", locationsRouter);

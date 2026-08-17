@@ -23,6 +23,8 @@ import FunZone from './features/fun/FunZone';
 import FunFacts from './features/fun/FunFacts';
 import HighScores from './features/fun/HighScores';
 import Trivia from './features/fun/Trivia';
+import TriviaLive from './features/fun/TriviaLive';
+import TriviaHost from './features/fun/TriviaHost';
 import Spinner from './features/fun/Spinner';
 import SkeeBall from './features/fun/SkeeBall';
 import AirHockey from './features/fun/AirHockey';
@@ -174,6 +176,11 @@ export default function App() {
           {/* §12 "While You Wait" content — fun facts and trivia. */}
           <Route path="/arcade/facts" element={<FunFacts />} />
           <Route path="/arcade/trivia" element={<Trivia />} />
+          {/* Live (bar) trivia — one host, a room full of phones. The host
+              screen is staff-facing; /live is the player's seat. */}
+          <Route path="/arcade/trivia/live" element={<TriviaLive />} />
+          <Route path="/arcade/trivia/live/:sessionId" element={<TriviaLive />} />
+          <Route path="/arcade/trivia/host" element={<TriviaHost />} />
           {/* Clubhouse extra — Arcade Putt mini-golf minigame. */}
           <Route path="/arcade/putt" element={<PuttGolf />} />
           <Route path="/arcade/skeeball" element={<SkeeBall />} />

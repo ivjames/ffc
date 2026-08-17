@@ -24,6 +24,7 @@ import { router as announcementsRouter } from "./routes/announcements.js";
 import { router as rewardsRouter } from "./routes/rewards.js";
 import { router as gameRewardsRouter } from "./routes/gameRewards.js";
 import { router as gameScoresRouter } from "./routes/gameScores.js";
+import { router as triviaLiveRouter } from "./routes/triviaLive.js";
 import { router as loyaltyRouter } from "./routes/loyalty.js";
 import { router as eventsRouter } from "./routes/events.js";
 import { router as feedbackRouter } from "./routes/feedback.js";
@@ -151,6 +152,10 @@ app.use("/api/game-rewards", gameRewardsRouter);
 // signed-in account (guarded inside the router); the boards are an open read
 // like /api/leaderboard.
 app.use("/api/game-scores", gameScoresRouter);
+// Live trivia — one host, a room full of phones. Create needs sign-in; joining
+// and answering ride the per-device participant token, hosting rides the host
+// token (both guarded inside the router). Includes the SSE stream.
+app.use("/api/trivia", triviaLiveRouter);
 // The player's own rewards card — account-bound. Signed-in only (guarded
 // inside the router): the vendor is reachable only from here, so a card number
 // can no longer be used to read a stranger's balances from the browser.
