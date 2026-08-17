@@ -602,9 +602,21 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
     await client.query("commit");
 
     // Tell the room how many have locked in — but not who, and not whether
-    // this one was right: the question is still open. Broadcast the session as
-    // re-read under the lock, never the one the request arrived with.
-    await broadcast(session);
+    // this one was right: the question is still open.
+    //
+    // Re-read AFTER the commit, not the row we held under the lock. The lock
+    // orders the two writes but is released by the commit, so a host advance
+    // waiting on it can update to 'reveal' and publish in the gap before this
+    // line runs — and publishing the locked (now stale) row last would drag
+    // the whole room back out of the reveal. Reading fresh shrinks that to a
+    // race we can't win here at all; the client drops out-of-order frames
+    // outright (isFresh in src/lib/triviaLiveApi.ts), which is what actually
+    // closes it.
+    const latest = await pool.query(
+      `select ${SESSION_COLS} from trivia_session s where s.id = $1`,
+      [session.id]
+    );
+    await broadcast(latest.rows[0] ?? session);
     return res.json({ ok: true, locked: choice });
   } catch (err) {
     await client.query("rollback").catch(() => {});

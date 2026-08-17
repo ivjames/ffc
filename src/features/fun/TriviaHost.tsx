@@ -10,6 +10,7 @@ import {
   advance,
   endSession,
   subscribeSession,
+  isFresh,
   type TriviaSnapshot,
 } from '../../lib/triviaLiveApi';
 
@@ -85,7 +86,9 @@ export default function TriviaHost() {
       }
     });
     const stop = subscribeSession(host.sessionId, { host: host.hostToken }, (s) => {
-      if (live) setSnapshot(s);
+      // A late answer-broadcast must not drag the host's screen back out of
+      // the reveal it just advanced to (see isFresh).
+      if (live) setSnapshot((prev) => (isFresh(prev, s) ? s : prev));
     });
     return () => {
       live = false;

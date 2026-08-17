@@ -262,12 +262,21 @@ router.post("/", tenant(), requireUser, async (req, res) => {
 
     // The player's best BEFORE this round decides the "personal best" banner —
     // read it first, because the insert below may itself become that best.
+    // `session_id <> $5` excludes THIS round from its own "previous" best.
+    // A challenge round is written to the board by two concurrent paths — this
+    // one and POST /api/challenges/:id/play — and both are idempotent on
+    // (game, session_id). If the challenge write lands first, an unfiltered
+    // read sees the round that just happened and reports it as the score to
+    // beat, so "new personal best" and the venue-record celebration vanish
+    // nondeterministically. Excluding the session makes the answer independent
+    // of which write won.
     const prior = await pool.query(
       `select score::bigint as score from game_score
         where app_user_id = $1 and game = $2 and variant = $3 and location_id = $4
+          and session_id <> $5
         order by score ${sortDirection(game)}, created_at asc
         limit 1`,
-      [req.user.id, game, variant, locationId]
+      [req.user.id, game, variant, locationId, sessionId]
     );
     const previousBest = prior.rows[0] ? Number(prior.rows[0].score) : null;
 

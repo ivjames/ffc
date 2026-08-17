@@ -45,6 +45,32 @@ export type TriviaSnapshot = {
   entrant?: { id: string; name: string };
 };
 
+// How far through the game a snapshot is, as one comparable number.
+//
+// Frames can arrive out of order: an answer's broadcast and the host's advance
+// are ordered against each other in the database, but their SSE publishes are
+// not, so a slow "question" frame can land after the "reveal" that superseded
+// it and yank the whole room backwards. Ordering is lexicographic on
+// (questionIndex, phase) and monotonic across a game — index only ever grows,
+// and within one index the phase only ever moves forward.
+const PHASE_RANK: Record<TriviaStatus, number> = {
+  lobby: 0,
+  question: 1,
+  reveal: 2,
+  final: 3,
+  abandoned: 4,
+};
+
+export function progressOf(snapshot: TriviaSnapshot): number {
+  return snapshot.session.currentIndex * 10 + (PHASE_RANK[snapshot.session.status] ?? 0);
+}
+
+/** True when `next` is not older than `prev` — i.e. safe to render. */
+export function isFresh(prev: TriviaSnapshot | null, next: TriviaSnapshot): boolean {
+  if (!prev) return true;
+  return progressOf(next) >= progressOf(prev);
+}
+
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string; status: number };
 
 async function call<T>(path: string, init?: RequestInit): Promise<Result<T>> {

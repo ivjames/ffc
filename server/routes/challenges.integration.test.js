@@ -178,6 +178,29 @@ test("a challenge round also lands on the venue's high score board", async () =>
   );
 });
 
+test("a challenge round is not its own previous best", async () => {
+  // Two paths write the same (game, sessionId) board row — this one and
+  // POST /api/game-scores — and both are idempotent. If the challenge write
+  // lands first, an unfiltered previous-best read sees the round that just
+  // happened and reports it as the score to beat, silently suppressing the
+  // personal-best celebration depending on which request won.
+  const a = await player("PBS");
+  const challenge = await create(a.cookie);
+  const shared = sid();
+  await call("POST", `/${challenge.id}/play`, { score: 500, sessionId: shared }, a.cookie);
+
+  // Now the board write for the same round arrives (the end screen's own post).
+  const res = await fetch(`${baseUrl}/api/game-scores`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: a.cookie },
+    body: JSON.stringify({ locationId, game: "skeeball", score: 500, sessionId: shared }),
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.previousBest, null, "this round is not the score it had to beat");
+  assert.equal(body.isPersonalBest, true, "so the celebration still fires");
+});
+
 test("a stranger can neither read nor play someone else's challenge", async () => {
   const a = await player("OWN");
   const stranger = await player("NOS");
