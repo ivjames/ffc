@@ -1,0 +1,407 @@
+// The icon manifest — every icon the app needs, named for what it MEANS.
+//
+// Generated as a seed by `node scripts/icon-inventory.mjs --json`, then curated
+// by hand. The inventory can tell you where a glyph is used; only a person can
+// say what it was for. This file is that answer, and it is the contract the
+// drawings are made against.
+//
+// ── Why names are semantic ──────────────────────────────────────────────────
+//
+// Icons are named `game.bowling`, not `bowling-ball`. The picture is expected
+// to change — per skin today (six of them: unstyled, candy, blocky, uv, glass,
+// chrome — see src/lib/skin.ts), per venue later. A name that describes the
+// drawing would be a lie the first time the drawing changes.
+//
+// ── Why there are more icons than there were emoji ──────────────────────────
+//
+// 84 distinct emoji are doing 110 distinct jobs, because the emoji font simply
+// has no separate picture for some of the things this app means. The vector set
+// has no such shortage, so those jobs are pulled back apart here. Every `not:`
+// note below marks a place where that happened, and each one is load-bearing —
+// dropping it re-merges two icons that a player can tell apart:
+//
+//   🎳  game.bowling         a ball and a triangle of pins
+//       game.skee-ball       a ramp and concentric scoring rings
+//   🔨  game.whack-a-mole    a soft mallet, held over a hole
+//       game.high-striker    a strongman hammer, beside a tower and a bell
+//   💦  game.water-gun-race  a jet of water, aimed
+//       score.water-hazard   a splash in a pond, a stroke penalty on a hole
+//   🎯  game.darts           a dartboard with a dart in it
+//       award.hole-in-one    a badge/medal for the achievement
+//   🔔  order.ready          a service bell — your food is up
+//       order.notify         a bell with a plus/ring — turn alerts ON
+//   🏆  award.trophy         the object you won
+//       action.leaderboard   a ranked list — where standings live
+//
+// ── What is deliberately NOT here ───────────────────────────────────────────
+//
+// Emoji inside sentences ('Strike! 🎳'), the ~136 editorial glyphs in
+// src/data/funContent.ts, PhotoBooth's sticker sheet, and typographic marks
+// (‹ › • ✓ ✗) all stay as they are. The inventory script classifies and counts
+// them so the exclusion is visible rather than assumed.
+
+/** One icon's contract: what it means, and how to draw it so it stays distinct. */
+export type IconSpec = {
+  /** What this icon communicates. The reason it exists. */
+  means: string;
+  /** The drawing brief — enough for two illustrators to land in the same place. */
+  draw: string;
+  /** Icons this must NOT be confused with. Present wherever emoji merged them. */
+  not?: string;
+  /** The emoji it replaces, kept for provenance and for the migration check. */
+  placeholder: string;
+};
+
+export const ICONS = {
+  // ── Section navigation ────────────────────────────────────────────────────
+  'nav.home': { means: 'The app home screen.', draw: 'A simple house: gable roof over a square body.', placeholder: '🏠' },
+  'nav.golf': { means: 'The mini-golf section.', draw: 'A pin flag standing in a hole, ball beside it.', not: 'game.arcade-putt — the arcade mini-game, not the real course.', placeholder: '⛳️' },
+  'nav.arcade': { means: 'The arcade section.', draw: 'A gamepad seen head-on: D-pad left, two buttons right.', placeholder: '🎮' },
+  'nav.food': { means: 'Food & drink ordering.', draw: 'A hot dog in a bun, three-quarter view.', placeholder: '🌭' },
+  'nav.photos': { means: 'The photo booth section.', draw: 'A camera body with a lens circle and a flash bump.', not: 'action.take-photo — the shutter action inside the booth.', placeholder: '📸' },
+  'nav.hunt': { means: 'The scavenger hunt.', draw: 'A magnifier over a small map pin.', placeholder: '🔍' },
+  'nav.me': { means: 'The player’s own profile section.', draw: 'A head-and-shoulders bust in outline.', not: 'state.account — outline for the section, filled for the signed-in state.', placeholder: '👤' },
+  'nav.locations': { means: 'Switch venue / pick a location.', draw: 'A map pin with a hollow centre.', not: 'state.located — hollow pin switches venue, filled pin means you are here.', placeholder: '📍' },
+  'nav.install': { means: 'Install the app to the home screen.', draw: 'A downward arrow into an open tray.', placeholder: '⬇️' },
+  'nav.rewards': { means: 'The rewards / loyalty card.', draw: 'An arcade ticket: rounded rectangle, perforated edge, notch.', not: 'award.ticket — the card section, not the ticket currency.', placeholder: '🎟️' },
+
+  // ── The arcade roster ─────────────────────────────────────────────────────
+  // One icon per attraction. These are the app's densest naming problem: the
+  // FunZone tile and the game's own screen used the same emoji, and several
+  // games shared one glyph with each other.
+  'game.air-hockey': { means: 'Air hockey.', draw: 'A striker (mallet) above a puck, table edge implied.', placeholder: '🏒' },
+  'game.axe-throwing': { means: 'Axe throwing.', draw: 'A hatchet in flight, blade forward, toward a target edge.', placeholder: '🪓' },
+  'game.batting-cages': { means: 'Batting cages.', draw: 'A bat crossed behind a ball, cage mesh hinted.', placeholder: '⚾️' },
+  'game.bumper-boats': { means: 'Bumper boats.', draw: 'A round boat with a bumper ring, on two water lines.', not: 'game.bumper-cars — same bumper ring, but wheels, not water.', placeholder: '🚤' },
+  'game.bumper-cars': { means: 'Bumper cars.', draw: 'A tub car on a wide bumper skirt, pole running up to the ceiling grid line.', not: 'game.bumper-boats.', placeholder: '🚗' },
+  'game.milk-bottles': { means: 'Milk-bottle toss.', draw: 'Three stacked bottles in a pyramid, ball incoming.', placeholder: '🥛' },
+  'game.bowling': { means: 'Ten-pin bowling.', draw: 'A bowling ball with three finger holes, triangle of pins behind.', not: 'game.skee-ball — 🎳 covered both; bowling is BALL + PINS.', placeholder: '🎳' },
+  'game.claw-machine': { means: 'The claw / prize crane.', draw: 'A three-prong claw descending over a plush shape.', placeholder: '🧸' },
+  'game.darts': { means: 'Darts.', draw: 'A dartboard’s concentric rings with a dart struck in off-centre.', not: 'award.hole-in-one — 🎯 covered both; that one is a badge.', placeholder: '🎯' },
+  'game.fun-facts': { means: 'Fun Facts — the bite-size fact deck.', draw: 'A lightbulb with a short radiating burst.', not: 'action.hint — the hunt’s hint bulb, drawn without the burst.', placeholder: '💡' },
+  'game.shooting-gallery': { means: 'The shooting gallery.', draw: 'A carnival duck in profile — round head, beak, plump body — on a post above a rail.', placeholder: '🦆' },
+  'game.pop-a-shot': { means: 'Pop-a-Shot basketball.', draw: 'Backboard, rim and net seen head-on, ball below and to the left.', placeholder: '🏀' },
+  'game.go-karts': { means: 'Go-karts.', draw: 'A kart in profile: low chassis, two fat wheels, and the driver’s helmet above — the helmet is what stops it reading as an abstract diagram. NO flag; state.finish owns that.', not: 'state.finish — the chequered flag alone; go-karts is the vehicle.', placeholder: '🏁' },
+  'game.whack-a-mole': { means: 'Whack-a-Mole.', draw: 'A soft-headed MALLET raised over a hole with a mole snout.', not: 'game.high-striker — 🔨 covered both; this one is the mallet + hole.', placeholder: '🔨' },
+  'game.pinball': { means: 'Pinball.', draw: 'The cabinet in plan: tall rounded rect, a bumper circle, the ball, and two flippers angled up from the bottom corners.', placeholder: '🕹️' },
+  'game.coin-pusher': { means: 'The coin pusher.', draw: 'A stack of coins on a ledge, one tipping over the lip.', placeholder: '🪙' },
+  'game.arcade-putt': { means: 'Arcade Putt — the in-app putting mini-game.', draw: 'A putter head addressing a ball, hole behind.', not: 'nav.golf — the real course section, drawn as a pin flag.', placeholder: '⛳️' },
+  'game.ring-toss': { means: 'Ring toss.', draw: 'A ring mid-air over an upright peg.', placeholder: '🎪' },
+  'game.skee-ball': { means: 'Skee-Ball.', draw: 'The alley in perspective — a trapezoid narrowing upward to the ringed target hole, ball rolling at the near end.', not: 'game.bowling — 🎳 covered both; skee-ball is RAMP + RINGS.', placeholder: '🎳' },
+  'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A long-handled HAMMER beside a tower with a bell on top.', not: 'game.whack-a-mole, order.ready — 🔨 and 🔔 both collided here.', placeholder: '🔔' },
+  'game.trivia': { means: 'Trivia.', draw: 'A brain in profile with a question mark.', placeholder: '🧠' },
+  'game.water-gun-race': { means: 'The water gun race.', draw: 'A water pistol with a JET aimed at a rising target.', not: 'score.water-hazard — 💦 covered both; that one is a splash.', placeholder: '💦' },
+  'game.challenge-spinner': { means: 'The challenge spinner wheel.', draw: 'A segmented wheel with a pointer at the top.', placeholder: '🔻' },
+
+  // ── Putting outcomes ──────────────────────────────────────────────────────
+  // The per-hole result reactions in PuttGolf (holeResult()). These are scores,
+  // not achievements — award.* below is the badge family.
+  'score.hole-in-one': { means: 'Sank it in one.', draw: 'A ball dropping into the cup, pin flag leaning.', not: 'award.hole-in-one — the earned badge version.', placeholder: '🏌️' },
+  'score.eagle': { means: 'Two under par.', draw: 'An eagle’s head in profile, or two chevrons down.', placeholder: '🦅' },
+  'score.birdie': { means: 'One under par.', draw: 'A small bird in profile, or one chevron down.', placeholder: '🐦' },
+  'score.par': { means: 'Level par.', draw: 'A pin flag with a level dash beside it.', not: 'course.default, nav.golf — ⛳️ served all three; this one is a SCORE.', placeholder: '⛳️' },
+  'score.bogey': { means: 'One over par.', draw: 'A flat, wincing face — or one chevron up.', placeholder: '😬' },
+  'score.over-par': { means: 'Two or more over par.', draw: 'A dazed face — or a stacked double chevron up.', placeholder: '😵' },
+  'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'A SPLASH crown over a pond line.', not: 'game.water-gun-race — 💦 covered both.', placeholder: '💦' },
+  'score.endless': { means: 'Endless (procedural) mode.', draw: 'A lemniscate — a clean infinity loop.', placeholder: '♾️' },
+
+  // ── Awards & achievements ─────────────────────────────────────────────────
+  'award.trophy': { means: 'A win, or an earned award.', draw: 'A two-handled cup on a plinth.', not: 'action.leaderboard — 🏆 covered both; that is a ranked list.', placeholder: '🏆' },
+  'award.medal': { means: 'An achievement medal.', draw: 'A disc on a short ribbon.', placeholder: '🏅' },
+  'award.ticket': { means: 'Redemption tickets.', draw: 'An arcade ticket: perforated edge, notched ends.', not: 'nav.rewards — the currency, not the section that holds it.', placeholder: '🎟️' },
+  'award.hole-in-one': { means: 'The “hole in one” achievement badge.', draw: 'A badge outline containing a ball-in-cup.', not: 'game.darts, score.hole-in-one — 🎯 and 🏌️ both collided here.', placeholder: '🎯' },
+  'award.under-par': { means: 'The “under par” achievement badge.', draw: 'A badge outline containing a pin flag and a down chevron.', placeholder: '⛳' },
+  'award.hunt-master': { means: 'The “hunt master” achievement badge.', draw: 'A badge outline containing a magnifier.', placeholder: '🕵️' },
+
+  // ── Food order lifecycle ──────────────────────────────────────────────────
+  // OrderStatus renders these as an ordered progress rail, so they must read as
+  // a sequence — keep a consistent weight and baseline across all five.
+  'order.received': { means: 'Order received.', draw: 'A receipt with a torn lower edge.', placeholder: '🧾' },
+  'order.sent-to-kitchen': { means: 'Sent to the kitchen.', draw: 'A paper plane, nose up.', placeholder: '📨' },
+  'order.being-prepared': { means: 'Being prepared.', draw: 'A pan with an egg, one heat curl above.', placeholder: '🍳' },
+  'order.ready': { means: 'Ready for pickup.', draw: 'A service bell (dome + plunger), still.', not: 'order.notify — same bell, opposite meaning.', placeholder: '🔔' },
+  'order.picked-up': { means: 'Picked up — enjoy.', draw: 'A burst of confetti / rays.', not: 'state.celebrate — reserve the plain burst for celebration.', placeholder: '🎉' },
+  'order.notify': { means: 'Turn on “tell me when it’s ready”.', draw: 'A bell with motion ticks — an ALERT being armed.', not: 'order.ready — 🔔 covered both; this one is the toggle.', placeholder: '🔔' },
+  'order.cart': { means: 'The food cart / basket.', draw: 'A shopping basket in outline.', placeholder: '🛒' },
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  'action.take-photo': { means: 'Take a photo.', draw: 'A shutter circle inside a camera body.', not: 'nav.photos — the section, not the shutter.', placeholder: '📸' },
+  'action.share': { means: 'Share this.', draw: 'A box with an arrow leaving through the top.', placeholder: '📤' },
+  'action.delete': { means: 'Delete / remove.', draw: 'A waste bin with a lid line.', placeholder: '🗑️' },
+  'action.edit': { means: 'Edit.', draw: 'A pencil at 45°, tip lower-left.', placeholder: '✏️' },
+  'action.hint': { means: 'Reveal a hint.', draw: 'A lightbulb, no burst.', not: 'game.fun-facts.', placeholder: '💡' },
+  'action.refresh': { means: 'Reload — a new version is available.', draw: 'Two arrows chasing in a circle.', placeholder: '🔄' },
+  'action.feedback': { means: 'Send feedback.', draw: 'A speech bubble with a tail.', placeholder: '💬' },
+  'action.play-together': { means: 'Play together — everyone on their own phone.', draw: 'A phone with a small radiating arc.', placeholder: '📲' },
+  'action.rules': { means: 'Read the rules.', draw: 'An open book, two pages.', placeholder: '📖' },
+  'action.scorecard': { means: 'View the scorecard.', draw: 'A clipboard with three ruled lines.', placeholder: '📋' },
+  'action.leaderboard': { means: 'View the leaderboard.', draw: 'Three ranked bars, tallest centre — a podium.', not: 'award.trophy — 🏆 covered both.', placeholder: '🏆' },
+
+  // ── Controls ──────────────────────────────────────────────────────────────
+  // The bottom-left control cluster. These ship in PAIRS and must read as one
+  // family: identical optical weight, so a toggle does not jump when it flips.
+  'control.skin': { means: 'Open the theme (skin) picker.', draw: 'An artist’s palette with a thumb hole.', placeholder: '🎨' },
+  'control.theme-light': { means: 'Switch to light mode.', draw: 'A sun: disc plus eight short rays.', placeholder: '☀️' },
+  'control.theme-dark': { means: 'Switch to dark mode.', draw: 'A crescent moon, same optical size as the sun disc.', placeholder: '🌙' },
+  'control.sound-on': { means: 'Sound is on.', draw: 'A speaker with two arcs.', placeholder: '🔊' },
+  'control.sound-off': { means: 'Sound is muted.', draw: 'The same speaker with a cross — same body, so only the state changes.', placeholder: '🔇' },
+
+  // ── States & markers ──────────────────────────────────────────────────────
+  'state.done': { means: 'Step complete / confirmed.', draw: 'A check inside a circle.', placeholder: '✅' },
+  'state.locked': { means: 'Private or locked.', draw: 'A closed padlock, shackle down.', placeholder: '🔒' },
+  'state.account': { means: 'A signed-in player.', draw: 'A filled bust — the solid counterpart to nav.me.', not: 'nav.me — filled for the state, outline for the section.', placeholder: '👤' },
+  'state.guest': { means: 'A guest / not yet signed in.', draw: 'A four-point sparkle.', placeholder: '✨' },
+  'state.teams': { means: 'Teams / group play.', draw: 'Two overlapping busts.', placeholder: '👥' },
+  'state.located': { means: 'You are at the venue.', draw: 'A map pin with a solid dot at its centre — the counterpart to nav.locations’ hollow one.', not: 'nav.locations — hollow pin for the switcher.', placeholder: '📍' },
+  'state.no-venue': { means: 'No venue found / out of range.', draw: 'A compass rose with a tilted needle.', placeholder: '🧭' },
+  'state.announcement': { means: 'A venue announcement.', draw: 'A megaphone, mouth right.', placeholder: '📣' },
+  'state.cpu': { means: 'The CPU opponent.', draw: 'A blocky robot head with two eyes and an antenna.', placeholder: '🤖' },
+  'state.timer': { means: 'Time remaining.', draw: 'A stopwatch with a crown button.', placeholder: '⏱' },
+  'state.finish': { means: 'Finished / start a round.', draw: 'A chequered flag on a short staff.', not: 'game.go-karts — the kart carries the flag as a motif.', placeholder: '🏁' },
+  'state.celebrate': { means: 'Celebration — a win, an accepted invite.', draw: 'A confetti burst, no container.', not: 'order.picked-up — 🎉 served both; that one belongs to the order rail.', placeholder: '🎉' },
+  'state.win': { means: 'You won this round.', draw: 'A balloon on a string.', placeholder: '🎈' },
+  'state.lose': { means: 'You lost this round.', draw: 'A clown face: round outline, ball nose, a flat mouth line — deflated, not mocking.', placeholder: '🤡' },
+  'brand.mark': { means: 'Venue brand fallback when no logo is uploaded.', draw: 'A ferris wheel: hub, spokes, gondolas.', placeholder: '🎡' },
+
+  // ── Course identity ───────────────────────────────────────────────────────
+  // src/lib/theme.ts maps a course theme to a glyph. Multi-tenant: a venue can
+  // add themes, so these need to stay open-ended and `course.default` must
+  // always render.
+  'course.default': { means: 'A course with no specific theme.', draw: 'A pin flag in a hole.', not: 'course.classic — the fallback, not the themed classic course.', placeholder: '⛳️' },
+  'course.classic': { means: 'The classic mini-golf course.', draw: 'A pin flag with a windmill sail behind.', not: 'course.default — ⛳️ came from both a case and the default arm.', placeholder: '⛳️' },
+  'course.blue': { means: 'The Blue course.', draw: 'A plain ring, stroked in the course accent. The colour is the identity, so the shape stays neutral across all three.', placeholder: '🔵' },
+  'course.green': { means: 'The Green course.', draw: 'A plain ring, stroked in the course accent — identical to course.blue but for the colour.', placeholder: '🟢' },
+  'course.red': { means: 'The Red course.', draw: 'A plain ring, stroked in the course accent — identical to course.blue but for the colour.', placeholder: '🔴' },
+  'course.california': { means: 'The California / tropical course.', draw: 'A palm tree, two fronds and a lean.', not: 'course.jungle — both were 🌴; palm for California, monstera for Jungle.', placeholder: '🌴' },
+  'course.jungle': { means: 'The Jungle Run course.', draw: 'A broad monstera leaf.', not: 'course.california — both were 🌴.', placeholder: '🌴' },
+  'course.dragon': { means: 'The Dragon course.', draw: 'A dragon head in profile with a horn.', placeholder: '🐉' },
+  'course.western': { means: 'The Western course.', draw: 'A cowboy hat, front view.', placeholder: '🤠' },
+  'course.pirate': { means: 'The Pirate’s Cove course.', draw: 'A skull-and-crossbones flag on a staff.', placeholder: '🏴‍☠️' },
+  'course.space': { means: 'The Space Odyssey course.', draw: 'A rocket, nose up, two fins.', placeholder: '🚀' },
+  'course.haunted': { means: 'The Haunted Manor course.', draw: 'A ghost with a wavy hem.', placeholder: '👻' },
+} as const satisfies Record<string, IconSpec>;
+
+export type IconName = keyof typeof ICONS;
+
+/**
+ * Inventory role + placeholder emoji → icon name.
+ *
+ * The migration's audit trail: every `(role, glyph)` pair the inventory finds
+ * has exactly one entry, so `scripts/icon-inventory.mjs` output and this file
+ * can be diffed and neither can drift silently. Keys are `"<role> <glyph>"`,
+ * matching the pair list the script prints.
+ *
+ * Where one key maps somewhere surprising, the surprise IS the point — those
+ * are the sites where an emoji was standing in for something it did not mean.
+ */
+export const ROLE_ICONS: Record<string, IconName> = {
+  // Section nav (Home tiles + NavDrawer)
+  'nav.ui 🏠': 'nav.home',
+  'nav.golf ⛳️': 'nav.golf',
+  'nav.arcade 🎮': 'nav.arcade',
+  'nav.food 🌭': 'nav.food',
+  'nav.photos 📸': 'nav.photos',
+  'nav.hunt 🔍': 'nav.hunt',
+  'nav.me 👤': 'nav.me',
+  'nav.locations 📍': 'nav.locations',
+  'nav.install ⬇️': 'nav.install',
+  'me.rewards 🎟️': 'nav.rewards',
+
+  // FunZone tiles → the game roster
+  'arcade.airhockey 🏒': 'game.air-hockey',
+  'arcade.axe 🪓': 'game.axe-throwing',
+  'arcade.batting ⚾️': 'game.batting-cages',
+  'arcade.boats 🚤': 'game.bumper-boats',
+  'arcade.bottles 🥛': 'game.milk-bottles',
+  'arcade.bowling 🎳': 'game.bowling',
+  'arcade.bumper 🚗': 'game.bumper-cars',
+  'arcade.claw 🧸': 'game.claw-machine',
+  'arcade.darts 🎯': 'game.darts',
+  'arcade.facts 💡': 'game.fun-facts',
+  'arcade.gallery 🦆': 'game.shooting-gallery',
+  'arcade.hoops 🏀': 'game.pop-a-shot',
+  'arcade.karts 🏁': 'game.go-karts',
+  'arcade.mole 🔨': 'game.whack-a-mole',
+  'arcade.pinball 🕹️': 'game.pinball',
+  'arcade.pusher 🪙': 'game.coin-pusher',
+  'arcade.putt ⛳️': 'game.arcade-putt',
+  'arcade.rings 🎪': 'game.ring-toss',
+  'arcade.skeeball 🎳': 'game.skee-ball',
+  'arcade.striker 🔔': 'game.high-striker',
+  'arcade.trivia 🧠': 'game.trivia',
+  'arcade.watergun 💦': 'game.water-gun-race',
+
+  // Game screens — the hero glyph and the "play again" furniture. These merge
+  // onto the same icons as the tiles above; that merge is the whole reason the
+  // tile and the screen must not be named after the file they live in.
+  'fun.airhockey 🏒': 'game.air-hockey',
+  'fun.airhockey 🏆': 'award.trophy',
+  'fun.airhockey 🤖': 'state.cpu',
+  'fun.axethrow 🪓': 'game.axe-throwing',
+  'fun.battingcages ⚾️': 'game.batting-cages',
+  'fun.bowling 🎳': 'game.bowling',
+  'fun.bumper-boats 🚤': 'game.bumper-boats',
+  'fun.bumper-cars 🚗': 'game.bumper-cars',
+  'fun.bumperarena ⏱': 'state.timer',
+  'fun.clawmachine 🧸': 'game.claw-machine',
+  'fun.coinpusher 🪙': 'game.coin-pusher',
+  'fun.darts 🎯': 'game.darts',
+  'fun.gokarts 🏁': 'game.go-karts',
+  'fun.highstriker 🔨': 'game.high-striker',
+  'fun.milkbottle 🥎': 'game.milk-bottles',
+  'fun.milkbottle 👍': 'state.win',
+  'fun.milkbottle 🎮': 'nav.arcade',
+  'fun.pinball 🕹️': 'game.pinball',
+  'fun.popashot 🏀': 'game.pop-a-shot',
+  'fun.popashot ⏱': 'state.timer',
+  'fun.ringtoss 🎪': 'game.ring-toss',
+  'fun.shootinggallery 🦆': 'game.shooting-gallery',
+  'fun.skeeball 🎳': 'game.skee-ball',
+  'fun.trivia 🧠': 'game.trivia',
+  'fun.whackamole 🔨': 'game.whack-a-mole',
+  'fun.watergunrace 🔫': 'game.water-gun-race',
+  'fun.watergunrace 🎈': 'state.win',
+  'fun.watergunrace 🤡': 'state.lose',
+  'fun.spinner 🔻': 'game.challenge-spinner',
+  'fun.spinner ⛳️': 'nav.golf',
+  'fun.spinner 🎉': 'state.celebrate',
+  'fun.earns-tickets 🎟️': 'award.ticket',
+  'fun.gameticketaward 🎟️': 'award.ticket',
+
+  // Putting outcomes
+  'putt.hole-in-one 🏌️': 'score.hole-in-one',
+  'putt.eagle 🦅': 'score.eagle',
+  'putt.birdie 🐦': 'score.birdie',
+  'putt.par ⛳️': 'score.par',
+  'putt.bogey 😬': 'score.bogey',
+  'putt.hole-in-one 😵': 'score.over-par',
+  'putt.puttgolf 💦': 'score.water-hazard',
+  'putt.puttgolf ♾️': 'score.endless',
+  'putt.puttgolf ⛳️': 'game.arcade-putt',
+  'putt.puttgolf 🏁': 'state.finish',
+  'putt.puttgolf 🏆': 'award.trophy',
+
+  // Achievements
+  'me.hole-in-one 🎯': 'award.hole-in-one',
+  'scorecard.hole-in-one 🎯': 'award.hole-in-one',
+  'me.under-par ⛳': 'award.under-par',
+  'scorecard.under-par ⛳': 'award.under-par',
+  'me.hunt-master 🕵️': 'award.hunt-master',
+  'scorecard.hunt-master 🕵️': 'award.hunt-master',
+
+  // Food
+  'food.food 🛒': 'order.cart',
+  'food.order-received 🧾': 'order.received',
+  'food.sent-to-the-kitchen 📨': 'order.sent-to-kitchen',
+  'food.being-prepared 🍳': 'order.being-prepared',
+  'food.activeorderscard 🍳': 'order.being-prepared',
+  'food.ready-for-pickup 🔔': 'order.ready',
+  'food.picked-up-enjoy 🎉': 'order.picked-up',
+  'food.orderstatus 🔔': 'order.notify',
+  'food.orderstatus ✅': 'state.done',
+
+  // Photo booth
+  'photos.photobooth 📸': 'action.take-photo',
+  'photos.photobooth 📤': 'action.share',
+  'photos.photobooth 🗑️': 'action.delete',
+  'photos.photobooth ✏️': 'action.edit',
+  'photos.photobooth ✅': 'state.done',
+
+  // Hunt
+  'hunt.hunt 🔍': 'nav.hunt',
+  'hunt.venuehuntstart 🔍': 'nav.hunt',
+  'scorecard.scavenger-hunt 🔍': 'nav.hunt',
+  'golf.golfhome 🔍': 'nav.hunt',
+  'hunt.hunt 💡': 'action.hint',
+  'hunt.hunt 📷': 'action.take-photo',
+  'hunt.hunt 📤': 'action.share',
+
+  // Golf home / scorecard / summary
+  'golf.golfhome 📲': 'action.play-together',
+  'golf.golfhome 🏆': 'action.leaderboard',
+  'golf.golfhome 📖': 'action.rules',
+  'scorecard.playersetup 📲': 'action.play-together',
+  'scorecard.playersetup 🏅': 'award.medal',
+  'scorecard.challenge-spinner 🎡': 'game.challenge-spinner',
+  'scorecard.summary 🏆': 'action.leaderboard',
+  'scorecard.summary 📋': 'action.scorecard',
+  'scorecard.summary 📸': 'action.take-photo',
+  'scorecard.summary 🎟️': 'award.ticket',
+  'scorecard.shareimage 🏆': 'award.trophy',
+  'scorecard.shareimage 🏅': 'award.medal',
+  'scorecard.shareimage ⛳️': 'nav.golf',
+  'scorecard.coursepicker 📍': 'state.located',
+  'courses.courselist 📍': 'state.located',
+
+  // Me / account / teams
+  'me.mehome 👤': 'state.account',
+  'me.mehome ✨': 'state.guest',
+  'me.mehome 🏅': 'award.medal',
+  'me.mehome 👥': 'state.teams',
+  'me.mehome 🎟️': 'nav.rewards',
+  'me.mehome ⬇️': 'nav.install',
+  'me.mehome 🔒': 'state.locked',
+  'shared.accountgate 👤': 'state.account',
+  'shared.accountgate ✨': 'state.guest',
+  'account.account 👥': 'state.teams',
+  'account.account 🏌️': 'score.hole-in-one',
+  'account.account 🎟️': 'award.ticket',
+  'teams.acceptinvite 🎉': 'state.celebrate',
+
+  // Rewards
+  'rewards.rewards 🎟️': 'award.ticket',
+  'rewards.rewards 🕹️': 'nav.arcade',
+  'ui.adoptionbonustoast 🎟️': 'award.ticket',
+
+  // Home
+  'home.home 🌭': 'nav.food',
+  'home.home 🛒': 'order.cart',
+  'home.home 👤': 'state.account',
+  'home.home 🎡': 'brand.mark',
+
+  // Location / venue gating
+  'locations.locationpicker 🧭': 'state.no-venue',
+  'locations.locationpicker 📍': 'state.located',
+  'shared.geofencegate 📍': 'state.located',
+  'shared.tenantunavailable 🧭': 'state.no-venue',
+
+  // Install
+  'install.install ⛳️': 'nav.golf',
+  'install.install ✅': 'state.done',
+  'ui.adoptionnudge 📲': 'action.play-together',
+  'ui.adoptionnudge 🏆': 'award.trophy',
+
+  // Chrome & controls
+  'ui.choose-a-theme 🎨': 'control.skin',
+  'ui.skinpicker ↗': 'control.skin',
+  'ui.themetoggle ☀️': 'control.theme-light',
+  'ui.themetoggle 🌙': 'control.theme-dark',
+  'ui.navdrawer 🌙': 'control.theme-dark',
+  'ui.soundtoggle 🔊': 'control.sound-on',
+  'ui.soundtoggle 🔇': 'control.sound-off',
+  'ui.navdrawer 🔊': 'control.sound-on',
+  'ui.updatemodal 🔄': 'action.refresh',
+  'ui.announcementbanner 📣': 'state.announcement',
+  'ui.feedbackbutton 💬': 'action.feedback',
+  'ui.feedbackbutton 📸': 'action.take-photo',
+
+  // TV / signage
+  'tv.tvwall ⛳️': 'nav.golf',
+  'tv.tvleaderboard 🏅': 'award.medal',
+
+  // Course identity (src/lib/theme.ts). Keyed on the switch arm, not the glyph:
+  // 'classic' and the default arm both return ⛳️, and 'california' and 'jungle'
+  // both return 🌴, but all four are different courses and get their own art.
+  'theme.default ⛳️': 'course.default',
+  'theme.classic ⛳️': 'course.classic',
+  'theme.blue 🔵': 'course.blue',
+  'theme.green 🟢': 'course.green',
+  'theme.red 🔴': 'course.red',
+  'theme.california 🌴': 'course.california',
+  'theme.jungle 🌴': 'course.jungle',
+  'theme.dragon 🐉': 'course.dragon',
+  'theme.western 🤠': 'course.western',
+  'theme.pirate 🏴‍☠️': 'course.pirate',
+  'theme.space 🚀': 'course.space',
+  'theme.haunted 👻': 'course.haunted',
+};
