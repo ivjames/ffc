@@ -202,8 +202,17 @@ export default function TriviaLive() {
     const index = snapshot.session.currentIndex;
     void fetchSnapshot(sessionId, { participant: stored.participantToken }).then((r) => {
       if (!live || !r.ok) return;
-      setSnapshot(r as unknown as TriviaSnapshot);
-      setPersonalizedIndex(index);
+      const next = r as unknown as TriviaSnapshot;
+      // Same merge as every other path: if the host moved on while this was in
+      // flight, restoring the old reveal would leave this phone a question
+      // behind until somebody else answered. And personalization only counts
+      // as done if the state we actually kept is still that question.
+      setSnapshot((prev) => mergeSnapshot(prev, next));
+      // Marked outside the updater — an updater must stay pure, and React may
+      // call it twice. Guarded on the response still being ABOUT the question
+      // we asked for: if the host moved on, `resultKnown` compares against the
+      // new index and won't match anyway, so this can't mislabel anything.
+      if (next.session.currentIndex === index) setPersonalizedIndex(index);
     });
     return () => {
       live = false;

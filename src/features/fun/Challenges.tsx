@@ -296,6 +296,12 @@ export function startChallengeRound(
     game: challenge.game,
     variant: challenge.variant,
   });
-  navigate(route);
+  // The variant rides the route so the game can start the RIGHT one. Without
+  // it a Boomerang challenge dropped the player on the track picker; pick any
+  // other track and GameHighScore rejects the marker (the boards are per
+  // variant, deliberately), so the round is never submitted and the challenge
+  // sits waiting on someone who thinks they played it.
+  const to = challenge.variant ? `${route}?variant=${encodeURIComponent(challenge.variant)}` : route;
+  navigate(to);
   return true;
 }

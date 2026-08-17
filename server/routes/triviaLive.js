@@ -462,19 +462,25 @@ router.get("/sessions/:id", async (req, res) => {
   const { id } = req.params;
   const hostToken = typeof req.query.host === "string" ? req.query.host : null;
   try {
+    // expireIfStale can CHANGE the status, so the snapshot has to be built
+    // from the effective one — building it from the row we loaded a moment ago
+    // tells a reconnecting host the expired game is live, and then refuses
+    // their very next tap. Cheap to apply: the status is all that moved.
     if (hostToken) {
       const session = await loadHostSession(id, hostToken);
       if (!session) return res.status(404).json({ ok: false, error: "unknown session" });
-      await expireIfStale(session);
-      return res.json({ ok: true, ...(await buildSnapshot(session, { forHost: true })) });
+      const status = await expireIfStale(session);
+      const effective = { ...session, status };
+      return res.json({ ok: true, ...(await buildSnapshot(effective, { forHost: true })) });
     }
     const ctx = await loadParticipant(id, req.query.participant);
     if (!ctx) return res.status(404).json({ ok: false, error: "unknown session" });
-    await expireIfStale(ctx);
+    const status = await expireIfStale(ctx);
+    const effective = { ...ctx, status };
     return res.json({
       ok: true,
       entrant: { id: ctx.entrantId, name: ctx.entrantName },
-      ...(await buildSnapshot(ctx, { forHost: false, entrantId: ctx.entrantId })),
+      ...(await buildSnapshot(effective, { forHost: false, entrantId: ctx.entrantId })),
     });
   } catch (err) {
     console.error("[trivia] snapshot error:", err);

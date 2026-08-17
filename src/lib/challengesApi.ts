@@ -39,6 +39,32 @@ export type ChallengeView = {
   youWon: boolean;
 };
 
+/**
+ * How far along a challenge is, as one comparable number.
+ *
+ * The initial GET and the SSE stream race on open: if the opponent joins or
+ * finishes while the screen is loading, the stream can install the newer state
+ * and the slower fetch then restores the older one — and since nothing
+ * broadcasts again until the next event, the screen can sit there having lost
+ * the opponent or the result.
+ *
+ * Both components only ever move forward: an entry is never withdrawn, and a
+ * challenge only ever settles.
+ */
+export function challengeProgress(view: ChallengeView): number {
+  const played =
+    (view.challenger.score != null ? 1 : 0) + (view.opponent?.score != null ? 1 : 0);
+  const claimed = view.opponent != null ? 1 : 0;
+  const settled = view.challenge.status !== 'open' ? 1 : 0;
+  return played * 4 + claimed * 2 + settled;
+}
+
+/** Keep whichever view is further along. */
+export function mergeChallenge(prev: ChallengeView | null, next: ChallengeView): ChallengeView {
+  if (!prev) return next;
+  return challengeProgress(next) >= challengeProgress(prev) ? next : prev;
+}
+
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string; status: number };
 
 async function call<T>(path: string, init?: RequestInit): Promise<Result<T>> {
