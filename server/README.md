@@ -384,8 +384,9 @@ no domain history hangs off an account.)
 | Method & path | Purpose |
 | --- | --- |
 | `POST /api/admin/login` | email+password login (no auth required to call this one) |
+| `POST /api/admin/password/forgot` · `…/token-check` · `…/set` | self-serve set-password flow (pre-auth by design; see "Admin accounts & sessions" below) |
 | `POST /api/admin/logout` · `GET /api/admin/me` | end / inspect the current session |
-| `GET  /api/admin/users` · `POST /api/admin/users` | list / create `admin_user` accounts — **super_admin only** |
+| `GET  /api/admin/users` · `POST /api/admin/users` | list / create `admin_user` accounts (password optional — omitted = emailed set-password invite) — **super_admin only** |
 | `PATCH /api/admin/users/:id` · `DELETE /api/admin/users/:id` | edit (incl. password reset) / remove an account — **super_admin only** |
 | `GET  /api/admin/overview` | rollup: counts + rounds 7/30d + per-location (org-scoped for `org_admin`) |
 | `GET  /api/admin/hunt-usage` | hunt vision-spend rollup from `hunt_scan`: monthly per-venue rounds/scans/tokens + list-price cost (`?months=1..24`, default 6; org-scoped for `org_admin`; see `HUNT-PRICING.md`) |
@@ -413,9 +414,10 @@ no domain history hangs off an account.)
 
 The admin **UI** is a separate SPA (repo `admin/`, built to `dist-admin/`) served
 on its own vhost `admin.<fqdn>` under a wildcard TLS cert — it is **not** part of
-the player PWA. See `../master-control-plan.md` and `ffc admin-setup`. The SPA
-today still authenticates with `x-app-token` (`admin/api.ts`) — wiring its
-login screen to `POST /login` + session cookies is frontend work not yet done.
+the player PWA. See `../master-control-plan.md` and `ffc admin-setup`. Its login
+screen is wired to `POST /login` + session cookies (`admin/api.ts` also still
+sends an `x-app-token` header when the operator has one configured — the server
+accepts either credential).
 
 #### Admin accounts & sessions
 
@@ -423,10 +425,37 @@ login screen to `POST /login` + session cookies is frontend work not yet done.
 server-side session tokens) back real per-operator logins, alongside the
 original single-shared-secret `APP_TOKEN`:
 
-- **Bootstrap**: there's no self-serve signup. Use `APP_TOKEN` (still a full
-  super-admin bypass) to call `POST /api/admin/users` and create the first
-  `admin_user`; from then on that account can log in and, if `super_admin`,
-  create more.
+- **Bootstrap / invites**: there's no self-serve signup, and no operator ever
+  types another person's password. Use `APP_TOKEN` (still a full super-admin
+  bypass) — or any `super_admin` session — to call `POST /api/admin/users`
+  **without a password** (or provision a whole site, which invites its
+  org_admin the same way): the account is created with a NULL `password_hash`
+  and the invitee gets a set-password link at
+  `https://admin.<fqdn>/set-password?token=…` by email. Passing a password to
+  `POST /users` still works for scripted setups.
+  While no real mail provider is configured (`MAIL_PROVIDER` unset/`console`
+  — the pre-Resend window), these two **super_admin-gated** responses also
+  return the link itself as `inviteLink`, so the operator can relay it by
+  hand (in production the console provider withholds mail from the logs, so
+  the response is the only place the link exists). The public forgot endpoint
+  never returns a link. Once a real provider is set, `inviteLink` is `null`.
+- **Self-serve set-password** (`admin_password_token`,
+  `lib/adminPasswordTokens.js`; all three endpoints are pre-auth by design):
+  - `POST /api/admin/password/forgot { email }` → always `{ok:true}`,
+    whether or not the address has an account (non-enumeration — same stance
+    as login's uniform 401). A pending account is re-sent its **invite**
+    (7-day link); an active one gets a **reset** (2-hour link) — so "Forgot
+    password" on the sign-in page doubles as "re-send my invite", and is the
+    recovery when an invite mail failed to deliver. Rate-limited (3 per
+    address / 15 min, 10 per IP / hour).
+  - `POST /api/admin/password/token-check { token }` → `{ok, email}` (lets
+    the page greet the user), `410` when the link is expired or already used.
+  - `POST /api/admin/password/set { token, password }` (min 8 chars) →
+    consumes the token, stores the hash, and **auto-logs the user in** — same
+    `{ok, user}` body + session cookie as `POST /login`. `410` on a dead link.
+  - Tokens are 32-byte hex, single-use, stored only as sha256 digests, and a
+    fresh request **supersedes** any outstanding token for the same user —
+    exactly one live link at a time.
 - **Login**: `POST /api/admin/login { email, password }` → on success, an
   `httpOnly`, `SameSite=Lax` cookie scoped to `/api/admin` (named
   `ffc_admin_session`, 7-day expiry, `Secure` when `NODE_ENV=production`).

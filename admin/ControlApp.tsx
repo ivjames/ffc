@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { setToken, clearToken, api, AuthError, ApiError, type CurrentUser } from './api';
-import { Button, Card, Field, Input, Banner, ToastProvider, ADMIN_TZ_LABEL } from './ui';
+import { BrandMark, Button, Card, Field, Input, Banner, ToastProvider, ADMIN_TZ_LABEL } from './ui';
+import SetPassword from './SetPassword';
 import Overview from './Overview';
 import Orgs from './Orgs';
 import OrgDetail from './OrgDetail';
@@ -18,6 +19,7 @@ import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
 import HuntUsage from './HuntUsage';
 import SyntheticBot from './SyntheticBot';
+import ProvisionSite from './ProvisionSite';
 import Account from './Account';
 
 // ---------------------------------------------------------------------------
@@ -113,6 +115,15 @@ const ICON_PATHS = {
       <path d="M9 13v2M15 13v2" />
     </>
   ),
+  provision: (
+    <>
+      {/* Storefront with a plus — "stand up a new site" */}
+      <path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9" />
+      <path d="M4 9h16" />
+      <path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
+      <path d="M12 12.5v5M9.5 15h5" />
+    </>
+  ),
 } as const;
 
 type IconName = keyof typeof ICON_PATHS;
@@ -197,34 +208,18 @@ const NAV_SECTIONS: NavSection[] = [
 
 // Load/soak bot — a platform tool, so super_admin only.
 const SYNTHETIC_ITEM: NavItem = { to: '/synthetic', label: 'Synthetic', icon: 'synthetic' };
+// One-shot site provisioning — creates orgs, so super_admin only.
+const PROVISION_ITEM: NavItem = { to: '/provision', label: 'Provision site', icon: 'provision' };
+
+// Extra nav items appended per section for super_admins only.
+const SUPER_ADMIN_EXTRAS: Record<string, NavItem[]> = {
+  Venues: [PROVISION_ITEM],
+  Ops: [SYNTHETIC_ITEM],
+};
 
 function itemActive(item: NavItem, pathname: string): boolean {
   if (item.isActive) return item.isActive(pathname);
   return pathname === item.to || pathname.startsWith(item.to + '/');
-}
-
-function BrandMark({ className = 'h-8 w-8' }: { className?: string }) {
-  return (
-    <span
-      className={`grid shrink-0 place-items-center rounded-lg bg-slate-900 text-white ${className}`}
-    >
-      {/* Mini-golf flag */}
-      <svg
-        viewBox="0 0 24 24"
-        className="h-4.5 w-4.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M9 21V4" />
-        <path d="M9 4l8 3-8 3" fill="currentColor" />
-        <path d="M4 21h13" />
-      </svg>
-    </span>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -232,10 +227,12 @@ function BrandMark({ className = 'h-8 w-8' }: { className?: string }) {
 // ---------------------------------------------------------------------------
 
 export function SignInGate({ onUnlock }: { onUnlock: (user: CurrentUser | null) => void }) {
-  const [mode, setMode] = useState<'token' | 'login'>('token');
+  const [mode, setMode] = useState<'token' | 'login' | 'forgot'>('token');
   const [value, setValue] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -248,6 +245,24 @@ export function SignInGate({ onUnlock }: { onUnlock: (user: CurrentUser | null) 
       onUnlock({ ...user, viaToken: false });
     } catch (err) {
       setError(err instanceof ApiError || err instanceof AuthError ? err.message : 'Login failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      // The server always answers ok (no account-existence oracle) — anything
+      // thrown here is a rate limit (429) or a network failure.
+      await api.forgotPassword(forgotEmail.trim());
+      setForgotSent(true);
+    } catch (err) {
+      setError(
+        err instanceof ApiError || err instanceof AuthError ? err.message : 'Could not send the email'
+      );
     } finally {
       setBusy(false);
     }
@@ -296,7 +311,7 @@ export function SignInGate({ onUnlock }: { onUnlock: (user: CurrentUser | null) 
                 Log in with email and password instead
               </button>
             </>
-          ) : (
+          ) : mode === 'login' ? (
             <>
               <p className="mb-4 text-sm text-slate-500">Log in to your Master Control account.</p>
               <form onSubmit={handleLogin} className="space-y-3">
@@ -322,12 +337,61 @@ export function SignInGate({ onUnlock }: { onUnlock: (user: CurrentUser | null) 
                   {busy ? 'Logging in…' : 'Log in'}
                 </Button>
               </form>
+              <div className="mt-3 flex flex-col items-start gap-1.5">
+                <button
+                  type="button"
+                  className="text-xs text-slate-500 underline hover:text-slate-700"
+                  onClick={() => {
+                    setError('');
+                    setMode('forgot');
+                  }}
+                >
+                  Forgot password?
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-slate-500 underline hover:text-slate-700"
+                  onClick={() => setMode('token')}
+                >
+                  Use an admin token instead
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mb-4 text-sm text-slate-500">
+                Enter your email and we'll send a link to reset your password.
+              </p>
+              {forgotSent ? (
+                <Banner kind="success">
+                  If that address has an account, we've emailed a link. Check your inbox.
+                </Banner>
+              ) : (
+                <form onSubmit={handleForgot} className="space-y-3">
+                  <Field label="Email">
+                    <Input
+                      type="email"
+                      autoFocus
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="you@example.com"
+                    />
+                  </Field>
+                  {error && <Banner kind="error">{error}</Banner>}
+                  <Button type="submit" disabled={busy || !forgotEmail.trim()} className="w-full">
+                    {busy ? 'Sending…' : 'Send reset link'}
+                  </Button>
+                </form>
+              )}
               <button
                 type="button"
                 className="mt-3 text-xs text-slate-500 underline hover:text-slate-700"
-                onClick={() => setMode('token')}
+                onClick={() => {
+                  setError('');
+                  setMode('login');
+                }}
               >
-                Use an admin token instead
+                Back to log in
               </button>
             </>
           )}
@@ -355,9 +419,10 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
   useEffect(() => setNavOpen(false), [pathname]);
 
   const sections = isSuperAdmin
-    ? NAV_SECTIONS.map((s) =>
-        s.label === 'Ops' ? { ...s, items: [...s.items, SYNTHETIC_ITEM] } : s
-      )
+    ? NAV_SECTIONS.map((s) => {
+        const extras = s.label ? SUPER_ADMIN_EXTRAS[s.label] : undefined;
+        return extras ? { ...s, items: [...s.items, ...extras] } : s;
+      })
     : NAV_SECTIONS;
 
   return (
@@ -499,6 +564,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/account" element={<Account user={user} />} />
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
+            {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}
             <Route path="*" element={<Overview />} />
           </Routes>
         </main>
@@ -512,6 +578,7 @@ type AuthState = 'checking' | 'locked' | 'unlocked';
 export default function ControlApp() {
   const [authState, setAuthState] = useState<AuthState>('checking');
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const { pathname } = useLocation();
 
   // Any API call that hits 401 dispatches this event -> drop to the gate.
   useEffect(() => {
@@ -539,6 +606,21 @@ export default function ControlApp() {
       () => setAuthState('locked')
     );
   }, []);
+
+  // Pre-auth by design: the emailed set-password link must render in every
+  // auth state without a gate flash, so it bypasses the state machine entirely
+  // (the mount-time me() probe above is harmless — quiet401). Finishing the
+  // form auto-logs in and unlocks the shell directly.
+  if (pathname === '/set-password') {
+    return (
+      <SetPassword
+        onDone={(loggedInUser) => {
+          setUser({ ...loggedInUser, viaToken: false });
+          setAuthState('unlocked');
+        }}
+      />
+    );
+  }
 
   if (authState === 'checking') return null;
   if (authState === 'locked') {

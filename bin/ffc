@@ -23,13 +23,19 @@
 #   backup    pg_dump -> data/backups/ (gzip, retention) + offsite push when
 #             FFC_BACKUP_REMOTE is set (rclone remote or scp target)
 #   backup-cron  install the nightly backup cron (/etc/cron.d/ffc-backup)
-#   vhost     (re)write the player nginx vhost (serves <fqdn> + *.<fqdn> —
-#             each client org lives on <org-slug>.<fqdn>) + (re)issue TLS;
-#             installs the wildcard cert when it exists, else single-name
+#   vhost     (re)write the player nginx vhost + (re)issue TLS. Serves
+#             <fqdn> + *.<fqdn> until `landing-vhost` has run; after that the
+#             bare apex belongs to the landing vhost and the player app keeps
+#             only *.<fqdn> (each client org lives on <org-slug>.<fqdn>)
 #   wildcard-cert  issue/renew the *.<fqdn> wildcard cert (certbot DNS-01 via
-#             doctl) — covers admin.<fqdn> AND every client org subdomain
+#             doctl) — covers the apex, admin.<fqdn>, AND every org subdomain
 #   admin-vhost    (re)write the Master Control vhost (admin.<fqdn>)
 #   admin-setup    one-time: wildcard-cert + admin-vhost (Master Control bring-up)
+#   landing-vhost  put the marketing landing page on the bare apex and move the
+#             player app to *.<fqdn> only (requires the wildcard cert; also
+#             re-renders the player vhost — one command performs the flip)
+#   seed-demo (re)seed the demo orgs (deploy/demo-orgs.seed.json) through the
+#             admin API — idempotent, and re-running RESETS the demo orgs
 #
 # NOTE: uploaded org branding assets must outlive deploys — set
 #   BRAND_ASSET_DIR=<app-dir>/shared/brand-assets in server/.env (deploy
@@ -82,6 +88,14 @@ BASE_DNS="${FFC_DNS_DOMAIN:-$(echo "$FQDN" | awk -F. '{print $(NF-1)"."$NF}')}"
 # (org slug -> <slug>.$FQDN, one CNAME/A per org — or a wildcard DNS record).
 WILDCARD_CERT_NAME="${FFC_WILDCARD_CERT_NAME:-$STUB-wildcard}"
 
+# Marketing landing page on the bare apex (opt-in via `ffc landing-vhost`).
+# The conf file's presence is the switch cmd_vhost keys off: once it exists,
+# the player vhost is rendered without the apex in its server_name.
+LANDING_CONF="/etc/nginx/sites-available/$FQDN-landing"
+# Player-app host the apex 301s frozen PWA paths to (printed QR signage's
+# /install, /join, /tv, emailed /teams/accept, shared /games/...).
+DEFAULT_ORG_HOST="${FFC_DEFAULT_ORG_HOST:-bullwinkles.$FQDN}"
+
 c_b=$'\033[1;34m'; c_r=$'\033[1;31m'; c_o=$'\033[0m'
 log(){ printf '%s==>%s %s\n' "$c_b" "$c_o" "$*"; }
 die(){ printf '%serror:%s %s\n' "$c_r" "$c_o" "$*" >&2; exit 1; }
@@ -127,6 +141,10 @@ build_release(){
     ( cd "$APP_DIR" && VITE_CENTEREDGE_API_BASE="$CE_MOCK_BASE" npm run build )
   fi
   cp -r "$APP_DIR/dist" "$release/dist"
+  # Marketing landing page for the platform apex — static, no build step, but
+  # shipped inside the release so the landing vhost serves from the same
+  # atomically-swapped `current` symlink as dist/dist-admin.
+  [ -d "$APP_DIR/landing" ] && cp -r "$APP_DIR/landing" "$release/landing"
   # Master Control admin SPA — separate bundle (no service worker). Built and
   # shipped in the same atomic release so current/dist-admin swaps together with
   # the player build. Non-fatal if it fails: never block a player deploy on it.
@@ -266,28 +284,48 @@ api_health(){
 cmd_vhost(){
   [ -f "$APP_DIR/deploy/nginx.conf.template" ] || die "missing deploy/nginx.conf.template"
   local conf="/etc/nginx/sites-available/$FQDN"
-  log "Writing static vhost $conf (serves $FQDN + *.$FQDN client subdomains; root current/dist, /api -> :$API_PORT, /ce -> :$CE_MOCK_PORT)"
-  sed -e "s/__FQDN__/$FQDN/g" -e "s#__APP_DIR__#$APP_DIR#g" -e "s/__API_PORT__/$API_PORT/g" \
+  # Apex ownership is state-driven: once the landing vhost exists (written by
+  # `ffc landing-vhost`), the marketing page owns the bare apex and the player
+  # vhost keeps only the org subdomains. Before then — including fresh sites
+  # that don't have the wildcard cert yet — behavior is exactly the old
+  # single-vhost shape, apex included.
+  local names="__FQDN__ *.__FQDN__"
+  [ -f "$LANDING_CONF" ] && names="*.__FQDN__"
+  log "Writing static vhost $conf (server_name: ${names//__FQDN__/$FQDN}; root current/dist, /api -> :$API_PORT, /ce -> :$CE_MOCK_PORT)"
+  sed -e "s/__SERVER_NAMES__/$names/g" \
+    -e "s/__FQDN__/$FQDN/g" -e "s#__APP_DIR__#$APP_DIR#g" -e "s/__API_PORT__/$API_PORT/g" \
     -e "s/__CE_MOCK_PORT__/$CE_MOCK_PORT/g" \
     "$APP_DIR/deploy/nginx.conf.template" > "$conf"
   ln -sf "$conf" "/etc/nginx/sites-enabled/$FQDN"
   nginx -t && systemctl reload nginx
   if command -v certbot >/dev/null; then
-    # The vhost's server_name is now "$FQDN *.$FQDN" (one subdomain per client
-    # org slug). Only the wildcard lineage covers those subdomains, so install
-    # it when it exists — a plain `certbot --nginx -d $FQDN` here would mint a
+    # The vhost's server_name carries *.$FQDN (one subdomain per client org
+    # slug). Only the wildcard lineage covers those subdomains, so install it
+    # when it exists — a plain `certbot --nginx -d $FQDN` here would mint a
     # single-name lineage that leaves every client subdomain with a bad cert.
     if [ -d "/etc/letsencrypt/live/$WILDCARD_CERT_NAME" ]; then
-      log "Installing wildcard cert '$WILDCARD_CERT_NAME' for $FQDN + *.$FQDN"
-      # -d "$FQDN" only: certbot's nginx installer can't match a literal
-      # "*.$FQDN" -d against a server block non-interactively ("Which server
-      # blocks would you like to modify?" -> hard fail under -n). It's also
-      # redundant — the lineage covers both names, and installing on the block
-      # matched by the bare FQDN configures TLS for the whole
-      # "server_name $FQDN *.$FQDN" block, client subdomains included.
-      certbot install --nginx --cert-name "$WILDCARD_CERT_NAME" \
-        -d "$FQDN" --redirect -n \
-        || log "certbot install did not complete. Re-run later: ffc vhost"
+      # A single concrete -d only: certbot's nginx installer can't match a
+      # literal "*.$FQDN" -d against a server block non-interactively ("Which
+      # server blocks would you like to modify?" -> hard fail under -n, seen
+      # on the droplet). It's also redundant — the lineage covers both names,
+      # and installing on the block matched by the one concrete name
+      # configures TLS for that block's whole server_name, client subdomains
+      # included.
+      if [ -f "$LANDING_CONF" ]; then
+        # The apex lives on the landing vhost (which references the lineage
+        # directly and must never be touched by certbot), and the player block
+        # is "server_name *.$FQDN" only — so target it via a concrete host the
+        # wildcard matches (the default org's subdomain).
+        log "Installing wildcard cert '$WILDCARD_CERT_NAME' for *.$FQDN (apex is the landing vhost)"
+        certbot install --nginx --cert-name "$WILDCARD_CERT_NAME" \
+          -d "$DEFAULT_ORG_HOST" --redirect -n \
+          || log "certbot install did not complete. Re-run later: ffc vhost"
+      else
+        log "Installing wildcard cert '$WILDCARD_CERT_NAME' for $FQDN + *.$FQDN"
+        certbot install --nginx --cert-name "$WILDCARD_CERT_NAME" \
+          -d "$FQDN" --redirect -n \
+          || log "certbot install did not complete. Re-run later: ffc vhost"
+      fi
     else
       log "Issuing/refreshing single-name TLS for $FQDN (client subdomains need the wildcard: ffc wildcard-cert, then ffc vhost)"
       certbot --nginx -d "$FQDN" --redirect -n --agree-tos \
@@ -333,7 +371,19 @@ cmd_seed(){
     -H 'content-type: application/json' \
     ${token:+-H "x-app-token: $token"} \
     --data-binary @"$APP_DIR/deploy/courses.seed.json" >/dev/null
-  log "Seeded 4 courses."
+  log "Seeded courses from deploy/courses.seed.json."
+}
+
+# (Re)seed the demo orgs through the admin API on loopback. Idempotent (fixed
+# UUIDs, upsert-on-id) — and deliberately a RESET: re-running restores the demo
+# orgs to deploy/demo-orgs.seed.json, discarding console edits made to them.
+cmd_seed_demo(){
+  local token
+  token="$(grep -E '^APP_TOKEN=' "$APP_DIR/server/.env" 2>/dev/null | cut -d= -f2- || true)"
+  [ -n "$token" ] || die "no APP_TOKEN in server/.env — the demo seeder drives /api/admin/*"
+  log "Seeding demo orgs -> 127.0.0.1:$API_PORT/api/admin/* (idempotent; resets demo orgs)"
+  FFC_API="http://127.0.0.1:$API_PORT" APP_TOKEN="$token" \
+    node "$APP_DIR/scripts/seed-demo-orgs.mjs"
 }
 
 cmd_deploy(){
@@ -385,6 +435,9 @@ cmd_deploy(){
   # directive is actually missing — otherwise just reload. Self-heals the "you
   # also had to run ffc vhost" gap without touching TLS on every deploy.
   local conf="/etc/nginx/sites-available/$FQDN"
+  # Landing vhost is opt-in (created by ffc landing-vhost); once present, keep
+  # it current with the template on every deploy (no certbot involved).
+  [ -f "$LANDING_CONF" ] && render_landing_vhost
   if [ -f "$conf" ] && ! grep -q 'client_max_body_size' "$conf"; then
     log "vhost missing client_max_body_size — re-rendering (runs certbot once)"
     cmd_vhost
@@ -393,6 +446,12 @@ cmd_deploy(){
     cmd_vhost
   elif [ -f "$conf" ] && ! grep -qE 'server_name[^;]*\*\.' "$conf"; then
     log "vhost missing *.$FQDN server_name (client org subdomains) — re-rendering (runs certbot once)"
+    cmd_vhost
+  elif [ -f "$LANDING_CONF" ] && grep -qE "server_name[^;]*[[:space:]]$FQDN[[:space:];]" "$conf"; then
+    # The whitespace anchor before $FQDN keeps *.$FQDN (preceded by '.') from
+    # matching — this only fires when the player vhost still claims the apex
+    # even though the landing vhost owns it now.
+    log "landing vhost owns the apex but the player vhost still names it — re-rendering (runs certbot once)"
     cmd_vhost
   else
     nginx -t && systemctl reload nginx
@@ -464,6 +523,34 @@ cmd_admin_setup(){
   [ "$(id -u)" -eq 0 ] || die "run as root (writes nginx + runs certbot)."
   cmd_wildcard_cert
   cmd_admin_vhost
+}
+
+# Render the landing vhost (bare apex -> marketing page). Like the admin vhost
+# it references the wildcard lineage directly and certbot never rewrites it.
+render_landing_vhost(){
+  [ -f "$APP_DIR/deploy/nginx.landing.conf.template" ] || die "missing deploy/nginx.landing.conf.template"
+  [ -d "/etc/letsencrypt/live/$WILDCARD_CERT_NAME" ] \
+    || die "wildcard cert '$WILDCARD_CERT_NAME' not found — run 'ffc wildcard-cert' first"
+  [ -f "$APP_DIR/current/landing/index.html" ] \
+    || die "no current/landing in the active release — run 'ffc deploy' first (build_release ships landing/)"
+  log "Writing landing vhost $LANDING_CONF (apex -> current/landing; frozen player paths 301 -> $DEFAULT_ORG_HOST)"
+  sed -e "s/__FQDN__/$FQDN/g" \
+      -e "s#__APP_DIR__#$APP_DIR#g" \
+      -e "s/__WILDCARD_LINEAGE__/$WILDCARD_CERT_NAME/g" \
+      -e "s/__DEFAULT_ORG_HOST__/$DEFAULT_ORG_HOST/g" \
+      "$APP_DIR/deploy/nginx.landing.conf.template" > "$LANDING_CONF"
+  ln -sf "$LANDING_CONF" "/etc/nginx/sites-enabled/$FQDN-landing"
+}
+
+# Put the marketing page on the bare apex. One command performs the whole flip:
+# the landing conf appears, so the cmd_vhost re-render drops the apex from the
+# player vhost's server_name and narrows certbot to *.$FQDN — no duplicate
+# server_name is left behind (nginx -t in cmd_vhost verifies + reloads).
+cmd_landing_vhost(){
+  [ "$(id -u)" -eq 0 ] || die "run as root (writes nginx + runs certbot)."
+  render_landing_vhost
+  cmd_vhost
+  log "Landing page: https://$FQDN   Player app: https://$DEFAULT_ORG_HOST"
 }
 
 # Return to the previously-deployed commit (recorded by cmd_deploy), or an
@@ -552,7 +639,9 @@ case "${1:-}" in
   migrate)          cmd_migrate ;;
   version)          cmd_version ;;
   vhost)            cmd_vhost ;;
+  landing-vhost)    cmd_landing_vhost ;;
   seed)             cmd_seed ;;
+  seed-demo)        cmd_seed_demo ;;
   restart)          pm2 restart ffc-api && pm2 save ;;
   logs)             pm2 logs ffc-api ;;
   backup)           cmd_backup ;;

@@ -1,5 +1,5 @@
 // Integration coverage for /api/admin/users — CRUD + super_admin-only gate.
-import { test, before, after } from "node:test";
+import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   TEST_DATABASE_URL,
@@ -10,9 +10,22 @@ import {
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.APP_TOKEN = "users-test-token";
+delete process.env.MAIL_PROVIDER; // console mailer — invite links land in stdout
 
 const { app } = await import("../../app.js");
 const { hashPassword } = await import("../../lib/adminPasswords.js");
+
+// Capture the console mailer's output to see invite mails like a real inbox.
+let mailLog = [];
+const realLog = console.log;
+function captureMail() {
+  mailLog = [];
+  console.log = (...args) => {
+    const line = args.join(" ");
+    if (line.startsWith("[mailer]")) mailLog.push(line);
+    else realLog(...args);
+  };
+}
 
 let baseUrl;
 let close;
@@ -67,7 +80,12 @@ before(async () => {
   orgAdminCookie = loginRes.headers.get("set-cookie").split(";")[0];
 });
 
+beforeEach(() => {
+  captureMail();
+});
+
 after(async () => {
+  console.log = realLog;
   if (close) await close();
   await testQuery(`delete from admin_user where id = any($1::uuid[])`, [userIds]);
   await testQuery(`delete from org where id = $1`, [orgId]);
@@ -118,6 +136,43 @@ test("super_admin (APP_TOKEN) can create, list, patch, and delete a user", async
   const afterDelete = await superAdmin(`/api/admin/users`);
   const afterDeleteList = await afterDelete.json();
   assert.ok(!afterDeleteList.some((u) => u.id === created.user.id));
+});
+
+test("POST /api/admin/users without a password creates a pending account and mails an invite", async () => {
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const email = `invited-${stamp}@example.com`;
+
+  const res = await superAdmin("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ email, role: "org_admin", orgId }),
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.inviteSent, true);
+  assert.equal(body.user.email, email);
+  assert.equal("passwordHash" in body.user, false);
+  userIds.push(body.user.id);
+
+  // Pending row: NULL hash + a live invite token, and the mail carries a link.
+  const row = await testQuery(
+    `select password_hash is null as "pending" from admin_user where id = $1`,
+    [body.user.id]
+  );
+  assert.equal(row.rows[0].pending, true);
+  const tokenRow = await testQuery(
+    `select kind from admin_password_token where admin_user_id = $1 and used_at is null`,
+    [body.user.id]
+  );
+  assert.equal(tokenRow.rowCount, 1);
+  assert.equal(tokenRow.rows[0].kind, "invite");
+  const mail = mailLog[mailLog.length - 1] ?? "";
+  assert.match(mail, /set-password\?token=[0-9a-f]{64}/);
+  assert.match(mail, /invited to Master Control/);
+
+  // Pre-Resend stopgap: on the console provider the super_admin response
+  // carries the same link the mail did, for hand relay.
+  const mailedToken = mail.match(/set-password\?token=([0-9a-f]{64})/)?.[1];
+  assert.equal(body.inviteLink, `http://localhost:5174/set-password?token=${mailedToken}`);
 });
 
 test("POST /api/admin/users validates email, password length, role, and org_admin requiring orgId", async () => {

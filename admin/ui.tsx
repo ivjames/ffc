@@ -30,6 +30,32 @@ export function fmtDateTime(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? '' : dateTimeFmt.format(d);
 }
 
+/** The Master Control logo square (mini-golf flag) — shared by the shell's
+ *  sidebar and the pre-auth screens (sign-in gate, set-password). */
+export function BrandMark({ className = 'h-8 w-8' }: { className?: string }) {
+  return (
+    <span
+      className={`grid shrink-0 place-items-center rounded-lg bg-slate-900 text-white ${className}`}
+    >
+      {/* Mini-golf flag */}
+      <svg
+        viewBox="0 0 24 24"
+        className="h-4.5 w-4.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M9 21V4" />
+        <path d="M9 4l8 3-8 3" fill="currentColor" />
+        <path d="M4 21h13" />
+      </svg>
+    </span>
+  );
+}
+
 export function Button({
   variant = 'primary',
   className = '',

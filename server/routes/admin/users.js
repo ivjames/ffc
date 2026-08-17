@@ -1,13 +1,14 @@
 // Admin: admin_user accounts. super_admin only — user management isn't
 // something an org_admin can do to themselves or anyone else.
 //   GET    /api/admin/users            list (never returns password_hash)
-//   POST   /api/admin/users           create (email + password required)
+//   POST   /api/admin/users           create (password optional — omitted = emailed set-password invite)
 //   PATCH  /api/admin/users/:id       edit email/role/orgId, optionally reset password
 //   DELETE /api/admin/users/:id       remove (hard delete — no domain history hangs off an account)
 import { Router } from "express";
 import { pool } from "../../db.js";
 import { audit, isSuperAdmin, actorLabel } from "../../lib/adminAuth.js";
 import { hashPassword } from "../../lib/adminPasswords.js";
+import { sendSetPasswordEmail } from "../../lib/adminPasswordTokens.js";
 import { UUID_RE } from "../../lib/validateLocation.js";
 import { EMAIL_RE } from "../../lib/validateUser.js";
 
@@ -72,24 +73,62 @@ router.get("/", async (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const result = normalizeUserInput(req.body, { requirePassword: true });
+  // Password optional: the normal path is to OMIT it and let the invitee set
+  // their own via the emailed link (no operator ever knows it). Passing one
+  // still works for scripted/bootstrap setups.
+  const result = normalizeUserInput(req.body, { requirePassword: false });
   if (result.error) return res.status(400).json({ ok: false, error: result.error });
-  const { email, password, role, orgId } = result.row;
+  const { password, role, orgId } = result.row;
+  // Lowercase on create only — PATCH merges the stored row back through
+  // normalizeUserInput, and rewriting existing spellings there would silently
+  // rename accounts (login matches email exactly).
+  const email = result.row.email.trim().toLowerCase();
   try {
-    const passwordHash = hashPassword(password);
-    const db = await pool.query(
-      `insert into admin_user (email, role, org_id, password_hash)
-         values ($1, $2, $3, $4) returning ${USER_COLS}`,
-      [email, role, orgId, passwordHash]
-    );
+    // Invited accounts start with a NULL password_hash — they can't log in
+    // until they follow the set-password link.
+    const db = password
+      ? await pool.query(
+          `insert into admin_user (email, role, org_id, password_hash)
+             values ($1, $2, $3, $4) returning ${USER_COLS}`,
+          [email, role, orgId, hashPassword(password)]
+        )
+      : await pool.query(
+          `insert into admin_user (email, role, org_id)
+             values ($1, $2, $3) returning ${USER_COLS}`,
+          [email, role, orgId]
+        );
+    const user = db.rows[0];
+    // Post-insert: a failed send must not lose the created account — the
+    // response says `inviteSent: false`, and "Forgot password" re-mails it.
+    let inviteSent;
+    // Non-null only while no real mail provider is configured: this route is
+    // super_admin-gated, so the operator may receive the link to relay by
+    // hand (see sendSetPasswordEmail's note).
+    let inviteLink = null;
+    if (!password) {
+      ({ sent: inviteSent, inviteLink } = await sendSetPasswordEmail({
+        req,
+        email,
+        adminUserId: user.id,
+        kind: "invite",
+      }));
+    }
     await audit({
       action: "user.create",
       entity: "admin_user",
-      entityId: db.rows[0].id,
-      detail: { email, role, orgId },
+      entityId: user.id,
+      detail: {
+        email,
+        role,
+        orgId,
+        // Boolean only — the audit log must never hold the capability itself.
+        ...(password ? {} : { invited: true, inviteSent, inviteLinkReturned: inviteLink !== null }),
+      },
       actor: actorLabel(req),
     });
-    return res.json({ ok: true, user: db.rows[0] });
+    return password
+      ? res.json({ ok: true, user })
+      : res.json({ ok: true, user, inviteSent, inviteLink });
   } catch (err) {
     if (err && err.code === "23505") {
       return res.status(409).json({ ok: false, error: "email already in use" });

@@ -1,0 +1,116 @@
+{
+  "__comment": "Demo orgs for the multi-org staging topology — seeded by `ffc seed-demo` (scripts/seed-demo-orgs.mjs) through the admin API. Fixed UUIDs make every write an upsert, so re-running RESETS these orgs to this file. Names/colors match the landing page's fictional venue switcher. POS is deliberately differentiated: boardwalk-fun is the everything-on venue (ordering + loyalty + game tickets with caps and adoption bonuses), putters-cove is loyalty-only with platform-default caps. No apiBase anywhere: stored null makes the client fall back to the baked /ce CenterEdge mock. Validated offline by server/lib/demoOrgsSeed.test.js.",
+  "orgs": [
+    {
+      "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "name": "Boardwalk Fun Co.",
+      "slug": "boardwalk-fun",
+      "sortOrder": 20,
+      "branding": {
+        "appName": "Boardwalk Fun Co.",
+        "shortName": "Boardwalk",
+        "themeColor": "#d61b5e",
+        "accentColor": "#ff2e73",
+        "backgroundColor": "#2b0a18",
+        "shareFooter": "Boardwalk Fun Co. · come beat this score"
+      },
+      "locations": [
+        {
+          "id": "e1111111-1111-4111-8111-111111111111",
+          "name": "Santa Cruz Boardwalk",
+          "slug": "santa-cruz",
+          "lat": 36.9643,
+          "lng": -122.0176,
+          "geofenceKm": 2,
+          "tz": "America/Los_Angeles",
+          "sortOrder": 10,
+          "hours": {
+            "mon": { "open": "12:00", "close": "21:00" },
+            "tue": { "open": "12:00", "close": "21:00" },
+            "wed": { "open": "12:00", "close": "21:00" },
+            "thu": { "open": "12:00", "close": "21:00" },
+            "fri": { "open": "12:00", "close": "23:00" },
+            "sat": { "open": "10:00", "close": "23:00" },
+            "sun": { "open": "10:00", "close": "21:00" }
+          },
+          "pos": {
+            "ordering": { "vendor": "centeredge" },
+            "loyalty": {
+              "vendor": "centeredge",
+              "gameRewards": true,
+              "gameRewardCaps": {
+                "dailyPerCard": 300,
+                "perGame": { "skeeball": 40, "highstriker": 25 }
+              },
+              "adoptionBonus": { "install": 75, "signin": 25 }
+            }
+          },
+          "courses": [
+            {
+              "id": "e1111111-1111-4111-8111-c11111111111",
+              "name": "Surf City Links",
+              "theme": "blue",
+              "sortOrder": 10,
+              "pars": [3, 2, 3, 3, 2, 4, 2, 3, 3, 2, 3, 4, 2, 3, 3, 2, 3, 2]
+            },
+            {
+              "id": "e1111111-1111-4111-8111-c22222222222",
+              "name": "Pier Party",
+              "theme": "classic",
+              "sortOrder": 20,
+              "pars": [2, 3, 3, 2, 3, 3, 4, 2, 3, 2, 3, 3, 2, 4, 3, 2, 3, 3]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      "name": "Putter's Cove",
+      "slug": "putters-cove",
+      "sortOrder": 30,
+      "branding": {
+        "appName": "Putter's Cove",
+        "shortName": "Putter's",
+        "themeColor": "#0089ab",
+        "accentColor": "#00c4ea",
+        "backgroundColor": "#0a2a33",
+        "shareFooter": "Putter's Cove · come beat this score"
+      },
+      "locations": [
+        {
+          "id": "f1111111-1111-4111-8111-111111111111",
+          "name": "Putter's Cove Newport",
+          "slug": "newport",
+          "lat": 44.6368,
+          "lng": -124.0535,
+          "geofenceKm": 2,
+          "tz": "America/Los_Angeles",
+          "sortOrder": 10,
+          "hours": {
+            "mon": "closed",
+            "tue": { "open": "11:00", "close": "20:00" },
+            "wed": { "open": "11:00", "close": "20:00" },
+            "thu": { "open": "11:00", "close": "20:00" },
+            "fri": { "open": "11:00", "close": "22:00" },
+            "sat": { "open": "10:00", "close": "22:00" },
+            "sun": { "open": "10:00", "close": "19:00" }
+          },
+          "pos": {
+            "ordering": null,
+            "loyalty": { "vendor": "centeredge", "gameRewards": true }
+          },
+          "courses": [
+            {
+              "id": "f1111111-1111-4111-8111-c11111111111",
+              "name": "Tidepool Trail",
+              "theme": "green",
+              "sortOrder": 10,
+              "pars": [3, 3, 2, 3, 4, 2, 3, 2, 3, 3, 2, 3, 3, 2, 4, 3, 2, 3]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

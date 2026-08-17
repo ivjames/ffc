@@ -1,0 +1,63 @@
+# nginx site for the Infinicade marketing landing page — the bare platform
+# apex (lab980 convention: /etc/nginx/sites-available/<fqdn>-landing symlinked
+# into sites-enabled/). Once this vhost exists, the player PWA serves only the
+# org subdomains (*.<fqdn>) — `ffc landing-vhost` renders this file and then
+# re-renders the player vhost apex-less in the same run.
+#
+# Placeholders to replace (ffc landing-vhost does this):
+#   __FQDN__              e.g. ffc.lab980.com  (later: infinicade.com)
+#   __APP_DIR__           e.g. /var/www/ffc
+#   __WILDCARD_LINEAGE__  e.g. ffc-wildcard  (certbot lineage dir name)
+#   __DEFAULT_ORG_HOST__  e.g. bullwinkles.ffc.lab980.com
+#
+# TLS: the wildcard lineage issued by `ffc wildcard-cert` covers the apex too,
+# so this file references it directly. Certbot NEVER rewrites this file (same
+# convention as nginx.admin.conf.template).
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __FQDN__;
+    # Redirect to HTTPS (the wildcard cert covers the apex).
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name __FQDN__;
+
+    # Wildcard cert covering *.<fqdn> AND the apex, issued via DNS-01.
+    ssl_certificate     /etc/letsencrypt/live/__WILDCARD_LINEAGE__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__WILDCARD_LINEAGE__/privkey.pem;
+
+    # Static landing page, shipped inside each release (build_release copies
+    # landing/ next to dist/), so it swaps atomically with the app.
+    root __APP_DIR__/current/landing;
+    index index.html;
+
+    # Frozen player paths baked into external artifacts — the printed QR
+    # signage's /install, emailed /teams/accept, TV /tv, QR /join, shared-game
+    # /games/:id/lobby, and account bookmarks under /me/ (see the REDIRECTS
+    # note in src/App.tsx). The apex no longer serves the PWA, so forward them
+    # (path + query intact) to the default org's subdomain.
+    location = /install    { return 301 https://__DEFAULT_ORG_HOST__$request_uri; }
+    location = /join       { return 301 https://__DEFAULT_ORG_HOST__$request_uri; }
+    location = /tv         { return 301 https://__DEFAULT_ORG_HOST__$request_uri; }
+    location /tv/          { return 301 https://__DEFAULT_ORG_HOST__$request_uri; }
+    location /teams/accept { return 301 https://__DEFAULT_ORG_HOST__$request_uri; }
+    location /games/       { return 301 https://__DEFAULT_ORG_HOST__$request_uri; }
+    location /me/          { return 301 https://__DEFAULT_ORG_HOST__$request_uri; }
+
+    # PWA self-destruct: installs from the apex-served-the-app era still poll
+    # /sw.js for updates. Serve the kill-switch worker (landing/sw.js) uncached
+    # so they unregister, drop their caches, and re-navigate into the 301s
+    # above instead of replaying a dead cached shell.
+    location = /sw.js {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
+    location / {
+        try_files $uri /index.html;
+    }
+}

@@ -401,6 +401,21 @@ create table if not exists admin_session (
 );
 create index if not exists admin_session_expires_idx on admin_session (expires_at);
 
+-- Emailed set-password links for admin_user (invite-on-provision + forgot
+-- password; lib/adminPasswordTokens.js). Only the sha256 of the 32-byte hex
+-- token is stored. kind: invite | reset (app-enforced vocab, house style).
+create table if not exists admin_password_token (
+  id            uuid primary key default gen_random_uuid(),
+  admin_user_id uuid not null references admin_user(id) on delete cascade,
+  kind          text not null default 'invite',
+  token_hash    text not null,
+  expires_at    timestamptz not null,   -- invite: +7 days, reset: +2 hours
+  used_at       timestamptz,
+  created_at    timestamptz not null default now()
+);
+create index if not exists admin_password_token_hash_idx on admin_password_token (token_hash);
+create index if not exists admin_password_token_user_idx on admin_password_token (admin_user_id);
+
 -- Seed the default org for the current client (Bullwinkle's) and backfill the
 -- existing locations onto it. Fixed id so this is idempotent and mirrors the
 -- LOC_* / course id convention in src/data/courses.ts.

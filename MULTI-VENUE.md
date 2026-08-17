@@ -34,9 +34,15 @@ is hit on every app boot. Exposed as middleware `tenant()` setting
 `req.tenant`; mounted only on the routes that need it (content, manifest,
 announcements), not globally.
 
-Backward compat: on today's staging host (`ffc.lab980.com`) the first label
-`ffc` matches no slug, so resolution falls through to the default org —
-behavior is identical to today.
+Platform topology (since the apex cutover — see DEPLOY.md "Platform
+topology"): the bare apex `ffc.lab980.com` serves the marketing landing page
+via its own nginx vhost, and the player PWA's canonical host is the default
+org's subdomain `bullwinkles.ffc.lab980.com` (resolved via step 2, `via:
+'host'` — strict org filtering, no org-less fallback rows). Unmatched labels
+on other subdomains still fall through to `DEFAULT_ORG_SLUG` as above.
+Infrastructure hostnames can never become org slugs: `normalizeOrg` rejects
+the reserved labels in `server/lib/reservedSlugs.js` (admin, api, app, ffc,
+infinicade, landing, mail, www).
 
 ## 2. Org branding (`org.branding` jsonb, default `'{}'`)
 
@@ -112,7 +118,21 @@ place client-side (`src/lib/branding.ts`). Validation rejects unknown keys.
   updated. Client DNS = one CNAME/A per org slug under the platform domain (or
   a wildcard DNS record).
 
-## 6. Follow-ups
+## 6. Onboarding a new site
+
+Provisioning is a Master Control tool, not an ops task: **Provision site**
+(super_admin only, `POST /api/admin/provision`) creates the whole site in one
+transaction — org + branding + first venue (hours, POS offering selection) +
+courses, plus optionally an emailed invite for the site's org_admin, who sets
+their own password via the link (no password ever typed by the operator). The
+subdomain is live
+immediately (the tenant cache is cleared in-process): no SSH, no DNS, no
+cert, no deploy — the wildcard vhost/cert/record already cover every slug.
+Create-only semantics: an existing org/location slug 409s, never overwrites.
+Follow-ups (logo/icon uploads, ticket caps, hunt items) happen on the
+existing org/venue pages.
+
+## 7. Follow-ups
 
 Addressed since the initial build:
 

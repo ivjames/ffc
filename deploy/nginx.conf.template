@@ -4,6 +4,10 @@
 # Placeholders to replace:
 #   __FQDN__     e.g. minigolf.lab980.com   (or an apex like putt.example.com);
 #                also serves every client subdomain via *.__FQDN__ (see below)
+#   __SERVER_NAMES__  substituted by `ffc vhost`: "__FQDN__ *.__FQDN__" until
+#                the landing vhost exists, then "*.__FQDN__" only — once the
+#                marketing page owns the bare apex, this vhost keeps just the
+#                org subdomains
 #   __APP_DIR__  e.g. /var/www/ffc
 #   __API_PORT__ e.g. 8060  (the Node/Express API's local pm2 port)
 #   __CE_MOCK_PORT__ e.g. 8070  (the CenterEdge mock's local pm2 port)
@@ -22,9 +26,11 @@ server {
     # Multi-venue: each client org is served on <org-slug>.__FQDN__ — the
     # wildcard routes every client subdomain to this same vhost, and the API
     # resolves the tenant from the Host header (which the /api/ proxy below
-    # passes through intact). The admin vhost's exact admin.__FQDN__ name
-    # still wins over this wildcard (nginx: exact match beats wildcard).
-    server_name __FQDN__ *.__FQDN__;
+    # passes through intact). Exact-match names win over this wildcard
+    # (nginx precedence): the admin vhost's admin.__FQDN__ always did, and
+    # after `ffc landing-vhost` the bare apex moves to the landing vhost —
+    # at which point ffc vhost renders this line without the apex.
+    server_name __SERVER_NAMES__;
 
     # Static build served from the atomically-swapped release symlink.
     root __APP_DIR__/current/dist;

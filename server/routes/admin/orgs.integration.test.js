@@ -57,6 +57,21 @@ test("POST /api/admin/orgs validates name and slug", async () => {
   assert.equal(badSlug.status, 400);
 });
 
+test("POST /api/admin/orgs rejects reserved hostname slugs", async () => {
+  // An org slug is the first DNS label of its subdomain, so infrastructure
+  // labels (admin.<fqdn>, the platform apex itself, …) must never be taken
+  // by an org — see lib/reservedSlugs.js.
+  for (const slug of ["admin", "www", "api", "ffc", "infinicade"]) {
+    const res = await api("/api/admin/orgs", {
+      method: "POST",
+      body: JSON.stringify({ name: "Reserved Check", slug }),
+    });
+    assert.equal(res.status, 400, `slug "${slug}" should be rejected`);
+    const body = await res.json();
+    assert.match(body.error, /reserved/, `slug "${slug}" error should say reserved`);
+  }
+});
+
 test("POST /api/admin/orgs creates, then updates via id, and audits both", async () => {
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const createRes = await api("/api/admin/orgs", {

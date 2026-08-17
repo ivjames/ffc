@@ -415,6 +415,56 @@ export type SyntheticProjection = {
   effective: VolumePair; // whichever the ignoreHours flag selects
 };
 
+// One-shot site provisioning (Master Control → Provision site, super_admin
+// only). The server creates the org + branding + first venue + courses (+
+// optionally the org admin) atomically — any slug/email conflict fails the
+// whole thing with an ApiError like "org slug already in use".
+export type ProvisionPayload = {
+  org: { name: string; slug: string; sortOrder?: number };
+  branding?: {
+    appName?: string;
+    shortName?: string;
+    themeColor?: string;
+    accentColor?: string;
+    backgroundColor?: string;
+    shareFooter?: string;
+  };
+  location: {
+    name: string;
+    slug: string;
+    lat?: number;
+    lng?: number;
+    geofenceKm?: number;
+    hours?: Record<string, { open: string; close: string } | 'closed'>;
+    pos?: unknown;
+    sortOrder?: number;
+  };
+  courses: Array<{ name: string; theme: string; pars: number[]; sortOrder?: number }>;
+  adminUser?: { email: string };
+};
+
+export type ProvisionResult = {
+  ok: true;
+  site: {
+    org: Org;
+    location: Location;
+    courses: Course[];
+    adminUser: {
+      id: string;
+      email: string;
+      role: string;
+      orgId: string;
+      inviteSent: boolean;
+      /** The set-password link itself — non-null ONLY while the server has no
+       *  real mail provider (pre-Resend window), so the operator can relay it
+       *  by hand. */
+      inviteLink: string | null;
+    } | null;
+    /** null in dev; the SPA falls back to slug + stripped hostname. */
+    playerUrl: string | null;
+  };
+};
+
 // Hunt vision-spend rollup (GET /api/admin/hunt-usage — the invoice view).
 // `rows` is per month + venue; `orgSummary` pre-aggregates per month + org.
 // verify/screenCostUsd arrive rounded to 4 decimals (sub-cent screen spend
@@ -491,6 +541,20 @@ export const api = {
   // "not logged in" is the expected common case, not an auth failure to react to.
   me: () => req<{ ok: true; user: CurrentUser }>('GET', '/me', undefined, { quiet401: true }),
 
+  // Self-serve password flow. All three are quiet401: they run on pre-auth
+  // screens (the sign-in gate's forgot mode and the emailed /set-password
+  // link), which must never trip the global unauthorized force-lock.
+  forgotPassword: (email: string) =>
+    req<{ ok: true }>('POST', '/password/forgot', { email }, { quiet401: true }),
+  checkPasswordToken: (token: string) =>
+    req<{ ok: true; email: string }>('POST', '/password/token-check', { token }, { quiet401: true }),
+  setPassword: (token: string, password: string) =>
+    req<{ ok: true; user: Omit<CurrentUser, 'viaToken'> }>(
+      'POST',
+      '/password/set',
+      { token, password },
+      { quiet401: true }
+    ),
   // Self-service password change. quiet401: a wrong CURRENT password comes
   // back as a 401 that the form shows inline — it must not fire the global
   // sign-out event (the session is still perfectly valid).
@@ -500,6 +564,7 @@ export const api = {
   listOrgs: (archived = false) => req<Org[]>('GET', `/orgs${archived ? '?archived=1' : ''}`),
   getOrg: (id: string) => req<{ org: Org; locations: Location[] }>('GET', `/orgs/${id}`),
   saveOrg: (org: Partial<Org>) => req<{ ok: true; org: Org }>('POST', '/orgs', org),
+  provisionSite: (p: ProvisionPayload) => req<ProvisionResult>('POST', '/provision', p),
   archiveOrg: (id: string, archived: boolean) =>
     req<{ ok: true; org: Org }>('POST', `/orgs/${id}/${archived ? 'archive' : 'unarchive'}`),
   // Lifecycle switch (super_admin only): a suspended org keeps all its data
