@@ -96,7 +96,7 @@ on the fixed layers): hero = violet+cyan; `#platform` = cyan/violet/lime;
 
 ```
 nav (fixed pill)
-hero (compact, playable putt canvas)
+hero (two-column: copy + putting-green putt stage)
 marquee ×2 (opposite directions)
 #platform (bento grid)
 #white-label (copy + venue switcher phone)
@@ -160,12 +160,14 @@ via `steps(2)` 1.4s), short pitch, lime mailto button
 
 ## 5. Hero putt game
 
-Full-bleed `<canvas>` under the hero copy; an invisible 60px `#ballHandle`
+The game lives in a visible putting-green card (`.putt-stage`) that is the
+hero's right column (stacks below the copy <900px) — turf stripes, pale
+lime/cyan gradient, hint + score chip inside. An invisible 60px `#ballHandle`
 div (`touch-action: none`) tracks the ball so page scrolling is never
 hijacked — only grabbing the ball captures the pointer.
 
 - **Aim:** drag from ball = slingshot; dotted cyan aim line + coral power
-  ring; power = drag distance clamped to 260px; launch velocity = 26 × power
+  ring; power = drag distance clamped to 200px; launch velocity = 21 × power
   fraction, opposite the drag.
 - **Physics:** friction ×0.985/frame, wall bounce ×−0.72, stop below 0.05.
 - **Hole:** lime-ringed cup + coral flag. Capture requires dist < r−2 **and**
@@ -173,10 +175,9 @@ hijacked — only grabbing the ball captures the pointer.
 - **Sink:** 26-particle lime burst, ball shrink, counter chip
   (`PUTTS SUNK · NN`), escalating hint lines, respawn at a random spot ~700ms
   later.
-- **Placement (desktop >900px):** hole ≈ (0.81W, 0.54H) — right of the
-  wordmark, clear of copy; ball spawns ≈ (0.68W, 0.74H), right of the CTAs.
-  **Mobile:** both live in the free strip at the bottom of the hero
-  (hole ≈ (0.72W, H−150), ball ≈ (0.26W, H−120)).
+- **Placement:** relative to the stage — hole ≈ (0.72W, 0.38H), ball
+  spawns ≈ (0.26W, 0.68H). The walls are the card's edges, so every bounce
+  stays inside the green at all viewports (no desktop/mobile branching).
 - Canvas is DPR-aware (capped ×2) and relayouts on resize.
 
 ## 6. Motion inventory
