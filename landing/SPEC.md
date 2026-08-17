@@ -158,7 +158,20 @@ Centered `PRESS START` (`clamp(38px, 7.4vw, 92px)`; "START" in lime blinking
 via `steps(2)` 1.4s), short pitch, lime mailto button
 (`hello@infinicade.com`), small-print `no credit card · no app store · just play`.
 
-## 5. Hero putt game
+## 5. Hero arcade stage (three playable micro-games)
+
+The stage rotates between three playable scenes — pill tabs bottom-left,
+auto-advancing every 9s until the visitor interacts (never under
+reduced-motion). Per-game scores persist for the visit, and the card
+re-skins per game (turf / wooden lane / carnival stripes) via
+`.stage-<mode>` classes:
+
+1. **Mini golf** — the drag-to-putt game described below.
+2. **Skee-ball** — the same slingshot physics aimed up the lane at
+   concentric 20/30/50/100 rings; the ball scores where it stops, with
+   floating "+N" text and a coral burst on 50+.
+3. **High striker** — tap-timing: an oscillating power meter, a puck
+   launched up the tower, bell at ≥~93% power (DING!, confetti, counter).
 
 The game lives in a visible putting-green card (`.putt-stage`) that is the
 hero's right column (stacks below the copy <900px) — turf stripes, pale
@@ -192,6 +205,7 @@ hijacked — only grabbing the ball captures the pointer.
 | Ticket count-up | 0 → 1,250, 1.6s cubic ease-out on first view | jumps to final |
 | Rewards toggle flicker | every 3.4s | off |
 | Venue auto-cycle | 4s | off |
+| Stage auto-rotate | 9s | off |
 | Scanline / pulses / blink | 1.4–2.6s loops | off |
 | Cursor glow | rAF lerp 0.08 | off |
 | Putt game | rAF, user-initiated | kept (interaction, not ambient); idle hole pulse stilled |

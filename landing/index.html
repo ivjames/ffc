@@ -159,6 +159,29 @@ img, svg { display: block; }
   box-shadow: 0 20px 50px rgba(16, 20, 60, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 @media (max-width: 900px) { .putt-stage { min-height: 280px; } }
+.putt-stage.stage-skee {
+  background:
+    repeating-linear-gradient(0deg, rgba(180, 120, 30, 0.05) 0 26px, transparent 26px 52px),
+    radial-gradient(120% 90% at 72% 16%, rgba(255, 46, 115, 0.08), transparent 62%),
+    linear-gradient(150deg, #fdf4de, #fbe9d2 55%, #f7e3ee);
+  border-color: rgba(214, 138, 40, 0.35);
+}
+.putt-stage.stage-striker {
+  background:
+    repeating-linear-gradient(90deg, rgba(109, 53, 255, 0.04) 0 30px, transparent 30px 60px),
+    radial-gradient(120% 90% at 72% 16%, rgba(255, 46, 115, 0.10), transparent 62%),
+    linear-gradient(150deg, #fdeef3, #eeeafc 55%, #ddf1fb);
+  border-color: rgba(255, 46, 115, 0.30);
+}
+.stage-tabs { position: absolute; left: 12px; bottom: 12px; z-index: 4; display: flex; gap: 8px; flex-wrap: wrap; }
+.s-tab {
+  font-family: var(--display); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 8px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(16, 20, 60, 0.15); background: rgba(255, 255, 255, 0.85); color: var(--dim);
+  transition: all 0.15s ease;
+}
+.s-tab:hover { color: var(--ink); transform: translateY(-1px); }
+.s-tab.active { background: var(--ink); color: #ffffff; border-color: transparent; }
 #putt { position: absolute; inset: 0; }
 .eyebrow {
   display: inline-flex; align-items: center; gap: 10px;
@@ -558,6 +581,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
           <span id="hintText">⛳ grab the ball · drag · release</span>
           <span class="score" id="puttScore">PUTTS SUNK · 00</span>
         </div>
+        <div class="stage-tabs" id="stageTabs" aria-label="Try another game"></div>
       </div>
     </div>
   </header>
@@ -758,18 +782,35 @@ footer .logo { font-size: 12px; color: var(--ink); }
     })();
   }
 
-  /* ---------- hero putt game ---------- */
+  /* ---------- hero arcade stage: three playable micro-games ---------- */
   const stage = document.getElementById("stage");
   const canvas = document.getElementById("putt");
   const handle = document.getElementById("ballHandle");
   const scoreEl = document.getElementById("puttScore");
   const hintEl = document.getElementById("hintText");
+  const tabsEl = document.getElementById("stageTabs");
   const ctx = canvas.getContext("2d");
   let W = 0, H = 0, dpr = 1;
-  const ball = { x: 200, y: 300, vx: 0, vy: 0, r: 11 };
+
+  const pad2 = n => String(n).padStart(2, "0");
+  const ball = { x: 120, y: 200, vx: 0, vy: 0, r: 11 };
   const hole = { x: 0, y: 0, r: 17 };
-  let dragging = false, drag = { x: 0, y: 0 }, sunk = 0, sinking = 0;
   const parts = [];
+  let dragging = false, drag = { x: 0, y: 0 };
+  let sinking = 0, launched = false, restTimer = 0;
+  let flash = null;
+  const striker = { phase: 0, meter: 0, hp: -1, vel: 0, glow: 0, swinging: false, scored: false };
+  const scores = { golf: 0, skee: 0, striker: 0 };
+  let mode = "golf";
+
+  const MODES = {
+    golf: { icon: "\u26f3", label: "MINI GOLF", hint: "\u26f3 grab the ball \u00b7 drag \u00b7 release",
+            score: () => "PUTTS SUNK \u00b7 " + pad2(scores.golf) },
+    skee: { icon: "\ud83c\udfb3", label: "SKEE-BALL", hint: "\ud83c\udfb3 flick the ball up the lane",
+            score: () => "SKEE \u00b7 " + String(scores.skee).padStart(3, "0") },
+    striker: { icon: "\ud83d\udd28", label: "HIGH STRIKER", hint: "\ud83d\udd28 tap when the power peaks",
+               score: () => "BELLS RUNG \u00b7 " + pad2(scores.striker) },
+  };
 
   function layout() {
     dpr = Math.min(devicePixelRatio || 1, 2);
@@ -777,25 +818,54 @@ footer .logo { font-size: 12px; color: var(--ink); }
     canvas.width = W * dpr; canvas.height = H * dpr;
     canvas.style.width = W + "px"; canvas.style.height = H + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    hole.x = W * 0.72;
-    hole.y = H * 0.38;
-    if (!dragging && ball.vx === 0 && ball.vy === 0) respawn(false);
+    hole.x = W * 0.72; hole.y = H * 0.38;
+    if (!dragging && ball.vx === 0 && ball.vy === 0 && sinking <= 0) respawnBall(false);
   }
-  function respawn(random) {
-    ball.x = W * (random ? 0.16 + Math.random() * 0.30 : 0.26);
-    ball.y = H * (random ? 0.52 + Math.random() * 0.30 : 0.68);
-    ball.vx = ball.vy = 0;
+  function respawnBall(random) {
+    if (mode === "skee") { ball.x = W * (random ? 0.35 + Math.random() * 0.3 : 0.5); ball.y = H * 0.84; }
+    else { ball.x = W * (random ? 0.16 + Math.random() * 0.30 : 0.26); ball.y = H * (random ? 0.52 + Math.random() * 0.30 : 0.68); }
+    ball.vx = ball.vy = 0; launched = false;
   }
   layout();
   addEventListener("resize", layout);
 
+  function updateScore() { scoreEl.textContent = MODES[mode].score(); }
+  function setMode(m, byUser) {
+    mode = m; sinking = 0; flash = null; restTimer = 0;
+    striker.hp = -1; striker.swinging = false; striker.glow = 0;
+    stage.classList.remove("stage-golf", "stage-skee", "stage-striker");
+    stage.classList.add("stage-" + m);
+    handle.style.display = m === "striker" ? "none" : "";
+    hintEl.textContent = MODES[m].hint;
+    updateScore();
+    respawnBall(false);
+    [...tabsEl.children].forEach(b => b.classList.toggle("active", b.dataset.mode === m));
+    if (byUser) stopAuto();
+  }
+  let autoRotate = null;
+  function stopAuto() { if (autoRotate) { clearInterval(autoRotate); autoRotate = null; } }
+
+  Object.entries(MODES).forEach(([m, cfg]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "s-tab"; b.dataset.mode = m;
+    b.textContent = cfg.icon + " " + cfg.label;
+    b.addEventListener("pointerdown", e => e.stopPropagation());
+    b.addEventListener("click", () => setMode(m, true));
+    tabsEl.appendChild(b);
+  });
+  if (!reduced) autoRotate = setInterval(() => {
+    if (dragging || striker.swinging) return;
+    const order = Object.keys(MODES);
+    setMode(order[(order.indexOf(mode) + 1) % order.length], false);
+  }, 9000);
+
   handle.addEventListener("pointerdown", e => {
-    e.preventDefault();
+    e.preventDefault(); stopAuto();
     dragging = true; drag.x = e.clientX; drag.y = e.clientY;
     handle.setPointerCapture(e.pointerId);
   });
   handle.addEventListener("pointermove", e => { if (dragging) { drag.x = e.clientX; drag.y = e.clientY; } });
-  handle.addEventListener("pointerup", e => {
+  handle.addEventListener("pointerup", () => {
     if (!dragging) return;
     dragging = false;
     const rect = stage.getBoundingClientRect();
@@ -804,22 +874,68 @@ footer .logo { font-size: 12px; color: var(--ink); }
     if (d > 6) {
       const p = Math.min(d, 200) / 200;
       ball.vx = (dx / d) * p * 21; ball.vy = (dy / d) * p * 21;
-      if (hintEl) hintEl.textContent = "⛳ nice stroke";
+      launched = true;
+      if (mode === "golf") hintEl.textContent = "\u26f3 nice stroke";
     }
+  });
+
+  stage.addEventListener("pointerdown", () => {
+    stopAuto();
+    if (mode !== "striker" || striker.swinging) return;
+    striker.swinging = true; striker.scored = false;
+    const T = H * 0.60;
+    striker.hp = 0;
+    striker.vel = striker.meter * Math.sqrt(2 * 0.55 * T * 1.1);
   });
 
   function burst(x, y, color) {
     for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 5;
-      parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 1.5, life: 1, color });
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 5;
+      parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5, life: 1, color });
     }
   }
+  function physicsStep() {
+    if (dragging) return;
+    ball.x += ball.vx; ball.y += ball.vy;
+    ball.vx *= 0.985; ball.vy *= 0.985;
+    if (Math.abs(ball.vx) < 0.05) ball.vx = 0;
+    if (Math.abs(ball.vy) < 0.05) ball.vy = 0;
+    if (ball.x < ball.r) { ball.x = ball.r; ball.vx *= -0.72; }
+    if (ball.x > W - ball.r) { ball.x = W - ball.r; ball.vx *= -0.72; }
+    if (ball.y < ball.r) { ball.y = ball.r; ball.vy *= -0.72; }
+    if (ball.y > H - ball.r) { ball.y = H - ball.r; ball.vy *= -0.72; }
+  }
+  function drawAim(rect) {
+    if (!dragging) return;
+    const px = drag.x - rect.left, py = drag.y - rect.top;
+    const dx = ball.x - px, dy = ball.y - py;
+    const d = Math.min(Math.hypot(dx, dy), 200);
+    const a = Math.atan2(dy, dx);
+    ctx.setLineDash([4, 9]);
+    ctx.strokeStyle = "rgba(0,170,210,0.95)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ball.x, ball.y);
+    ctx.lineTo(ball.x + Math.cos(a) * d * 1.4, ball.y + Math.sin(a) * d * 1.4);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r + 6 + d / 12, 0, 7);
+    ctx.strokeStyle = `rgba(255,46,115,${0.25 + (d / 200) * 0.55})`; ctx.stroke();
+  }
+  function drawBall(top, bottom, stroke) {
+    if (sinking > 0 && sinking <= 0.35) return;
+    const shrink = sinking > 0 ? sinking : 1;
+    ctx.beginPath(); ctx.ellipse(ball.x, ball.y + ball.r * 0.9, ball.r * 0.95, ball.r * 0.4, 0, 0, 7);
+    ctx.fillStyle = "rgba(16,20,60,0.15)"; ctx.fill();
+    const bg = ctx.createRadialGradient(ball.x - 3, ball.y - 4, 1, ball.x, ball.y, ball.r);
+    bg.addColorStop(0, top); bg.addColorStop(1, bottom);
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r * shrink, 0, 7);
+    ctx.fillStyle = bg; ctx.fill();
+    ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke();
+  }
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+  }
 
-  function tick() {
-    ctx.clearRect(0, 0, W, H);
-    const rect = stage.getBoundingClientRect();
-
-    // hole
+  function drawGolf(rect) {
     const pulse = reduced ? 0 : Math.sin(performance.now() / 500) * 2;
     ctx.beginPath(); ctx.arc(hole.x, hole.y, hole.r + 8 + pulse, 0, 7);
     ctx.strokeStyle = "rgba(0,180,220,0.40)"; ctx.lineWidth = 2; ctx.stroke();
@@ -827,82 +943,160 @@ footer .logo { font-size: 12px; color: var(--ink); }
     hg.addColorStop(0, "#0b0e28"); hg.addColorStop(1, "#39407c");
     ctx.beginPath(); ctx.arc(hole.x, hole.y, hole.r, 0, 7); ctx.fillStyle = hg; ctx.fill();
     ctx.strokeStyle = "rgba(0,170,210,0.90)"; ctx.lineWidth = 1.6; ctx.stroke();
-    // flag
     ctx.strokeStyle = "rgba(16,20,60,0.65)"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(hole.x, hole.y - 4); ctx.lineTo(hole.x, hole.y - 46); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(hole.x, hole.y - 46); ctx.lineTo(hole.x + 22, hole.y - 38); ctx.lineTo(hole.x, hole.y - 30); ctx.closePath();
     ctx.fillStyle = "#ff2e73"; ctx.fill();
 
-    // physics
     if (sinking > 0) {
       sinking -= 0.06;
-      if (sinking <= 0) respawn(true);
-    } else if (!dragging) {
-      ball.x += ball.vx; ball.y += ball.vy;
-      ball.vx *= 0.985; ball.vy *= 0.985;
-      if (Math.abs(ball.vx) < 0.05) ball.vx = 0;
-      if (Math.abs(ball.vy) < 0.05) ball.vy = 0;
-      if (ball.x < ball.r) { ball.x = ball.r; ball.vx *= -0.72; }
-      if (ball.x > W - ball.r) { ball.x = W - ball.r; ball.vx *= -0.72; }
-      if (ball.y < ball.r) { ball.y = ball.r; ball.vy *= -0.72; }
-      if (ball.y > H - ball.r) { ball.y = H - ball.r; ball.vy *= -0.72; }
+      if (sinking <= 0) respawnBall(true);
+    } else {
+      physicsStep();
       const dh = Math.hypot(ball.x - hole.x, ball.y - hole.y);
       const speed = Math.hypot(ball.vx, ball.vy);
       if (dh < hole.r - 2 && speed < 9) {
-        sunk++; sinking = 1;
-        scoreEl.textContent = "PUTTS SUNK · " + String(sunk).padStart(2, "0");
-        if (hintEl) hintEl.textContent = ["⛳ sunk it!", "⛳ hole in one energy", "⛳ the crowd goes wild", "⛳ unstoppable"][Math.min(sunk - 1, 3)];
+        scores.golf++; sinking = 1;
+        updateScore();
+        hintEl.textContent = ["\u26f3 sunk it!", "\u26f3 hole in one energy", "\u26f3 the crowd goes wild", "\u26f3 unstoppable"][Math.min(scores.golf - 1, 3)];
         burst(hole.x, hole.y, "#ff2e73");
       } else if (dh < hole.r + 4 && speed >= 9) {
-        // rolled right over the cup — classic
-        if (hintEl) hintEl.textContent = "⛳ too hot! ease up";
+        hintEl.textContent = "\u26f3 too hot! ease up";
       }
     }
+    drawAim(rect);
+    drawBall("#ffffff", "#b9c2e8", "rgba(16,20,60,0.30)");
+  }
 
-    // aim line
-    if (dragging) {
-      const px = drag.x - rect.left, py = drag.y - rect.top;
-      const dx = ball.x - px, dy = ball.y - py;
-      const d = Math.min(Math.hypot(dx, dy), 200);
-      const a = Math.atan2(dy, dx);
-      ctx.setLineDash([4, 9]);
-      ctx.strokeStyle = "rgba(0,170,210,0.95)"; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(ball.x, ball.y);
-      ctx.lineTo(ball.x + Math.cos(a) * d * 1.4, ball.y + Math.sin(a) * d * 1.4);
-      ctx.stroke(); ctx.setLineDash([]);
-      // power ring
-      ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r + 6 + d / 12, 0, 7);
-      ctx.strokeStyle = `rgba(255,46,115,${0.25 + (d / 200) * 0.55})`; ctx.stroke();
+  const ringDefs = () => {
+    const base = Math.min(W, H);
+    return [
+      { r: base * 0.07, pts: 100, c: "#ff2e73" },
+      { r: base * 0.14, pts: 50, c: "#6d35ff" },
+      { r: base * 0.21, pts: 30, c: "#0089ab" },
+      { r: base * 0.28, pts: 20, c: "#7aa300" },
+    ];
+  };
+  function drawSkee(rect) {
+    const cx = W * 0.5, cy = H * 0.30;
+    const rs = ringDefs();
+    for (let i = rs.length - 1; i >= 0; i--) {
+      ctx.beginPath(); ctx.arc(cx, cy, rs[i].r, 0, 7);
+      ctx.fillStyle = i % 2 ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.30)";
+      ctx.fill();
+      ctx.strokeStyle = rs[i].c; ctx.lineWidth = 2; ctx.stroke();
     }
+    ctx.font = "700 10px 'Space Grotesk', sans-serif"; ctx.textAlign = "center";
+    rs.forEach((rg, i) => {
+      ctx.fillStyle = rg.c;
+      ctx.fillText(String(rg.pts), cx, i === 0 ? cy + 3 : cy - rg.r + 12);
+    });
+    ctx.textAlign = "start";
 
-    // ball
-    if (sinking <= 0 || sinking > 0.35) {
-      const shrink = sinking > 0 ? sinking : 1;
-      ctx.beginPath(); ctx.ellipse(ball.x, ball.y + ball.r * 0.9, ball.r * 0.95, ball.r * 0.4, 0, 0, 7);
-      ctx.fillStyle = "rgba(16,20,60,0.15)"; ctx.fill();
-      const bg = ctx.createRadialGradient(ball.x - 3, ball.y - 4, 1, ball.x, ball.y, ball.r);
-      bg.addColorStop(0, "#ffffff"); bg.addColorStop(1, "#b9c2e8");
-      ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r * shrink, 0, 7);
-      ctx.fillStyle = bg; ctx.fill();
-      ctx.strokeStyle = "rgba(16,20,60,0.30)"; ctx.lineWidth = 1; ctx.stroke();
+    if (restTimer > 0) {
+      restTimer--;
+      if (restTimer === 0) respawnBall(true);
+    } else {
+      physicsStep();
+      const speed = Math.hypot(ball.vx, ball.vy);
+      if (launched && !dragging && speed === 0) {
+        const d = Math.hypot(ball.x - cx, ball.y - cy);
+        const hit = rs.find(rg => d <= rg.r);
+        const pts = hit ? hit.pts : 0;
+        scores.skee += pts;
+        flash = { text: pts ? "+" + pts : "MISS", x: ball.x - 16, y: ball.y - 20, life: 1, c: pts >= 50 ? "#ff2e73" : pts ? "#0089ab" : "#5a6296" };
+        if (pts >= 50) burst(ball.x, ball.y, "#ff2e73");
+        hintEl.textContent = pts >= 100 ? "\ud83c\udfb3 hundred! dead center" : pts >= 50 ? "\ud83c\udfb3 +" + pts + " \u2014 nice arc" : pts ? "\ud83c\udfb3 +" + pts : "\ud83c\udfb3 gutter \u2014 flick harder";
+        updateScore();
+        launched = false; restTimer = 55;
+      }
     }
+    drawAim(rect);
+    drawBall("#f7c866", "#b8791f", "rgba(120,70,10,0.40)");
+  }
 
-    // particles
+  function drawStriker() {
+    striker.phase += 0.045;
+    striker.meter = (Math.sin(striker.phase) + 1) / 2;
+    const baseY = H * 0.86, T = H * 0.60, towerX = W * 0.60;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(16,20,60,0.25)"; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(towerX, baseY); ctx.lineTo(towerX, baseY - T); ctx.stroke();
+    for (let i = 1; i < 5; i++) {
+      ctx.strokeStyle = "rgba(16,20,60,0.15)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(towerX - 10, baseY - T * i / 5); ctx.lineTo(towerX + 10, baseY - T * i / 5); ctx.stroke();
+    }
+    const bellY = baseY - T - 18;
+    ctx.beginPath(); ctx.arc(towerX, bellY, 14 + striker.glow * 6, 0, 7);
+    ctx.fillStyle = striker.glow > 0 ? "#ffd24a" : "#f2b62c"; ctx.fill();
+    ctx.strokeStyle = "rgba(120,70,10,0.5)"; ctx.lineWidth = 2; ctx.stroke();
+    if (striker.glow > 0) striker.glow -= 0.03;
+    ctx.fillStyle = "rgba(255,46,115,0.85)";
+    ctx.beginPath(); ctx.arc(towerX, baseY + 8, 12, 0, 7); ctx.fill();
+
+    const mX = W * 0.26, mH = H * 0.5, mY = H * 0.68 + mH * 0.18;
+    ctx.fillStyle = "rgba(255,255,255,0.65)"; rr(mX - 10, mY - mH, 20, mH, 10); ctx.fill();
+    ctx.strokeStyle = "rgba(16,20,60,0.20)"; ctx.lineWidth = 1.5; rr(mX - 10, mY - mH, 20, mH, 10); ctx.stroke();
+    const fh = mH * striker.meter;
+    const grad = ctx.createLinearGradient(0, mY, 0, mY - mH);
+    grad.addColorStop(0, "#0089ab"); grad.addColorStop(0.6, "#6d35ff"); grad.addColorStop(1, "#ff2e73");
+    ctx.fillStyle = grad; rr(mX - 7, mY - fh, 14, fh, 7); ctx.fill();
+
+    if (striker.hp >= 0) {
+      striker.hp += striker.vel; striker.vel -= 0.55;
+      if (striker.hp > T) striker.hp = T;
+      if (striker.vel <= 0 && !striker.scored) {
+        striker.scored = true;
+        if (striker.hp >= T * 0.94) {
+          scores.striker++; striker.glow = 1;
+          burst(towerX, bellY, "#f2b62c");
+          flash = { text: "DING!", x: towerX + 22, y: bellY + 6, life: 1, c: "#d61b5e" };
+          hintEl.textContent = "\ud83d\udd28 DING! rang the bell";
+          updateScore();
+        } else {
+          hintEl.textContent = striker.hp >= T * 0.7 ? "\ud83d\udd28 so close \u2014 tap at the peak" : "\ud83d\udd28 more power \u2014 tap at the peak";
+        }
+      }
+      if (striker.hp <= 0 && striker.vel < 0) { striker.hp = -1; striker.swinging = false; }
+      else if (striker.hp >= 0) {
+        ctx.fillStyle = "#10143c";
+        ctx.beginPath(); ctx.arc(towerX, baseY - striker.hp, 8, 0, 7); ctx.fill();
+      }
+    }
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+    const rect = stage.getBoundingClientRect();
+    if (mode === "golf") drawGolf(rect);
+    else if (mode === "skee") drawSkee(rect);
+    else drawStriker();
+
     for (let i = parts.length - 1; i >= 0; i--) {
-      const p = parts[i];
-      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.02;
-      if (p.life <= 0) { parts.splice(i, 1); continue; }
-      ctx.globalAlpha = p.life;
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, 4, 4);
-      ctx.globalAlpha = 1;
+      const pt = parts[i];
+      pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.12; pt.life -= 0.02;
+      if (pt.life <= 0) { parts.splice(i, 1); continue; }
+      ctx.globalAlpha = pt.life; ctx.fillStyle = pt.color;
+      ctx.fillRect(pt.x, pt.y, 4, 4); ctx.globalAlpha = 1;
     }
-
-    handle.style.left = ball.x + "px";
-    handle.style.top = ball.y + "px";
-    handle.style.display = sinking > 0 ? "none" : "";
+    if (flash) {
+      flash.y -= 0.6; flash.life -= 0.018;
+      if (flash.life <= 0) flash = null;
+      else {
+        ctx.globalAlpha = Math.max(flash.life, 0);
+        ctx.font = "800 16px 'Unbounded', sans-serif";
+        ctx.fillStyle = flash.c; ctx.fillText(flash.text, flash.x, flash.y);
+        ctx.globalAlpha = 1;
+      }
+    }
+    if (mode !== "striker") {
+      handle.style.left = ball.x + "px";
+      handle.style.top = ball.y + "px";
+      handle.style.display = sinking > 0 ? "none" : "";
+    }
     requestAnimationFrame(tick);
   }
+  setMode("golf", false);
   requestAnimationFrame(tick);
 
   /* ---------- leaderboard shuffle ---------- */
