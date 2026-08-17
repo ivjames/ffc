@@ -40,7 +40,6 @@ import RingToss from './features/fun/RingToss';
 import MilkBottle from './features/fun/MilkBottle';
 import WaterGunRace from './features/fun/WaterGunRace';
 import Pinball from './features/fun/Pinball';
-import CoinPusher from './features/fun/CoinPusher';
 import Food from './features/food/Food';
 import Checkout from './features/food/Checkout';
 import OrderStatusScreen from './features/food/OrderStatus';
@@ -186,7 +185,6 @@ export default function App() {
           <Route path="/arcade/bottles" element={<MilkBottle />} />
           <Route path="/arcade/watergun" element={<WaterGunRace />} />
           <Route path="/arcade/pinball" element={<Pinball />} />
-          <Route path="/arcade/pusher" element={<CoinPusher />} />
           {/* Native F&B ordering — POS-integration add-on, rendered only for
               venues with a paid config (src/lib/pos); each screen redirects home
               when its capability is off. */}

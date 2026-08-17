@@ -38,10 +38,12 @@ problem, not an achievement problem:
   the single richest source of achievement material in the app.
 - `installed` / `signed_in` badges **collided with `bonus_award`**, which
   already pays one-time install and sign-in tickets. Same action, two ledgers.
-- The coin pusher is **deliberately excluded** from the ticket registry as pure
-  chance (PR #140). A paying badge for it re-opens a settled decision.
+- **Luck-based surfaces were off-limits** by the skill-only rule (PR #140) — a
+  paying badge for a pure-chance game re-opens a settled decision.
 
-All five vanish when nothing pays. What's left is content design.
+All four vanish when nothing pays; the fourth is moot anyway now that the coin
+pusher, the app's only pure-chance game, has been removed. What's left is
+content design.
 
 Three further wins worth naming:
 
@@ -59,35 +61,44 @@ Three further wins worth naming:
    badge is a venue-economics question needing sign-off. Unpaid, the catalog is
    ours to iterate on freely.
 
-### What it costs, and the one real fork
+### The golf payout — open, leaning toward removal
 
-Punchlist #8 was explicitly *"Rewards/tickets tie in"* — the venue asked for
-golf to feed the loyalty economy. So: **does "no tickets" include the existing
-three, or only new ones?**
+Punchlist #8 was explicitly *"Rewards/tickets tie in"*, so pulling tickets off
+golf entirely is a real reversal of a venue ask. It is nevertheless the current
+direction, and there's a better argument for it than simplicity.
 
-- **Keep the three paying.** Smallest change: the shipped claim lane keeps
-  working, #8 stays satisfied, and only new badges are status-only. The cost is
-  a permanently two-class catalog — three special achievements and ninety
-  ordinary ones — which is confusing to explain on the wall.
-- **Nothing pays at all.** Conceptually clean: *achievements are status, tickets
-  are for playing.* But it retires a working, venue-requested feature and leaves
-  `POST /api/rewards/claim`, `src/lib/pos/golfRewards.ts`, the golf half of
-  `dailyTickets.js`, `reward_grant`'s payout columns, and Master Control's golf
-  issuance rollup as dead code. Golf would stop feeding the ticket economy
-  entirely; only mini-games and adoption bonuses still would.
+**Golf scores are entirely self-reported.** The scorecard is a number pad on a
+device the group controls; nothing verifies that a 1 on hole 7 was a 1. Today
+that types-in-a-small-number gesture is worth 100 tickets. Measured honestly,
+this is the *weakest* trust surface in the whole ticket economy — weaker than
+the client-scored mini-games, which at least run in our own code and are capped
+server-side per round. The hunt is the one golf-side achievement with real
+verification behind it (a vision model judges a photo, with anti-cheat flags),
+and it's the cheapest of the three.
 
-**Recommendation — decouple instead of deleting.** Move the golf payout off
-achievements and onto the round itself: *finish a round, earn N tickets*,
-optionally scaled by holes completed. That keeps #8's intent intact (golf feeds
-the economy), is far easier to explain to a family at the counter, doesn't
-distort play toward one scoring outcome, caps trivially, and frees the
-achievement catalog completely. The existing `reward_grant` plumbing is reusable
-almost as-is — it becomes one grant per completed round instead of one per
-achievement.
+So the integrity case and the simplicity case point the same way: **paying
+tickets for self-reported scores is the part worth removing**, and it happens to
+be the part that constrains the badge catalog.
 
-If that's too big a swing for now, keep the three paying and ship everything new
-as badge-only; the wall can mark the paying three with a ticket icon and the
-two-class problem stays legible.
+What comes out with it: `POST /api/rewards/claim`, `src/lib/pos/golfRewards.ts`,
+the golf half of `server/lib/dailyTickets.js`, `reward_grant`'s payout columns
+(`tickets_awarded`, `card_player_id`, `pos_transaction_id`, `redeemed_at`), the
+claim/settle logic in `src/features/scorecard/Summary.tsx`, and Master Control's
+golf issuance rollup (`server/routes/admin/rewards.js`, `admin/Rewards.tsx`).
+Golf stops feeding the ticket economy; mini-games and adoption bonuses still do.
+
+**If the tie-in needs to survive in some form**, the least-bad version is to move
+it off achievements and onto the round itself: *finish a round, earn N tickets*.
+It's easier to explain at the counter, doesn't distort play toward one scoring
+outcome, and caps trivially. It carries the same self-reporting weakness, but
+with a far lower ceiling — farming it means manufacturing whole rounds rather
+than typing a low number — and `reward_grant` is reusable nearly as-is, one
+grant per completed round instead of one per achievement.
+
+**Recommendation:** pull tickets from golf achievements either way. Treat
+round-completion tickets as a separate, later question to settle with the venue
+rather than a blocker on the badge catalog — the catalog no longer depends on
+how that lands.
 
 ---
 
@@ -217,9 +228,9 @@ these are nearly free server-side.
 
 **Entirely unlocked by the no-tickets decision.** These games are client-scored,
 which made them untouchable while badges paid; as pure status they're the
-richest untapped source in the app — nineteen games, each with its own natural
-milestone. Cheapest honest implementation is a device-local counter in
-IndexedDB, nothing sent to the server.
+richest untapped source in the app — nineteen ticket-earning games, each with
+its own natural milestone. Cheapest honest implementation is a device-local
+counter in IndexedDB, nothing sent to the server.
 
 | Name | How to earn | |
 |---|---|---|
@@ -236,10 +247,12 @@ IndexedDB, nothing sent to the server.
 | Mole Patrol 🔨 | Whack-a-mole streak of ten | N |
 | Sharpshooter II 🔫 | Clear the shooting gallery without a miss | N |
 | Ringer 💍 | Three ring-toss landings in a row | N |
-| Avalanche 🪙 | Trigger a big coin-pusher drop | N |
 
-The coin pusher is back on the table precisely because this badge pays nothing —
-the skill-only ticket rule (PR #140) is untouched by a status badge.
+The coin pusher is **not** on this list: it has been removed from the app
+outright — classic, but not fun and not useful, and a pure-chance game was never
+going to carry an achievement worth earning. The fun zone is now 21 tiles.
+Every remaining game is a skill game, which also means the skill-only ticket
+rule (PR #140) no longer needs a standing exception.
 
 ## Photo booth
 

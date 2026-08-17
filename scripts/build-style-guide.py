@@ -349,19 +349,19 @@ screen(id="together", name="Play together (join + lobby)", route="/join · /game
 
 # ============================================================ 14. ARCADE HUB
 screen(id="arcade", name="Arcade hub", route="/arcade",
- purpose="Grid landing routing to every attraction mini-game plus Fun Facts and Trivia. One flat 2-col grid, 22 tiles.",
+ purpose="Grid landing routing to every attraction mini-game plus Fun Facts and Trivia. One flat 2-col grid, 21 tiles.",
  body="".join([
    topbar("Arcade", right=MENU()),
    txt("intro — “Every game in the house — plus facts and trivia. / Pass the time between attractions.”","center muted"),
    row(
      f'<div class="wf-box ftile">{cn(1)}{icon(n=2)}<span>game tile — icon · title</span><span class="tk">{cn(3)}🎟️</span></div>',
      *[box("game tile — icon · title","ftile") for _ in range(5)], cls="ftiles"),
-   repeat("…22 tiles total (20 games + Fun Facts + Trivia)"),
+   repeat("…21 tiles total (19 games + Fun Facts + Trivia)"),
  ]),
  specs=[
-  (1,"Activity tile","One per game → its route (22 tiles)","2-col grid, radius 12","rise-in stagger; press-shrink feedback","accent-tinted per tile (bg/border/icon)","the tile surface"),
+  (1,"Activity tile","One per game → its route (21 tiles)","2-col grid, radius 12","rise-in stagger; press-shrink feedback","accent-tinted per tile (bg/border/icon)","the tile surface"),
   (2,"Activity icon","Leading mark on each tile","36×36 chip, radius 8, glyph ~20px","—","tinted to the tile accent","one designed icon per activity"),
-  (3,"“Earns tickets” badge","Trailing badge inside ticket-awarding tiles","small 🎟️ badge","venue's game-rewards add-on AND the tile earns; Fun Facts, Arcade Putt, and Coin Pusher never carry it","--accent","the badge treatment"),
+  (3,"“Earns tickets” badge","Trailing badge inside ticket-awarding tiles","small 🎟️ badge","venue's game-rewards add-on AND the tile earns; Fun Facts and Arcade Putt never carry it","--accent","the badge treatment"),
  ]),
 
 # ============================================================ 15. ARCADE PUTT (fills screen)
