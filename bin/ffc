@@ -279,8 +279,14 @@ cmd_vhost(){
     # single-name lineage that leaves every client subdomain with a bad cert.
     if [ -d "/etc/letsencrypt/live/$WILDCARD_CERT_NAME" ]; then
       log "Installing wildcard cert '$WILDCARD_CERT_NAME' for $FQDN + *.$FQDN"
+      # -d "$FQDN" only: certbot's nginx installer can't match a literal
+      # "*.$FQDN" -d against a server block non-interactively ("Which server
+      # blocks would you like to modify?" -> hard fail under -n). It's also
+      # redundant — the lineage covers both names, and installing on the block
+      # matched by the bare FQDN configures TLS for the whole
+      # "server_name $FQDN *.$FQDN" block, client subdomains included.
       certbot install --nginx --cert-name "$WILDCARD_CERT_NAME" \
-        -d "$FQDN" -d "*.$FQDN" --redirect -n \
+        -d "$FQDN" --redirect -n \
         || log "certbot install did not complete. Re-run later: ffc vhost"
     else
       log "Issuing/refreshing single-name TLS for $FQDN (client subdomains need the wildcard: ffc wildcard-cert, then ffc vhost)"
