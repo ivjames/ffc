@@ -267,6 +267,63 @@ test("one answer per TEAM, however many phones are at the table", async () => {
   assert.equal(view.board.find((e) => e.name === "Table 4").score, BASE_POINTS);
 });
 
+test("an edit to the bank cannot change a question already in play", async () => {
+  // The bank stays editable while a game runs — it's the same admin screen a
+  // manager tidies up between rounds. Re-reading it per request meant an edit
+  // could land mid-question: two players a second apart scored against
+  // different correct choices, and the prompt on every phone in the room
+  // replaced between the ask and the reveal. A game deals its cards once.
+  const { id, hostToken, joinCode } = await createSession({
+    questionCount: 3,
+    config: { speedBonus: false },
+  });
+  const { participantToken } = await join(joinCode, "Steady");
+  await advance(id, hostToken); // -> question
+
+  const asked = await json(
+    await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`)
+  );
+  const dealtId = (
+    await testQuery(`select question_ids, current_index from trivia_session where id = $1`, [id])
+  ).rows[0];
+  const liveId = dealtId.question_ids[dealtId.current_index];
+
+  // The bank is shared by the whole suite, so the edit is put back afterwards
+  // — this test is about the session's copy, not about damaging the pack.
+  const original = (
+    await testQuery(`select prompt, choices, answer from trivia_question where id = $1`, [liveId])
+  ).rows[0];
+  try {
+    // The manager rewrites the question under the room, answer and all.
+    await testQuery(
+      `update trivia_question set prompt = $2, choices = $3::jsonb, answer = $4 where id = $1`,
+      [liveId, "Rewritten mid-round", JSON.stringify(["a", "b", "c", "d"]), 3]
+    );
+
+    const after = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+    assert.equal(
+      after.question.prompt,
+      asked.question.prompt,
+      "the room keeps the question it was asked"
+    );
+    assert.equal(after.question.answer, asked.question.answer);
+
+    // And the scoring agrees with what the players were shown, not the edit.
+    const correct = await post(`/api/trivia/sessions/${id}/answer`, {
+      participant: participantToken,
+      choice: asked.question.answer,
+    });
+    assert.equal(correct.status, 200);
+    const board = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+    assert.equal(board.board.find((e) => e.name === "Steady").score, BASE_POINTS);
+  } finally {
+    await testQuery(
+      `update trivia_question set prompt = $2, choices = $3::jsonb, answer = $4 where id = $1`,
+      [liveId, original.prompt, JSON.stringify(original.choices), original.answer]
+    );
+  }
+});
+
 test("a solo player's entrant cannot be joined by someone else in the room", async () => {
   const { id, hostToken, joinCode } = await createSession({ config: { speedBonus: false } });
   const victim = await join(joinCode, "Dana");

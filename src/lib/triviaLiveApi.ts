@@ -154,7 +154,15 @@ export function createSession(input: {
   category?: string | null;
   config?: { questionSeconds?: number; speedBonus?: boolean; teams?: boolean };
 }) {
-  return call<{ session: TriviaSnapshot['session']; hostToken: string }>('/sessions', {
+  // `dealt` can be under `requested` when the chosen category holds fewer
+  // questions than the host asked for — the game still starts, but the host
+  // is told rather than finding out at the last question.
+  return call<{
+    session: TriviaSnapshot['session'];
+    hostToken: string;
+    requested: number;
+    dealt: number;
+  }>('/sessions', {
     method: 'POST',
     body: JSON.stringify(input),
   });

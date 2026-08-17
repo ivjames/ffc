@@ -65,6 +65,7 @@ export default function TriviaHost() {
   const [seconds, setSeconds] = useState(20);
   const [speedBonus, setSpeedBonus] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -116,6 +117,14 @@ export default function TriviaHost() {
       setError(res.error);
       return;
     }
+    // A short category deals what it has rather than refusing to start, so
+    // say so here — otherwise the only clue is the counter reading "of 12"
+    // when the host set up 20.
+    setNotice(
+      res.dealt < res.requested
+        ? `Only ${res.dealt} questions available${category ? ` in ${category}` : ''} — dealing ${res.dealt}.`
+        : null,
+    );
     const next = { sessionId: res.session.id, hostToken: res.hostToken };
     saveHost(next);
     setHost(next);
@@ -331,6 +340,12 @@ export default function TriviaHost() {
               </li>
             ))}
           </ol>
+        )}
+
+        {notice && (
+          <p className="mb-3 rounded-xl border border-fairway-700 bg-fairway-900/50 px-3 py-2 text-sm text-fairway-100/80">
+            {notice}
+          </p>
         )}
 
         {error && (

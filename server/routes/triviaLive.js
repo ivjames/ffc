@@ -76,7 +76,7 @@ export function resetTriviaRateLimits() {
 // of cleverness that breaks silently the first time a column name contains the
 // prefix being stripped.
 const SESSION_FIELDS = `id, join_code as "joinCode", location_id as "locationId",
-                        status, question_ids as "questionIds",
+                        status, question_ids as "questionIds", questions,
                         current_index as "currentIndex", asked_at as "askedAt",
                         config, created_at as "createdAt", ended_at as "endedAt"`;
 const SESSION_COLS = SESSION_FIELDS.replace(/(^|,)(\s*)(\w+)/g, "$1$2s.$3");
@@ -136,9 +136,23 @@ async function loadBoard(sessionId) {
   return result.rows.map((row, i) => ({ ...row, rank: i + 1 }));
 }
 
-/** `q` lets the answer path read inside its own transaction — using the pool
- *  there would read outside the row lock it is holding. */
+/**
+ * The current question, as DEALT — read from the session's own copy, not from
+ * the bank it was drawn out of.
+ *
+ * The bank stays editable while a game is running, so re-reading it meant an
+ * admin's edit could land mid-round: answers a second apart scored against
+ * different correct choices, and the prompt on every phone in the room
+ * replaced between the ask and the reveal.
+ *
+ * `q` lets the answer path read inside its own transaction — using the pool
+ * there would read outside the row lock it is holding. It is only needed by
+ * the fallback below, which serves sessions that were already in a lobby when
+ * this column was added; those have no copy to read.
+ */
 async function currentQuestionRow(session, q = pool) {
+  const dealt = session.questions?.[session.currentIndex];
+  if (dealt) return dealt;
   const id = session.questionIds?.[session.currentIndex];
   if (!id) return null;
   const result = await q.query(
@@ -277,7 +291,7 @@ router.post("/sessions", requireUser, tenant(), async (req, res) => {
     // this org's own questions, plus any written specifically for this venue.
     // A question belonging to another client is never in scope.
     const bank = await pool.query(
-      `select id from trivia_question
+      `select id, category, prompt, choices, answer from trivia_question
         where archived_at is null and active
           and (org_id is null or org_id = $1)
           and (location_id is null or location_id = $2)
@@ -299,13 +313,34 @@ router.post("/sessions", requireUser, tenant(), async (req, res) => {
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         const inserted = await pool.query(
-          `insert into trivia_session (location_id, join_code, created_by, question_ids, config)
-           values ($1, $2, $3, $4::uuid[], $5::jsonb)
+          `insert into trivia_session
+             (location_id, join_code, created_by, question_ids, questions, config)
+           values ($1, $2, $3, $4::uuid[], $5::jsonb, $6::jsonb)
            returning ${SESSION_FIELDS}, host_token as "hostToken"`,
-          [locationId, generateJoinCode(), req.user.id, questionIds, JSON.stringify(configCheck.config)]
+          [
+            locationId,
+            generateJoinCode(),
+            req.user.id,
+            questionIds,
+            JSON.stringify(bank.rows),
+            JSON.stringify(configCheck.config),
+          ]
         );
-        const row = inserted.rows[0];
-        return res.json({ ok: true, session: row, hostToken: row.hostToken });
+        // `questions` carries the answers and is the server's working copy —
+        // no reason to hand it back, even to the host who is allowed them.
+        const { questions, ...row } = inserted.rows[0];
+        // A category can hold fewer questions than the host asked for. Dealing
+        // what exists beats refusing to start a game in front of a room, but
+        // the host configured a length and is entitled to know it changed —
+        // so the shortfall is stated rather than left to be noticed at
+        // question 12 of "20".
+        return res.json({
+          ok: true,
+          session: row,
+          hostToken: row.hostToken,
+          requested: count,
+          dealt: questionIds.length,
+        });
       } catch (err) {
         if (err?.code !== "23505" || attempt === 4) throw err;
       }
