@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useInstallPrompt } from '../lib/pwaInstall';
 import { useLinkedPlayerId } from '../lib/rewardsCard';
 import { getCurrentLocationId } from '../lib/location';
+import Icon from './Icon';
 import {
   claimAdoptionBonus,
   wasAttempted,
@@ -71,9 +72,7 @@ export default function AdoptionBonusToast({ signedIn }: { signedIn: boolean }) 
         className="surface-1 mb-3 flex items-center gap-3 rounded-2xl border border-fairway-500/40 px-4 py-3"
         role="status"
       >
-        <span className="text-xl" aria-hidden="true">
-          🎟️
-        </span>
+        <Icon name="award.ticket" className="text-xl" />
         <div className="min-w-0 flex-1 text-sm font-bold text-fairway-50">
           +{awarded} bonus tickets added to your card!
         </div>
@@ -92,9 +91,7 @@ export default function AdoptionBonusToast({ signedIn }: { signedIn: boolean }) 
     return (
       <div className="surface-1 mb-3 rounded-2xl border border-fairway-500/30 px-4 py-3">
         <div className="flex items-start gap-3">
-          <span className="text-xl" aria-hidden="true">
-            🎟️
-          </span>
+          <Icon name="award.ticket" className="text-xl" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-bold text-fairway-50">Collect your bonus tickets</div>
             <div className="mt-0.5 text-xs text-fairway-100/70">

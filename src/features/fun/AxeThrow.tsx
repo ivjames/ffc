@@ -5,6 +5,7 @@ import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -663,7 +664,7 @@ export default function AxeThrow() {
         <TopBar title="Axe Throwing" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🪓</span>
+            <Icon name="game.axe-throwing" className="text-6xl" />
             <div className="text-5xl font-black text-fairway-50">{total}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {THROWS} throws</p>
@@ -717,7 +718,7 @@ export default function AxeThrow() {
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="text-5xl">🪓</span>
+            <Icon name="game.axe-throwing" className="text-5xl" />
             <p className="text-sm text-fairway-100">
               Tap to set your aim, tap again to set the height. {THROWS} throws — stick the bullseye or a clutch.
             </p>

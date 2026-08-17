@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState , type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { emailError, normalizeEmail } from '../../lib/validateUser';
@@ -15,6 +15,7 @@ import { resetCard, refreshCard } from '../../lib/rewardsCard';
 import { track } from '../../lib/analytics';
 import { claimAdoptionBonus } from '../../lib/pos/adoptionBonus';
 import { claimMyRounds } from '../../lib/claimRounds';
+import Icon from '../../ui/Icon';
 
 // Account — passwordless email sign-in (registration IS sign-in: verifying the
 // first code creates the account) plus profile editing once signed in. Email is
@@ -43,7 +44,7 @@ export default function Account() {
     params.get('link') === 'expired' ? 'That sign-in link expired — request a fresh code below.' : null,
   );
   const [saved, setSaved] = useState(false);
-  const [bonusNotice, setBonusNotice] = useState<string | null>(null);
+  const [bonusNotice, setBonusNotice] = useState<ReactNode>(null);
   const [roundsNotice, setRoundsNotice] = useState<string | null>(null);
 
   // On a fresh sign-in, keep the device's already-played rounds by attaching
@@ -64,7 +65,11 @@ export default function Account() {
     // Only announce a FRESH award — a duplicate replay credits nothing, so
     // don't claim tickets landed that didn't.
     if (out.status === 'awarded' && !out.duplicate) {
-      setBonusNotice(`🎟️ +${out.tickets} bonus tickets added to your card!`);
+      setBonusNotice(
+          <>
+            <Icon name="award.ticket" /> +{out.tickets} bonus tickets added to your card!
+          </>,
+        );
     } else if (out.status === 'no-card') {
       setBonusNotice('Link your arcade card on the Rewards screen to collect a sign-in bonus.');
     }
@@ -217,7 +222,7 @@ export default function Account() {
             className="surface-1 mb-4 rounded-2xl border border-fairway-800/60 px-4 py-3 text-sm text-fairway-100/80"
             role="status"
           >
-            🏌️ {roundsNotice}
+            <Icon name="score.hole-in-one" /> {roundsNotice}
           </div>
         )}
         {stage === 'loading' && <p className="text-fairway-100/70">Loading…</p>}
@@ -377,7 +382,7 @@ export default function Account() {
                 {busy ? 'Saving…' : 'Save'}
               </Button>
               <Button variant="ghost" onClick={() => navigate('/me/teams')}>
-                👥 My teams
+                <Icon name="state.teams" /> My teams
               </Button>
               <Button variant="ghost" onClick={() => void signOut()} disabled={busy}>
                 Sign out

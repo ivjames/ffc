@@ -5,6 +5,7 @@ import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -571,7 +572,7 @@ export default function AirHockey() {
         <TopBar title="Air Hockey" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">{won ? '🏆' : '🤖'}</span>
+            <Icon name={won ? 'award.trophy' : 'state.cpu'} className="text-6xl" />
             <div className="text-2xl font-black text-fairway-50">{won ? 'You win!' : 'CPU wins'}</div>
             <div className="text-4xl font-black text-fairway-50">
               {you} <span className="text-fairway-400">–</span> {cpu}
@@ -610,7 +611,7 @@ export default function AirHockey() {
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="text-5xl">🏒</span>
+            <Icon name="game.air-hockey" className="text-5xl" />
             <p className="text-sm text-fairway-100">
               Drag your green mallet to hit the puck into the CPU's goal at the top. First to {TARGET} wins.
             </p>

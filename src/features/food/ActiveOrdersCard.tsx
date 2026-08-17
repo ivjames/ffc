@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePos } from '../../lib/pos';
 import { useCurrentLocationId } from '../../lib/location';
 import { usePlacedOrders, activeOrders, forgetOrder } from '../../lib/foodOrders';
+import Icon from '../../ui/Icon';
 
 // "Your order is in the kitchen" re-entry point — placed orders otherwise
 // have their id only in the /food/order/:id URL, so navigating away would
@@ -49,7 +50,7 @@ export default function ActiveOrdersCard() {
           className="surface-1 flex w-full items-center justify-between gap-3 rounded-2xl border border-fairway-800/60 px-4 py-3 text-left transition-transform active:translate-y-px"
         >
           <span className="flex items-center gap-2 text-sm">
-            <span aria-hidden="true">🍳</span>
+            <span aria-hidden="true"><Icon name="order.being-prepared" /></span>
             <span className="font-semibold text-fairway-50">
               Order #{order.orderNumber} is in the kitchen
             </span>

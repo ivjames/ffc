@@ -6,6 +6,8 @@ import { drawLogo } from './logo';
 import { playBump, playWaterBump, playScore, playTick, playFanfare } from '../../lib/sound';
 import type { Vec as FxVec, Floater } from './fx';
 import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, spawnFloater, stepFloaters, drawFloaters, decay, shakeOffset } from './fx';
+import Icon from '../../ui/Icon';
+import type { DrawnIcon } from '../../ui/icons/registry';
 
 // §12 Bumper arena — the shared engine behind Bumper Cars and Bumper Boats.
 // Drag to lead your unit around (it chases your finger like a lure, the same
@@ -53,7 +55,7 @@ const SPARK_MIN_GAP = 45; // ms throttle between spark bursts
 /** Per-game skin + handling. Everything that differs between cars and boats. */
 export type BumperTheme = {
   title: string;
-  emoji: string;
+  icon: DrawnIcon;
   kind: 'car' | 'boat';
   playerColor: string;
   aiColors: string[];
@@ -876,7 +878,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
         <TopBar title={theme.title} back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">{theme.emoji}</span>
+            <Icon name={theme.icon} className="text-6xl" />
             <div className="text-5xl font-black text-fairway-50">{score}</div>
             <p className="text-lg font-semibold text-fairway-100">{theme.remark(score)}</p>
             <p className="text-sm text-fairway-400">bumps in 30 seconds</p>
@@ -903,7 +905,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
       <TopBar title={theme.title} back="/arcade" />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
         <span className="font-bold text-positive">Bumps {score}</span>
-        <span className={`font-bold ${secs <= 5 ? 'text-danger' : 'text-fairway-300'}`}>⏱ {secs}s</span>
+        <span className={`font-bold ${secs <= 5 ? 'text-danger' : 'text-fairway-300'}`}><Icon name="state.timer" /> {secs}s</span>
       </div>
 
       <div className="grid min-h-0 flex-1 place-items-center px-4">
@@ -917,7 +919,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="text-5xl">{theme.emoji}</span>
+            <Icon name={theme.icon} className="text-5xl" />
             <p className="text-sm text-fairway-100">{theme.hint}</p>
             <Button onClick={start}>Start</Button>
           </div>

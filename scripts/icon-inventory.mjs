@@ -22,6 +22,10 @@
 // the design system permanently, so the report below calls the reuse out
 // explicitly (see the COLLISIONS section) for a human to resolve.
 //
+// The marker count is now ZERO — every UI call site renders <Icon>. Keep running
+// this: a non-zero marker count means a new emoji has appeared on a screen with
+// nobody deciding what it means, which is exactly the drift this was built for.
+//
 // Not every emoji in the tree is an icon. Occurrences are classified:
 //
 //   marker   a glyph standing alone as a UI element → NEEDS A VECTOR
@@ -35,10 +39,12 @@
 //            per spinner challenge (src/data/funContent.ts). The set grows
 //            every time someone writes a new fact, so it can never be a closed
 //            icon library; it is illustration, and it stays emoji.
-//   catalog  StyleGuide's own glyph display. The style guide EXHIBITS the
-//            markers rather than using them, so counting its rows would double
-//            every icon in the app. Once the registry lands, §13 should render
-//            from the registry instead (and this exclusion goes away).
+//   catalog  StyleGuide's own glyph display, plus the manifest's record of
+//            which emoji each icon replaced. Both EXHIBIT the markers rather
+//            than using them, so counting them would double every icon.
+//   canvas   the share image, rasterised with `fillText`. <Icon> cannot render
+//            into a 2D context, so this is the one user-visible surface where
+//            emoji remain. See EXCLUDED_FILES.
 //   symbol   typographic marks the style guide lumps in with icons (‹ › • ✓ ✗
 //            ± ↻). These are text and should stay text — reported separately
 //            so the decision is visible rather than silent.
@@ -68,11 +74,18 @@ const OUT = join(REPO, 'scripts', 'icon-inventory.json');
 const SYMBOLS = new Set(['‹', '›', '•', '·', '✓', '✗', '↻', '−', '±', '➕', '▶', '⏸', '⏭', '↗', '↔']);
 
 // Files whose every glyph is excluded from the vector set, with the reason
-// recorded as the occurrence's kind. Both are deliberate, not oversights —
+// recorded as the occurrence's kind. All deliberate, not oversights —
 // see the header. `src/data/courses.ts` is NOT here: its per-course glyphs are
 // real identity markers and the vector set owes a drawing for each.
 const EXCLUDED_FILES = new Map([
   ['src/data/funContent.ts', 'content'],
+  // The share image is rasterised with canvas `fillText`, not rendered into the
+  // DOM, so <Icon> cannot reach it — a React component has no meaning inside a
+  // 2D context. Emoji rasterise correctly there and the file is not part of the
+  // icon system. This is the one user-visible surface where emoji remain; the
+  // way to change that is Path2D over the registry's path data, which is a
+  // layout problem (placing a path inline with headline text), not a migration.
+  ['src/features/scorecard/shareImage.ts', 'canvas'],
   ['src/features/style/StyleGuide.tsx', 'catalog'],
   // The manifest records the emoji each icon REPLACES, so it necessarily
   // contains every placeholder in the app. Counting it would make the icon set
@@ -156,9 +169,27 @@ function stripTrailingComment(line) {
  *  Word-counting the whole run gets this wrong in both directions: a leading
  *  icon can carry a five-word label, and a sentence can be three words long. */
 function precedingText(line, col) {
+  let quote = null;
   let start = 0;
   for (let i = 0; i < col; i++) {
-    if (`"'\`<>{}`.includes(line[i]) && line[i - 1] !== '\\') start = i + 1;
+    const ch = line[i];
+    if (line[i - 1] === '\\') continue;
+    if (quote) {
+      // Only the MATCHING quote closes the run. Without this, the apostrophe in
+      // `"Nice chuckin'! 👍"` looked like a delimiter, the glyph appeared to lead
+      // its own run, and a line of pure copy was billed as two icons.
+      if (ch === quote) {
+        quote = null;
+        start = i + 1;
+      }
+    } else if (ch === '"' || ch === '`' || (ch === "'" && !/[A-Za-z]/.test(line[i - 1] ?? ''))) {
+      // A `'` directly after a letter is an apostrophe (`friend's`), not a
+      // string opening.
+      quote = ch;
+      start = i + 1;
+    } else if ('<>{}'.includes(ch)) {
+      start = i + 1;
+    }
   }
   return line.slice(start, col);
 }
@@ -296,9 +327,13 @@ for (const file of sourceFiles()) {
       } else if (SYMBOLS.has(glyph)) {
         kind = 'symbol';
       } else {
-        // Words BEFORE the glyph in its own run mean the glyph is decorating a
-        // sentence rather than labelling one.
-        kind = /[A-Za-z]{2}/.test(precedingText(line, col)) ? 'prose' : 'marker';
+        // ANYTHING before the glyph in its own run means it is decorating that
+        // run rather than labelling it. Looking for letters specifically was too
+        // loose: `…{teamName}</span>! 🎉` puts only "! " before the glyph, so a
+        // celebration tacked onto the end of a sentence was billed as an icon.
+        // A real leading marker has nothing before it — `🔍 Scavenger hunt`,
+        // `+{tickets} 🎟️` (the run starts after the `}`).
+        kind = precedingText(line, col).trim() === '' ? 'marker' : 'prose';
       }
 
       const { role, from, needsReview } =
@@ -358,6 +393,7 @@ say(`  markers   ${String(byKind('marker').length).padStart(4)} occurrences · $
 say(`  prose     ${String(byKind('prose').length).padStart(4)} occurrences  (emoji inside copy — stays emoji)`);
 say(`  content   ${String(byKind('content').length).padStart(4)} occurrences  (funContent editorial — stays emoji)`);
 say(`  catalog   ${String(byKind('catalog').length).padStart(4)} occurrences  (StyleGuide exhibit — renders the set)`);
+say(`  canvas    ${String(byKind('canvas').length).padStart(4)} occurrences  (share image raster — <Icon> cannot reach)`);
 say(`  sticker   ${String(byKind('sticker').length).padStart(4)} occurrences  (PhotoBooth content — out of scope)`);
 say(`  symbol    ${String(byKind('symbol').length).padStart(4)} occurrences  (typographic marks — stay text)`);
 say();

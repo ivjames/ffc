@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useInstallPrompt } from '../../lib/pwaInstall';
 import { track } from '../../lib/analytics';
+import Icon from '../../ui/Icon';
 
 // §install — landing page for the "install to home screen" QR code. Detects the
 // platform and shows the closest thing each one allows:
@@ -38,7 +39,7 @@ export default function Install() {
       <TopBar title="Install the app" back="/" />
       <Content>
         <div className="mb-6 mt-2 text-center">
-          <div className="text-5xl">⛳️</div>
+          <Icon name="nav.golf" className="text-5xl" />
           <h2 className="mt-3 text-2xl font-black tracking-tight text-fairway-50">
             Add Mini Golf to your phone
           </h2>
@@ -50,7 +51,7 @@ export default function Install() {
         {installed ? (
           <Card>
             <div className="text-center">
-              <div className="text-3xl">✅</div>
+              <Icon name="state.done" className="text-3xl" />
               <p className="mt-2 font-bold text-fairway-50">You&apos;re all set</p>
               <p className="mt-1 text-sm text-fairway-100/70">
                 This app is already installed on your device. Look for the ⛳️ icon on your

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from './components';
 import { useApiBuild } from './useApiBuild';
 import { reloadForUpdate } from '../pwa';
+import Icon from './Icon';
 
 // When the client's baked-in build key no longer matches the API's (a deploy
 // landed while this app was open on a stale, service-worker-cached bundle), pop
@@ -25,7 +26,7 @@ export function UpdateModal() {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-fairway-950/80 p-6 backdrop-blur-sm"
     >
       <div className="w-full max-w-sm rounded-2xl border border-fairway-700 bg-fairway-900 p-6 text-center shadow-2xl">
-        <div className={`text-4xl${reloading ? ' animate-spin' : ''}`}>🔄</div>
+        <div className={`text-4xl${reloading ? ' animate-spin' : ''}`}><Icon name="action.refresh" /></div>
         <h2 id="update-modal-title" className="mt-3 text-lg font-bold text-fairway-50">
           A new version is ready
         </h2>

@@ -5,7 +5,8 @@ import ThemeToggle from '../../ui/ThemeToggle';
 import SoundToggle from '../../ui/SoundToggle';
 import SkinPicker from '../../ui/SkinPicker';
 import Confetti from '../../ui/Confetti';
-import { themeEmoji, accentInk } from '../../lib/theme';
+import { themeIcon, accentInk } from '../../lib/theme';
+import Icon from '../../ui/Icon';
 
 // A living style guide / component inventory. Renders every reusable element the
 // app is built from — using the REAL components, CSS classes, and tokens — so it
@@ -13,7 +14,7 @@ import { themeEmoji, accentInk } from '../../lib/theme';
 // the app changes. This is the reference an artist works from when replacing the
 // CSS-art materials with real themed assets. Reachable at /style.
 
-// The inkable course themes (name, theme key, raw accent hex). themeEmoji() and
+// The inkable course themes (name, theme key, raw accent hex). themeIcon() and
 // accentInk() key off `theme`; the raw hex drives tiles/tags/pucks/glows.
 const THEMES = [
   { name: 'Green', theme: 'green', accent: '#22c55e' },
@@ -242,7 +243,7 @@ export default function StyleGuide() {
                   className="course-puck flex h-14 w-14 items-center justify-center rounded-full text-3xl"
                   style={{ '--puck-accent': t.accent } as CSSProperties}
                 >
-                  {themeEmoji(t.theme)}
+                  <Icon name={themeIcon(t.theme)} />
                 </span>
                 <span className="text-sm font-black text-fairway-50">{t.name}</span>
               </button>

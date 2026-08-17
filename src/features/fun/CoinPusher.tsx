@@ -4,6 +4,7 @@ import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playTick, playPinClack, playScore, playCup, playUndo, playFanfare, playDing } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -891,7 +892,7 @@ export default function CoinPusher() {
         <TopBar title="Coin Pusher" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🪙</span>
+            <Icon name="game.coin-pusher" className="text-6xl" />
             <div className="text-5xl font-black text-fairway-50">{score}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">paid out from {coinsDropped} coins</p>
@@ -933,7 +934,7 @@ export default function CoinPusher() {
       {phase === 'play' && (
         <div className="flex shrink-0 gap-2 px-4 pb-2">
           <Button variant="ghost" className="flex-1" disabled={ending} sound="none" onClick={buyMore}>
-            🪙 +{TOPUP_COINS} coins
+            <Icon name="game.coin-pusher" /> +{TOPUP_COINS} coins
           </Button>
           <Button variant="ghost" className="flex-1" disabled={ending} onClick={cashOut}>
             Cash out
@@ -952,7 +953,7 @@ export default function CoinPusher() {
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="text-5xl">🪙</span>
+            <Icon name="game.coin-pusher" className="text-5xl" />
             <p className="text-sm text-fairway-100">
               Tap the top strip to drop coins behind the pusher — or hold to keep feeding them in — and shove the
               pile over the glowing edge. Gold pays ×5. Start with {STARTING_COINS} — buy more anytime, there's no
@@ -963,7 +964,7 @@ export default function CoinPusher() {
         )}
         {phase === 'priming' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-3 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="animate-pulse text-5xl">🪙</span>
+            <Icon name="game.coin-pusher" className="animate-pulse text-5xl" />
             <p className="text-sm text-fairway-100">Setting up the tray…</p>
           </div>
         )}

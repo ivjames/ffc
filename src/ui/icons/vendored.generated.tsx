@@ -4,11 +4,11 @@
 // Artwork from two sources, both copied in rather than imported, so only the
 // icons the app actually uses ship and both packages stay devDependencies:
 //
-//   68 from Lucide (https://lucide.dev), ISC licence. Copyright (c) for
+//   74 from Lucide (https://lucide.dev), ISC licence. Copyright (c) for
 //   portions Lucide are held by Lucide Contributors 2022, and copyright for
 //   portions of Feather are held by Cole Bemis 2013-2022.
 //
-//   7 from Phosphor Icons (https://phosphoricons.com), MIT licence,
+//   11 from Phosphor Icons (https://phosphoricons.com), MIT licence,
 //   copyright (c) 2023 Phosphor Icons. Bold weight, for arcade subjects Lucide
 //   has no icon for. These are FILLED on a 256 grid — see FILLED_ART below.
 //
@@ -155,6 +155,22 @@ export const VENDORED_ART = {
       <path d="M6.003 5.125a4 4 0 0 0-2.526 5.77" />
     </>
   ),
+  'score.hole-in-one': (
+    <>
+      {/* lucide/star */}
+      {/* an ace — the exceptional result. award.hole-in-one is the BADGE for it. */}
+      <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+    </>
+  ),
+  'score.eagle': (
+    <>
+      {/* lucide/feather */}
+      {/* bird-family but not the perched bird, so eagle and birdie stay apart. A weak pick: neither set has a raptor, and it only works because the label sits beside it. */}
+      <path d="M14.086 18.412A2 2 0 0112.67 19H5v-7.672a2 2 0 01.586-1.414L11.75 3.75a6 6 0 118.49 8.49z" />
+      <path d="M16 8 2 22" />
+      <path d="M17.488 15H9" />
+    </>
+  ),
   'score.birdie': (
     <>
       {/* lucide/bird */}
@@ -166,13 +182,33 @@ export const VENDORED_ART = {
       <path d="M7 18a6 6 0 0 0 3.84-10.61" />
     </>
   ),
+  'score.par': (
+    <>
+      {/* lucide/circle-dot */}
+      {/* the ball dead centre in the cup — exactly as expected. */}
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="1" />
+    </>
+  ),
   'score.bogey': (
     <>
       {/* lucide/annoyed */}
-      {/* a wince. state.lose shared the idea and takes the frown. */}
+      {/* a wince — first step on the face ramp: annoyed → angry. */}
       <path d="M14 10h2" />
       <path d="M8 10h2" />
       <path d="M8 16h8" />
+      <circle cx="12" cy="12" r="10" />
+    </>
+  ),
+  'score.over-par': (
+    <>
+      {/* lucide/angry */}
+      {/* the far end of the face ramp. state.lose takes the plain frown, so all three stay distinct. */}
+      <path d="M15 11V9.416" />
+      <path d="M17 9a5 5 0 00-3 1" />
+      <path d="M7 9a5 5 0 013 1" />
+      <path d="M9 11V9.416" />
+      <path d="M9 16a5 5 0 016.001 0" />
       <circle cx="12" cy="12" r="10" />
     </>
   ),
@@ -211,6 +247,22 @@ export const VENDORED_ART = {
       <path d="M8 7h8" />
       <circle cx="12" cy="17" r="5" />
       <path d="M12 18v-2h-.5" />
+    </>
+  ),
+  'award.hole-in-one': (
+    <>
+      {/* lucide/award */}
+      {/* a badge on a ribbon — the achievement. score.hole-in-one is the SCORE, drawn as a star. */}
+      <path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526" />
+      <circle cx="12" cy="8" r="6" />
+    </>
+  ),
+  'award.under-par': (
+    <>
+      {/* lucide/trending-down */}
+      {/* a line trending down: below par is the good direction in golf. */}
+      <path d="M16 17h6v-6" />
+      <path d="m22 17-8.5-8.5-5 5L2 7" />
     </>
   ),
   'award.ticket': (
@@ -651,12 +703,18 @@ export const VENDORED_SOURCE: Partial<Record<IconName, string>> = {
   'game.coin-pusher': 'lucide/coins',
   'game.high-striker': 'lucide/hammer',
   'game.trivia': 'lucide/brain',
+  'score.hole-in-one': 'lucide/star',
+  'score.eagle': 'lucide/feather',
   'score.birdie': 'lucide/bird',
+  'score.par': 'lucide/circle-dot',
   'score.bogey': 'lucide/annoyed',
+  'score.over-par': 'lucide/angry',
   'score.endless': 'lucide/infinity',
   'score.water-hazard': 'lucide/droplets',
   'award.trophy': 'lucide/trophy',
   'award.medal': 'lucide/medal',
+  'award.hole-in-one': 'lucide/award',
+  'award.under-par': 'lucide/trending-down',
   'award.ticket': 'lucide/ticket',
   'order.received': 'lucide/receipt',
   'order.sent-to-kitchen': 'lucide/send-horizontal',
@@ -709,6 +767,10 @@ export const VENDORED_SOURCE: Partial<Record<IconName, string>> = {
   'game.batting-cages': 'phosphor-bold/baseball',
   'game.air-hockey': 'phosphor-bold/hockey',
   'game.go-karts': 'phosphor-bold/steering-wheel',
+  'award.hunt-master': 'phosphor-bold/detective',
+  'course.classic': 'phosphor-bold/windmill',
+  'course.western': 'phosphor-bold/cowboy-hat',
+  'course.default': 'phosphor-bold/flag-pennant',
   'state.finish': 'phosphor-bold/flag-checkered',
 };
 
@@ -761,6 +823,33 @@ export const FILLED_ART = {
       {/* phosphor/steering-wheel (bold) */}
       {/* a wheel, which frees the chequered flag for state.finish — what 🏁 actually meant. */}
       <path d="M144,144a16,16,0,1,1-16-16A16,16,0,0,1,144,144Zm92-16A108,108,0,1,1,128,20,108.12,108.12,0,0,1,236,128Zm-70.45,28h41.63c.79-2.21,1.49-4.47,2.09-6.76a116,116,0,0,0-162.54,0q.9,3.44,2.09,6.76H90.45a20.07,20.07,0,0,1,18.73,13l16.06,42.93c.92,0,1.83.07,2.76.07s1.82,0,2.72-.07l16.1-43A20.09,20.09,0,0,1,165.55,156ZM44.41,119.73a139.85,139.85,0,0,1,167.18,0,84,84,0,0,0-167.18,0Zm53.08,86.51L87.68,180H62.1A84.46,84.46,0,0,0,97.49,206.24ZM193.9,180H168.32l-9.84,26.25A84.35,84.35,0,0,0,193.9,180Z"/>
+    </>
+  ),
+  'award.hunt-master': (
+    <>
+      {/* phosphor/detective (bold) */}
+      {/* the hat-and-magnifier silhouette — exactly the 🕵️ it replaces. */}
+      <path d="M244,104H219.21L175.82,44.24a20,20,0,0,0-31.61-.94L131.39,58.16c-.1.11-.2.23-.29.35a4,4,0,0,1-6.2,0c-.09-.12-.19-.24-.29-.35L111.79,43.3a20,20,0,0,0-31.61.94L36.79,104H12a12,12,0,0,0,0,24H244a12,12,0,0,0,0-24ZM96.62,62.45l9.69,11.24a28,28,0,0,0,43.38,0l9.69-11.24L189.55,104H66.45ZM180,140a40.07,40.07,0,0,0-38.16,28H114.16a40,40,0,1,0,0,24h27.68A40,40,0,1,0,180,140ZM76,196a16,16,0,1,1,16-16A16,16,0,0,1,76,196Zm104,0a16,16,0,1,1,16-16A16,16,0,0,1,180,196Z"/>
+    </>
+  ),
+  'course.classic': (
+    <>
+      {/* phosphor/windmill (bold) */}
+      {/* the mini-golf windmill. course.default takes the generic pennant. */}
+      <path d="M224,220H186.41l-4.72-33a20,20,0,0,0,23.55-8.83l12-20.33a20,20,0,0,0-7.09-27.4l-31.57-18.58,38.66-65.68a20,20,0,0,0-7.08-27.39l-20.34-12a20,20,0,0,0-27.39,7.09L143.84,45.43,78.15,6.77a20,20,0,0,0-27.39,7.09l-12,20.33a20,20,0,0,0,7.09,27.4L77.43,80.17,38.77,145.85a20,20,0,0,0,7.08,27.39l20.34,12a19.83,19.83,0,0,0,8,2.65L69.59,220H32a12,12,0,0,0,0,24H224a12,12,0,0,0,0-24Zm-37.41-57.47-62.26-36.64,7.93-13.46,62.26,36.65Zm-5.52-133,13.46,7.93L157.89,99.67l-13.46-7.92Zm-111.66,0,62.26,36.64-7.93,13.46L61.48,42.93ZM61.47,154.59,98.11,92.34l13.46,7.92L74.93,162.52Zm40.34,9.56,10.35-17.57L155.3,172l6.86,48H93.84Z"/>
+    </>
+  ),
+  'course.western': (
+    <>
+      {/* phosphor/cowboy-hat (bold) */}
+      <path d="M212,116a12,12,0,0,0-10.18,5.64q-2.48,4-5,7.57L182.25,52.33A20,20,0,0,0,150.1,40.4l-.18.15L128,58.8,106.08,40.55l-.18-.15A20,20,0,0,0,73.75,52.3L59.14,129.22q-2.49-3.61-5-7.57A12,12,0,0,0,44,116a44,44,0,1,0,0,88H212a44,44,0,1,0,0-88ZM96.07,63.44l19.25,16,.19.15a19.89,19.89,0,0,0,25,0l.19-.15,19.25-16L171.44,124H84.56ZM44,180a20,20,0,0,1-5.94-39.1c11.7,17.38,23.7,30,35,39.1Zm35-26.75L80,148h96l1,5.25c-25.33,25-46.71,26.65-49,26.75C125.71,179.9,104.33,178.29,79,153.25ZM212,180H183c11.28-9.12,23.28-21.72,35-39.1A20,20,0,0,1,212,180Z"/>
+    </>
+  ),
+  'course.default': (
+    <>
+      {/* phosphor/flag-pennant (bold) */}
+      {/* a generic pennant for an unrecognised theme. A different flag shape from nav.golf, and the two never appear in the same context. */}
+      <path d="M243.94,92.67l-184-64A12,12,0,0,0,44,40V216a12,12,0,0,0,24,0V176.53l175.94-61.2a12,12,0,0,0,0-22.66ZM68,151.12V56.88L203.47,104Z"/>
     </>
   ),
   'state.finish': (

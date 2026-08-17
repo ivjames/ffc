@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { GEOFENCE_ENFORCED } from '../../lib/flags';
 import { usePresence, refreshPresence, type Presence } from '../../lib/presence';
+import Icon from '../../ui/Icon';
 
 // On-location gate (layout route). Food, games, and golf are only playable at a
 // venue: this wraps those routes and requires a GPS-confirmed presence inside a
@@ -58,9 +59,7 @@ function Blocked({ presence }: { presence: Presence }) {
       <TopBar title="At the venue?" back="/" />
       <Content>
         <div className="mx-auto mt-10 max-w-sm space-y-5 text-center">
-          <div className="text-5xl" aria-hidden="true">
-            📍
-          </div>
+          <Icon name="state.located" className="text-5xl" />
           <h1 className="text-xl font-black text-fairway-50">{title}</h1>
           <p className="text-sm text-fairway-100/80">{body}</p>
           <div className="space-y-2 pt-2">
@@ -70,7 +69,13 @@ function Blocked({ presence }: { presence: Presence }) {
                 void refreshPresence();
               }}
             >
-              {checking ? 'Checking…' : '📍 Try again'}
+              {checking ? (
+              'Checking…'
+            ) : (
+              <>
+                <Icon name="state.located" /> Try again
+              </>
+            )}
             </Button>
             <Button variant="ghost" onClick={() => navigate('/')}>
               Back to home

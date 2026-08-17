@@ -17,6 +17,8 @@ import type { GameAwardOutcome } from '../../lib/pos/gameRewards';
 import { shareRound } from './shareImage';
 import { playFanfare } from '../../lib/sound';
 import type { CourseSeed, LocalRound } from '../../types';
+import Icon from '../../ui/Icon';
+import type { DrawnIcon } from '../../ui/icons/registry';
 import {
   coursePar,
   playerTotal,
@@ -184,9 +186,7 @@ export default function Summary() {
             {/* One horizontal row: trophy left, champion in the middle, score
                 right — a compact hero rather than a tall stack. */}
             <div className="relative flex items-center gap-4">
-              <div className="animate-trophy-pop w-14 shrink-0 text-center text-5xl leading-none">
-                🏆
-              </div>
+              <Icon name="action.leaderboard" className="animate-trophy-pop w-14 shrink-0 text-center text-5xl leading-none" />
               <div className="min-w-0 flex-1 text-center">
                 <div className="text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
                   {tied ? 'Tied for the win' : 'Winner'}
@@ -255,7 +255,7 @@ export default function Summary() {
         ) : (
           <div className="mb-6">
             <Button variant="ghost" onClick={() => setShowScorecard(true)}>
-              📋 View scorecard
+              <Icon name="action.scorecard" /> View scorecard
             </Button>
           </div>
         )}
@@ -289,7 +289,13 @@ export default function Summary() {
               );
             }}
           >
-            {sharing ? 'Preparing…' : '📸 Share this round'}
+            {sharing ? (
+                  'Preparing…'
+                ) : (
+                  <>
+                    <Icon name="action.take-photo" /> Share this round
+                  </>
+                )}
           </Button>
           <Button
             variant="ghost"
@@ -308,7 +314,7 @@ export default function Summary() {
               })
             }
           >
-            🏆 View leaderboard
+            <Icon name="action.leaderboard" /> View leaderboard
           </Button>
           <Button onClick={() => navigate('/')}>Done</Button>
         </div>
@@ -404,10 +410,10 @@ function NineGrid({
 }
 
 // What each achievement is called on the card (mirrors server/lib/rewards.js).
-const REWARD_META: Record<string, { emoji: string; label: string }> = {
-  hole_in_one: { emoji: '🎯', label: 'Hole-in-One' },
-  under_par: { emoji: '⛳', label: 'Under Par' },
-  hunt_master: { emoji: '🕵️', label: 'Hunt Master' },
+const REWARD_META: Record<string, { icon: DrawnIcon; label: string }> = {
+  hole_in_one: { icon: 'award.hole-in-one', label: 'Hole-in-One' },
+  under_par: { icon: 'award.under-par', label: 'Under Par' },
+  hunt_master: { icon: 'award.hunt-master', label: 'Hunt Master' },
 };
 
 // The value shown for one owned achievement. Tickets or nothing — there is NO
@@ -418,7 +424,7 @@ function RewardValue({ outcome }: { outcome: GameAwardOutcome | undefined }) {
   if (outcome?.status === 'awarded') {
     return (
       <span className="whitespace-nowrap text-sm font-black text-fairway-50">
-        +{outcome.tickets} 🎟️
+        +{outcome.tickets} <Icon name="award.ticket" />
       </span>
     );
   }
@@ -519,7 +525,7 @@ function RewardsCard({
       style={{ '--i': 1 } as CSSProperties}
     >
       <div className="mb-1 text-center text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
-        🎟️ Rewards earned
+        <Icon name="award.ticket" /> Rewards earned
       </div>
       <p className="mb-3 text-center text-xs text-fairway-100/70">{subtitle}</p>
 
@@ -529,7 +535,7 @@ function RewardsCard({
             variant="ghost"
             onClick={() => navigate(signedIn ? '/me/rewards' : '/me/account?next=/me/rewards')}
           >
-            {signedIn ? '🎟️ Link rewards card' : '🎟️ Sign in to bank these'}
+            <Icon name="award.ticket" /> {signedIn ? 'Link rewards card' : 'Sign in to bank these'}
           </Button>
         </div>
       )}
@@ -537,14 +543,14 @@ function RewardsCard({
       <div className="space-y-2">
         {visible.map((r) => {
           const key = keyOf(r);
-          const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
+          const meta = REWARD_META[r.achievement] ?? { icon: 'award.trophy' as DrawnIcon, label: r.achievement };
           return (
             <div
               key={key}
               className="surface-1 flex items-center gap-3 rounded-2xl border border-fairway-800/60 px-4 py-2.5"
             >
               <span className="text-xl" aria-hidden="true">
-                {meta.emoji}
+                <Icon name={meta.icon} />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-bold text-fairway-50">{meta.label}</div>

@@ -37,8 +37,11 @@
 //
 // Emoji inside sentences ('Strike! 🎳'), the ~136 editorial glyphs in
 // src/data/funContent.ts, PhotoBooth's sticker sheet, and typographic marks
-// (‹ › • ✓ ✗) all stay as they are. The inventory script classifies and counts
-// them so the exclusion is visible rather than assumed.
+// (‹ › • ✓ ✗) all stay as they are. So does src/features/scorecard/shareImage.ts,
+// which rasterises with canvas `fillText` and so cannot render a component at
+// all — the one user-visible surface still showing emoji. The inventory script
+// classifies and counts every one of these, so each exclusion is visible in the
+// report rather than quietly assumed.
 
 /** One icon's contract: what it means, and how to draw it so it stays distinct. */
 export type IconSpec = {
@@ -96,12 +99,12 @@ export const ICONS = {
   // ── Putting outcomes ──────────────────────────────────────────────────────
   // The per-hole result reactions in PuttGolf (holeResult()). These are scores,
   // not achievements — award.* below is the badge family.
-  'score.hole-in-one': { means: 'Sank it in one.', draw: 'A ball dropping into the cup, pin flag leaning.', not: 'award.hole-in-one — the earned badge version.', placeholder: '🏌️' },
-  'score.eagle': { means: 'Two under par.', draw: 'An eagle’s head in profile, or two chevrons down.', placeholder: '🦅' },
+  'score.hole-in-one': { means: 'Sank it in one.', draw: 'A star — the exceptional result, the one score that is not measured against par.', not: 'award.hole-in-one — the earned BADGE; this is the score itself.', placeholder: '🏌️' },
+  'score.eagle': { means: 'Two under par.', draw: 'A single feather. Bird-family so it groups with score.birdie, but not the perched bird, so the two stay apart. A weak pick — neither library has a raptor — and it leans on the “Eagle” label beside it.', placeholder: '🦅' },
   'score.birdie': { means: 'One under par.', draw: 'A small bird in profile, or one chevron down.', placeholder: '🐦' },
-  'score.par': { means: 'Level par.', draw: 'A pin flag with a level dash beside it.', not: 'course.default, nav.golf — ⛳️ served all three; this one is a SCORE.', placeholder: '⛳️' },
+  'score.par': { means: 'Level par.', draw: 'A dot dead centre in a ring — the ball in the cup, exactly as expected.', not: 'course.default, nav.golf — ⛳️ served all three; this one is a SCORE.', placeholder: '⛳️' },
   'score.bogey': { means: 'One over par.', draw: 'A face with a flat mouth and one raised brow — a wince, not a frown; state.lose takes the frown.', placeholder: '😬' },
-  'score.over-par': { means: 'Two or more over par.', draw: 'A dazed face — or a stacked double chevron up.', placeholder: '😵' },
+  'score.over-par': { means: 'Two or more over par.', draw: 'The far end of the face ramp: par is neutral, bogey winces, this one scowls. state.lose keeps the plain frown so all three read apart.', placeholder: '😵' },
   'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'Two falling droplets — water as a hazard, no aim and no jet.', not: 'game.water-gun-race — 💦 covered both.', placeholder: '💦' },
   'score.endless': { means: 'Endless (procedural) mode.', draw: 'A lemniscate — a clean infinity loop.', placeholder: '♾️' },
 
@@ -109,9 +112,9 @@ export const ICONS = {
   'award.trophy': { means: 'A win, or an earned award.', draw: 'A two-handled cup on a plinth.', not: 'action.leaderboard — 🏆 covered both; that is a ranked list.', placeholder: '🏆' },
   'award.medal': { means: 'An achievement medal.', draw: 'A disc on a short ribbon.', placeholder: '🏅' },
   'award.ticket': { means: 'Redemption tickets.', draw: 'An arcade ticket: perforated edge, notched ends.', not: 'nav.rewards — the currency, not the section that holds it.', placeholder: '🎟️' },
-  'award.hole-in-one': { means: 'The “hole in one” achievement badge.', draw: 'A badge outline containing a ball-in-cup.', not: 'game.darts, score.hole-in-one — 🎯 and 🏌️ both collided here.', placeholder: '🎯' },
-  'award.under-par': { means: 'The “under par” achievement badge.', draw: 'A badge outline containing a pin flag and a down chevron.', placeholder: '⛳' },
-  'award.hunt-master': { means: 'The “hunt master” achievement badge.', draw: 'A badge outline containing a magnifier.', placeholder: '🕵️' },
+  'award.hole-in-one': { means: 'The “hole in one” achievement badge.', draw: 'A rosette badge on a ribbon. score.hole-in-one is the star; this is the award you keep.', not: 'game.darts, score.hole-in-one — 🎯 and 🏌️ both collided here.', placeholder: '🎯' },
+  'award.under-par': { means: 'The “under par” achievement badge.', draw: 'A line trending downward — below par is the good direction in golf, so the icon says the thing the name does.', placeholder: '⛳' },
+  'award.hunt-master': { means: 'The “hunt master” achievement badge.', draw: 'The detective silhouette — brimmed hat over a magnifier, exactly the 🕵️ it replaces.', placeholder: '🕵️' },
 
   // ── Food order lifecycle ──────────────────────────────────────────────────
   // OrderStatus renders these as an ordered progress rail, so they must read as
@@ -167,15 +170,15 @@ export const ICONS = {
   // src/lib/theme.ts maps a course theme to a glyph. Multi-tenant: a venue can
   // add themes, so these need to stay open-ended and `course.default` must
   // always render.
-  'course.default': { means: 'A course with no specific theme.', draw: 'A pin flag in a hole.', not: 'course.classic — the fallback, not the themed classic course.', placeholder: '⛳️' },
-  'course.classic': { means: 'The classic mini-golf course.', draw: 'A pin flag with a windmill sail behind.', not: 'course.default — ⛳️ came from both a case and the default arm.', placeholder: '⛳️' },
+  'course.default': { means: 'A course with no specific theme.', draw: 'A plain pennant on a staff — a course whose theme we do not recognise. A different flag shape from nav.golf, and the two never share a screen.', not: 'course.classic — this is the fallback arm, not the themed classic course.', placeholder: '⛳️' },
+  'course.classic': { means: 'The classic mini-golf course.', draw: 'A windmill — the mini-golf obstacle everyone pictures, and the one thing that makes “classic” a picture rather than a word.', not: 'course.default — ⛳️ came from both a case and the default arm.', placeholder: '⛳️' },
   'course.blue': { means: 'The Blue course.', draw: 'A plain ring, stroked in the course accent. The colour is the identity, so the shape stays neutral across all three.', placeholder: '🔵' },
   'course.green': { means: 'The Green course.', draw: 'A plain ring, stroked in the course accent — identical to course.blue but for the colour.', placeholder: '🟢' },
   'course.red': { means: 'The Red course.', draw: 'A plain ring, stroked in the course accent — identical to course.blue but for the colour.', placeholder: '🔴' },
   'course.california': { means: 'The California / tropical course.', draw: 'A single palm with a leaning trunk. course.jungle takes the grove.', not: 'course.jungle — both were 🌴; a single palm here, a grove there.', placeholder: '🌴' },
   'course.jungle': { means: 'The Jungle Run course.', draw: 'A grove of round-canopy trees — deliberately not a palm, so the two 🌴 courses read apart.', not: 'course.california — both were 🌴.', placeholder: '🌴' },
   'course.dragon': { means: 'The Dragon course.', draw: 'A dragon head in profile with a horn.', placeholder: '🐉' },
-  'course.western': { means: 'The Western course.', draw: 'A cowboy hat, front view.', placeholder: '🤠' },
+  'course.western': { means: 'The Western course.', draw: 'A cowboy hat, brim curling up at the sides.', placeholder: '🤠' },
   'course.pirate': { means: 'The Pirate’s Cove course.', draw: 'A skull-and-crossbones flag on a staff.', placeholder: '🏴‍☠️' },
   'course.space': { means: 'The Space Odyssey course.', draw: 'A rocket, nose up, two fins.', placeholder: '🚀' },
   'course.haunted': { means: 'The Haunted Manor course.', draw: 'A ghost with a wavy hem.', placeholder: '👻' },
@@ -249,8 +252,6 @@ export const ROLE_ICONS: Record<string, IconName> = {
   'fun.gokarts 🏁': 'game.go-karts',
   'fun.highstriker 🔨': 'game.high-striker',
   'fun.milkbottle 🥎': 'game.milk-bottles',
-  'fun.milkbottle 👍': 'state.win',
-  'fun.milkbottle 🎮': 'nav.arcade',
   'fun.pinball 🕹️': 'game.pinball',
   'fun.popashot 🏀': 'game.pop-a-shot',
   'fun.popashot ⏱': 'state.timer',
@@ -323,13 +324,15 @@ export const ROLE_ICONS: Record<string, IconName> = {
   'scorecard.playersetup 📲': 'action.play-together',
   'scorecard.playersetup 🏅': 'award.medal',
   'scorecard.challenge-spinner 🎡': 'game.challenge-spinner',
+  // Summary renders 🏆 three times and the role+glyph key cannot tell them
+  // apart: two are "view leaderboard" buttons, the third is REWARD_META's
+  // fallback badge for an achievement the client does not know the name of.
+  // That third one is award.trophy at the call site — the limit of deriving a
+  // role from the component when one component means several things.
   'scorecard.summary 🏆': 'action.leaderboard',
   'scorecard.summary 📋': 'action.scorecard',
   'scorecard.summary 📸': 'action.take-photo',
   'scorecard.summary 🎟️': 'award.ticket',
-  'scorecard.shareimage 🏆': 'award.trophy',
-  'scorecard.shareimage 🏅': 'award.medal',
-  'scorecard.shareimage ⛳️': 'nav.golf',
   'scorecard.coursepicker 📍': 'state.located',
   'courses.courselist 📍': 'state.located',
 
@@ -346,7 +349,6 @@ export const ROLE_ICONS: Record<string, IconName> = {
   'account.account 👥': 'state.teams',
   'account.account 🏌️': 'score.hole-in-one',
   'account.account 🎟️': 'award.ticket',
-  'teams.acceptinvite 🎉': 'state.celebrate',
 
   // Rewards
   'rewards.rewards 🎟️': 'award.ticket',

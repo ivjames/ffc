@@ -17,6 +17,7 @@ import { playClick, playStroke, playUndo, playCup } from '../../lib/sound';
 import { openSharedRound, type SharedHandle, type SharedStatus } from '../../sync/shared';
 import { LivePill } from '../shared/Lobby';
 import { DEV_MODE } from '../../lib/flags';
+import Icon from '../../ui/Icon';
 
 // Testing aid — the gap between simulated button taps. The auto-player drives
 // the real +/Next handlers one tap per tick, so each tap fires its sound; the
@@ -356,7 +357,7 @@ export default function Scorecard() {
               aria-label="Scavenger hunt"
               title="Scavenger hunt"
             >
-              🔍
+              <Icon name="nav.hunt" />
             </button>
             {/* Challenge spinner — a quick group dare while waiting your turn;
                 carries the course so the wheel uses that course's themed set,
@@ -371,7 +372,7 @@ export default function Scorecard() {
               aria-label="Challenge spinner"
               title="Challenge spinner"
             >
-              🎡
+              <Icon name="game.challenge-spinner" />
             </button>
           </div>
         }

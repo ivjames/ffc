@@ -143,6 +143,20 @@ const BESPOKE_ART = {
     </>
   ),
 
+  // ── Course identity ───────────────────────────────────────────────────────
+
+  // Dragon — a head in profile with a horn and a jaw. The only icon in the set
+  // neither Lucide nor Phosphor has ANY candidate for, mythical creatures being
+  // outside what a UI icon library carries. Hand-drawn by necessity, not choice.
+  'course.dragon': (
+    <>
+      <path d="M4 17c0-3.5 2.5-6.5 6-7.2V7.5a1 1 0 0 1 1.6-.8L14 8.5h3.5a2.5 2.5 0 0 1 2.5 2.5c0 2-1.6 3-3.2 3.2" />
+      <path d="M10 9.8 8.2 6.4a.6.6 0 0 1 .7-.85L12 6.4" />
+      <path d="M4 17h8.5c2 0 3.5 1.3 3.5 3" />
+      <path d="M12.5 11.2h.01" />
+    </>
+  ),
+
   // Challenge spinner — a segmented wheel with a POINTER at the top.
   'game.challenge-spinner': (
     <>

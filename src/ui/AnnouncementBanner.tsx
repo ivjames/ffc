@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { markAnnouncementsSeen, useAnnouncements } from '../lib/announcements';
+import Icon from './Icon';
 
 // Rotating announcement banner (punchlist #1). One card slot; multiple live
 // announcements cycle through it on a timer. Renders nothing when there's
@@ -39,9 +40,7 @@ export default function AnnouncementBanner({
       aria-live="polite"
     >
       <div className="flex items-center gap-3">
-        <span className="text-lg" aria-hidden="true">
-          📣
-        </span>
+        <Icon name="state.announcement" className="text-lg" />
         {/* Keyed on the row so each rotation re-runs the entrance animation. */}
         <div key={a.id} className="animate-rise-in min-w-0 flex-1">
           <div className="truncate text-sm font-bold text-fairway-50">{a.title}</div>

@@ -71,15 +71,22 @@ const VENDOR = {
   'game.high-striker': ['hammer', 'the long-handled hammer. whack-a-mole shared 🔨 and keeps the bespoke mallet.'],
   'game.trivia': ['brain'],
 
-  // Putting outcomes
+  // Putting outcomes. Two sub-families, mirroring what the emoji did: the good
+  // scores are objects (star, bird, feather), the bad ones are faces on a ramp.
+  'score.hole-in-one': ['star', 'an ace — the exceptional result. award.hole-in-one is the BADGE for it.'],
+  'score.eagle': ['feather', 'bird-family but not the perched bird, so eagle and birdie stay apart. A weak pick: neither set has a raptor, and it only works because the label sits beside it.'],
   'score.birdie': ['bird'],
-  'score.bogey': ['annoyed', 'a wince. state.lose shared the idea and takes the frown.'],
+  'score.par': ['circle-dot', 'the ball dead centre in the cup — exactly as expected.'],
+  'score.bogey': ['annoyed', 'a wince — first step on the face ramp: annoyed → angry.'],
+  'score.over-par': ['angry', 'the far end of the face ramp. state.lose takes the plain frown, so all three stay distinct.'],
   'score.endless': ['infinity'],
   'score.water-hazard': ['droplets', 'water as a hazard. game.water-gun-race shared 💦 and keeps the aimed jet.'],
 
   // Awards
   'award.trophy': ['trophy', 'the object won. action.leaderboard shared 🏆 and takes the ranked list.'],
   'award.medal': ['medal'],
+  'award.hole-in-one': ['award', 'a badge on a ribbon — the achievement. score.hole-in-one is the SCORE, drawn as a star.'],
+  'award.under-par': ['trending-down', 'a line trending down: below par is the good direction in golf.'],
   'award.ticket': ['ticket'],
 
   // Food order lifecycle — reads as a sequence, so all five come from one set.
@@ -153,6 +160,10 @@ const PHOSPHOR = {
   'game.batting-cages': ['baseball'],
   'game.air-hockey': ['hockey', 'crossed sticks. Not strictly an air-hockey striker, but it matches the 🏒 the app already chose and reads at size.'],
   'game.go-karts': ['steering-wheel', 'a wheel, which frees the chequered flag for state.finish — what 🏁 actually meant.'],
+  'award.hunt-master': ['detective', 'the hat-and-magnifier silhouette — exactly the 🕵️ it replaces.'],
+  'course.classic': ['windmill', 'the mini-golf windmill. course.default takes the generic pennant.'],
+  'course.western': ['cowboy-hat'],
+  'course.default': ['flag-pennant', 'a generic pennant for an unrecognised theme. A different flag shape from nav.golf, and the two never appear in the same context.'],
   'state.finish': ['flag-checkered', 'the chequered flag, back now that game.go-karts is a steering wheel and the two no longer collide.'],
 };
 
