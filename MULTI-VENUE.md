@@ -34,9 +34,15 @@ is hit on every app boot. Exposed as middleware `tenant()` setting
 `req.tenant`; mounted only on the routes that need it (content, manifest,
 announcements), not globally.
 
-Backward compat: on today's staging host (`ffc.lab980.com`) the first label
-`ffc` matches no slug, so resolution falls through to the default org —
-behavior is identical to today.
+Platform topology (since the apex cutover — see DEPLOY.md "Platform
+topology"): the bare apex `ffc.lab980.com` serves the marketing landing page
+via its own nginx vhost, and the player PWA's canonical host is the default
+org's subdomain `bullwinkles.ffc.lab980.com` (resolved via step 2, `via:
+'host'` — strict org filtering, no org-less fallback rows). Unmatched labels
+on other subdomains still fall through to `DEFAULT_ORG_SLUG` as above.
+Infrastructure hostnames can never become org slugs: `normalizeOrg` rejects
+the reserved labels in `server/lib/reservedSlugs.js` (admin, api, app, ffc,
+infinicade, landing, mail, www).
 
 ## 2. Org branding (`org.branding` jsonb, default `'{}'`)
 

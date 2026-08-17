@@ -95,13 +95,107 @@ Master Control is then live at `https://admin.ffc.lab980.com`, gated by the same
 service worker). Re-issue/rotate the cert with `ffc wildcard-cert`; rewrite the
 vhost with `ffc admin-vhost`.
 
+## Platform topology (apex landing + org subdomains)
+
+Staging runs the production shape the platform will keep on its real domain:
+
+| Host | Serves | Vhost file |
+| --- | --- | --- |
+| `ffc.lab980.com` (bare apex) | Infinicade marketing landing page (`current/landing/`) | `sites-available/ffc.lab980.com-landing` (written by `ffc landing-vhost`; certbot never touches it) |
+| `<org-slug>.ffc.lab980.com` | player PWA, tenant-resolved from the first DNS label | `sites-available/ffc.lab980.com` (written by `ffc vhost`; `server_name *.ffc.lab980.com` once the landing vhost exists) |
+| `bullwinkles.ffc.lab980.com` | the default org — the canonical player host | (same wildcard vhost) |
+| `admin.ffc.lab980.com` | Master Control | `sites-available/admin.ffc.lab980.com` |
+
+One wildcard cert lineage (`ffc-wildcard`) covers all of it, apex included. The
+apex 301s the frozen player paths (`/install`, `/join`, `/tv`, `/teams/accept`,
+`/games/…`, `/me/…`) to `bullwinkles.ffc.lab980.com` so printed QR signage and
+emailed links keep working, and serves a kill-switch `sw.js` that unwinds
+PWA installs from the apex-served-the-app era. Org slugs that would collide
+with infrastructure hostnames are rejected at the API
+(`server/lib/reservedSlugs.js`: admin, api, app, ffc, infinicade, landing,
+mail, www). Unmatched subdomain labels still fall back to `DEFAULT_ORG_SLUG`
+(default `bullwinkles`).
+
+On the future real domain (`infinicade.com`) this whole shape carries over —
+the org slugs, data, and vhost templates are domain-agnostic; only DNS, the
+wildcard cert, and the `FFC_FQDN`-derived names change.
+
+### Apex cutover runbook (one-time)
+
+Run as root on the droplet, top to bottom:
+
+```bash
+# 1. Preflight (read-only)
+ls /etc/letsencrypt/live/ffc-wildcard/          # wildcard lineage exists (else: ffc wildcard-cert)
+dig +short bullwinkles.ffc.lab980.com           # resolves to the droplet (the *.ffc A record above)
+grep DEFAULT_ORG_SLUG /var/www/ffc/server/.env  # unset, or bullwinkles
+
+# 2. Ship the code (release now contains current/landing/)
+ffc deploy
+
+# 3. Flip the apex — one command: writes the landing vhost, re-renders the
+#    player vhost without the apex, installs the wildcard cert on *.ffc, reloads
+ffc landing-vhost
+nginx -t                                        # must be clean, NO "conflicting server name" warnings
+
+# 4. Repoint outbound links at the canonical player host
+#    (edit /var/www/ffc/server/.env): PUBLIC_APP_URL=https://bullwinkles.ffc.lab980.com
+ffc restart
+
+# 5. Seed the demo orgs (idempotent; re-running RESETS them)
+ffc seed-demo
+```
+
+DB sanity — rows without an org would vanish under strict per-host tenancy
+(schema.sql backfills `location.org_id` on migrate; verify it held):
+
+```sql
+select count(*) from location where org_id is null;   -- expect 0
+select c.id, c.name from course c
+  left join location l on l.id = c.location_id
+ where c.location_id is null or l.org_id is null;     -- expect 0 rows
+```
+
+Verify (give the ~30 s tenant cache a beat after seeding):
+
+```bash
+curl -s  https://ffc.lab980.com/ | grep -om1 Infinicade          # landing page on the apex
+curl -sI https://ffc.lab980.com/install | grep -i location       # 301 -> bullwinkles.…/install (printed QR keeps working)
+curl -s  https://ffc.lab980.com/sw.js | head -1                  # kill-switch worker (JS comment, not HTML)
+curl -s  https://bullwinkles.ffc.lab980.com/api/content   | jq '[.locations[].slug]'   # upland, tukwila, wilsonville
+curl -s  https://boardwalk-fun.ffc.lab980.com/api/content | jq '[.locations[].slug]'   # ["santa-cruz"] only (strict isolation)
+curl -s  https://putters-cove.ffc.lab980.com/api/content  | jq '[.locations[].slug]'   # ["newport"] only
+curl -s  https://boardwalk-fun.ffc.lab980.com/api/manifest.webmanifest | jq .name      # "Boardwalk Fun Co."
+```
+
+Then in a browser: install the PWA from `bullwinkles.…` and play a hole;
+`admin.ffc.lab980.com` still loads; `boardwalk-fun` shows food ordering +
+rewards (via the `/ce` mock), `putters-cove` rewards only. A phone with the
+OLD apex install self-destructs into the redirect on its next online open —
+reinstall from `bullwinkles.…` (apex-origin offline data is orphaned; known
+cost).
+
+If `certbot install` balks at the wildcard-only name in step 3, the manual
+fix is copying the two `ssl_certificate` lines from the landing vhost into
+the player vhost's 443 block, then `nginx -t && systemctl reload nginx`.
+
+**Rollback** (also required before `ffc rollback` to any pre-landing commit —
+older releases don't contain `current/landing/`):
+
+```bash
+rm /etc/nginx/sites-enabled/ffc.lab980.com-landing /etc/nginx/sites-available/ffc.lab980.com-landing
+ffc vhost        # apex returns to the player vhost automatically
+# restore PUBLIC_APP_URL in server/.env, then: ffc restart
+```
+
 ### Player accounts + shared games — deploy notes
 
 Two features lean on infrastructure beyond the code:
 
 - **Outbound email** (sign-in codes, team invites): set `MAIL_PROVIDER=resend`
   + `RESEND_API_KEY` + `MAIL_FROM` in `server/.env`, and set `PUBLIC_APP_URL`
-  to the player origin (e.g. `https://ffc.lab980.com`) so magic links and
+  to the player origin (after the apex cutover that's the default org's
+  subdomain, e.g. `https://bullwinkles.ffc.lab980.com`) so magic links and
   invite links point at production. **Before flipping to `resend`, verify the
   sending domain in Resend (SPF + DKIM DNS records)** — unverified domains
   don't deliver. Until then the default `console` provider logs codes to the

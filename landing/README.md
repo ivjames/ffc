@@ -24,20 +24,30 @@ Deliberately **not** in `public/`: everything there ships inside the player
 PWA bundle and would be served on every tenant subdomain. This page belongs
 only on the bare platform domain.
 
-## Wiring it up (once the domain exists)
+## How it's served
 
-Per the multi-venue architecture (`MULTI-VENUE.md`), tenants live on
-`<org-slug>.infinicade.com` and the player vhost's
-`server_name __FQDN__ *.__FQDN__;` currently serves the PWA on the apex too
-(falling back to the default org). To put this page on the apex instead:
+This page runs on the bare platform apex — `ffc.lab980.com` pro tem, and the
+same machinery later serves `infinicade.com` unchanged (only DNS + the
+`FFC_FQDN`-derived names differ). One command wires it:
 
-1. Add an exact-name `server` block for the apex ahead of the wildcard
-   (nginx: exact match beats wildcard) with
-   `root <APP_DIR>/current/landing;` — no API proxy needed.
-2. Drop the apex from the PWA vhost's `server_name` (keep `*.__FQDN__`).
-3. Reuse the existing wildcard cert lineage (it covers apex + `*`).
+```bash
+ffc landing-vhost    # requires the wildcard cert; run after an ffc deploy
+```
 
-Until then, nothing references this directory; it's inert in the repo.
+That renders `deploy/nginx.landing.conf.template` into the exact-name apex
+vhost (`sites-available/<fqdn>-landing`, certbot-free, wildcard-lineage TLS)
+and re-renders the player vhost so the PWA keeps only `*.<fqdn>` — nginx
+exact-match precedence gives the apex to this page. `build_release` ships
+this directory into each release, so the vhost serves from the atomically
+swapped `current/landing/`. The apex also:
+
+- 301s the frozen player paths (`/install`, `/join`, `/tv`, `/teams/accept`,
+  `/games/…`, `/me/…`) to the default org's subdomain, so printed QR signage
+  and emailed links survive the cutover;
+- serves `sw.js` (in this directory) uncached — a kill-switch worker that
+  unwinds PWA installs from when the apex served the player app.
+
+Full cutover runbook: DEPLOY.md → "Platform topology".
 
 The contact address (`hello@infinicade.com`) assumes mail is set up on the
 new domain — update it if a different address ends up being used.

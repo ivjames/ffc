@@ -18,6 +18,7 @@ import { pool } from "../../db.js";
 import { audit, isSuperAdmin, orgScope, actorLabel } from "../../lib/adminAuth.js";
 import { UUID_RE, SLUG_RE, LOCATION_RETURN_COLS, withLabel } from "../../lib/validateLocation.js";
 import { normalizeBranding } from "../../lib/branding.js";
+import { isReservedOrgSlug } from "../../lib/reservedSlugs.js";
 import {
   BRAND_ASSET_KINDS,
   validateBrandAsset,
@@ -45,6 +46,12 @@ function normalizeOrg(body) {
       error: "slug must be lowercase [a-z0-9-], no leading/trailing/double hyphen",
       status: 400,
     };
+  }
+  // The slug becomes the org's subdomain label — infrastructure hostnames are
+  // off limits (see lib/reservedSlugs.js). 400 not 409: a validation rule,
+  // not a collision with another org.
+  if (isReservedOrgSlug(slug)) {
+    return { error: `slug "${slug}" is reserved for platform hostnames`, status: 400 };
   }
   let sortOrder = 0;
   if (body.sortOrder !== undefined && body.sortOrder !== null) {
