@@ -17,7 +17,7 @@ const USAGE: HuntUsagePayload = {
     {
       month: '2026-08-01',
       orgId: 'org-1',
-      orgName: 'Bullwinkles',
+      orgName: 'Acme Family Fun',
       locationId: 'loc-1',
       locationName: 'Upland',
       locationSlug: 'upland',
@@ -53,7 +53,7 @@ const USAGE: HuntUsagePayload = {
     {
       month: '2026-08-01',
       orgId: 'org-1',
-      orgName: 'Bullwinkles',
+      orgName: 'Acme Family Fun',
       huntRounds: 40,
       scans: 130,
       verifyScans: 120,
@@ -89,7 +89,7 @@ describe('HuntUsage', () => {
   test('renders the per-org invoice summary: orgs, exact tokens, formatted costs', async () => {
     render(<HuntUsage />);
     // Each org appears in the summary AND its venue row.
-    expect(await screen.findAllByText('Bullwinkles')).toHaveLength(2);
+    expect(await screen.findAllByText('Acme Family Fun')).toHaveLength(2);
     expect(screen.getAllByText('PA Parks')).toHaveLength(2);
     // Month buckets render compact.
     expect(screen.getAllByText('2026-08').length).toBeGreaterThan(0);
@@ -121,7 +121,7 @@ describe('HuntUsage', () => {
     expect(screen.queryByText('Upland')).not.toBeInTheDocument();
     expect(screen.getByText('Riverside')).toBeInTheDocument();
     // The org summary above is untouched by the venue filter.
-    expect(screen.getAllByText('Bullwinkles')).toHaveLength(1);
+    expect(screen.getAllByText('Acme Family Fun')).toHaveLength(1);
   });
 
   test('defaults to 6 months and refetches when the window changes', async () => {

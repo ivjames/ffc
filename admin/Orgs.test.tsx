@@ -46,7 +46,7 @@ describe('Orgs — super_admin', () => {
     renderOrgs(true);
     await screen.findByText('Test Org');
 
-    await user.type(screen.getByPlaceholderText("Bullwinkle's"), 'New Org');
+    await user.type(screen.getByPlaceholderText('Acme Family Fun'), 'New Org');
     await user.click(screen.getByRole('button', { name: 'Create org' }));
 
     await waitFor(() =>

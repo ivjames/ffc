@@ -4,22 +4,24 @@ import { api, type Branding, type BrandingAssetKind, type Org } from './api';
 import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
 
 // The platform defaults from MULTI-VENUE.md §2 — shown as placeholders so an
-// empty field visibly means "use the platform default". The server holds the
-// canonical copy (server/lib/branding.js); this list only feeds placeholders
-// and the color-swatch fallback, so drift is cosmetic, not behavioral.
-export const BRANDING_DEFAULTS: Required<Branding> = {
+// empty field visibly means "use the platform default". The logo trio has NO
+// platform default (undefined here): absent means the player app shows no
+// logo anywhere until the org uploads one. The server holds the canonical
+// copy (server/lib/branding.js); this list only feeds placeholders and the
+// color-swatch fallback, so drift is cosmetic, not behavioral.
+export const BRANDING_DEFAULTS = {
   appName: 'Mini Golf Scorecard',
   shortName: 'MiniGolf',
   themeColor: '#15803d',
   backgroundColor: '#052e16',
   accentColor: '#38bdf8',
-  logoUrl: '/brand/logo.png',
-  logoBadgeUrl: '/brand/logo-badge.png',
-  logoWordmarkUrl: '/brand/logo-wordmark.png',
+  logoUrl: undefined,
+  logoBadgeUrl: undefined,
+  logoWordmarkUrl: undefined,
   icon192Url: '/icons/icon-192.png',
   icon512Url: '/icons/icon-512.png',
-  shareFooter: "Bullwinkle's · come beat this score",
-};
+  shareFooter: 'Come beat this score',
+} satisfies Record<keyof Branding, string | undefined>;
 
 type BrandingKey = keyof Branding;
 const BRANDING_KEYS = Object.keys(BRANDING_DEFAULTS) as BrandingKey[];
@@ -94,7 +96,8 @@ function UrlField({
 }: {
   label: string;
   value: string;
-  def: string;
+  /** Platform default, or undefined for fields with none (the logo trio). */
+  def: string | undefined;
   onChange: (v: string) => void;
   /** File-picker filter for the Upload button (icons are PNG-only). */
   accept: string;
@@ -117,9 +120,17 @@ function UrlField({
     }
   }
   return (
-    <Field label={label} hint={`"/path" or "https://…", or upload a file. Blank = ${def}.`}>
+    <Field
+      label={label}
+      hint={`"/path" or "https://…", or upload a file. Blank = ${def ?? 'no logo (no platform default)'}.`}
+    >
       <div className="flex items-center gap-2">
-        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={def} inputMode="url" />
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={def ?? 'No platform default — upload a file or paste a URL'}
+          inputMode="url"
+        />
         <input
           ref={fileRef}
           type="file"
@@ -209,7 +220,8 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
       <h2 className="mb-1 text-sm font-semibold text-slate-700">Branding</h2>
       <p className="mb-3 text-xs text-slate-500">
         White-label overrides for this org's player app (name, colors, logos). Every field is
-        optional — blank means the platform default shown as the placeholder.
+        optional — blank means the platform default shown as the placeholder. The logo fields
+        have no platform default: left blank, the player app shows no logo.
       </p>
       {err && <Banner kind="error">{err}</Banner>}
       <div className="mt-2 grid grid-cols-2 gap-2">
