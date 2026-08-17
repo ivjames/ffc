@@ -99,15 +99,16 @@ payout lane is gone:
 Tickets now come only from the mini-game proxy and the one-time adoption
 bonuses. **Achievements pay nothing, and there is no second class of them.**
 
-**Still open, and now independent:** whether golf should feed the ticket economy
-some other way. The least-bad version is to attach tickets to the round rather
-than to an achievement — *finish a round, earn N tickets*. It's easier to explain
-at the counter, doesn't distort play toward one scoring outcome, and caps
-trivially. It carries the same self-reporting weakness but with a far lower
-ceiling: farming it means manufacturing whole rounds rather than typing a low
-number. `reward_grant` is reusable nearly as-is, one grant per completed round
-instead of one per achievement. That's a conversation with the venue, not a
-blocker — the badge catalog no longer depends on how it lands.
+**Settled: golf does not feed the ticket economy at all.** Round-completion
+tickets — *finish a round, earn N tickets* — were the obvious fallback and were
+considered and rejected. They carry the same self-reporting weakness as the
+achievements did (a round is still just numbers typed on the group's own
+device), and reintroducing any golf payout would drag the daily cap, the
+anti-farm questions, and the venue-economics sign-off back into a system that
+just got free of them. App-earned tickets are the mini-games and the one-time
+adoption bonuses; golf is scored, ranked, and badged, but never paid. Treat this
+as closed rather than deferred — punchlist #8's ticket tie-in is retired, not
+pending a venue conversation.
 
 ---
 
@@ -350,9 +351,9 @@ and it costs nothing to be playful here.
 5. **`reward_grant` is now a record, not a voucher.** With the payout columns
    dropped it holds exactly `(round, player_index, player_tag, achievement,
    created_at)`. That's a fine home for the server-detected achievements (the
-   **S** rows), and it costs nothing to keep granting into it. If round-completion
-   tickets ever land, give them their own grant row rather than re-attaching
-   value to an achievement — the separation is the point.
+   **S** rows), and it costs nothing to keep granting into it. Nothing in this
+   table carries value any more, and nothing should: golf's ticket lane is
+   closed, not paused.
 
 ## Suggested first slate
 
