@@ -173,6 +173,13 @@ img, svg { display: block; }
     linear-gradient(150deg, #fdeef3, #eeeafc 55%, #ddf1fb);
   border-color: rgba(255, 46, 115, 0.30);
 }
+.putt-stage.stage-axe {
+  background:
+    repeating-linear-gradient(90deg, rgba(120, 72, 20, 0.06) 0 24px, transparent 24px 48px),
+    radial-gradient(120% 90% at 72% 16%, rgba(251, 191, 36, 0.14), transparent 62%),
+    linear-gradient(150deg, #f8eeda, #f2e2c8 55%, #efe0d6);
+  border-color: rgba(180, 120, 40, 0.40);
+}
 .stage-tabs { position: absolute; left: 12px; bottom: 12px; z-index: 4; display: flex; gap: 8px; flex-wrap: wrap; }
 .s-tab {
   font-family: var(--display); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
@@ -563,7 +570,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
     <div class="wrap hero-inner">
       <div class="hero-copy">
         <span class="eyebrow"><span class="pulse"></span> Infinicade · coming soon to a venue near you</span>
-        <h1><span class="ghost">Every game.</span><br><span class="fill">One platform</span><span class="dot">.</span></h1>
+        <h1><span class="ghost">So. Many.</span><br><span class="fill">Games</span><span class="dot">.</span></h1>
         <p class="sub">
           Mini golf scorecards, arcade games, AI scavenger hunts, and live
           leaderboards — under <strong>your venue's brand</strong>, with
@@ -740,7 +747,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
       </svg>
       INFINICADE
     </span>
-    <span>© 2026 Infinicade · every game, one platform</span>
+    <span>© 2026 Infinicade · so. many. games.</span>
   </div>
 </footer>
 
@@ -800,7 +807,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
   let sinking = 0, launched = false, restTimer = 0;
   let flash = null;
   const striker = { phase: 0, meter: 0, hp: -1, vel: 0, glow: 0, swinging: false, scored: false };
-  const scores = { golf: 0, skee: 0, striker: 0 };
+  const scores = { golf: 0, skee: 0, axe: 0, striker: 0 };
   let mode = "golf";
 
   const MODES = {
@@ -808,6 +815,8 @@ footer .logo { font-size: 12px; color: var(--ink); }
             score: () => "PUTTS SUNK \u00b7 " + pad2(scores.golf) },
     skee: { icon: "\ud83c\udfb3", label: "SKEE-BALL", hint: "\ud83c\udfb3 flick the ball up the lane",
             score: () => "SKEE \u00b7 " + String(scores.skee).padStart(3, "0") },
+    axe: { icon: "\ud83e\ude93", label: "AXE THROW", hint: "\ud83e\ude93 tap to lock the line \u2014 twice",
+           score: () => "AXE \u00b7 " + String(scores.axe).padStart(3, "0") },
     striker: { icon: "\ud83d\udd28", label: "HIGH STRIKER", hint: "\ud83d\udd28 tap when the power peaks",
                score: () => "BELLS RUNG \u00b7 " + pad2(scores.striker) },
   };
@@ -833,9 +842,10 @@ footer .logo { font-size: 12px; color: var(--ink); }
   function setMode(m, byUser) {
     mode = m; sinking = 0; flash = null; restTimer = 0;
     striker.hp = -1; striker.swinging = false; striker.glow = 0;
+    axe.phase = "x"; axe.fly = 0; axe.rest = 0;
     stage.classList.remove("stage-golf", "stage-skee", "stage-striker");
     stage.classList.add("stage-" + m);
-    handle.style.display = m === "striker" ? "none" : "";
+    handle.style.display = (m === "striker" || m === "axe") ? "none" : "";
     hintEl.textContent = MODES[m].hint;
     updateScore();
     respawnBall(false);
@@ -881,6 +891,11 @@ footer .logo { font-size: 12px; color: var(--ink); }
 
   stage.addEventListener("pointerdown", () => {
     stopAuto();
+    if (mode === "axe") {
+      if (axe.phase === "x") { axe.phase = "y"; hintEl.textContent = "\ud83e\ude93 tap again to lock the height"; }
+      else if (axe.phase === "y") { axe.phase = "fly"; axe.fly = 0; }
+      return;
+    }
     if (mode !== "striker" || striker.swinging) return;
     striker.swinging = true; striker.scored = false;
     const T = H * 0.60;
@@ -1015,6 +1030,95 @@ footer .logo { font-size: 12px; color: var(--ink); }
     drawBall("#f7c866", "#b8791f", "rgba(120,70,10,0.40)");
   }
 
+  /* Axe throw — art and mechanics ported from the app (src/features/fun/AxeThrow.tsx):
+     same ring palette, wood grain, axe sprite + head-center anchor, and the
+     two-phase amber guide sweep (tap locks x, tap locks y). */
+  const axe = { phase: "x", gx: 0, gy: 0, fly: 0, ang: 0, rest: 0 };
+  const AXE_RINGS = [
+    { k: 0.98, pts: 1, fill: "#3f2d1a" },
+    { k: 0.76, pts: 2, fill: "#6b4a24" },
+    { k: 0.55, pts: 3, fill: "#1e3a5f" },
+    { k: 0.35, pts: 4, fill: "#2563eb" },
+    { k: 0.17, pts: 5, fill: "#dc2626" },
+  ];
+  function drawAxeSprite(x, y, angle, scale) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.scale(scale, scale);
+    const hg = ctx.createLinearGradient(-2.5, 0, 2.5, 0);
+    hg.addColorStop(0, "#4a2f18"); hg.addColorStop(0.45, "#a06a34"); hg.addColorStop(0.6, "#8b5a2b"); hg.addColorStop(1, "#3d2713");
+    ctx.fillStyle = hg; ctx.fillRect(-2.5, -6, 5, 26);
+    const mg = ctx.createLinearGradient(-2, -14, 12, -1);
+    mg.addColorStop(0, "#f1f5f9"); mg.addColorStop(0.5, "#cbd5e1"); mg.addColorStop(1, "#64748b");
+    ctx.beginPath(); ctx.moveTo(-2, -10); ctx.lineTo(12, -14); ctx.lineTo(12, -1); ctx.lineTo(-2, -4); ctx.closePath();
+    ctx.fillStyle = mg; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(11.4, -13); ctx.lineTo(11.4, -1.6); ctx.stroke();
+    ctx.restore();
+  }
+  const AXE_HEAD = { x: 5.86, y: -7.28 };
+  function drawAxeStuck(hx, hy, angle, scale) {
+    const c = Math.cos(angle), sn = Math.sin(angle);
+    drawAxeSprite(hx - (AXE_HEAD.x * c - AXE_HEAD.y * sn) * scale, hy - (AXE_HEAD.x * sn + AXE_HEAD.y * c) * scale, angle, scale);
+  }
+  function neonLine(x1, y1, x2, y2, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha == null ? 1 : alpha;
+    ctx.shadowColor = "#fbbf24"; ctx.shadowBlur = 10;
+    ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.restore();
+  }
+  function drawAxeGame() {
+    const bx = W * 0.16, by = H * 0.08, bw = W * 0.68, bh = H * 0.64;
+    const cx = bx + bw / 2, cy = by + bh / 2, base = Math.min(bw, bh) / 2;
+    rr(bx, by, bw, bh, 12);
+    const wood = ctx.createRadialGradient(cx, cy - 12, 16, cx, cy, base * 1.6);
+    wood.addColorStop(0, "#5a3f22"); wood.addColorStop(0.6, "#3f2c17"); wood.addColorStop(1, "#241910");
+    ctx.fillStyle = wood; ctx.fill();
+    ctx.save(); rr(bx, by, bw, bh, 12); ctx.clip();
+    ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.lineWidth = 1;
+    for (let gx = bx + 22; gx < bx + bw; gx += 26) { ctx.beginPath(); ctx.moveTo(gx, by); ctx.lineTo(gx, by + bh); ctx.stroke(); }
+    ctx.restore();
+    AXE_RINGS.forEach(rg => {
+      ctx.beginPath(); ctx.arc(cx, cy, base * rg.k, 0, 7);
+      ctx.fillStyle = rg.fill; ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1; ctx.stroke();
+    });
+    const gloss = ctx.createRadialGradient(cx - 3, cy - 4, 1, cx, cy, base * 0.17);
+    gloss.addColorStop(0, "rgba(255,255,255,0.45)"); gloss.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.beginPath(); ctx.arc(cx, cy, base * 0.17, 0, 7); ctx.fillStyle = gloss; ctx.fill();
+
+    const t = performance.now() / 700;
+    if (axe.phase === "x") {
+      axe.gx = bx + (Math.sin(t) * 0.5 + 0.5) * bw;
+      neonLine(axe.gx, by + 4, axe.gx, by + bh - 4);
+    } else if (axe.phase === "y") {
+      neonLine(axe.gx, by + 4, axe.gx, by + bh - 4, 0.35);
+      axe.gy = by + (Math.sin(t * 1.17) * 0.5 + 0.5) * bh;
+      neonLine(bx + 4, axe.gy, bx + bw - 4, axe.gy);
+    } else if (axe.phase === "fly") {
+      axe.fly += 0.07;
+      const k = Math.min(axe.fly, 1);
+      const sx = W * 0.5, sy = H * 0.98;
+      drawAxeSprite(sx + (axe.gx - sx) * k, sy + (axe.gy - sy) * k, axe.fly * 14, 1.9 - 0.5 * k);
+      if (k >= 1) {
+        axe.phase = "stuck"; axe.rest = 70;
+        axe.ang = -0.5 + Math.random() * 0.3;
+        const d = Math.hypot(axe.gx - cx, axe.gy - cy);
+        let pts = 0;
+        for (const rg of AXE_RINGS) if (d <= base * rg.k) pts = rg.pts;
+        scores.axe += pts;
+        flash = { text: pts ? "+" + pts : "MISS", x: axe.gx + 16, y: axe.gy - 12, life: 1, c: pts >= 5 ? "#dc2626" : pts ? "#b45309" : "#5a6296" };
+        if (pts === 5) burst(axe.gx, axe.gy, "#fbbf24");
+        hintEl.textContent = pts === 5 ? "\ud83e\ude93 BULLSEYE!" : pts ? "\ud83e\ude93 +" + pts + " \u2014 stuck it" : "\ud83e\ude93 off the board!";
+        updateScore();
+      }
+    } else if (axe.phase === "stuck") {
+      drawAxeStuck(axe.gx, axe.gy, axe.ang, 1.9);
+      axe.rest--;
+      if (axe.rest <= 0) { axe.phase = "x"; hintEl.textContent = MODES.axe.hint; }
+    }
+  }
+
   function drawStriker() {
     striker.phase += 0.045;
     striker.meter = (Math.sin(striker.phase) + 1) / 2;
@@ -1070,6 +1174,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
     const rect = stage.getBoundingClientRect();
     if (mode === "golf") drawGolf(rect);
     else if (mode === "skee") drawSkee(rect);
+    else if (mode === "axe") drawAxeGame();
     else drawStriker();
 
     for (let i = parts.length - 1; i >= 0; i--) {
@@ -1089,7 +1194,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
         ctx.globalAlpha = 1;
       }
     }
-    if (mode !== "striker") {
+    if (mode !== "striker" && mode !== "axe") {
       handle.style.left = ball.x + "px";
       handle.style.top = ball.y + "px";
       handle.style.display = sinking > 0 ? "none" : "";

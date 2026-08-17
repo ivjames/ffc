@@ -14,9 +14,9 @@ embedded as data URIs — so it makes zero external requests and can be
 previewed by opening `index.html` directly in a browser.
 
 Interactive touches (all vanilla JS, all degrade gracefully without it, and
-all respect `prefers-reduced-motion`): a three-game arcade stage in the
-hero (drag-to-putt mini golf, skee-ball with scored rings, a tap-timing
-high striker), a live-reshuffling leaderboard mock, an AI-hunt verify loop, a
+all respect `prefers-reduced-motion`): a four-game arcade stage in the
+hero (drag-to-putt mini golf, skee-ball with scored rings, two-phase axe
+throw using the real app's art, a tap-timing high striker), a live-reshuffling leaderboard mock, an AI-hunt verify loop, a
 ticket count-up, and a white-label venue switcher that re-skins a phone
 mockup per tenant.
 

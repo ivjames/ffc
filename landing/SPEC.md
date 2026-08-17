@@ -67,8 +67,9 @@ Both faces are embedded variable woff2 (SIL OFL), declared with weight ranges:
 Scale:
 
 - **h1 (hero headline):** `clamp(30px, 6.4vw, 84px)` w800, lh 1.02, uppercase.
-  A value-prop headline, not the brand — "EVERY GAME." in ink over
-  "ONE PLATFORM." in the accent gradient + accent `.`; the brand name
+  A value-prop headline, not the brand — "SO. MANY." in ink over "GAMES."
+  in the accent gradient + accent `.` (deliberately not an "every game"
+  claim); the brand name
   appears only in the nav, eyebrow, and footer (operator decision,
   2026-08-17: no wordmark hero).
 - **h2:** `clamp(30px, 5vw, 54px)` w800, uppercase; one word per heading may
@@ -158,19 +159,24 @@ Centered `PRESS START` (`clamp(38px, 7.4vw, 92px)`; "START" in lime blinking
 via `steps(2)` 1.4s), short pitch, lime mailto button
 (`hello@infinicade.com`), small-print `no credit card · no app store · just play`.
 
-## 5. Hero arcade stage (three playable micro-games)
+## 5. Hero arcade stage (four playable micro-games)
 
-The stage rotates between three playable scenes — pill tabs bottom-left,
+The stage rotates between four playable scenes — pill tabs bottom-left,
 auto-advancing every 9s until the visitor interacts (never under
 reduced-motion). Per-game scores persist for the visit, and the card
-re-skins per game (turf / wooden lane / carnival stripes) via
+re-skins per game (turf / wooden lane / plank wall / carnival stripes) via
 `.stage-<mode>` classes:
 
 1. **Mini golf** — the drag-to-putt game described below.
 2. **Skee-ball** — the same slingshot physics aimed up the lane at
    concentric 20/30/50/100 rings; the ball scores where it stops, with
    floating "+N" text and a coral burst on 50+.
-3. **High striker** — tap-timing: an oscillating power meter, a puck
+3. **Axe throw** — two-phase tap-timing ported from the app's real game
+   (`src/features/fun/AxeThrow.tsx`): the same ring palette, wood grain,
+   axe sprite + head-center anchor, and amber neon guides — first tap
+   locks the sweeping vertical line (x), second locks the horizontal (y),
+   the axe flies in spinning and sticks; rings score 1–5, bullseye bursts.
+4. **High striker** — tap-timing: an oscillating power meter, a puck
    launched up the tower, bell at ≥~93% power (DING!, confetti, counter).
 
 The game lives in a visible putting-green card (`.putt-stage`) that is the
