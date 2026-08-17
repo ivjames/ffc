@@ -159,25 +159,35 @@ Centered `PRESS START` (`clamp(38px, 7.4vw, 92px)`; "START" in lime blinking
 via `steps(2)` 1.4s), short pitch, lime mailto button
 (`hello@infinicade.com`), small-print `no credit card · no app store · just play`.
 
-## 5. Hero arcade stage (four playable micro-games)
+## 5. Hero arcade stage (five playable micro-games)
 
-The stage rotates between four playable scenes — pill tabs bottom-left,
+The stage rotates between five playable scenes — pill tabs bottom-left,
 auto-advancing every 9s until the visitor interacts (never under
 reduced-motion). Per-game scores persist for the visit, and the card
-re-skins per game (turf / wooden lane / plank wall / carnival stripes) via
+re-skins per game (turf / skee lane / bowling boards / plank wall / carnival stripes) via
 `.stage-<mode>` classes:
 
 1. **Mini golf** — the drag-to-putt game described below.
 2. **Skee-ball** — the same slingshot physics aimed up the lane at
    concentric 20/30/50/100 rings; the ball scores where it stops, with
    floating "+N" text and a coral burst on 50+.
-3. **Axe throw** — two-phase tap-timing ported from the app's real game
+3. **Bowling** — ported from the app's `Bowling.tsx`: the 4-row rack
+   geometry, 6:1 ball/pin mass ratio with 0.5 restitution, purple house
+   ball, and white pins with the red neck ring, flattened to a top-down
+   lane with gutters and lane arrows. Flick to roll; real ball→pin→pin
+   collisions; pins downed by displacement; standing pins persist between
+   rolls, full rack resets when all ten fall. STRIKE! on a 10-pin roll.
+4. **Axe throw** — two-phase tap-timing ported from the app's real game
    (`src/features/fun/AxeThrow.tsx`): the same ring palette, wood grain,
    axe sprite + head-center anchor, and amber neon guides — first tap
    locks the sweeping vertical line (x), second locks the horizontal (y),
    the axe flies in spinning and sticks; rings score 1–5, bullseye bursts.
-4. **High striker** — tap-timing: an oscillating power meter, a puck
+5. **High striker** — tap-timing: an oscillating power meter, a puck
    launched up the tower, bell at ≥~93% power (DING!, confetti, counter).
+
+Tab labels are single words (GOLF / SKEE / BOWL / AXE / STRIKER) so all
+five fit one row; ball spawns sit at ≤0.78H so the tab row never covers
+the draggable ball.
 
 The game lives in a visible putting-green card (`.putt-stage`) that is the
 hero's right column (stacks below the copy <900px) — turf stripes, pale

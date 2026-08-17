@@ -180,6 +180,13 @@ img, svg { display: block; }
     linear-gradient(150deg, #f8eeda, #f2e2c8 55%, #efe0d6);
   border-color: rgba(180, 120, 40, 0.40);
 }
+.putt-stage.stage-bowl {
+  background:
+    repeating-linear-gradient(90deg, rgba(150, 110, 50, 0.07) 0 22px, transparent 22px 44px),
+    radial-gradient(120% 90% at 72% 16%, rgba(168, 85, 247, 0.10), transparent 62%),
+    linear-gradient(150deg, #faf3e3, #f3e9d2 55%, #efe6f6);
+  border-color: rgba(180, 140, 60, 0.38);
+}
 .stage-tabs { position: absolute; left: 12px; bottom: 12px; z-index: 4; display: flex; gap: 8px; flex-wrap: wrap; }
 .s-tab {
   font-family: var(--display); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
@@ -757,7 +764,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---------- marquee content ---------- */
-  const row1 = ["MINI GOLF", "SKEE-BALL", "HIGH STRIKER", "AXE THROW", "DARTS", "SCAVENGER HUNT"];
+  const row1 = ["MINI GOLF", "SKEE-BALL", "BOWLING", "HIGH STRIKER", "AXE THROW", "DARTS", "SCAVENGER HUNT"];
   const row2 = ["LIVE LEADERBOARDS", "TEAM PLAY", "TICKET REWARDS", "NO DOWNLOADS", "WHITE-LABEL", "OFFLINE-FIRST"];
   const fill = (el, words, outline) => {
     const seq = words.map(w => `<span class="${outline ? "o" : ""}">${w}</span><span class="star">✦</span>`).join("");
@@ -807,17 +814,19 @@ footer .logo { font-size: 12px; color: var(--ink); }
   let sinking = 0, launched = false, restTimer = 0;
   let flash = null;
   const striker = { phase: 0, meter: 0, hp: -1, vel: 0, glow: 0, swinging: false, scored: false };
-  const scores = { golf: 0, skee: 0, axe: 0, striker: 0 };
+  const scores = { golf: 0, skee: 0, bowl: 0, axe: 0, striker: 0 };
   let mode = "golf";
 
   const MODES = {
-    golf: { icon: "\u26f3", label: "MINI GOLF", hint: "\u26f3 grab the ball \u00b7 drag \u00b7 release",
+    golf: { icon: "\u26f3", label: "GOLF", hint: "\u26f3 grab the ball \u00b7 drag \u00b7 release",
             score: () => "PUTTS SUNK \u00b7 " + pad2(scores.golf) },
-    skee: { icon: "\ud83c\udfb3", label: "SKEE-BALL", hint: "\ud83c\udfb3 flick the ball up the lane",
+    skee: { icon: "\ud83c\udfaf", label: "SKEE", hint: "\ud83c\udfaf flick the ball up the lane",
             score: () => "SKEE \u00b7 " + String(scores.skee).padStart(3, "0") },
-    axe: { icon: "\ud83e\ude93", label: "AXE THROW", hint: "\ud83e\ude93 tap to lock the line \u2014 twice",
+    bowl: { icon: "\ud83c\udfb3", label: "BOWL", hint: "\ud83c\udfb3 flick to roll \u2014 real pin physics",
+            score: () => "PINS \u00b7 " + String(scores.bowl).padStart(3, "0") },
+    axe: { icon: "\ud83e\ude93", label: "AXE", hint: "\ud83e\ude93 tap to lock the line \u2014 twice",
            score: () => "AXE \u00b7 " + String(scores.axe).padStart(3, "0") },
-    striker: { icon: "\ud83d\udd28", label: "HIGH STRIKER", hint: "\ud83d\udd28 tap when the power peaks",
+    striker: { icon: "\ud83d\udd28", label: "STRIKER", hint: "\ud83d\udd28 tap when the power peaks",
                score: () => "BELLS RUNG \u00b7 " + pad2(scores.striker) },
   };
 
@@ -831,9 +840,10 @@ footer .logo { font-size: 12px; color: var(--ink); }
     if (!dragging && ball.vx === 0 && ball.vy === 0 && sinking <= 0) respawnBall(false);
   }
   function respawnBall(random) {
-    if (mode === "skee") { ball.x = W * (random ? 0.35 + Math.random() * 0.3 : 0.5); ball.y = H * 0.84; }
+    if (mode === "skee") { ball.x = W * (random ? 0.35 + Math.random() * 0.3 : 0.5); ball.y = H * 0.78; }
+    else if (mode === "bowl") { ball.x = W * (random ? 0.38 + Math.random() * 0.24 : 0.5); ball.y = H * 0.78; }
     else { ball.x = W * (random ? 0.16 + Math.random() * 0.30 : 0.26); ball.y = H * (random ? 0.52 + Math.random() * 0.30 : 0.68); }
-    ball.vx = ball.vy = 0; launched = false;
+    ball.vx = ball.vy = 0; launched = false; ball.gutter = false;
   }
   layout();
   addEventListener("resize", layout);
@@ -843,6 +853,8 @@ footer .logo { font-size: 12px; color: var(--ink); }
     mode = m; sinking = 0; flash = null; restTimer = 0;
     striker.hp = -1; striker.swinging = false; striker.glow = 0;
     axe.phase = "x"; axe.fly = 0; axe.rest = 0;
+    bowl.rest = 0;
+    if (m === "bowl") rackPins();
     stage.classList.remove("stage-golf", "stage-skee", "stage-striker");
     stage.classList.add("stage-" + m);
     handle.style.display = (m === "striker" || m === "axe") ? "none" : "";
@@ -886,6 +898,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
       ball.vx = (dx / d) * p * 21; ball.vy = (dy / d) * p * 21;
       launched = true;
       if (mode === "golf") hintEl.textContent = "\u26f3 nice stroke";
+      if (mode === "bowl") bowl.downAtRollStart = bowl.pins.filter(pn => pn.down).length;
     }
   });
 
@@ -1028,6 +1041,125 @@ footer .logo { font-size: 12px; color: var(--ink); }
     }
     drawAim(rect);
     drawBall("#f7c866", "#b8791f", "rgba(120,70,10,0.40)");
+  }
+
+  /* Bowling — ported from the app's Bowling.tsx: the 4-row rack geometry,
+     ball/pin mass ratio and restitution, purple house ball, and white pins
+     with the red neck ring — flattened to the stage's top-down view. */
+  const bowl = { pins: [], rest: 0, downAtRollStart: 0 };
+  const PIN_RAD = 7;
+  function rackPins() {
+    bowl.pins = [];
+    const cx = W * 0.5, headY = H * 0.36, gapX = Math.min(W, H) * 0.085, gapY = Math.min(W, H) * 0.075;
+    for (let r = 0; r < 4; r++) for (let i = 0; i <= r; i++) {
+      const x = cx + (i - r / 2) * gapX, y = headY - r * gapY;
+      bowl.pins.push({ x, y, vx: 0, vy: 0, ox: x, oy: y, down: false, flat: false });
+    }
+  }
+  function collide(a, b, ra, rb, ma, mb) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 0.01;
+    const overlap = ra + rb - dist;
+    if (overlap <= 0) return;
+    const nx = dx / dist, ny = dy / dist;
+    a.x -= nx * overlap * (mb / (ma + mb)); a.y -= ny * overlap * (mb / (ma + mb));
+    b.x += nx * overlap * (ma / (ma + mb)); b.y += ny * overlap * (ma / (ma + mb));
+    const rv = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+    if (rv <= 0) return;
+    const imp = 1.5 * rv / (1 / ma + 1 / mb);
+    a.vx -= imp * nx / ma; a.vy -= imp * ny / ma;
+    b.vx += imp * nx / mb; b.vy += imp * ny / mb;
+  }
+  function drawPinUp(p) {
+    const g = ctx.createRadialGradient(p.x - 2, p.y - 2, 1, p.x, p.y, PIN_RAD);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.55, "#f6f8fb"); g.addColorStop(1, "#a9b3c3");
+    ctx.beginPath(); ctx.arc(p.x, p.y, PIN_RAD, 0, 7); ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = "#dc2626"; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, PIN_RAD * 0.58, 0, 7); ctx.stroke();
+    ctx.strokeStyle = "rgba(105,115,135,0.45)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(p.x, p.y, PIN_RAD, 0, 7); ctx.stroke();
+  }
+  function drawPinFlat(p) {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(0.9); ctx.globalAlpha = 0.55;
+    ctx.fillStyle = "#cbd5e1";
+    ctx.beginPath(); ctx.ellipse(0, 0, PIN_RAD * 1.25, PIN_RAD * 0.6, 0, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  function drawBowl(rect) {
+    const gutterW = W * 0.085;
+    ctx.fillStyle = "rgba(90, 70, 40, 0.16)";
+    ctx.fillRect(0, 0, gutterW, H); ctx.fillRect(W - gutterW, 0, gutterW, H);
+    ctx.strokeStyle = "rgba(90, 70, 40, 0.30)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(gutterW, 0); ctx.lineTo(gutterW, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W - gutterW, 0); ctx.lineTo(W - gutterW, H); ctx.stroke();
+    ctx.strokeStyle = "rgba(150, 110, 50, 0.14)";
+    for (let x = gutterW + 18; x < W - gutterW; x += 22) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    ctx.fillStyle = "rgba(120, 90, 40, 0.35)";
+    [[0.5, 0.60], [0.42, 0.65], [0.58, 0.65]].forEach(([kx, ky]) => {
+      const ax = W * kx, ay = H * ky;
+      ctx.beginPath(); ctx.moveTo(ax, ay - 6); ctx.lineTo(ax + 5, ay + 4); ctx.lineTo(ax - 5, ay + 4); ctx.closePath(); ctx.fill();
+    });
+
+    if (bowl.rest > 0) {
+      bowl.rest--;
+      if (bowl.rest === 0) {
+        if (bowl.pins.every(pn => pn.down)) rackPins();
+        respawnBall(true);
+      }
+    } else if (!dragging) {
+      ball.x += ball.vx; ball.y += ball.vy;
+      ball.vx *= 0.98; ball.vy *= 0.98;
+      if (Math.abs(ball.vx) < 0.05) ball.vx = 0;
+      if (Math.abs(ball.vy) < 0.05) ball.vy = 0;
+      if (!ball.gutter && ball.y < H * 0.92 && (ball.x < gutterW + ball.r || ball.x > W - gutterW - ball.r)) {
+        ball.gutter = true; ball.vx = 0;
+        ball.x = ball.x < W / 2 ? gutterW / 2 : W - gutterW / 2;
+      }
+      if (ball.y < ball.r) { ball.y = ball.r; ball.vy *= -0.4; }
+      if (ball.y > H - ball.r) { ball.y = H - ball.r; ball.vy *= -0.4; }
+      if (ball.x < ball.r) { ball.x = ball.r; ball.vx = 0; }
+      if (ball.x > W - ball.r) { ball.x = W - ball.r; ball.vx = 0; }
+    }
+
+    for (const pn of bowl.pins) {
+      pn.x += pn.vx; pn.y += pn.vy;
+      pn.vx *= 0.90; pn.vy *= 0.90;
+      if (Math.abs(pn.vx) < 0.05) pn.vx = 0;
+      if (Math.abs(pn.vy) < 0.05) pn.vy = 0;
+      if (pn.x < PIN_RAD) { pn.x = PIN_RAD; pn.vx *= -0.4; }
+      if (pn.x > W - PIN_RAD) { pn.x = W - PIN_RAD; pn.vx *= -0.4; }
+      if (pn.y < PIN_RAD) { pn.y = PIN_RAD; pn.vy *= -0.4; }
+      if (!pn.down && Math.hypot(pn.x - pn.ox, pn.y - pn.oy) > 6) pn.down = true;
+      if (pn.down && !pn.flat && pn.vx === 0 && pn.vy === 0) pn.flat = true;
+    }
+    if (!ball.gutter && !dragging && bowl.rest === 0) {
+      for (const pn of bowl.pins) if (!pn.flat) collide(ball, pn, ball.r, PIN_RAD, 6, 1);
+    }
+    for (let i = 0; i < bowl.pins.length; i++) for (let j = i + 1; j < bowl.pins.length; j++) {
+      const a = bowl.pins[i], b = bowl.pins[j];
+      if (!a.flat || !b.flat) collide(a, b, PIN_RAD, PIN_RAD, 1, 1);
+    }
+
+    if (bowl.rest === 0 && launched && !dragging &&
+        ball.vx === 0 && ball.vy === 0 &&
+        bowl.pins.every(pn => pn.vx === 0 && pn.vy === 0)) {
+      const downs = bowl.pins.filter(pn => pn.down).length;
+      const gained = Math.max(downs - bowl.downAtRollStart, 0);
+      scores.bowl += gained;
+      const strike = gained === 10 && bowl.downAtRollStart === 0;
+      flash = { text: strike ? "STRIKE!" : gained > 0 ? "+" + gained : ball.gutter ? "GUTTER" : "MISS",
+                x: W * 0.5 - (strike ? 42 : 20), y: H * 0.52, life: 1,
+                c: strike ? "#7e22ce" : gained > 0 ? "#0089ab" : "#5a6296" };
+      if (strike) burst(W * 0.5, H * 0.32, "#a855f7");
+      hintEl.textContent = strike ? "\ud83c\udfb3 STRIKE! clean sweep" : gained > 0 ? "\ud83c\udfb3 +" + gained + " pins" : ball.gutter ? "\ud83c\udfb3 gutter! aim it straighter" : "\ud83c\udfb3 pins survived \u2014 go again";
+      updateScore();
+      launched = false; bowl.rest = 65;
+    }
+
+    for (const pn of bowl.pins) if (pn.flat) drawPinFlat(pn);
+    for (const pn of bowl.pins) if (!pn.flat) drawPinUp(pn);
+    drawAim(rect);
+    drawBall("#e9d5ff", "#7e22ce", "rgba(60, 20, 110, 0.45)");
   }
 
   /* Axe throw — art and mechanics ported from the app (src/features/fun/AxeThrow.tsx):
@@ -1174,6 +1306,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
     const rect = stage.getBoundingClientRect();
     if (mode === "golf") drawGolf(rect);
     else if (mode === "skee") drawSkee(rect);
+    else if (mode === "bowl") drawBowl(rect);
     else if (mode === "axe") drawAxeGame();
     else drawStriker();
 
