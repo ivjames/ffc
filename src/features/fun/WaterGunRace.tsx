@@ -20,7 +20,6 @@ import {
   drawFloaters,
   decay,
   shakeOffset,
-  drawScreenVeil,
 } from './fx';
 
 // §12 Water Gun Race — a carnival balloon-race mini-game. Press-and-hold to
@@ -549,9 +548,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function WaterGunRace() {

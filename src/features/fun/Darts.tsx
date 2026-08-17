@@ -18,11 +18,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
-  drawScreenVeil,
-  drawScreenFlash,
   drawGlow,
   makeCachedLayer,
-  attractPulse,
 } from './fx';
 
 // §12 Darts — a nine-dart high-score mini-game. The same two-tap timing aim as
@@ -424,21 +421,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.translate(s.x, s.y);
   }
 
-  // Board lighting, over the baked face. Two sources, matching how every other
-  // cabinet in the arcade treats a scoring target:
-  //   • the bull breathes while the player is lining up — it's what the game is
-  //     asking you to hit, and an idle board is otherwise completely static;
-  //   • whichever bed just took a dart stays lit while the score reads out.
-  // 'ready' counts: that's the pre-game screen, the longest the board ever sits
-  // untouched and the first thing a player sees.
-  const aiming =
-    gs.phase === 'ready' ||
-    gs.phase === 'countdown' ||
-    gs.phase === 'aimX' ||
-    gs.phase === 'aimY';
-  if (aiming) {
-    drawGlow(ctx, CX, CY, 34 + attractPulse(now, 2200) * 12, '#ef4444', 0.16);
-  }
+  // The bed a dart just went into stays lit while the score reads out.
+  // Nothing breathes at rest.
   if (fx.hitGlow > 0.02) {
     drawGlow(ctx, fx.hitAt.x, fx.hitAt.y, 26 + fx.hitGlow * 24, fx.hitColor, fx.hitGlow * 0.5);
   }
@@ -502,9 +486,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
-  // —— Big-hit flash: the beat a treble or a bull lands ——
-  drawScreenFlash(ctx, W, H, fx.flash, fx.flashColor);
-
   // Visit-total beat while the darts are pulled from the board.
   if (gs.phase === 'visit') {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -545,9 +526,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function Darts() {

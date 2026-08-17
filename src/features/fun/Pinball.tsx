@@ -32,11 +32,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
-  drawScreenVeil,
-  drawScreenFlash,
   drawGlow,
   makeCachedLayer,
-  attractPulse,
 } from './fx';
 
 // §12 Pinball — the flagship Fun Zone mini-game. A real pop-bumper table:
@@ -698,13 +695,10 @@ function drawBumper(
   ctx: CanvasRenderingContext2D,
   b: { x: number; y: number; r: number },
   glow: number,
-  attract: number,
 ) {
-  // The lamp under the cap throwing light onto the deck around it. A pop bumper
-  // is the brightest thing on a real table even at rest, and the light landing
-  // on the playfield is what says "lit object" rather than "bright circle".
-  const lit = Math.max(glow, attract);
-  if (lit > 0.02) drawGlow(ctx, b.x, b.y, b.r * (2.5 + glow * 1.8), '#f0abfc', 0.16 + lit * 0.55);
+  // A bumper throws light onto the deck when it FIRES, not while it sits
+  // there — the light is the hit, not the table's mood.
+  if (glow > 0.02) drawGlow(ctx, b.x, b.y, b.r * (2.5 + glow * 1.8), '#f0abfc', glow * 0.6);
   drawShadow(ctx, b.x, b.y + 4, b.r * 0.95, b.r * 0.4, 0.35);
   if (glow > 0.02) {
     // Expanding hit ring.
@@ -936,14 +930,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   }
 
   for (let i = 0; i < SLINGS.length; i++) drawSlingShape(ctx, SLINGS[i], fx.slingGlow[i]);
-  // With no ball in play the table is dead still, so the bumpers chase in
-  // sequence — a real machine's attract mode. Staggered by index so the light
-  // travels across the cluster instead of all five blinking together.
-  const idle = !gs.live;
-  for (let i = 0; i < BUMPERS.length; i++) {
-    const attract = idle ? attractPulse(now, 1700, i * 1.25) * 0.55 : 0;
-    drawBumper(ctx, BUMPERS[i], fx.bumperGlow[i], attract);
-  }
+  for (let i = 0; i < BUMPERS.length; i++) drawBumper(ctx, BUMPERS[i], fx.bumperGlow[i]);
 
   // Drop-target banks: standing targets glow amber; dropped ones leave a dim
   // socket line until the bank resets.
@@ -1018,14 +1005,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
-  // —— LANES-bonus flash: the beat the whole table lights up ——
-  drawScreenFlash(ctx, W, H, fx.flash, fx.flashColor);
-
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function Pinball() {

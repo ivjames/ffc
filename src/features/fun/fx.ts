@@ -27,48 +27,6 @@ export function fxRandom(): number {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
-// Canvas drawing is invisible to the CSS `prefers-reduced-motion` block, so a
-// game that paints ambient motion — an attract-mode shimmer, an idle pulse on a
-// target — has to gate it here instead. Tracked live (same shape as
-// lib/haptics.ts) so toggling the OS setting mid-session is honored without a
-// reload; a phone left on a cabinet all evening never gets reloaded.
-//
-// Note this covers AMBIENT motion only. Motion the player caused — a ball in
-// flight, a bumper lighting on a hit — is the game responding to input, not
-// decoration, and stays on regardless.
-let reduceMotion = false;
-if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-  const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-  reduceMotion = mq.matches;
-  const onChange = (e: MediaQueryListEvent) => {
-    reduceMotion = e.matches;
-  };
-  // Older Safari only has addListener; try both.
-  if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onChange);
-  else if (typeof (mq as unknown as { addListener?: unknown }).addListener === 'function')
-    (mq as unknown as { addListener: (fn: (e: MediaQueryListEvent) => void) => void }).addListener(
-      onChange,
-    );
-}
-
-/** Whether the player has asked for reduced motion. Gate ambient motion on it. */
-export function prefersReducedMotion(): boolean {
-  return reduceMotion;
-}
-
-/**
- * A 0..1 sine for attract-mode idling — the slow breath a real machine's lamps
- * have while nobody is playing. `offset` (radians) staggers sibling elements so
- * a row of lamps ripples instead of blinking in unison.
- *
- * Returns a steady mid-brightness under reduced motion, so the element still
- * reads as lit rather than snapping dark.
- */
-export function attractPulse(now: number, periodMs: number, offset = 0): number {
-  if (reduceMotion) return 0.5;
-  return 0.5 + 0.5 * Math.sin((now / periodMs) * TWO_PI + offset);
-}
-
 export type Vec = { x: number; y: number };
 
 export type Particle = {
@@ -308,81 +266,6 @@ export function decay(v: number, dt: number, perMs: number): number {
 /** Random screen-shake offset for a magnitude (apply via ctx.translate). */
 export function shakeOffset(mag: number): Vec {
   return { x: (fxRandom() * 2 - 1) * mag, y: (fxRandom() * 2 - 1) * mag };
-}
-
-// --- Cabinet screen treatment ----------------------------------------------
-// The last thing a game's draw loop does. The CSS side (`.arcade-screen` in
-// index.css) supplies the bezel, the bloom, and the seat shadow — everything
-// OUTSIDE the drawing. These two supply what has to be composited on top of
-// the pixels themselves, which CSS cannot do to a canvas: a <canvas> is a
-// replaced element, so a ::after veil is never rendered on it.
-//
-// Both are pure overlays: call them after everything else, and they need no
-// state, no per-game tuning, and no changes to what the game already draws.
-
-/** Scanline pitch in CSS pixels. Three is the tightest that still reads as
- *  lines rather than as a flat grey wash once the canvas is scaled down to a
- *  phone. */
-const SCANLINE_PITCH = 3;
-
-/**
- * The CRT veil: scanlines plus a corner vignette, as a curved tube gives.
- *
- * Cheap by construction — one fillRect per line over a canvas a few hundred
- * pixels tall, no gradients per line, no offscreen buffer — because this runs
- * every frame in games that are already doing physics.
- *
- * @param strength 0..1; scales both effects together so a game with a dark
- *   playfield can dial it down rather than turning it off.
- */
-export function drawScreenVeil(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  strength = 1,
-): void {
-  if (strength <= 0) return;
-  ctx.save();
-
-  // Scanlines.
-  ctx.fillStyle = `rgba(0,0,0,${0.14 * strength})`;
-  for (let y = 0; y < h; y += SCANLINE_PITCH) ctx.fillRect(0, y, w, 1);
-
-  // Vignette. One radial gradient, transparent through most of the frame so it
-  // only bites at the corners.
-  const grad = ctx.createRadialGradient(w / 2, h * 0.45, Math.min(w, h) * 0.3, w / 2, h * 0.5, Math.max(w, h) * 0.75);
-  grad.addColorStop(0, 'rgba(0,0,0,0)');
-  grad.addColorStop(1, `rgba(0,0,0,${0.42 * strength})`);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
-
-  ctx.restore();
-}
-
-/**
- * A full-screen colored flash — the frame a machine lights up on a jackpot,
- * a strike, a bullseye. Drive `amount` from a scalar you decay() each frame:
- *
- *   gs.flash = decay(gs.flash, dt, 0.004);
- *   drawScreenFlash(ctx, W, H, gs.flash, '#fbbf24');
- *
- * Screen-blended, so it brightens the playfield rather than fogging it grey —
- * a plain white overlay at low alpha is what makes a "flash" look like haze.
- */
-export function drawScreenFlash(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  amount: number,
-  color = '#ffffff',
-): void {
-  if (amount <= 0) return;
-  ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = Math.min(1, amount) * 0.55;
-  ctx.fillStyle = color;
-  ctx.fillRect(0, 0, w, h);
-  ctx.restore();
 }
 
 // --- Cached static layers ---------------------------------------------------

@@ -18,12 +18,9 @@ import {
   pushTrail,
   decay,
   shakeOffset,
-  drawScreenVeil,
-  drawScreenFlash,
   drawGlow,
   makeCachedLayer,
   brushedStreaks,
-  attractPulse,
 } from './fx';
 
 // §12 Skee-Ball — the first attraction mini-game. Swipe up the lane to roll a
@@ -321,11 +318,6 @@ function paintRings(ctx: CanvasRenderingContext2D) {
   // Lower (bigger) rings first so the upper rings layer cleanly where they touch.
   const ordered = [...HOLES].sort((a, b) => b.cy - a.cy);
   for (const h of ordered) {
-    // The lamp's resting halo spilling onto the steel around the cup. Baked in
-    // rather than drawn per frame: an unlit cup's glow never changes, so it
-    // costs nothing here and gives every ring light that lands on its
-    // surroundings instead of stopping at its own rim.
-    drawGlow(ctx, h.cx, h.cy, h.R * 2.1, h.color, 0.16);
     // Funnel dish: a lit bowl sinking toward its drop hole.
     const dish = ctx.createRadialGradient(h.cx, h.cy - h.R * 0.3, h.R * 0.1, h.cx, h.cy, h.R);
     dish.addColorStop(0, withAlpha(h.color, 0.32));
@@ -372,7 +364,7 @@ function paintRings(ctx: CanvasRenderingContext2D) {
 const backdropLayer = makeCachedLayer(W, H, paintBackdrop);
 const ringsLayer = makeCachedLayer(W, H, paintRings);
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.clearRect(0, 0, W, H);
 
   // Keyed on the decal so the backdrop is rebuilt once the mark decodes. A null
@@ -396,22 +388,13 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   if (rings) ctx.drawImage(rings, 0, 0, W, H);
   else paintRings(ctx);
 
-  // Ring lighting, on top of the baked bodies. Two sources, both deliberately
-  // sparse — a glow is a gradient allocation, so only rings with something to
-  // say get one:
-  //   • the two 100 corners breathe while the machine waits for a throw, the
-  //     way a real cabinet advertises its prize target to the room;
-  //   • whichever cup was just scored stays hot for a beat.
-  const idle = gs.phase === 'aim' && !gs.drag.active;
+  // A cup that was just scored stays lit for a beat. Nothing glows at rest —
+  // the lamps come up because something happened, not as atmosphere.
   for (let i = 0; i < HOLES.length; i++) {
-    const h = HOLES[i];
     const hit = fx.ringGlow[i];
-    // Stagger the pair by half a cycle so the corners alternate rather than
-    // blinking together — two lamps in lockstep read as a strobe, not attract.
-    const attract = idle && h.pts === 100 ? attractPulse(now, 2600, i * Math.PI) * 0.3 : 0;
-    const lit = Math.max(attract, hit);
-    if (lit < 0.02) continue;
-    drawGlow(ctx, h.cx, h.cy, h.R * (2.2 + hit * 1.4), h.color, 0.2 + lit * 0.5);
+    if (hit < 0.02) continue;
+    const h = HOLES[i];
+    drawGlow(ctx, h.cx, h.cy, h.R * (2.2 + hit * 1.4), h.color, hit * 0.6);
   }
 
   // Aim trail while dragging — dots that FADE OUT before reaching the target, so
@@ -478,14 +461,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   ctx.restore();
 
-  // —— Big-score flash: the frame the machine lights up on a 100 ——
-  drawScreenFlash(ctx, W, H, fx.flash, fx.flashColor);
-
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function SkeeBall() {
@@ -630,7 +607,7 @@ export default function SkeeBall() {
       }
 
       updateFX(fxRef.current, gs, dt);
-      draw(ctx, gs, fxRef.current, now);
+      draw(ctx, gs, fxRef.current);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);

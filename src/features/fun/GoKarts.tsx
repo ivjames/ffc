@@ -19,7 +19,6 @@ import {
   decay,
   shakeOffset,
   fxRandom,
-  drawScreenVeil,
 } from './fx';
 
 // §12 Go-Karts — the seventh attraction mini-game. A top-down 3-lap time trial.
@@ -706,9 +705,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number, fx: FX) {
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 const fmt = (ms: number) => (ms / 1000).toFixed(2);

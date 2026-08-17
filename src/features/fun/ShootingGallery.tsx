@@ -26,11 +26,8 @@ import {
   drawFloaters,
   decay,
   shakeOffset,
-  drawScreenVeil,
-  drawScreenFlash,
   drawGlow,
   makeCachedLayer,
-  attractPulse,
 } from './fx';
 
 // §12 Shooting Gallery — the carnival booth classic. Tin ducks glide across
@@ -180,7 +177,6 @@ function drawDuck(
   flip: number,
   gold: boolean,
   now: number,
-  goldLit = 0, // 0..1 attract breath on the gold duck; ignored for plain ducks
 ) {
   ctx.save();
   ctx.translate(x, baseY);
@@ -199,7 +195,7 @@ function drawDuck(
   // than just being a brighter cutout — the same thing a Skee-Ball 100 cup or a
   // pop bumper does. A gradient, not shadowBlur: this duck is on screen every
   // frame it exists, and the sparkles below would double the cost again.
-  if (gold) drawGlow(ctx, 0, -38, 62, '#fbbf24', 0.3 + goldLit * 0.4);
+  if (gold) drawGlow(ctx, 0, -38, 62, '#fbbf24', 0.34);
 
   // Body — a flat painted ellipse with a tail kick.
   ctx.beginPath();
@@ -432,8 +428,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
       flipAmount(g.state, g.stateAt, now),
       true,
       now,
-      // The prize target breathes, like the Skee-Ball 100s and the darts bull.
-      attractPulse(now, 1600),
     );
   }
 
@@ -502,9 +496,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.restore();
   }
 
-  // —— Gold-hit flash overlay ——
-  drawScreenFlash(ctx, W, H, fx.flash, fx.flashColor);
-
   // "3, 2, 1, GO!" countdown before the round starts.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
@@ -524,9 +515,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function ShootingGallery() {

@@ -21,11 +21,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
-  drawScreenVeil,
-  drawScreenFlash,
   drawGlow,
   makeCachedLayer,
-  attractPulse,
 } from './fx';
 
 // §12 High Striker — the carnival strength-tower mini-game. A power meter
@@ -463,13 +460,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterV
   if (machine) ctx.drawImage(machine, 0, 0, W, H);
   else paintMachine(ctx);
 
-  // The bell breathes while the player is lining up a swing and blazes on the
-  // clang — same idle-then-payoff treatment the Skee-Ball 100s and the darts
-  // bull get. fx.flash is already 1 at the strike, so it doubles as "just rung".
-  // 'ready' counts: that's the pre-game screen, the longest the machine ever
-  // sits untouched and the first thing a player sees.
-  const waiting = gs.phase === 'ready' || gs.phase === 'aim' || gs.phase === 'countdown';
-  const bellLit = Math.max(fx.flash, waiting ? attractPulse(now, 2400) * 0.32 : 0);
+  // The bell lights on the clang and nowhere else.
+  const bellLit = fx.flash;
   drawBell(ctx, fx, now, bellLit);
 
   // Mallet swing: quick accelerating strike, then an eased return to rest.
@@ -510,9 +502,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterV
 
   drawFloaters(ctx, fx.floaters);
 
-  // —— Bell flash: the frame the whole midway lights up on a clang ——
-  drawScreenFlash(ctx, W, H, fx.flash, fx.flashColor);
-
   // "3, 2, 1, GO!" countdown before the meter starts sweeping.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
@@ -532,9 +521,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterV
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function HighStriker() {

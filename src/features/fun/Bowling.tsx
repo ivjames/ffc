@@ -21,12 +21,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
-  drawScreenVeil,
-  drawScreenFlash,
   drawGlow,
   makeCachedLayer,
-  attractPulse,
-  prefersReducedMotion,
 } from './fx';
 
 // §12 Bowling — the sixth attraction mini-game. Swipe up the lane to roll (aim
@@ -652,7 +648,7 @@ function paintAlley(ctx: CanvasRenderingContext2D) {
 
 const alleyLayer = makeCachedLayer(W, H, paintAlley);
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.clearRect(0, 0, W, H);
 
   // Keyed on the masking-unit mark so the alley rebuilds once it decodes; a null
@@ -664,11 +660,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   const deck = project(W / 2, HEAD_Y);
 
   // Lane oil. A dressed lane is wet down the middle and dry at the edges, and
-  // the head of it mirrors the pin-deck lighting straight back at the bowler.
-  // While nobody is rolling that reflection drifts, which is the only motion on
-  // an otherwise dead approach — gated as ambient, so reduced motion parks it.
-  const drift = prefersReducedMotion() ? 0.5 : attractPulse(now, 5200);
-  const oilY = deck.y + 40 + drift * 150;
+  // the head of it mirrors the pin-deck lighting back at the bowler. Static —
+  // a dressing pattern is a property of the surface, not an animation.
+  const oilY = deck.y + 115;
   const oil = ctx.createRadialGradient(W / 2, oilY, 6, W / 2, oilY, 130);
   oil.addColorStop(0, withAlpha(PURPLE_LIGHT, 0.09));
   oil.addColorStop(0.5, withAlpha(PURPLE, 0.04));
@@ -676,11 +670,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.fillStyle = oil;
   ctx.fillRect(0, deck.y, W, H - deck.y);
 
-  // The pin deck's own lighting, spilling forward off the rack. Drawn per frame
-  // rather than baked so a strike can drive it — every scoring element in the
-  // arcade lights its surroundings the same way.
-  const deckLit = 0.22 + fx.flash * 0.5;
-  drawGlow(ctx, W / 2, deck.y - 10, 90, PURPLE_LIGHT, deckLit);
+  // The pin deck flares when the rack goes over; it is dark otherwise.
+  if (fx.flash > 0.02) drawGlow(ctx, W / 2, deck.y - 10, 90, PURPLE_LIGHT, fx.flash * 0.55);
 
   // —— Dynamic layer (shaken on strikes/spares) ——
   ctx.save();
@@ -740,9 +731,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
-  // —— Strike/spare flash: the beat the house lights hit the lane ——
-  drawScreenFlash(ctx, W, H, fx.flash, PURPLE_LIGHT);
-
   // —— On-canvas STRIKE! / SPARE! banner, softly lit ——
   if (gs.phase === 'sweep' && (gs.note.includes('Strike') || gs.note.includes('Spare'))) {
     const strike = gs.note.includes('Strike');
@@ -759,9 +747,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 /** The classic ten-frame score strip: ball marks up top, cumulative score
@@ -972,7 +957,7 @@ export default function Bowling() {
       }
 
       updateFX(fxRef.current, gs, dt);
-      draw(ctx, gs, fxRef.current, now);
+      draw(ctx, gs, fxRef.current);
       raf = requestAnimationFrame(frameLoop);
     };
     raf = requestAnimationFrame(frameLoop);

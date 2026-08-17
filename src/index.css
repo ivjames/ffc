@@ -1180,43 +1180,23 @@ button {
    lane's amber, the air-hockey rink's cyan) by setting the variable inline;
    the default is the app's accent. */
 .arcade-screen {
-  --screen-glow: color-mix(in srgb, var(--accent) 55%, transparent);
   border: 0;
   background-color: #05070a;
-  box-shadow:
-    0 0 38px -6px var(--screen-glow),
-    0 0 0 1px rgb(255 255 255 / 0.16),
-    0 0 0 6px #14161c,
-    0 1px 0 6px rgb(255 255 255 / 0.09),
-    0 -1px 0 6px rgb(0 0 0 / 0.5),
-    0 0 0 8px #0a0c10,
-    0 14px 30px -10px rgb(0 0 0 / 0.75);
-  filter: saturate(1.08) contrast(1.04);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
 }
 
-/* NOTE on the CRT veil (scanlines + vignette): it is NOT done here. A <canvas>
-   is a replaced element, so ::before/::after are never rendered on it — a
-   pseudo-element veil would be dead CSS that silently does nothing. It lives
-   in the draw loop instead, as drawScreenVeil() in features/fun/fx.ts, which
-   also means it composites under the glow rather than over the bezel.
+/* The games draw their own surfaces; this class only supplies the dark ground
+   behind the canvas and a hairline edge. Deliberately no bloom, bezel or
+   saturation push — a scoring element lighting up should be the brightest
+   thing on screen, and a glowing frame competes with it.
 
 /* Marquee: the lit strip above a cabinet's screen carrying the game's name.
    Used by the arcade game HUDs. */
 .arcade-marquee {
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 24%, #0a0c10), #0a0c10);
   border-radius: 0.75rem;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.14),
-    0 0 22px -8px var(--accent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
-/* Motion sensitivity: the glow and the CRT veil are static, so there is
-   nothing to disable — but the saturation push can be uncomfortable alongside
-   reduced-motion preferences on some displays, so soften it. */
-@media (prefers-reduced-motion: reduce) {
-  .arcade-screen {
-    filter: none;
-  }
-}

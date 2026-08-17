@@ -21,11 +21,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
-  drawScreenVeil,
-  drawScreenFlash,
   drawGlow,
   makeCachedLayer,
-  attractPulse,
 } from './fx';
 
 // §12 Air Hockey — the second attraction mini-game. Drag your mallet in the
@@ -386,7 +383,7 @@ function paintTable(ctx: CanvasRenderingContext2D) {
 
 const tableLayer = makeCachedLayer(W, H, paintTable);
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.clearRect(0, 0, W, H);
 
   // Keyed on the centre badge so the table rebuilds once the mark decodes; a
@@ -395,20 +392,15 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   if (table) ctx.drawImage(table, 0, 0, W, H);
   else paintTable(ctx);
 
-  // Goal-mouth lighting, over the baked neon. Both ends breathe out of phase
-  // before the first serve — the table is otherwise completely still on the
-  // ready screen — and the end that was just scored on stays hot for a beat.
-  const idle = gs.phase === 'ready';
+  // The mouth that was just scored on stays lit for a beat. Neither end
+  // glows while the table is idle.
   const ends: Array<[number, string, number]> = [
     [4, '#38bdf8', fx.goalGlow[0]],
     [H - 4, '#22c55e', fx.goalGlow[1]],
   ];
-  for (let i = 0; i < ends.length; i++) {
-    const [y, color, hit] = ends[i];
-    const attract = idle ? attractPulse(now, 2000, i * Math.PI) * 0.3 : 0;
-    const lit = Math.max(attract, hit);
-    if (lit < 0.02) continue;
-    drawGlow(ctx, W / 2, y, GOAL_W * (0.5 + hit * 0.3), color, 0.15 + lit * 0.45);
+  for (const [y, color, hit] of ends) {
+    if (hit < 0.02) continue;
+    drawGlow(ctx, W / 2, y, GOAL_W * (0.5 + hit * 0.3), color, hit * 0.5);
   }
 
   // —— Dynamic layer (shaken on goals) ——
@@ -436,9 +428,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
-  // —— Goal flash overlay ——
-  drawScreenFlash(ctx, W, H, fx.flash, fx.flashColor);
-
   // "Get ready" flash on serve.
   if (gs.phase === 'serve') {
     ctx.save();
@@ -454,9 +443,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function AirHockey() {
@@ -581,7 +567,7 @@ export default function AirHockey() {
       }
 
       updateFX(fx, gs, dt);
-      draw(ctx, gs, fx, now);
+      draw(ctx, gs, fx);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
