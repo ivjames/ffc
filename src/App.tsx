@@ -56,6 +56,7 @@ import TenantUnavailable from './features/shared/TenantUnavailable';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import GeofenceGate from './features/shared/GeofenceGate';
+import AccountGate from './features/shared/AccountGate';
 import { BuildStamp } from './ui/BuildStamp';
 import FeedbackButton from './ui/FeedbackButton';
 import { CAPTURE_IGNORE_ATTR } from './lib/screenCapture';
@@ -210,16 +211,23 @@ export default function App() {
         <Route path="/hunt" element={<HuntEntry />} />
 
         {/* ── Me section ────────────────────────────────────────────────── */}
+        {/* The hub itself stays open — signed out it is the sign-in pitch, and
+            it hides the rows that need an account (see MeHome). */}
         <Route path="/me" element={<MeHome />} />
-        {/* Player account — passwordless email sign-in + profile. */}
+        {/* Player account — passwordless email sign-in + profile. Necessarily
+            ungated: it is how you get through the gate. */}
         <Route path="/me/account" element={<Account />} />
-        {/* Persistent teams (signed-in). */}
-        <Route path="/me/teams" element={<Teams />} />
-        <Route path="/me/teams/:id" element={<TeamDetail />} />
-        {/* Rewards card — POS loyalty add-on; redirects home when off. */}
-        <Route path="/me/rewards" element={<Rewards />} />
-        {/* Player achievements / badges gallery. */}
-        <Route path="/me/achievements" element={<Achievements />} />
+        {/* Everything that belongs to a person rather than a place needs an
+            account. Walk-up play (golf, arcade, photo booth, food) deliberately
+            stays open above — the gate is about identity, not friction. */}
+        <Route element={<AccountGate />}>
+          <Route path="/me/teams" element={<Teams />} />
+          <Route path="/me/teams/:id" element={<TeamDetail />} />
+          {/* Rewards card — POS loyalty add-on; redirects home when off. */}
+          <Route path="/me/rewards" element={<Rewards />} />
+          {/* Player achievements / badges gallery. */}
+          <Route path="/me/achievements" element={<Achievements />} />
+        </Route>
         {/* Plain-language disclosure of everything the app records. */}
         <Route path="/me/privacy" element={<Privacy />} />
 

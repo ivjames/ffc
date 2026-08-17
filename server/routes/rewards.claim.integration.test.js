@@ -19,6 +19,7 @@ process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.APP_TOKEN = "rewards-claim-test-token";
 
 const { app } = await import("../app.js");
+const { createUserSession } = await import("../lib/userAuth.js");
 
 // Stub CenterEdge with vendor-side idempotency + a call log + a failure toggle.
 const stub = { calls: [], byKey: new Map(), balance: 5000, failNext: false };
@@ -53,12 +54,39 @@ let noRewardsLocationId; // loyalty on, gameRewards off
 const locationIds = [];
 let seq = 0;
 
-function claim(body) {
+// Claiming banks tickets onto a card, so it is signed-in only and the card is
+// the caller's own binding at the round's venue — the round's clientId says
+// WHICH grant, never whose card gets paid.
+function claim(body, cookie) {
   return fetch(`${baseUrl}/api/rewards/claim`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
     body: JSON.stringify(body),
   });
+}
+
+let holderSeq = 0;
+const holderEmails = [];
+/** A signed-in player holding `card` at `loc`. Returns its cookie. */
+async function cardHolder(loc, card) {
+  const email = `claim-${Date.now()}-${holderSeq++}@example.com`;
+  holderEmails.push(email);
+  const row = await testQuery(
+    `insert into app_user (email, email_verified_at) values ($1, now()) returning id`,
+    [email]
+  );
+  const userId = row.rows[0].id;
+  if (loc && card) {
+    await testQuery(
+      `insert into user_card_link (app_user_id, location_id, card_player_id) values ($1, $2, $3)`,
+      [userId, loc, card]
+    );
+  }
+  const { token } = await createUserSession(userId);
+  return `ffc_session=${token}`;
 }
 
 async function makeLocation(slug, pos) {
@@ -117,30 +145,49 @@ after(async () => {
   );
   await testQuery(`delete from course where location_id = any($1::uuid[])`, [locationIds]);
   await testQuery(`delete from location where id = any($1::uuid[])`, [locationIds]);
+  await testQuery(`delete from app_user where email = any($1::text[])`, [holderEmails]);
 });
 
 test("rejects malformed requests", async () => {
   const { clientId } = await makeGrant(locationId, "hole_in_one");
+  const cookie = await cardHolder(locationId, "PL-1");
   const bad = [
-    [{ clientId: "", playerIndex: 0, achievement: "hole_in_one", playerId: "PL-1" }, /clientId/],
-    [{ clientId, playerIndex: 9, achievement: "hole_in_one", playerId: "PL-1" }, /playerIndex/],
-    [{ clientId, playerIndex: 0, achievement: "bogus", playerId: "PL-1" }, /unknown achievement/],
-    [{ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "" }, /playerId/],
+    [{ clientId: "", playerIndex: 0, achievement: "hole_in_one" }, /clientId/],
+    [{ clientId, playerIndex: 9, achievement: "hole_in_one" }, /playerIndex/],
+    [{ clientId, playerIndex: 0, achievement: "bogus" }, /unknown achievement/],
   ];
   for (const [body, msg] of bad) {
-    const res = await claim(body);
+    const res = await claim(body, cookie);
     assert.equal(res.status, 400);
     assert.match((await res.json()).error, msg);
   }
 });
 
+test("a leaked round id can't redirect the reward to someone else's card", async () => {
+  const { clientId } = await makeGrant(locationId, "hole_in_one");
+  // Anonymous: the round id alone buys nothing any more.
+  assert.equal(
+    (await claim({ clientId, playerIndex: 0, achievement: "hole_in_one" })).status,
+    401
+  );
+  // Signed in but cardless: nothing to credit, and the grant stays unclaimed.
+  const cardless = await cardHolder(null, null);
+  const res = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one" }, cardless);
+  assert.equal(res.status, 409);
+  const g = await testQuery(
+    `select redeemed_at ra from reward_grant g join round r on r.id = g.round_id
+      where r.client_id = $1`,
+    [clientId]
+  );
+  assert.equal(g.rows[0].ra, null);
+});
+
 test("no grant for the round/player/achievement -> 404 (can't mint without one)", async () => {
-  const res = await claim({
-    clientId: "does-not-exist",
-    playerIndex: 0,
-    achievement: "hole_in_one",
-    playerId: "PL-1",
-  });
+  const cookie = await cardHolder(locationId, "PL-1");
+  const res = await claim(
+    { clientId: "does-not-exist", playerIndex: 0, achievement: "hole_in_one" },
+    cookie
+  );
   assert.equal(res.status, 404);
 });
 
@@ -148,7 +195,8 @@ test("credits the SERVER-derived value once and is idempotent on replay", async 
   const { clientId } = await makeGrant(locationId, "hole_in_one");
   const before = stub.calls.length;
 
-  const r1 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-1001" });
+  const cookie = await cardHolder(locationId, "PL-1001");
+  const r1 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one" }, cookie);
   assert.equal(r1.status, 200);
   const b1 = await r1.json();
   assert.equal(b1.status, "awarded");
@@ -172,7 +220,7 @@ test("credits the SERVER-derived value once and is idempotent on replay", async 
   assert.ok(g.rows[0].p);
 
   // Replay: no second vendor credit, same answer.
-  const r2 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-1001" });
+  const r2 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one" }, cookie);
   assert.equal(r2.status, 200);
   assert.equal((await r2.json()).ticketsAwarded, 100);
   assert.equal(stub.calls.length, before + 1); // unchanged — settled from the row
@@ -180,13 +228,15 @@ test("credits the SERVER-derived value once and is idempotent on replay", async 
 
 test("under_par pays its own price (client can't over-pay)", async () => {
   const { clientId } = await makeGrant(locationId, "under_par");
-  const res = await claim({ clientId, playerIndex: 0, achievement: "under_par", playerId: "PL-2" });
+  const cookie = await cardHolder(locationId, "PL-2");
+  const res = await claim({ clientId, playerIndex: 0, achievement: "under_par" }, cookie);
   assert.equal((await res.json()).ticketsAwarded, 50);
 });
 
 test("venue without the gameRewards add-on -> 403", async () => {
   const { clientId } = await makeGrant(noRewardsLocationId, "hole_in_one");
-  const res = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-4" });
+  const cookie = await cardHolder(noRewardsLocationId, "PL-4");
+  const res = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one" }, cookie);
   assert.equal(res.status, 403);
 });
 
@@ -200,17 +250,17 @@ test("golf shares one daily cap: a claim clamps to the remaining budget, then ho
       gameRewardCaps: { dailyPerCard: 120, perGame: {} },
     },
   });
-  const card = "PL-CAP-GOLF";
+  const cookie = await cardHolder(capLoc, "PL-CAP-GOLF");
 
   // 1) hole_in_one (100) pays in full — 20 of the 120 budget left.
   const g1 = await makeGrant(capLoc, "hole_in_one");
-  const r1 = await claim({ clientId: g1.clientId, playerIndex: 0, achievement: "hole_in_one", playerId: card });
+  const r1 = await claim({ clientId: g1.clientId, playerIndex: 0, achievement: "hole_in_one" }, cookie);
   assert.equal((await r1.json()).ticketsAwarded, 100);
 
   // 2) under_par (50) with only 20 left — clamped to 20 and the grant is
   //    consumed at that value (partial, like the mini-games clamp).
   const g2 = await makeGrant(capLoc, "under_par");
-  const r2 = await claim({ clientId: g2.clientId, playerIndex: 0, achievement: "under_par", playerId: card });
+  const r2 = await claim({ clientId: g2.clientId, playerIndex: 0, achievement: "under_par" }, cookie);
   assert.equal((await r2.json()).ticketsAwarded, 20);
   const gg2 = await testQuery(
     `select tickets_awarded t, redeemed_at ra from reward_grant g
@@ -223,7 +273,7 @@ test("golf shares one daily cap: a claim clamps to the remaining budget, then ho
   // 3) budget exhausted — daily-cap, nothing credited, and the grant is NOT
   //    consumed so the achievement stays claimable another day.
   const g3 = await makeGrant(capLoc, "under_par");
-  const r3 = await claim({ clientId: g3.clientId, playerIndex: 0, achievement: "under_par", playerId: card });
+  const r3 = await claim({ clientId: g3.clientId, playerIndex: 0, achievement: "under_par" }, cookie);
   const b3 = await r3.json();
   assert.equal(b3.status, "daily-cap");
   assert.equal(b3.ticketsAwarded, 0);
@@ -246,21 +296,20 @@ test("golf and games draw down the SAME per-card daily budget", async () => {
       gameRewardCaps: { dailyPerCard: 120, perGame: {} },
     },
   });
-  const card = "PL-CAP-SHARED";
+  const cookie = await cardHolder(capLoc, "PL-CAP-SHARED");
 
   // Golf spends 100 of the 120 budget first.
   const g = await makeGrant(capLoc, "hole_in_one");
-  const rg = await claim({ clientId: g.clientId, playerIndex: 0, achievement: "hole_in_one", playerId: card });
+  const rg = await claim({ clientId: g.clientId, playerIndex: 0, achievement: "hole_in_one" }, cookie);
   assert.equal((await rg.json()).ticketsAwarded, 100);
 
   // A mini-game award on the same card now sees only 20 left — the game
   // endpoint counts the golf claim through the shared pool.
   const gameRes = await fetch(`${baseUrl}/api/game-rewards/award`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Cookie: cookie },
     body: JSON.stringify({
       locationId: capLoc,
-      playerId: card,
       game: "skeeball",
       tickets: 100,
       sessionId: `cross-${Date.now()}`,
@@ -273,12 +322,19 @@ test("golf and games draw down the SAME per-card daily budget", async () => {
 
 test("a held (vendor-failed) claim retries against the RESERVED card", async () => {
   const { clientId } = await makeGrant(locationId, "hole_in_one");
+  const cookie = await cardHolder(locationId, "PL-RESERVED");
   stub.failNext = true; // first vendor credit fails → claim held, not settled
-  const r1 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-RESERVED" });
+  const r1 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one" }, cookie);
   assert.equal(r1.status, 502);
 
-  // Retry with a DIFFERENT linked card — the credit must go to the reserved one.
-  const r2 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one", playerId: "PL-OTHER" });
+  // The player re-links a DIFFERENT card, then retries: the credit must still
+  // go to the card the claim reserved, not the one linked now.
+  await testQuery(
+    `update user_card_link set card_player_id = 'PL-OTHER'
+      where location_id = $1 and card_player_id = 'PL-RESERVED'`,
+    [locationId]
+  );
+  const r2 = await claim({ clientId, playerIndex: 0, achievement: "hole_in_one" }, cookie);
   assert.equal(r2.status, 200);
   assert.equal(stub.calls.at(-1).playerId, "PL-RESERVED");
 });

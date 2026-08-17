@@ -6,11 +6,12 @@ import { sanitizeTagInput, tagError, TAG_LENGTH } from '../../lib/sanitize';
 import {
   requestCode,
   verifyCode,
-  fetchMe,
   updateProfile,
   logout,
   type AppUser,
 } from '../../lib/authApi';
+import { setSessionUser, refreshSession } from '../../lib/session';
+import { resetCard, refreshCard } from '../../lib/rewardsCard';
 import { track } from '../../lib/analytics';
 import { claimAdoptionBonus } from '../../lib/pos/adoptionBonus';
 import { claimMyRounds } from '../../lib/claimRounds';
@@ -70,9 +71,9 @@ export default function Account() {
   }
 
   useEffect(() => {
-    void fetchMe().then((u) => {
-      if (u) {
-        applyUser(u);
+    void refreshSession().then((s) => {
+      if (s.user) {
+        applyUser(s.user);
         // Restored session (not just a fresh verify): claim any rounds played
         // anonymously since last time. Idempotent, and only notices on N>0.
         void claimRoundsToAccount();
@@ -82,7 +83,20 @@ export default function Account() {
     });
   }, []);
 
+  // Where to go once signed in. AccountGate sends people here with ?next= so a
+  // player who tapped "Rewards card" lands back on it instead of being left on
+  // the profile screen wondering what happened.
+  function goToNext() {
+    const next = params.get('next');
+    // Same-origin, in-app paths only — never bounce to an arbitrary URL.
+    if (next && next.startsWith('/') && !next.startsWith('//')) navigate(next, { replace: true });
+  }
+
   function applyUser(u: AppUser) {
+    // Publish to the shared store too: the gate, the nav drawer and Home all
+    // read from there, so signing in has to unlock them without a reload.
+    setSessionUser(u);
+    void refreshCard(); // this account's card, if it has one at this venue
     setUser(u);
     setDisplayName(u.displayName ?? '');
     setDefaultTag(u.defaultTag ?? '');
@@ -117,6 +131,7 @@ export default function Account() {
         applyUser(verified.user);
         void claimSigninBonus();
         void claimRoundsToAccount();
+        goToNext();
         return;
       }
       track('signin_failed', { method: 'bypass' });
@@ -144,6 +159,7 @@ export default function Account() {
     applyUser(res.user);
     void claimSigninBonus();
     void claimRoundsToAccount();
+    goToNext();
   }
 
   async function saveProfile() {
@@ -167,6 +183,10 @@ export default function Account() {
     setBusy(true);
     await logout();
     setBusy(false);
+    setSessionUser(null);
+    // Drop the card from memory as well — on a shared phone the next person
+    // to sign in must not see the last one's balances.
+    resetCard();
     setUser(null);
     setEmail('');
     setDisplayName('');

@@ -11,6 +11,7 @@ import { completeGame } from '../../lib/gamesApi';
 import { applyCompleted } from '../../lib/sharedMerge';
 import { posFor } from '../../lib/pos';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
+import { useSession } from '../../lib/session';
 import { awardGolfReward, deviceOwnsSlot } from '../../lib/pos/golfRewards';
 import type { GameAwardOutcome } from '../../lib/pos/gameRewards';
 import { shareRound } from './shareImage';
@@ -450,6 +451,7 @@ function RewardsCard({
   // round belongs to the course it was played on.
   const { gameRewards } = posFor(locationId);
   const playerId = useLinkedPlayerId();
+  const signedIn = useSession().user != null;
   const owns = (playerIndex: number) => deviceOwnsSlot({ deviceSlot, isShared, playerIndex });
 
   // Credit the owned achievements once, as tickets on the linked card. The claim
@@ -502,9 +504,14 @@ function RewardsCard({
   const visible = owned.filter((r) => credited[keyOf(r)]?.status !== 'daily-cap');
   if (visible.length === 0) return null;
 
+  // Banking an achievement credits a card, and a card belongs to an account —
+  // so a signed-out player is asked to sign in first rather than sent at a
+  // rewards screen that would bounce them off the account gate.
   const subtitle = playerId
     ? 'Added to your rewards card as tickets.'
-    : 'Link your rewards card to bank these as tickets.';
+    : signedIn
+      ? 'Link your rewards card to bank these as tickets.'
+      : 'Sign in and link your rewards card to bank these as tickets.';
 
   return (
     <div
@@ -518,8 +525,11 @@ function RewardsCard({
 
       {!playerId && (
         <div className="mb-3">
-          <Button variant="ghost" onClick={() => navigate('/me/rewards')}>
-            🎟️ Link rewards card
+          <Button
+            variant="ghost"
+            onClick={() => navigate(signedIn ? '/me/rewards' : '/me/account?next=/me/rewards')}
+          >
+            {signedIn ? '🎟️ Link rewards card' : '🎟️ Sign in to bank these'}
           </Button>
         </div>
       )}
@@ -545,7 +555,9 @@ function RewardsCard({
                   Claimed ✓
                 </span>
               ) : !playerId ? (
-                <span className="text-xs text-fairway-400">Link card to claim</span>
+                <span className="text-xs text-fairway-400">
+                  {signedIn ? 'Link card to claim' : 'Sign in to claim'}
+                </span>
               ) : (
                 <RewardValue outcome={credited[key]} />
               )}

@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { fetchMe } from '../../lib/authApi';
 import { listTeams, createTeam, type Team } from '../../lib/teamsApi';
 
-// Teams — list mine, create a new one. Signed-in only; signed-out visitors are
-// pointed at /account (no auto-redirect — explain first, then send).
+// Teams — list mine, create a new one. Signed-in only, enforced by AccountGate
+// on the route, so this screen no longer carries its own sign-in branch.
 
 const inputClass =
   'surface-sunk w-full rounded-xl border border-fairway-800/60 px-4 py-2.5 text-base text-fairway-50 placeholder:text-fairway-100/40 focus:border-fairway-500 focus:outline-none';
 
 export default function Teams() {
   const navigate = useNavigate();
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -20,15 +19,10 @@ export default function Teams() {
 
   useEffect(() => {
     void (async () => {
-      const me = await fetchMe();
-      if (!me) {
-        setSignedIn(false);
-        return;
-      }
-      setSignedIn(true);
       const res = await listTeams();
       if (res.ok) setTeams(res.teams);
       else setError(res.error);
+      setLoaded(true);
     })();
   }, []);
 
@@ -50,20 +44,9 @@ export default function Teams() {
     <Screen>
       <TopBar title="Teams" back="/" />
       <Content>
-        {signedIn === null && <p className="text-fairway-100/70">Loading…</p>}
+        {!loaded && <p className="text-fairway-100/70">Loading…</p>}
 
-        {signedIn === false && (
-          <>
-            <p className="mb-4 text-sm text-fairway-100/70">
-              Teams let you keep a regular group together — invite friends by email, then
-              start shared games everyone scores from their own phone. Sign in to create or
-              see your teams.
-            </p>
-            <Button onClick={() => navigate('/me/account')}>Sign in / register</Button>
-          </>
-        )}
-
-        {signedIn && (
+        {loaded && (
           <>
             {teams.length === 0 ? (
               <p className="mb-5 text-sm text-fairway-100/70">

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { awardGameTickets, type GameAwardOutcome } from '../../lib/pos/gameRewards';
 import { usePos } from '../../lib/pos';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
+import { useSession } from '../../lib/session';
 
 // Drop-in ticket-award banner for a mini-game's end screen. Self-gating:
 // renders nothing unless this venue sells the gameRewards add-on. With a
@@ -30,6 +31,7 @@ export default function GameTicketAward({
   const navigate = useNavigate();
   const { gameRewards } = usePos();
   const playerId = useLinkedPlayerId();
+  const signedIn = useSession().user != null;
   const [outcome, setOutcome] = useState<GameAwardOutcome | null>(null);
   const attempted = useRef<string | null>(null);
 
@@ -42,16 +44,32 @@ export default function GameTicketAward({
 
   if (!gameRewards || tickets < 1) return null;
 
+  // Tickets land on a card, and a card belongs to an account — so the pitch
+  // depends on which of the two is missing. Sending a signed-out player
+  // straight at /me/rewards would just bounce them off the account gate.
   if (!playerId) {
+    const signedOut = !signedIn;
     return (
       <button
-        onClick={() => navigate('/me/rewards')}
+        onClick={() => navigate(signedOut ? '/me/account?next=/me/rewards' : '/me/rewards')}
         className="surface-1 mt-4 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-3 text-left transition-transform active:translate-y-px"
       >
         <span className="text-sm text-fairway-100/80">
-          🎟️ Link your rewards card to earn <b>{tickets} tickets</b> from games like this
+          🎟️{' '}
+          {signedOut ? (
+            <>
+              Sign in and link your rewards card to earn <b>{tickets} tickets</b> from games like
+              this
+            </>
+          ) : (
+            <>
+              Link your rewards card to earn <b>{tickets} tickets</b> from games like this
+            </>
+          )}
         </span>
-        <span className="shrink-0 text-sm font-semibold text-fairway-400">Link</span>
+        <span className="shrink-0 text-sm font-semibold text-fairway-400">
+          {signedOut ? 'Sign in' : 'Link'}
+        </span>
       </button>
     );
   }

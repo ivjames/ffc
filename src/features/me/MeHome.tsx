@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import { fetchSession, type AppUser } from '../../lib/authApi';
+import { useSession } from '../../lib/session';
 import { usePos } from '../../lib/pos';
 import { isStandalone } from '../../lib/pwaInstall';
 
@@ -11,12 +10,8 @@ import { isStandalone } from '../../lib/pwaInstall';
 // the old catch-all Home button stack so identity lives in one predictable place.
 export default function MeHome() {
   const navigate = useNavigate();
-  const [me, setMe] = useState<AppUser | null>(null);
+  const { user: me } = useSession();
   const pos = usePos();
-
-  useEffect(() => {
-    void fetchSession().then((s) => setMe(s.user));
-  }, []);
 
   return (
     <Screen>
@@ -46,16 +41,25 @@ export default function MeHome() {
         </button>
 
         <div className="space-y-2">
-          <Button variant="ghost" onClick={() => navigate('/me/achievements')}>
-            🏅 Achievements
-          </Button>
-          <Button variant="ghost" onClick={() => navigate('/me/teams')}>
-            👥 My teams
-          </Button>
-          {pos.loyalty && (
-            <Button variant="ghost" onClick={() => navigate('/me/rewards')}>
-              🎟️ Rewards card
-            </Button>
+          {/* Account-only rows. Signed out these used to sit here looking
+              tappable — "My teams" implying teams you don't have, a rewards
+              card that isn't yours — and only revealed the requirement after
+              the tap. Now the identity card above is the whole pitch until
+              there's an account behind them. */}
+          {me && (
+            <>
+              <Button variant="ghost" onClick={() => navigate('/me/achievements')}>
+                🏅 Achievements
+              </Button>
+              <Button variant="ghost" onClick={() => navigate('/me/teams')}>
+                👥 My teams
+              </Button>
+              {pos.loyalty && (
+                <Button variant="ghost" onClick={() => navigate('/me/rewards')}>
+                  🎟️ Rewards card
+                </Button>
+              )}
+            </>
           )}
           {!isStandalone() && (
             <Button variant="ghost" onClick={() => navigate('/install')}>

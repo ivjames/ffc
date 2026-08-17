@@ -1122,3 +1122,22 @@ create table if not exists launch_signup (
   updated_at timestamptz not null default now()   -- last (re)submit; upsert re-stamps
 );
 create index if not exists launch_signup_created_idx on launch_signup (created_at desc);
+
+-- Account-bound loyalty card links (routes/loyalty.js). The venue's physical
+-- rewards card used to be a device-local value in localStorage, which meant
+-- anyone who typed a card number could read that cardholder's name, balances
+-- and history, and credit tickets to it. The card is now bound to a signed-in
+-- app_user: linking still proves possession by quoting the printed number, but
+-- from then on the card is only readable and creditable through the session
+-- that owns it -- no card-number enumeration, and ticket writes derive the
+-- card from the session instead of trusting the request body.
+-- One card per (user, venue): re-linking at the same venue replaces the row.
+create table if not exists user_card_link (
+  id             uuid primary key default gen_random_uuid(),
+  app_user_id    uuid not null references app_user(id) on delete cascade,
+  location_id    uuid not null references location(id) on delete cascade,
+  card_player_id text not null,          -- vendor player/card id (opaque here)
+  created_at     timestamptz not null default now(),
+  unique (app_user_id, location_id)
+);
+create index if not exists user_card_link_card_idx on user_card_link (location_id, card_player_id);

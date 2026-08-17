@@ -16,7 +16,6 @@ describe('resolveGameAward', () => {
     const plan = resolveGameAward(base);
     expect(plan).toEqual({
       request: {
-        playerId: 'PL-1001',
         tickets: 25,
         game: 'trivia',
         sessionId: 'abc-123',

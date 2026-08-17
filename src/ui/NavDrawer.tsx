@@ -4,6 +4,7 @@ import { closeNav, useNavDrawer } from '../lib/navDrawer';
 import { useCurrentLocationId } from '../lib/location';
 import { locationById } from '../data/courses';
 import { usePos } from '../lib/pos';
+import { useSession } from '../lib/session';
 import { isStandalone } from '../lib/pwaInstall';
 import { playClick } from '../lib/sound';
 import ThemeToggle from './ThemeToggle';
@@ -28,6 +29,9 @@ type Item = {
 
 function useSectionRows(): { primary: Item[]; secondary: Item[] } {
   const pos = usePos();
+  // The rewards card belongs to an account, so it only appears once there is
+  // one — advertising it to a signed-out visitor sent them to a gate.
+  const signedIn = useSession().user != null;
   // Only link to the native /food screen for POS-integrated venues — a
   // deep-link-only venue has no /food route (it'd redirect home), so its menu
   // lives on the Home card instead of the drawer.
@@ -43,7 +47,9 @@ function useSectionRows(): { primary: Item[]; secondary: Item[] } {
 
   const secondary: Item[] = [
     { to: '/photos', emoji: '📸', label: 'Photo Booth' },
-    ...(pos.loyalty ? [{ to: '/me/rewards', emoji: '🎟️', label: 'Rewards card' }] : []),
+    ...(pos.loyalty && signedIn
+      ? [{ to: '/me/rewards', emoji: '🎟️', label: 'Rewards card' }]
+      : []),
     { to: '/locations', emoji: '📍', label: 'Change location' },
     ...(!isStandalone() ? [{ to: '/install', emoji: '⬇️', label: 'Install app' }] : []),
   ];

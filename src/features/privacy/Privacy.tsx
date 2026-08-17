@@ -91,6 +91,18 @@ export default function Privacy() {
             display name and default tag. Email is used only for sign-in codes and team invites.
             Teammates on a shared team can see each other&apos;s email addresses.
           </p>
+          <p>
+            Your teams, achievements and rewards card do need an account, because they follow you
+            between visits and devices — there is no way to reach them without signing in.
+          </p>
+        </Section>
+
+        <Section title="Your rewards card">
+          <p>
+            Linking your venue rewards card ties it to your account. After that, only you can see
+            its balances and ticket history, and only your own card can be credited with tickets you
+            earn — the number printed on the card links it once and reveals nothing on its own.
+          </p>
         </Section>
 
         <Section title="Scavenger-hunt photos">

@@ -12,11 +12,8 @@ import type {
   Menu,
   Order,
   PlaceOrderResult,
-  Player,
-  PlayerTransaction,
   PosAdapter,
   PosCapabilityConfig,
-  RewardResult,
 } from './types';
 
 // Dev default when the venue config carries no apiBase override.
@@ -103,27 +100,10 @@ export function createCenterEdgeAdapter(config: PosCapabilityConfig): PosAdapter
         }),
     },
 
-    loyalty: {
-      fetchPlayer: (idOrCard) =>
-        request<{ ok: true; player: Player }>(`/players/${encodeURIComponent(idOrCard)}`),
-
-      fetchPlayerTransactions: (idOrCard) =>
-        request<{ ok: true; transactions: PlayerTransaction[] }>(
-          `/players/${encodeURIComponent(idOrCard)}/transactions`,
-        ),
-
-      rewardTickets: (opts) =>
-        request<RewardResult & { ok: true }>(
-          `/players/${encodeURIComponent(opts.playerId)}/tickets/reward`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              tickets: opts.tickets,
-              source: opts.source,
-              idempotencyKey: opts.idempotencyKey,
-            }),
-          },
-        ),
-    },
+    // No loyalty block: cards are account-bound and never touched from the
+    // browser. Reads go through /api/loyalty and ticket writes through
+    // /api/game-rewards, both of which require a player session and derive the
+    // card from it — see server/routes/loyalty.js. Calling the vendor from here
+    // is what let anyone read a stranger's card by typing its number.
   };
 }

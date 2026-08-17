@@ -17,15 +17,24 @@ process.env.DATABASE_URL = TEST_DATABASE_URL;
 const { app } = await import("../app.js");
 const { createUserSession } = await import("../lib/userAuth.js");
 
-// A signed-in player session (cookie) — the sign-in bonus requires one.
-async function signedInCookie(stamp) {
+// A signed-in player session (cookie). Both milestones now require one, and
+// the card credited is the one bound to that account at the venue — pass
+// `card`/`loc` to link it, omit them for a player with no card yet.
+async function signedInCookie(stamp, loc, card) {
   const row = await testQuery(
     `insert into app_user (email, email_verified_at, display_name)
        values ($1, now(), 'Bonus Tester') returning id`,
     [`bonus-${stamp}@example.com`]
   );
-  appUserIds.push(row.rows[0].id);
-  const { token } = await createUserSession(row.rows[0].id);
+  const userId = row.rows[0].id;
+  appUserIds.push(userId);
+  if (loc && card) {
+    await testQuery(
+      `insert into user_card_link (app_user_id, location_id, card_player_id) values ($1, $2, $3)`,
+      [userId, loc, card]
+    );
+  }
+  const { token } = await createUserSession(userId);
   return `ffc_session=${token}`;
 }
 const appUserIds = [];
@@ -107,31 +116,43 @@ after(async () => {
 });
 
 test("rejects malformed requests", async () => {
+  const cookie = await signedInCookie(`bad-${Date.now()}`, defaultLoc, "PL-1");
   const cases = [
-    [{ locationId: "nope", playerId: "PL-1", kind: "install" }, /locationId/],
-    [{ locationId: defaultLoc, playerId: "", kind: "install" }, /playerId/],
-    [{ locationId: defaultLoc, playerId: "PL-1", kind: "referral" }, /kind/],
+    [{ locationId: "nope", kind: "install" }, /locationId/],
+    [{ locationId: defaultLoc, kind: "referral" }, /kind/],
   ];
   for (const [body, msg] of cases) {
-    const res = await bonus(body);
+    const res = await bonus(body, cookie);
     assert.equal(res.status, 400);
     assert.match((await res.json()).error, msg);
   }
 });
 
+test("every milestone needs a session and a card of the caller's own", async () => {
+  // Anonymous — the install bonus used to be mintable for any card number.
+  assert.equal((await bonus({ locationId: defaultLoc, kind: "install" })).status, 401);
+  // Signed in but with no card bound: nothing to credit.
+  const cardless = await signedInCookie(`none-${Date.now()}`);
+  const res = await bonus({ locationId: defaultLoc, kind: "install" }, cardless);
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /no rewards card linked/);
+});
+
 test("gates on the venue's ticket rewards add-on", async () => {
-  const res = await bonus({ locationId: noRewardsLoc, playerId: "PL-1", kind: "install" });
+  const cookie = await signedInCookie(`off-${Date.now()}`, noRewardsLoc, "PL-1");
+  const res = await bonus({ locationId: noRewardsLoc, kind: "install" }, cookie);
   assert.equal(res.status, 403);
 });
 
 test("awards the default bonus once, then replays without double-crediting", async () => {
   const before = stub.calls.length;
-  const first = await (await bonus({ locationId: defaultLoc, playerId: "PL-A", kind: "install" })).json();
+  const cookie = await signedInCookie(`a-${Date.now()}`, defaultLoc, "PL-A");
+  const first = await (await bonus({ locationId: defaultLoc, kind: "install" }, cookie)).json();
   assert.equal(first.status, "awarded");
   assert.equal(first.ticketsAwarded, 50); // platform default
   assert.equal(first.duplicate, false);
 
-  const replay = await (await bonus({ locationId: defaultLoc, playerId: "PL-A", kind: "install" })).json();
+  const replay = await (await bonus({ locationId: defaultLoc, kind: "install" }, cookie)).json();
   assert.equal(replay.status, "awarded");
   assert.equal(replay.ticketsAwarded, 50);
   assert.equal(replay.duplicate, true);
@@ -152,17 +173,17 @@ test("awards the default bonus once, then replays without double-crediting", asy
 
 test("the sign-in bonus requires a real player session", async () => {
   // Anonymous — can't mint the sign-in reward without signing in.
-  assert.equal((await bonus({ locationId: defaultLoc, playerId: "PL-Z", kind: "signin" })).status, 401);
-  // With a session it goes through.
-  const cookie = await signedInCookie(`z-${Date.now()}`);
-  const ok = await (await bonus({ locationId: defaultLoc, playerId: "PL-Z", kind: "signin" }, cookie)).json();
+  assert.equal((await bonus({ locationId: defaultLoc, kind: "signin" })).status, 401);
+  // With a session (and a card of one's own) it goes through.
+  const cookie = await signedInCookie(`z-${Date.now()}`, defaultLoc, "PL-Z");
+  const ok = await (await bonus({ locationId: defaultLoc, kind: "signin" }, cookie)).json();
   assert.equal(ok.status, "awarded");
 });
 
 test("install and sign-in are separate one-time milestones", async () => {
-  const cookie = await signedInCookie(`b-${Date.now()}`);
-  const install = await (await bonus({ locationId: defaultLoc, playerId: "PL-B", kind: "install" })).json();
-  const signin = await (await bonus({ locationId: defaultLoc, playerId: "PL-B", kind: "signin" }, cookie)).json();
+  const cookie = await signedInCookie(`b-${Date.now()}`, defaultLoc, "PL-B");
+  const install = await (await bonus({ locationId: defaultLoc, kind: "install" }, cookie)).json();
+  const signin = await (await bonus({ locationId: defaultLoc, kind: "signin" }, cookie)).json();
   assert.equal(install.status, "awarded");
   assert.equal(signin.status, "awarded");
   assert.equal(install.ticketsAwarded, 50);
@@ -170,12 +191,12 @@ test("install and sign-in are separate one-time milestones", async () => {
 });
 
 test("a disabled milestone is a clean no-op; a tuned one pays the venue amount", async () => {
-  const cookie = await signedInCookie(`c-${Date.now()}`);
-  const off = await (await bonus({ locationId: tunedLoc, playerId: "PL-C", kind: "install" })).json();
+  const cookie = await signedInCookie(`c-${Date.now()}`, tunedLoc, "PL-C");
+  const off = await (await bonus({ locationId: tunedLoc, kind: "install" }, cookie)).json();
   assert.equal(off.status, "disabled");
   assert.equal(off.ticketsAwarded, 0);
 
-  const on = await (await bonus({ locationId: tunedLoc, playerId: "PL-C", kind: "signin" }, cookie)).json();
+  const on = await (await bonus({ locationId: tunedLoc, kind: "signin" }, cookie)).json();
   assert.equal(on.status, "awarded");
   assert.equal(on.ticketsAwarded, 200); // venue-tuned
 });

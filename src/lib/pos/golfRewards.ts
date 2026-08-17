@@ -47,13 +47,14 @@ export async function awardGolfReward(opts: {
         clientId: opts.clientId,
         playerIndex: opts.playerIndex,
         achievement: opts.achievement,
-        playerId,
       }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok !== true) {
       // Venue config changed under us — mirror the pre-flight gating.
       if (res.status === 403) return { status: 'unavailable' };
+      // Signed out / no card bound to the account — nothing to credit yet.
+      if (res.status === 401 || res.status === 409) return { status: 'no-card' };
       return { status: 'error', error: data.error ?? `HTTP ${res.status}` };
     }
     // Card already at its shared daily ticket cap — nothing credited (the grant

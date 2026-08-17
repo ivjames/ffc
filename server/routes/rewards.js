@@ -16,6 +16,8 @@ import { achievementTickets } from "../lib/rewards.js";
 import { effectiveCaps } from "../lib/gameRewards.js";
 import { dailySpentTickets } from "../lib/dailyTickets.js";
 import { rewardTickets } from "../lib/posLoyalty.js";
+import { requireUser } from "../lib/userAuth.js";
+import { linkedCardFor } from "../lib/cardLink.js";
 
 const VENUE_TZ = process.env.VENUE_TZ || "America/Los_Angeles";
 
@@ -49,10 +51,15 @@ router.get("/", async (req, res) => {
 // and refuses if no grant exists — so a request can't mint tickets without an
 // achievement or over-pay one. `reward_grant.redeemed_at` is the single consume
 // point, so a grant is banked exactly once and a re-opened summary settles from
-// the row instead of crediting twice. Auth model matches GET above: the round's
-// unguessable clientId is the capability.
-router.post("/claim", async (req, res) => {
-  const { clientId, playerIndex, achievement, playerId } = req.body ?? {};
+// the row instead of crediting twice.
+//
+// The round's unguessable clientId still says WHICH grant is being claimed, but
+// it is no longer the whole auth story: claiming credits a card, so the caller
+// must be signed in and the card is the one bound to that account at the
+// venue (lib/cardLink.js). A leaked clientId therefore can't redirect someone
+// else's achievement onto an attacker's card.
+router.post("/claim", requireUser, async (req, res) => {
+  const { clientId, playerIndex, achievement } = req.body ?? {};
   if (typeof clientId !== "string" || clientId.length < 1 || clientId.length > 200) {
     return res.status(400).json({ ok: false, error: "clientId is required" });
   }
@@ -61,9 +68,6 @@ router.post("/claim", async (req, res) => {
   }
   if (typeof achievement !== "string" || achievement.length < 1 || achievement.length > 64) {
     return res.status(400).json({ ok: false, error: "achievement is required" });
-  }
-  if (typeof playerId !== "string" || playerId.length < 1 || playerId.length > 100) {
-    return res.status(400).json({ ok: false, error: "playerId (card) is required" });
   }
   const tickets = achievementTickets(achievement);
   if (tickets < 1) return res.status(400).json({ ok: false, error: "unknown achievement" });
@@ -93,6 +97,18 @@ router.post("/claim", async (req, res) => {
       await client.query("rollback");
       return res.status(403).json({ ok: false, error: "card rewards not enabled for this venue" });
     }
+    if (!grant.location_id) {
+      await client.query("rollback");
+      return res.status(409).json({ ok: false, error: "grant has no venue" });
+    }
+    // Whose card gets the tickets: the signed-in account's binding at this
+    // venue, not a card id supplied by the caller.
+    const link = await linkedCardFor(req.user.id, grant.location_id);
+    if (!link) {
+      await client.query("rollback");
+      return res.status(409).json({ ok: false, error: "no rewards card linked" });
+    }
+    const playerId = link.cardPlayerId;
 
     if (grant.redeemed_at) {
       // Already banked to a card (redeemed_at is the single consume point).
@@ -115,10 +131,6 @@ router.post("/claim", async (req, res) => {
       // (one pool — lib/dailyTickets.js): serialize same-card awards on the
       // per-(venue, card) advisory lock, sum today's spend across both ledgers,
       // and clamp this achievement's payout to what's left of the budget.
-      if (!grant.location_id) {
-        await client.query("rollback");
-        return res.status(409).json({ ok: false, error: "grant has no venue" });
-      }
       const dailyCap = effectiveCaps(grant.pos, achievement).dailyPerCard;
       const tz = grant.tz || VENUE_TZ;
       await client.query("select pg_advisory_xact_lock(hashtext($1), hashtext($2))", [

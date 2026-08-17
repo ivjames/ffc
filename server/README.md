@@ -272,11 +272,15 @@ Request:
   per-game keys must be in the server registry, all-default caps normalize
   away. Edited in Master Control → Location → "Ticket economy caps".
 
-### `POST /api/game-rewards/award`
+### `POST /api/game-rewards/award` — **signed-in only**
 The trusted proxy between the app's mini-games and the venue's ticket
 system — the browser's ticket math is a display convenience, and **this
 endpoint decides what actually pays**. Body:
-`{ locationId, playerId, game, tickets, sessionId }`. The game must be in
+`{ locationId, game, tickets, sessionId }`. Note what is NOT in the body: the
+card. Awards require a player session, and the card credited is the one bound
+to that account at this venue (`user_card_link`, see "Rewards cards" below);
+a caller can only ever credit its own card. `409 no rewards card linked` when
+the account has none. The game must be in
 the server registry (chance games are deliberately absent — skill-only
 earning), the payout is clamped to the per-game per-round ceiling, the
 card's venue-local daily cap clamps what's left, and every decision lands in
@@ -291,6 +295,29 @@ sessions settle from the ledger without re-crediting. Responses:
 registry + limits the caps editor renders from) and
 `GET /api/admin/game-rewards/usage?days=` (org-scoped issuance rollup per
 day/venue/game plus top-earning cards — Master Control → Rewards).
+
+### `POST /api/game-rewards/bonus` — **signed-in only**
+The one-time adoption bonus (`{ locationId, kind }`, kind `install` |
+`signin`), one per (venue, card, kind), off the mini-game daily cap. Same
+identity rule as `/award`: session required, card derived from the binding.
+
+### `/api/loyalty` — the player's own rewards card (all **signed-in only**)
+`POST /link` `{locationId, cardNumber}` verifies the number with the vendor
+and binds that card to the account (one per venue; re-linking replaces it) ·
+`DELETE /link` `{locationId}` unbinds · `GET /me?locationId=` returns
+`{player, transactions}` for the linked card, or `{player: null}` when there
+is none (a card that has vanished vendor-side clears its stale binding).
+
+This module is the reason the loyalty vendor is unreachable from the browser.
+Previously the client adapter called CenterEdge directly with a bundled
+bearer token, so a card NUMBER was the only credential in the system: typing
+one revealed that cardholder's name, tier, balances and history, and the
+ticket-write paths credited whatever card id the request body carried. Now
+the vendor is reached only from `lib/posLoyalty.js` with server-held
+credentials, and a card number links a card exactly once — after that the
+account is what reads it. `POST /api/rewards/claim` follows the same rule:
+the round's unguessable `clientId` still says which grant is being claimed,
+but a leaked one can no longer redirect the payout to an attacker's card.
 
 Responses:
 - `200 { "ok": true, "location": { …, "tz": "…", "tzLabel": "Eastern Time (ET)" } }`

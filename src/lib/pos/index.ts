@@ -2,7 +2,7 @@ import { locationById, useContentRevision } from '../../data/courses';
 import { useCurrentLocationId } from '../location';
 import { DEV_MODE } from '../flags';
 import { createCenterEdgeAdapter } from './centeredge';
-import type { LoyaltyApi, OrderingApi, PosAdapter, PosCapabilityConfig, PosConfig } from './types';
+import type { OrderingApi, PosAdapter, PosCapabilityConfig, PosConfig } from './types';
 
 // POS integration resolution — which vendor adapter serves each PAID
 // capability for the current venue. The config comes from the venue's Master
@@ -56,7 +56,11 @@ function adapterFor(block: PosCapabilityConfig): PosAdapter | null {
  *  adapter implements it. */
 export type PosCapabilities = {
   ordering: OrderingApi | null;
-  loyalty: LoyaltyApi | null;
+  /** The venue sells rewards cards. A capability FLAG, not an API: the browser
+   *  no longer talks to the loyalty vendor at all — reads and writes both go
+   *  through our own /api/loyalty and /api/game-rewards, which hold the vendor
+   *  credentials and bind every card to the signed-in account. */
+  loyalty: boolean;
   /** Mini-games may credit tickets (requires loyalty; separately sold). */
   gameRewards: boolean;
 };
@@ -64,11 +68,12 @@ export type PosCapabilities = {
 export function posFor(locationId: string): PosCapabilities {
   const config = posConfigFor(locationId);
   const ordering = config?.ordering ? (adapterFor(config.ordering)?.ordering ?? null) : null;
-  const loyalty = config?.loyalty ? (adapterFor(config.loyalty)?.loyalty ?? null) : null;
+  // Loyalty needs no client adapter — only whether the venue named a vendor.
+  const loyalty = config?.loyalty != null;
   return {
     ordering,
     loyalty,
-    gameRewards: (config?.loyalty?.gameRewards ?? false) && loyalty !== null,
+    gameRewards: (config?.loyalty?.gameRewards ?? false) && loyalty,
   };
 }
 

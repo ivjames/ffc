@@ -18,6 +18,11 @@ import { posFor, type PosCapabilities } from './index';
 // Master Control), records the award, and only then credits the vendor with
 // server-held credentials. The number the server returns is what actually
 // landed, so always render THAT, not the requested count.
+//
+// WHICH card gets credited is not ours to say: the request carries no card id
+// at all, and the server derives it from the caller's session (schema
+// user_card_link). The local `playerId` below only decides whether there is
+// anything to try — it is a pre-flight nicety, never the authority.
 
 export type GameAwardPlan =
   | { skip: 'unavailable' } // venue hasn't bought gameRewards (or no loyalty)
@@ -25,7 +30,6 @@ export type GameAwardPlan =
   | { skip: 'nothing' } // zero tickets — nothing to award
   | {
       request: {
-        playerId: string;
         tickets: number;
         game: string;
         sessionId: string;
@@ -45,7 +49,6 @@ export function resolveGameAward(opts: {
   if (!Number.isInteger(opts.tickets) || opts.tickets < 1) return { skip: 'nothing' };
   return {
     request: {
-      playerId: opts.playerId,
       tickets: opts.tickets,
       game: opts.game,
       sessionId: opts.sessionId,
@@ -67,7 +70,6 @@ export type GameAwardOutcome =
  *  `sessionId` is the idempotency key (stable per award event). */
 export async function submitAward(body: {
   locationId: string;
-  playerId: string;
   game: string;
   tickets: number;
   sessionId: string;
@@ -82,6 +84,9 @@ export async function submitAward(body: {
     if (!res.ok || data.ok !== true) {
       // The venue config changed under us — mirror the pre-flight gating.
       if (res.status === 403) return { status: 'unavailable' };
+      // 401 signed out / 409 no card bound: the same "nothing to credit yet"
+      // state the pre-flight gate models, not an error to shout about.
+      if (res.status === 401 || res.status === 409) return { status: 'no-card' };
       return { status: 'error', error: data.error ?? `HTTP ${res.status}` };
     }
     if (data.status === 'daily-cap') {
