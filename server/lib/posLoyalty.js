@@ -32,37 +32,55 @@ function centerEdgeBase() {
 }
 
 /**
- * Credit tickets to a player card via the venue's loyalty vendor.
- * `loyaltyConfig` is the venue's normalized pos.loyalty block — only its
- * `vendor` is honored here (endpoint + token come from server env; see the
- * security note above). Resolves to the vendor's RewardResult-shaped body, or
- * an { ok: false, error } — never throws.
+ * One vendor call with the server-held credentials. `loyaltyConfig` is the
+ * venue's normalized pos.loyalty block — only its `vendor` is honored (endpoint
+ * + token come from server env; see the security note above). Resolves to the
+ * vendor's parsed body, or an { ok: false, error, status } — never throws.
  */
-export async function rewardTickets(loyaltyConfig, { playerId, tickets, source, idempotencyKey }) {
+async function vendorRequest(loyaltyConfig, path, init) {
   if (loyaltyConfig?.vendor !== "centeredge") {
     return { ok: false, error: `no server-side loyalty client for vendor ${loyaltyConfig?.vendor}` };
   }
   const base = centerEdgeBase();
   const token = process.env.CENTEREDGE_API_TOKEN || DEFAULT_TOKEN;
   try {
-    const res = await fetch(
-      `${base}/api/v1/players/${encodeURIComponent(playerId)}/tickets/reward`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ tickets, source, idempotencyKey }),
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
+    const res = await fetch(`${base}/api/v1${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...init?.headers,
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { ok: false, error: data.error ?? `POS HTTP ${res.status}` };
+      return { ok: false, error: data.error ?? `POS HTTP ${res.status}`, status: res.status };
     }
     return data;
   } catch (err) {
     return { ok: false, error: `POS unreachable: ${err.message ?? "network error"}` };
   }
+}
+
+/** Credit tickets to a player card via the venue's loyalty vendor. */
+export async function rewardTickets(loyaltyConfig, { playerId, tickets, source, idempotencyKey }) {
+  return vendorRequest(loyaltyConfig, `/players/${encodeURIComponent(playerId)}/tickets/reward`, {
+    method: "POST",
+    body: JSON.stringify({ tickets, source, idempotencyKey }),
+  });
+}
+
+/**
+ * Look up a card by its printed number (or vendor player id). Used ONLY by the
+ * account-bound link/read routes — the browser no longer reads the vendor
+ * directly, so a card number can't be used to browse a stranger's account.
+ */
+export async function fetchPlayer(loyaltyConfig, idOrCard) {
+  return vendorRequest(loyaltyConfig, `/players/${encodeURIComponent(idOrCard)}`);
+}
+
+/** Ticket history for a card the caller has already been authorized for. */
+export async function fetchPlayerTransactions(loyaltyConfig, idOrCard) {
+  return vendorRequest(loyaltyConfig, `/players/${encodeURIComponent(idOrCard)}/transactions`);
 }

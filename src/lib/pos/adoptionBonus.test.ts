@@ -19,7 +19,7 @@ describe('resolveBonusClaim', () => {
 
   it('plans a request when the add-on is on and a card is linked', () => {
     expect(resolveBonusClaim({ capabilities: { gameRewards: true }, playerId: 'PL-9', kind: 'install' })).toEqual({
-      request: { playerId: 'PL-9', kind: 'install' },
+      request: { kind: 'install' },
     });
   });
 });

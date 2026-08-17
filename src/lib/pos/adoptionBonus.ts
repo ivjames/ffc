@@ -16,7 +16,7 @@ export type BonusKind = 'install' | 'signin';
 export type BonusPlan =
   | { skip: 'unavailable' } // venue hasn't got the ticket-reward add-on
   | { skip: 'no-card' } // has it, but this device has no linked card to credit
-  | { request: { playerId: string; kind: BonusKind } };
+  | { request: { kind: BonusKind } };
 
 /** Pure gating decision — unit-testable without the network or DOM. */
 export function resolveBonusClaim(opts: {
@@ -26,7 +26,7 @@ export function resolveBonusClaim(opts: {
 }): BonusPlan {
   if (!opts.capabilities.gameRewards) return { skip: 'unavailable' };
   if (!opts.playerId) return { skip: 'no-card' };
-  return { request: { playerId: opts.playerId, kind: opts.kind } };
+  return { request: { kind: opts.kind } };
 }
 
 export type BonusOutcome =
@@ -40,7 +40,6 @@ export type BonusOutcome =
 
 export async function submitBonus(body: {
   locationId: string;
-  playerId: string;
   kind: BonusKind;
 }): Promise<BonusOutcome> {
   try {
@@ -52,6 +51,8 @@ export async function submitBonus(body: {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok !== true) {
       if (res.status === 403) return { status: 'unavailable' };
+      // Signed out / no card bound — the caller prompts, it isn't an error.
+      if (res.status === 401 || res.status === 409) return { status: 'no-card' };
       return { status: 'error', error: data.error ?? `HTTP ${res.status}` };
     }
     if (data.status === 'disabled') return { status: 'disabled' };

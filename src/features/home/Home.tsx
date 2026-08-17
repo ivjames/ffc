@@ -14,7 +14,7 @@ import {
   detectNearestLocation,
 } from '../../lib/geolocate';
 import { playClick, playCup } from '../../lib/sound';
-import { fetchSession, type AppUser } from '../../lib/authApi';
+import { useSession } from '../../lib/session';
 import { usePos } from '../../lib/pos';
 import ActiveOrdersCard from '../food/ActiveOrdersCard';
 import AdoptionNudge from '../../ui/AdoptionNudge';
@@ -91,8 +91,7 @@ type SectionTile = { to: string; emoji: string; title: string; accent: string };
 export default function Home() {
   const navigate = useNavigate();
   const [resume, setResume] = useState<LocalRound | null>(null);
-  const [me, setMe] = useState<AppUser | null>(null);
-  const [meChecked, setMeChecked] = useState(false);
+  const { user: me, known: meChecked } = useSession();
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
   const courses = coursesByLocation(locationId);
@@ -101,13 +100,6 @@ export default function Home() {
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
-    // Session check that distinguishes signed-out from unreachable: only mark
-    // it "checked" on an authoritative answer, so the sign-in nudge never
-    // shows to an already-signed-in player whose /me call just failed offline.
-    void fetchSession().then((s) => {
-      setMe(s.user);
-      if (s.known) setMeChecked(true);
-    });
   }, []);
 
   // Silent GPS auto-detect: only when location is already granted (so we never

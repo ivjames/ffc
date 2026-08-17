@@ -1,18 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import type { Player, PlayerTransaction } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
-import { useLinkedPlayerId, setLinkedPlayerId } from '../../lib/rewardsCard';
+import { useCard, linkCard, unlinkCard } from '../../lib/rewardsCard';
 import { DEV_MODE } from '../../lib/flags';
 
-// /rewards — link the venue's player card to this device, then show live
-// balances (cash / game-play credits / tickets) and history. A POS add-on:
-// only venues with the `loyalty` capability get this screen. Mini-games and
-// promos credit tickets through loyalty.rewardTickets() (gated separately by
-// the venue's `gameRewards` flag); food checkout attaches the linked card to
-// orders. Linking is a lookup by card number (printed on the physical card)
-// or account id — the CenterEdge mock seeds PL-1001/2/3.
+// /me/rewards — the signed-in player's venue rewards card: link it once, then
+// see live balances (tickets / game-play credits) and ticket history. A POS
+// add-on: only venues with the `loyalty` capability get this screen, and it
+// sits behind AccountGate, so everything below assumes a session.
+//
+// Linking is a lookup by the number printed on the physical card. That lookup
+// now happens SERVER-side (/api/loyalty), which binds the card to the account
+// and is the only way to read it afterwards — a card number by itself no
+// longer reveals anything about its holder. Mini-games credit tickets through
+// /api/game-rewards, which derives the card from the same binding.
 
 const inputClass =
   'surface-sunk w-full rounded-xl border border-fairway-800/60 px-4 py-2.5 text-base text-fairway-50 placeholder:text-fairway-100/40 focus:border-fairway-500 focus:outline-none';
@@ -33,74 +35,28 @@ function BalanceTile({ label, value, emoji }: { label: string; value: string; em
 
 export default function Rewards() {
   const { loyalty } = usePos();
-  const playerId = useLinkedPlayerId();
-  const [player, setPlayer] = useState<Player | null>(null);
-  const [transactions, setTransactions] = useState<PlayerTransaction[]>([]);
+  const card = useCard();
   const [cardInput, setCardInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // (Re)load the linked player whenever the link changes.
-  useEffect(() => {
-    setPlayer(null);
-    setTransactions([]);
-    setError(null);
-    if (!playerId || !loyalty) return;
-    let cancelled = false;
-    void (async () => {
-      const res = await loyalty.fetchPlayer(playerId);
-      if (cancelled) return;
-      if ('error' in res) {
-        setError(res.error);
-        return;
-      }
-      setPlayer(res.player);
-      const txs = await loyalty.fetchPlayerTransactions(playerId);
-      if (!cancelled && !('error' in txs)) setTransactions(txs.transactions);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [playerId, loyalty]);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   if (!loyalty) return <Navigate to="/" replace />;
 
   async function link() {
     const query = cardInput.trim();
-    if (query === '' || busy || !loyalty) return;
+    if (query === '' || busy) return;
     setBusy(true);
-    setError(null);
-    const res = await loyalty.fetchPlayer(query);
+    setLinkError(null);
+    const res = await linkCard(query);
     setBusy(false);
-    if ('error' in res) {
-      setError(res.status === 404 ? 'No card found with that number.' : res.error);
+    if (!res.ok) {
+      setLinkError(res.error ?? 'Could not link that card.');
       return;
     }
     setCardInput('');
-    setLinkedPlayerId(res.player.id); // triggers the load effect above
   }
 
-  // DEV-only: exercise the secure ticket-injection path end to end. Real
-  // awards come from mini-games calling loyalty.rewardTickets with the game
-  // session id as the idempotency key (venues gated by pos.gameRewards).
-  async function awardTestTickets() {
-    if (!player || busy || !loyalty) return;
-    setBusy(true);
-    const res = await loyalty.rewardTickets({
-      playerId: player.id,
-      tickets: 50,
-      source: 'dev:test-award',
-      idempotencyKey: crypto.randomUUID(),
-    });
-    setBusy(false);
-    if ('error' in res) {
-      setError(res.error);
-      return;
-    }
-    setPlayer({ ...player, balances: { ...player.balances, tickets: res.newTicketBalance } });
-    const txs = await loyalty.fetchPlayerTransactions(player.id);
-    if (!('error' in txs)) setTransactions(txs.transactions);
-  }
+  const { player, transactions } = card;
 
   // The card shows loyalty activity only — ticket rewards. Food orders are a
   // separate lane (not paid from the card, not attached to it); a linked-card
@@ -112,12 +68,14 @@ export default function Rewards() {
     <Screen>
       <TopBar title="Rewards card" back="/me" />
       <Content>
-        {!playerId && (
+        {!card.known && card.loading && <p className="text-fairway-100/70">Loading…</p>}
+
+        {card.known && !player && (
           <>
             <p className="mb-4 text-sm text-fairway-100/70">
-              Link your player card to see your balances, keep your food orders on your
-              account, and collect tickets from the games in While You Wait. The number is
-              printed on the back of your card — or ask at the counter.
+              Link your player card to see your balances, keep your food orders on your account,
+              and collect tickets from the games in While You Wait. The number is printed on the
+              back of your card — or ask at the counter.
             </p>
             <label className="mb-1.5 block text-sm font-semibold text-fairway-100/80">
               Card number
@@ -126,14 +84,14 @@ export default function Rewards() {
               value={cardInput}
               onChange={(e) => {
                 setCardInput(e.target.value);
-                setError(null);
+                setLinkError(null);
               }}
               inputMode="numeric"
               maxLength={20}
               placeholder={DEV_MODE ? '770001112223 (mock card)' : 'Card number'}
               className={inputClass}
             />
-            {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+            {linkError && <p className="mt-2 text-sm text-danger">{linkError}</p>}
             <div className="mt-3">
               <Button onClick={() => void link()} disabled={busy || cardInput.trim() === ''}>
                 {busy ? 'Looking up…' : 'Link card'}
@@ -142,15 +100,7 @@ export default function Rewards() {
           </>
         )}
 
-        {playerId && !player && !error && <p className="text-fairway-100/70">Loading…</p>}
-        {playerId && error && !player && (
-          <>
-            <p className="mb-3 text-sm text-danger">{error}</p>
-            <Button variant="ghost" onClick={() => setLinkedPlayerId(null)}>
-              Unlink and try another card
-            </Button>
-          </>
-        )}
+        {card.error && !player && <p className="mt-3 text-sm text-danger">{card.error}</p>}
 
         {player && (
           <>
@@ -166,7 +116,7 @@ export default function Rewards() {
                   </span>
                 </span>
                 <button
-                  onClick={() => setLinkedPlayerId(null)}
+                  onClick={() => void unlinkCard()}
                   className="shrink-0 text-sm font-semibold text-fairway-400"
                 >
                   Unlink
@@ -187,15 +137,7 @@ export default function Rewards() {
               />
             </div>
 
-            {DEV_MODE && (
-              <div className="mb-4">
-                <Button variant="ghost" onClick={() => void awardTestTickets()} disabled={busy}>
-                  🧪 Award 50 test tickets (dev)
-                </Button>
-              </div>
-            )}
-
-            {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+            {card.error && <p className="mb-3 text-sm text-danger">{card.error}</p>}
 
             <h2 className="mb-2 text-sm font-black uppercase tracking-wide text-fairway-400">
               Activity

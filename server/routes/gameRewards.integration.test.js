@@ -18,6 +18,7 @@ process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.APP_TOKEN = "game-rewards-test-token";
 
 const { app } = await import("../app.js");
+const { createUserSession } = await import("../lib/userAuth.js");
 
 // --- Stub CenterEdge: /players/:id/tickets/reward with vendor-side
 // idempotency, a togglable failure mode, and a call log. -------------------
@@ -61,12 +62,41 @@ const locationIds = [];
 let sessionSeq = 0;
 const session = () => `sess-${Date.now()}-${sessionSeq++}`;
 
-function award(body) {
+// Awards are signed-in only, and the card credited is the one bound to the
+// caller's account at that venue — never a card id in the body. `cardHolder`
+// below mints a user with a given card linked, and every award rides its
+// cookie. A test that needs two different cards at one venue needs two users:
+// the (user, location) binding is unique.
+function award(body, cookie) {
   return fetch(`${baseUrl}/api/game-rewards/award`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
     body: JSON.stringify(body),
   });
+}
+
+let holderSeq = 0;
+const holderEmails = [];
+/** A signed-in player holding `cardPlayerId` at `loc`. Returns its cookie. */
+async function cardHolder(loc, cardPlayerId) {
+  const email = `game-rewards-${Date.now()}-${holderSeq++}@example.com`;
+  holderEmails.push(email);
+  const row = await testQuery(
+    `insert into app_user (email, email_verified_at) values ($1, now()) returning id`,
+    [email]
+  );
+  const userId = row.rows[0].id;
+  if (loc && cardPlayerId) {
+    await testQuery(
+      `insert into user_card_link (app_user_id, location_id, card_player_id) values ($1, $2, $3)`,
+      [userId, loc, cardPlayerId]
+    );
+  }
+  const { token } = await createUserSession(userId);
+  return `ffc_session=${token}`;
 }
 
 async function makeLocation(slugStamp, pos) {
@@ -113,48 +143,65 @@ after(async () => {
     locationIds,
   ]);
   await testQuery(`delete from location where id = any($1::uuid[])`, [locationIds]);
+  await testQuery(`delete from app_user where email = any($1::text[])`, [holderEmails]);
 });
 
 test("rejects malformed requests", async () => {
+  const cookie = await cardHolder(locationId, "PL-1");
   const cases = [
-    [{ locationId: "nope", playerId: "PL-1", game: "skeeball", tickets: 5, sessionId: session() }, /locationId/],
-    [{ locationId, playerId: "", game: "skeeball", tickets: 5, sessionId: session() }, /playerId/],
-    [{ locationId, playerId: "PL-1", game: "coinpusher", tickets: 5, sessionId: session() }, /unknown game/],
-    [{ locationId, playerId: "PL-1", game: "skeeball", tickets: 0, sessionId: session() }, /tickets/],
-    [{ locationId, playerId: "PL-1", game: "skeeball", tickets: 2.5, sessionId: session() }, /tickets/],
-    [{ locationId, playerId: "PL-1", game: "skeeball", tickets: 10_001, sessionId: session() }, /tickets/],
-    [{ locationId, playerId: "PL-1", game: "skeeball", tickets: 5, sessionId: "short" }, /sessionId/],
+    [{ locationId: "nope", game: "skeeball", tickets: 5, sessionId: session() }, /locationId/],
+    [{ locationId, game: "coinpusher", tickets: 5, sessionId: session() }, /unknown game/],
+    [{ locationId, game: "skeeball", tickets: 0, sessionId: session() }, /tickets/],
+    [{ locationId, game: "skeeball", tickets: 2.5, sessionId: session() }, /tickets/],
+    [{ locationId, game: "skeeball", tickets: 10_001, sessionId: session() }, /tickets/],
+    [{ locationId, game: "skeeball", tickets: 5, sessionId: "short" }, /sessionId/],
   ];
   for (const [body, msg] of cases) {
-    const res = await award(body);
+    const res = await award(body, cookie);
     assert.equal(res.status, 400);
     assert.match((await res.json()).error, msg);
   }
 });
 
+test("an anonymous caller cannot credit any card", async () => {
+  const res = await award({ locationId, game: "skeeball", tickets: 5, sessionId: session() });
+  assert.equal(res.status, 401);
+});
+
+test("a signed-in player with no linked card has nothing to credit", async () => {
+  const cookie = await cardHolder(null, null);
+  const res = await award(
+    { locationId, game: "skeeball", tickets: 5, sessionId: session() },
+    cookie
+  );
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /no rewards card linked/);
+});
+
 test("gates on the venue's gameRewards add-on", async () => {
-  const off = await award({
-    locationId: noRewardsLocationId,
-    playerId: "PL-1",
-    game: "skeeball",
-    tickets: 5,
-    sessionId: session(),
-  });
+  const offCookie = await cardHolder(noRewardsLocationId, "PL-1");
+  const off = await award(
+    { locationId: noRewardsLocationId, game: "skeeball", tickets: 5, sessionId: session() },
+    offCookie
+  );
   assert.equal(off.status, 403);
 
-  const gone = await award({
-    locationId: "00000000-0000-4000-8000-000000000000",
-    playerId: "PL-1",
-    game: "skeeball",
-    tickets: 5,
-    sessionId: session(),
-  });
+  const gone = await award(
+    {
+      locationId: "00000000-0000-4000-8000-000000000000",
+      game: "skeeball",
+      tickets: 5,
+      sessionId: session(),
+    },
+    offCookie
+  );
   assert.equal(gone.status, 404);
 });
 
 test("awards, records, and credits the vendor with the game-session key", async () => {
   const sessionId = session();
-  const res = await award({ locationId, playerId: "PL-100", game: "trivia", tickets: 25, sessionId });
+  const cookie = await cardHolder(locationId, "PL-100");
+  const res = await award({ locationId, game: "trivia", tickets: 25, sessionId }, cookie);
   assert.equal(res.status, 200);
   const json = await res.json();
   assert.equal(json.status, "awarded");
@@ -177,13 +224,11 @@ test("awards, records, and credits the vendor with the game-session key", async 
 });
 
 test("clamps a forged count to the hard per-round max", async () => {
-  const res = await award({
-    locationId,
-    playerId: "PL-101",
-    game: "battingcages",
-    tickets: 5000,
-    sessionId: session(),
-  });
+  const cookie = await cardHolder(locationId, "PL-101");
+  const res = await award(
+    { locationId, game: "battingcages", tickets: 5000, sessionId: session() },
+    cookie
+  );
   const json = await res.json();
   assert.equal(json.status, "awarded");
   assert.equal(json.ticketsAwarded, 100);
@@ -191,53 +236,53 @@ test("clamps a forged count to the hard per-round max", async () => {
 });
 
 test("venue per-game cap tightens the ceiling", async () => {
-  const res = await award({
-    locationId: cappedLocationId,
-    playerId: "PL-102",
-    game: "skeeball",
-    tickets: 80,
-    sessionId: session(),
-  });
+  const cookie = await cardHolder(cappedLocationId, "PL-102");
+  const res = await award(
+    { locationId: cappedLocationId, game: "skeeball", tickets: 80, sessionId: session() },
+    cookie
+  );
   const json = await res.json();
   assert.equal(json.ticketsAwarded, 10);
   assert.equal(json.capped, true);
 });
 
 test("daily per-card cap clamps then stops the card for the day", async () => {
-  const playerId = "PL-103"; // cappedLocation: dailyPerCard 30
+  const cookie = await cardHolder(cappedLocationId, "PL-103"); // dailyPerCard 30
   const first = await (
-    await award({ locationId: cappedLocationId, playerId, game: "trivia", tickets: 20, sessionId: session() })
+    await award({ locationId: cappedLocationId, game: "trivia", tickets: 20, sessionId: session() }, cookie)
   ).json();
   assert.equal(first.ticketsAwarded, 20);
 
   const second = await (
-    await award({ locationId: cappedLocationId, playerId, game: "darts", tickets: 20, sessionId: session() })
+    await award({ locationId: cappedLocationId, game: "darts", tickets: 20, sessionId: session() }, cookie)
   ).json();
   assert.equal(second.ticketsAwarded, 10); // clamped to the remaining 10
   assert.equal(second.capped, true);
 
   const third = await (
-    await award({ locationId: cappedLocationId, playerId, game: "pinball", tickets: 20, sessionId: session() })
+    await award({ locationId: cappedLocationId, game: "pinball", tickets: 20, sessionId: session() }, cookie)
   ).json();
   assert.equal(third.status, "daily-cap");
   assert.equal(third.ticketsAwarded, 0);
   assert.equal(third.dailyCap, 30);
 
   // Another card at the same venue is unaffected.
+  const otherCookie = await cardHolder(cappedLocationId, "PL-104");
   const other = await (
-    await award({ locationId: cappedLocationId, playerId: "PL-104", game: "trivia", tickets: 20, sessionId: session() })
+    await award({ locationId: cappedLocationId, game: "trivia", tickets: 20, sessionId: session() }, otherCookie)
   ).json();
   assert.equal(other.ticketsAwarded, 20);
 });
 
 test("a replayed session settles from the ledger without re-crediting", async () => {
   const sessionId = session();
-  const body = { locationId, playerId: "PL-105", game: "bowling", tickets: 40, sessionId };
-  const first = await (await award(body)).json();
+  const cookie = await cardHolder(locationId, "PL-105");
+  const body = { locationId, game: "bowling", tickets: 40, sessionId };
+  const first = await (await award(body, cookie)).json();
   assert.equal(first.ticketsAwarded, 40);
 
   const callsBefore = stub.calls.length;
-  const replay = await (await award(body)).json();
+  const replay = await (await award(body, cookie)).json();
   assert.equal(replay.status, "awarded");
   assert.equal(replay.ticketsAwarded, 40);
   assert.equal(replay.duplicate, true);
@@ -253,10 +298,11 @@ test("a replayed session settles from the ledger without re-crediting", async ()
 
 test("a failed vendor credit holds the reservation; a retry settles it", async () => {
   const sessionId = session();
-  const body = { locationId, playerId: "PL-106", game: "darts", tickets: 15, sessionId };
+  const cookie = await cardHolder(locationId, "PL-106");
+  const body = { locationId, game: "darts", tickets: 15, sessionId };
 
   stub.failNext = true;
-  const failed = await award(body);
+  const failed = await award(body, cookie);
   assert.equal(failed.status, 502);
   // The failure is ambiguous (the credit may have landed) — the reservation
   // stays pending, still holding its slice of the daily budget.
@@ -268,7 +314,7 @@ test("a failed vendor credit holds the reservation; a retry settles it", async (
 
   // Retrying the same session replays the vendor call under the same
   // idempotency key and settles the row.
-  const retry = await (await award(body)).json();
+  const retry = await (await award(body, cookie)).json();
   assert.equal(retry.status, "awarded");
   assert.equal(retry.ticketsAwarded, 15);
   const settled = await testQuery(
