@@ -20,8 +20,8 @@
 // note below marks a place where that happened, and each one is load-bearing —
 // dropping it re-merges two icons that a player can tell apart:
 //
-//   🎳  game.bowling         a ball and a triangle of pins
-//       game.skee-ball       a ramp and concentric scoring rings
+//   🎳  game.bowling         the ball, finger holes and all
+//       game.skee-ball       the alley, narrowing to a ringed target
 //   🔨  game.whack-a-mole    a soft mallet, held over a hole
 //       game.high-striker    a long-handled claw hammer
 //   💦  game.water-gun-race  a jet of water, aimed
@@ -55,7 +55,7 @@ export type IconSpec = {
 export const ICONS = {
   // ── Section navigation ────────────────────────────────────────────────────
   'nav.home': { means: 'The app home screen.', draw: 'A simple house: gable roof over a square body.', placeholder: '🏠' },
-  'nav.golf': { means: 'The mini-golf section.', draw: 'A pennant on a tall pole — the pin. No ball, no cup; state.finish takes the plain rectangular flag.', not: 'game.arcade-putt — the arcade mini-game, not the real course.', placeholder: '⛳️' },
+  'nav.golf': { means: 'The mini-golf section.', draw: 'A pennant on a tall pole — the pin. No ball, no cup; state.finish takes the chequered flag.', not: 'game.arcade-putt — a ball on a tee for the mini-game; this pennant is the real course.', placeholder: '⛳️' },
   'nav.arcade': { means: 'The arcade section.', draw: 'A gamepad seen head-on: D-pad left, two buttons right.', placeholder: '🎮' },
   'nav.food': { means: 'Food & drink ordering.', draw: 'Crossed fork and knife — the section, not any one menu item (the 🌭 was never about hot dogs specifically).', placeholder: '🌭' },
   'nav.photos': { means: 'The photo booth section.', draw: 'A camera body with a lens circle and a flash bump.', not: 'action.take-photo — the shutter action inside the booth.', placeholder: '📸' },
@@ -69,23 +69,23 @@ export const ICONS = {
   // One icon per attraction. These are the app's densest naming problem: the
   // FunZone tile and the game's own screen used the same emoji, and several
   // games shared one glyph with each other.
-  'game.air-hockey': { means: 'Air hockey.', draw: 'A striker (mallet) above a puck, table edge implied.', placeholder: '🏒' },
+  'game.air-hockey': { means: 'Air hockey.', draw: 'Crossed hockey sticks over a puck. Not literally an air-hockey striker, but it matches the 🏒 the app already chose and it reads at size.', placeholder: '🏒' },
   'game.axe-throwing': { means: 'Axe throwing.', draw: 'A hatchet in flight, blade forward, toward a target edge.', placeholder: '🪓' },
-  'game.batting-cages': { means: 'Batting cages.', draw: 'A bat crossed behind a ball, cage mesh hinted.', placeholder: '⚾️' },
+  'game.batting-cages': { means: 'Batting cages.', draw: 'A baseball with its stitching.', placeholder: '⚾️' },
   'game.bumper-boats': { means: 'Bumper boats.', draw: 'A round boat with a bumper ring, on two water lines.', not: 'game.bumper-cars — same bumper ring, but wheels, not water.', placeholder: '🚤' },
   'game.bumper-cars': { means: 'Bumper cars.', draw: 'A tub car on a wide bumper skirt, pole running up to the ceiling grid line.', not: 'game.bumper-boats.', placeholder: '🚗' },
   'game.milk-bottles': { means: 'Milk-bottle toss.', draw: 'Three stacked bottles in a pyramid, ball incoming.', placeholder: '🥛' },
-  'game.bowling': { means: 'Ten-pin bowling.', draw: 'A bowling ball with three finger holes, triangle of pins behind.', not: 'game.skee-ball — 🎳 covered both; bowling is BALL + PINS.', placeholder: '🎳' },
+  'game.bowling': { means: 'Ten-pin bowling.', draw: 'A bowling ball with three finger holes. No pins needed — game.skee-ball is an alley, so the pair reads as BALL vs ALLEY.', not: 'game.skee-ball — 🎳 covered both; bowling is the BALL, skee-ball the ALLEY.', placeholder: '🎳' },
   'game.claw-machine': { means: 'The claw / prize crane.', draw: 'A three-prong claw descending over a plush shape.', placeholder: '🧸' },
   'game.darts': { means: 'Darts.', draw: 'Concentric rings with a centre dot — a target seen head-on. No dart; the rings alone read as darts at 24px.', not: 'award.hole-in-one — 🎯 covered both; that one is a badge.', placeholder: '🎯' },
   'game.fun-facts': { means: 'Fun Facts — the bite-size fact deck.', draw: 'A plain lightbulb with its filament base — an idea. action.hint takes the question mark instead.', not: 'action.hint — the hunt’s hint is a question mark, not a second bulb.', placeholder: '💡' },
   'game.shooting-gallery': { means: 'The shooting gallery.', draw: 'A carnival duck in profile — round head, beak, plump body — on a post above a rail.', placeholder: '🦆' },
-  'game.pop-a-shot': { means: 'Pop-a-Shot basketball.', draw: 'Backboard, rim and net seen head-on, ball below and to the left.', placeholder: '🏀' },
-  'game.go-karts': { means: 'Go-karts.', draw: 'A kart in profile: low chassis, two fat wheels, and the driver’s helmet above — the helmet is what stops it reading as an abstract diagram. NO flag; state.finish owns that.', not: 'state.finish — the plain flag alone; go-karts is the vehicle.', placeholder: '🏁' },
+  'game.pop-a-shot': { means: 'Pop-a-Shot basketball.', draw: 'A basketball with its seam lines. The ball rather than the hoop, because a backboard-and-net does not survive 24px.', placeholder: '🏀' },
+  'game.go-karts': { means: 'Go-karts.', draw: 'A steering wheel, head-on. Not the kart itself: a wheel survives 24px where a chassis-and-wheels profile read as an abstract diagram.', not: 'state.finish — the chequered flag; go-karts is the wheel, so the two no longer compete for 🏁.', placeholder: '🏁' },
   'game.whack-a-mole': { means: 'Whack-a-Mole.', draw: 'A soft-headed MALLET raised over a hole with a mole snout.', not: 'game.high-striker — 🔨 covered both; this one is the mallet + hole.', placeholder: '🔨' },
   'game.pinball': { means: 'Pinball.', draw: 'The cabinet in plan: tall rounded rect, a bumper circle, the ball, and two flippers angled up from the bottom corners.', placeholder: '🕹️' },
   'game.coin-pusher': { means: 'The coin pusher.', draw: 'Two overlapping coin stacks seen from the side.', placeholder: '🪙' },
-  'game.arcade-putt': { means: 'Arcade Putt — the in-app putting mini-game.', draw: 'A putter head addressing a ball, hole behind.', not: 'nav.golf — the real course section, drawn as a pin flag.', placeholder: '⛳️' },
+  'game.arcade-putt': { means: 'Arcade Putt — the in-app putting mini-game.', draw: 'A golf ball on a tee. nav.golf keeps the pennant, so the mini-game and the real course stay apart.', not: 'nav.golf — the real course section, drawn as a pin flag.', placeholder: '⛳️' },
   'game.ring-toss': { means: 'Ring toss.', draw: 'A ring mid-air over an upright peg.', placeholder: '🎪' },
   'game.skee-ball': { means: 'Skee-Ball.', draw: 'The alley in perspective — a trapezoid narrowing upward to the ringed target hole, ball rolling at the near end.', not: 'game.bowling — 🎳 covered both; skee-ball is RAMP + RINGS.', placeholder: '🎳' },
   'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle is what separates it from whack-a-mole’s wide mallet.', not: 'game.whack-a-mole, order.ready — 🔨 and 🔔 both collided here.', placeholder: '🔔' },
@@ -157,7 +157,7 @@ export const ICONS = {
   'state.announcement': { means: 'A venue announcement.', draw: 'A megaphone, mouth right.', placeholder: '📣' },
   'state.cpu': { means: 'The CPU opponent.', draw: 'A blocky robot head with two eyes and an antenna.', placeholder: '🤖' },
   'state.timer': { means: 'Time remaining.', draw: 'A stopwatch with a crown button.', placeholder: '⏱' },
-  'state.finish': { means: 'Finished / start a round.', draw: 'A plain rectangular flag on a staff. Not chequered — game.go-karts owns the racing motif, and two flags at 24px were indistinguishable.', not: 'game.go-karts — the kart, which no longer carries a flag at all.', placeholder: '🏁' },
+  'state.finish': { means: 'Finished / start a round.', draw: 'A chequered flag on a staff — what 🏁 actually meant. It was only given up while game.go-karts was a kart carrying one; now that go-karts is a steering wheel, the flag comes back here.', not: 'game.go-karts — the steering wheel; neither needs to borrow the other’s motif now.', placeholder: '🏁' },
   'state.celebrate': { means: 'Celebration — a win, an accepted invite.', draw: 'A confetti burst, no container.', not: 'order.picked-up — 🎉 served both; that one belongs to the order rail.', placeholder: '🎉' },
   'state.win': { means: 'You won this round.', draw: 'A balloon on a string.', placeholder: '🎈' },
   'state.lose': { means: 'You lost this round.', draw: 'A frowning face. score.bogey takes the wince, so the two losing states stay apart.', placeholder: '🤡' },

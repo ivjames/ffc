@@ -1,4 +1,4 @@
-import { ICON_ART, type DrawnIcon } from './icons/registry';
+import { ICON_ART, FILLED_ICONS, type DrawnIcon } from './icons/registry';
 
 // The one way the app draws an icon.
 //
@@ -53,15 +53,22 @@ export default function Icon({
 }) {
   const art = ICON_ART[name];
 
+  // A handful of arcade icons come from Phosphor, which draws FILLED shapes on a
+  // 256 grid rather than stroking a 24 one (see scripts/vendor-icons.mjs). They
+  // need the opposite paint mode and their own coordinate system; everything
+  // else takes the stroked house style. Both still inherit `currentColor`, so a
+  // caller cannot tell the difference and neither can a skin's colour rules.
+  const filled = FILLED_ICONS.has(name);
+
   return (
     <svg
       // 1em square: inherits its size from font-size, like the emoji before it.
       width="1em"
       height="1em"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
+      viewBox={filled ? '0 0 256 256' : '0 0 24 24'}
+      fill={filled ? 'currentColor' : 'none'}
+      stroke={filled ? 'none' : 'currentColor'}
+      strokeWidth={filled ? undefined : 2}
       strokeLinecap="round"
       strokeLinejoin="round"
       // The per-skin restyling hook. Skins target `.ffc-icon` in index.css.

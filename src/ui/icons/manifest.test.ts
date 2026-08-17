@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { ICONS, ROLE_ICONS, type IconName, type IconSpec } from './manifest';
-import { ICON_ART } from './registry';
+import { ICON_ART, FILLED_ICONS } from './registry';
+import { FILLED_ART } from './vendored.generated';
 
 // Keeps the three moving parts honest about each other:
 //
@@ -100,5 +101,24 @@ describe('icon registry', () => {
   it('has art for every arcade game, so the FunZone grid is complete', () => {
     const games = Object.keys(ICONS).filter((n) => n.startsWith('game.'));
     expect(games.filter((n) => !(n in ICON_ART))).toEqual([]);
+  });
+});
+
+describe('mixed sources', () => {
+  // Two libraries with incompatible rendering modes now live together: Lucide
+  // strokes a 24 grid, Phosphor fills a 256 one. <Icon> picks the mode by name
+  // from FILLED_ICONS, which makes one specific failure possible and silent —
+  // if a stroked entry ever wins the merge for a name FILLED_ICONS still lists,
+  // <Icon> renders that stroked path with fill=currentColor and stroke=none,
+  // and the icon disappears. Nothing about it looks wrong in the source.
+  it('lets no stroked entry shadow a filled one in the merge', () => {
+    const shadowed = [...FILLED_ICONS].filter(
+      (n) => ICON_ART[n as keyof typeof ICON_ART] !== FILLED_ART[n as keyof typeof FILLED_ART],
+    );
+    expect(shadowed).toEqual([]);
+  });
+
+  it('names every filled icon in the manifest like any other', () => {
+    expect([...FILLED_ICONS].filter((n) => !(n in ICONS))).toEqual([]);
   });
 });

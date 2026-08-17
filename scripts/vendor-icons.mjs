@@ -1,32 +1,41 @@
 #!/usr/bin/env node
-// Vendors the generic half of the icon set from Lucide (ISC).
+// Vendors the non-bespoke part of the icon set: Lucide (ISC) for the generic
+// vocabulary, Phosphor (MIT) for a few arcade subjects Lucide has no icon for.
 //
 //   node scripts/vendor-icons.mjs   → rewrites src/ui/icons/vendored.generated.tsx
 //
-// ── Why Lucide and not Phosphor ─────────────────────────────────────────────
+// ── Both sets, for different jobs ────────────────────────────────────────────
 //
-// Phosphor has far better ARCADE vocabulary — it ships bowling-ball, golf,
-// basketball, baseball, hockey, steering-wheel, flag-checkered and crane, none
-// of which Lucide has. It still lost, on one structural fact:
+// LUCIDE is the base. It is drawn on exactly the grid, stroke width, caps and
+// joins this registry already specified, so its paths drop in untouched:
 //
 //   Lucide    viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  width 2
 //   Phosphor  viewBox="0 0 256 256"  fill="currentColor"   (stroke baked in)
 //
-// Phosphor's weights are FILLED paths — the outline look is geometry, not a
-// stroke. Adopting it would mean giving up the two things the set is built on:
-// <Icon> passing one stroke spec to every drawing, and skins restyling stroke
-// weight from CSS (index.css, `.ffc-icon`) with no re-render and no second set
-// of art. That is what keeps this 97 drawings rather than 97 × 6.
+// PHOSPHOR is taken selectively, for the handful of arcade icons no general set
+// has and Lucide does not: bowling-ball, golf, basketball, baseball, hockey,
+// steering-wheel, flag-checkered. Those were the weakest hand-drawn entries in
+// the set, and Phosphor's are simply better.
 //
-// Lucide is drawn on exactly the grid, stroke width, caps and joins this
-// registry already specified, so its paths drop in untouched — and the ~25
-// arcade-specific icons no general set has stay hand-drawn in registry.tsx.
+// Mixing costs something real, so it is worth being explicit about the price:
+// Phosphor's weights are FILLED paths — the outline look is geometry, not a
+// stroke — which means a Phosphor icon cannot take a stroke-width change. It
+// still inherits `currentColor` and still takes any filter a skin applies.
+// index.css restyles only the MATERIAL classes (body, .surface, .key, .tile,
+// .btn-accent — background, border, box-shadow); no skin touches stroke width
+// today, so the capability being given up is hypothetical rather than in use.
+// Seven better icons for that is a good trade; if a skin ever does want to
+// re-weight icons, these seven opt out of it and everything else follows.
+//
+// Weight matching matters when mixing. Phosphor `regular` is 16/256 ≈ 1.5px at
+// 24 and reads visibly lighter than Lucide's 2. `bold` is 24/256 ≈ 2.25 and
+// sits close enough to pass as one family, so the bold weight is the one taken.
 //
 // ── Why the SVGs are copied in rather than imported ─────────────────────────
 //
-// Vendoring keeps ~55 elements in the tree instead of a 2,025-icon dependency
-// in the PWA's bundle, and keeps `lucide-static` a devDependency. Re-run this
-// script to pick up upstream fixes.
+// Vendoring puts ~75 elements in the tree instead of two icon packages (2,025 +
+// 1,512 icons) in the PWA's bundle, and keeps both as devDependencies. Re-run
+// this script to change a mapping or pick up upstream fixes.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -34,6 +43,7 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(REPO, 'node_modules', 'lucide-static', 'icons');
+const PH = join(REPO, 'node_modules', '@phosphor-icons', 'core', 'assets', 'bold');
 const OUT = join(REPO, 'src', 'ui', 'icons', 'vendored.generated.tsx');
 
 // icon name → [lucide file, note]. The note is only present where the choice
@@ -43,7 +53,7 @@ const OUT = join(REPO, 'src', 'ui', 'icons', 'vendored.generated.tsx');
 const VENDOR = {
   // Section navigation
   'nav.home': ['house'],
-  'nav.golf': ['flag-triangle-right', 'a pennant on a pole — the pin. state.finish takes the plain flag.'],
+  'nav.golf': ['flag-triangle-right', 'a pennant on a pole — the pin. state.finish takes the chequered flag.'],
   'nav.arcade': ['gamepad-2'],
   'nav.food': ['utensils'],
   'nav.photos': ['camera', 'the device; action.take-photo takes the aperture, since 📸 served both.'],
@@ -113,7 +123,6 @@ const VENDOR = {
   'state.announcement': ['megaphone'],
   'state.cpu': ['bot'],
   'state.timer': ['timer'],
-  'state.finish': ['flag', 'the plain flag. nav.golf keeps the pennant, game.go-karts keeps the kart.'],
   'state.celebrate': ['party-popper'],
   'state.win': ['balloon'],
   'state.lose': ['frown', 'a flat frown. score.bogey shared the idea and takes the wince.'],
@@ -130,11 +139,28 @@ const VENDOR = {
   'course.haunted': ['ghost'],
 };
 
+// Taken from Phosphor (MIT), bold weight, for arcade subjects Lucide has no
+// icon for at all. These render FILLED on a 256 grid — see the header — so they
+// live in their own export and <Icon> switches coordinate system per icon.
+//
+// `crane` was evaluated for game.claw-machine and rejected: Phosphor's crane is
+// a construction crane, which is a different machine from a prize claw. Better
+// art losing to worse art on meaning is the correct outcome for this library.
+const PHOSPHOR = {
+  'game.bowling': ['bowling-ball', 'the ball with finger holes. game.skee-ball keeps the bespoke alley, so the pair is now BALL vs ALLEY.'],
+  'game.arcade-putt': ['golf', 'a ball on a tee. nav.golf keeps the pennant, so the mini-game and the real course stay apart.'],
+  'game.pop-a-shot': ['basketball', 'the ball rather than the hoop — it survives 24px, which my backboard-and-net did not.'],
+  'game.batting-cages': ['baseball'],
+  'game.air-hockey': ['hockey', 'crossed sticks. Not strictly an air-hockey striker, but it matches the 🏒 the app already chose and reads at size.'],
+  'game.go-karts': ['steering-wheel', 'a wheel, which frees the chequered flag for state.finish — what 🏁 actually meant.'],
+  'state.finish': ['flag-checkered', 'the chequered flag, back now that game.go-karts is a steering wheel and the two no longer collide.'],
+};
+
 /** Lucide's inner elements, as JSX. The wrapper is dropped — <Icon> supplies
  *  the viewBox, stroke, caps and joins, so a vendored icon is styled by exactly
  *  the same rules as a hand-drawn one. */
-function extract(file) {
-  const svg = readFileSync(join(SRC, `${file}.svg`), 'utf8');
+function extract(file, dir = SRC, suffix = '') {
+  const svg = readFileSync(join(dir, `${file}${suffix}.svg`), 'utf8');
   const inner = svg.slice(svg.indexOf('>', svg.indexOf('<svg')) + 1, svg.lastIndexOf('</svg>'));
   const elements = inner.match(/<(?:path|circle|rect|line|polyline|polygon|ellipse)\b[^>]*\/>/g);
   if (!elements) throw new Error(`no drawable elements in ${file}.svg`);
@@ -150,6 +176,13 @@ function extract(file) {
     .join('\n      ');
 }
 
+const phosphorEntries = Object.entries(PHOSPHOR)
+  .map(([name, [file, note]]) => {
+    const comment = note ? `      {/* ${note} */}\n` : '';
+    return `  '${name}': (\n    <>\n      {/* phosphor/${file} (bold) */}\n${comment}      ${extract(file, PH, '-bold')}\n    </>\n  ),`;
+  })
+  .join('\n');
+
 const entries = Object.entries(VENDOR)
   .map(([name, [file, note]]) => {
     // Inside JSX a `//` comment is just text that renders. Both the provenance
@@ -164,11 +197,16 @@ writeFileSync(
   `// GENERATED by scripts/vendor-icons.mjs — do not edit by hand.
 // Re-run the script to change the mapping or pick up upstream fixes.
 //
-// Artwork from Lucide (https://lucide.dev), ISC licence, copyright (c) for
-// portions Lucide are held by Lucide Contributors 2022, and copyright for
-// portions of Feather are held by Cole Bemis 2013-2022. Only the ${Object.keys(VENDOR).length} icons the
-// app actually uses are copied in; \`lucide-static\` stays a devDependency so
-// none of its other 2,000 icons reach the PWA bundle.
+// Artwork from two sources, both copied in rather than imported, so only the
+// icons the app actually uses ship and both packages stay devDependencies:
+//
+//   ${Object.keys(VENDOR).length} from Lucide (https://lucide.dev), ISC licence. Copyright (c) for
+//   portions Lucide are held by Lucide Contributors 2022, and copyright for
+//   portions of Feather are held by Cole Bemis 2013-2022.
+//
+//   ${Object.keys(PHOSPHOR).length} from Phosphor Icons (https://phosphoricons.com), MIT licence,
+//   copyright (c) 2023 Phosphor Icons. Bold weight, for arcade subjects Lucide
+//   has no icon for. These are FILLED on a 256 grid — see FILLED_ART below.
 //
 // The stroke spec lives on <Icon>, not here, so these are restyled per skin by
 // the same \`.ffc-icon\` rules as the hand-drawn arcade icons in registry.tsx.
@@ -186,7 +224,23 @@ export const VENDORED_SOURCE: Partial<Record<IconName, string>> = {
 ${Object.entries(VENDOR)
   .map(([name, [file]]) => `  '${name}': 'lucide/${file}',`)
   .join('\n')}
+${Object.entries(PHOSPHOR)
+  .map(([name, [file]]) => `  '${name}': 'phosphor-bold/${file}',`)
+  .join('\n')}
 };
+
+/**
+ * Phosphor, bold weight. FILLED paths on a 256 grid, so <Icon> renders these
+ * with fill=currentColor and no stroke — a different coordinate system and a
+ * different rendering mode from everything above, which is why they are a
+ * separate export rather than more entries in VENDORED_ART.
+ *
+ * The trade is in scripts/vendor-icons.mjs: these seven cannot take a
+ * stroke-width change, which no skin does today.
+ */
+export const FILLED_ART = {
+${phosphorEntries}
+} satisfies Partial<Record<IconName, ReactNode>>;
 `,
 );
 
