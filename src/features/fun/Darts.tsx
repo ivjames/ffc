@@ -429,7 +429,13 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   //   • the bull breathes while the player is lining up — it's what the game is
   //     asking you to hit, and an idle board is otherwise completely static;
   //   • whichever bed just took a dart stays lit while the score reads out.
-  const aiming = gs.phase === 'aimX' || gs.phase === 'aimY' || gs.phase === 'countdown';
+  // 'ready' counts: that's the pre-game screen, the longest the board ever sits
+  // untouched and the first thing a player sees.
+  const aiming =
+    gs.phase === 'ready' ||
+    gs.phase === 'countdown' ||
+    gs.phase === 'aimX' ||
+    gs.phase === 'aimY';
   if (aiming) {
     drawGlow(ctx, CX, CY, 34 + attractPulse(now, 2200) * 12, '#ef4444', 0.16);
   }
