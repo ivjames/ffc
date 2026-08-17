@@ -49,5 +49,10 @@ swapped `current/landing/`. The apex also:
 
 Full cutover runbook: DEPLOY.md → "Platform topology".
 
-The contact address (`hello@infinicade.com`) assumes mail is set up on the
-new domain — update it if a different address ends up being used.
+Contact is a launch-signup form (email + one consent checkbox) that POSTs to
+`/api/launch-signup` — the one API path the apex vhost proxies (exact-match
+location in `deploy/nginx.landing.conf.template`); signups land in the
+`launch_signup` table and are read in Master Control → Signups (with CSV
+export). The old contact address (`hello@infinicade.com`) remains only as
+the noscript/error fallback — update it if a different address ends up
+being used once mail exists on the domain.
