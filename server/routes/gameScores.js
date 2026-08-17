@@ -31,6 +31,7 @@ import { pool } from "../db.js";
 import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, tenantOrgFilter, findTenantLocation } from "../lib/tenant.js";
+import { moduleLive } from "../lib/modules.js";
 import { boardSyntheticFilter, resolveSynthetic } from "../lib/syntheticConfig.js";
 import {
   SCORED_GAMES,
@@ -250,8 +251,14 @@ router.post("/", tenant(), requireUser, async (req, res) => {
   try {
     // Tenant-scoped: a foreign venue's id 404s exactly like a nonexistent one,
     // so a guessed id can't write rows onto another client's board.
-    const loc = await findTenantLocation(locationId, req.tenant);
+    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, pos, modules" });
     if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
+    // The venue's plan has to include the arcade before we record arcade work
+    // for it (lib/modules.js). The client route guard keeps players out of the
+    // UI; this keeps a hand-rolled request out of the data.
+    if (!moduleLive(loc, "arcade")) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     // The player's best BEFORE this round decides the "personal best" banner —
     // read it first, because the insert below may itself become that best.

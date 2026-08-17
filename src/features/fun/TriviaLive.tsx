@@ -140,10 +140,17 @@ export default function TriviaLive() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot?.session.status]);
 
-  // Clear the optimistic lock once the server's own answer lands.
+  // Clear the optimistic lock on every new question.
+  //
+  // Keying this on `myAnswer` alone was a soft-lock: broadcast frames are
+  // viewer-neutral (built without an entrantId), so `myAnswer` is null on the
+  // stream and the effect never fired. `locked` falls back to `pending`, so a
+  // player who answered question one had every button disabled for the rest of
+  // the game and could only escape by reloading. The question index is the
+  // thing that actually means "this is a fresh question".
   useEffect(() => {
-    if (snapshot?.myAnswer) setPending(null);
-  }, [snapshot?.myAnswer]);
+    setPending(null);
+  }, [snapshot?.session.currentIndex, snapshot?.session.status]);
 
   const doJoin = useCallback(async () => {
     setError(null);
@@ -360,7 +367,11 @@ function LiveBody({
     return <p className="text-center text-sm text-fairway-100/70">Waiting for the next question…</p>;
   }
 
-  const open = session.status === 'question';
+  // Answers close when the countdown does, not when the host gets round to
+  // hitting reveal — the server enforces the same deadline, so leaving the
+  // buttons live at 0:00 would only produce taps it then refuses.
+  const expired = left <= 0;
+  const open = session.status === 'question' && !expired;
   const revealed = session.status === 'reveal';
 
   return (
@@ -374,7 +385,7 @@ function LiveBody({
         </span>
       </div>
 
-      {open && (
+      {session.status === 'question' && (
         <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-fairway-800">
           <div
             className="h-full rounded-full bg-fairway-400 transition-[width] duration-100 ease-linear"
@@ -423,6 +434,11 @@ function LiveBody({
       {open && locked !== null && (
         <p className="mt-3 text-center text-sm text-fairway-100/70">
           Locked in — waiting for the room…
+        </p>
+      )}
+      {session.status === 'question' && expired && locked === null && (
+        <p className="mt-3 text-center text-sm text-fairway-100/70">
+          Time's up — no answer in.
         </p>
       )}
       {revealed && (

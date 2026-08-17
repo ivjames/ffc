@@ -171,6 +171,24 @@ export function moduleStatus(location) {
 }
 
 /**
+ * Is one module live at this venue? The server-side half of the entitlement,
+ * for write paths that must not accept work for a module the venue's plan
+ * doesn't include — recording an arcade score, opening a trivia session,
+ * issuing a challenge.
+ *
+ * A route guard in the client (features/shared/ModuleGate.tsx) keeps players
+ * out of the UI; this keeps a hand-rolled request out of the data. Neither is
+ * load-bearing alone: hiding a nav tile does nothing about a bookmark, and a
+ * client-side redirect does nothing about curl.
+ *
+ * @param {{ pos?: object|null, modules?: object|null }} location
+ * @param {string} key
+ */
+export function moduleLive(location, key) {
+  return resolveModules(location)[key] === true;
+}
+
+/**
  * Validate + normalize a `modules` object from an admin write. Sparse and
  * replace-not-merge, matching how pos/hours/branding already behave: only the
  * keys an operator set are stored, and an absent key keeps deriving from the

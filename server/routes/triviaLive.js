@@ -29,6 +29,7 @@ import { pool } from "../db.js";
 import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
+import { moduleLive } from "../lib/modules.js";
 import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
@@ -37,6 +38,7 @@ import {
   MAX_QUESTIONS,
   DEFAULT_QUESTIONS,
   MAX_ENTRANTS,
+  MAX_ENTRANT_NAME,
   normalizeConfig,
   normalizeEntrantName,
   publicQuestion,
@@ -49,6 +51,11 @@ export const router = Router();
 // A session left running this long is over — the host closed the laptop, the
 // night ended. Checked lazily on access, like shared_game (no cron needed).
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+// Slack past the question's deadline before an answer is refused. Covers the
+// round trip on venue wifi, so a tap that landed in time isn't rejected by its
+// own latency; short enough that it can't be played as extra thinking time.
+const ANSWER_GRACE_MS = 1500;
 
 const joinLimit = makeRateLimit({ windowMs: 60_000, max: 60, name: "trivia join limit" });
 const answerLimit = makeRateLimit({
@@ -201,14 +208,30 @@ async function buildSnapshot(session, { forHost, entrantId = null }) {
   };
 }
 
-/** Push the new state to every connected device. Host and player streams get
- *  different payloads, so the fan-out sends both and each stream picks. */
+/**
+ * SSE channel for one audience of one session.
+ *
+ * The two audiences are SEPARATE CHANNELS, not one channel carrying both
+ * payloads. That distinction is the whole answer-secrecy guarantee on the
+ * stream: lib/gameBus.js fans a published frame out to every subscriber on the
+ * channel, so a single `{player, host}` frame would put the correct answer on
+ * the wire to every phone in the room. The client selecting `payload.player`
+ * is a rendering choice, not a security boundary — anyone can open devtools
+ * and read the frame.
+ */
+function channelFor(sessionId, forHost) {
+  return `trivia:${sessionId}:${forHost ? "host" : "player"}`;
+}
+
+/** Push the new state to every connected device, each audience on its own
+ *  channel so a player connection never receives the host payload. */
 async function broadcast(session) {
   const [playerView, hostView] = await Promise.all([
     buildSnapshot(session, { forHost: false }),
     buildSnapshot(session, { forHost: true }),
   ]);
-  publish(session.id, "state", { player: playerView, host: hostView });
+  publish(channelFor(session.id, false), "state", { player: playerView });
+  publish(channelFor(session.id, true), "state", { host: hostView });
 }
 
 // --- Create -----------------------------------------------------------------
@@ -226,8 +249,16 @@ router.post("/sessions", requireUser, tenant(), async (req, res) => {
   if (configCheck.error) return res.status(400).json({ ok: false, error: configCheck.error });
 
   try {
-    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, org_id" });
+    const loc = await findTenantLocation(locationId, req.tenant, {
+      cols: "id, org_id, pos, modules",
+    });
     if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
+    // The venue's plan has to include the arcade before we record arcade work
+    // for it (lib/modules.js). The client route guard keeps players out of the
+    // UI; this keeps a hand-rolled request out of the data.
+    if (!moduleLive(loc, "arcade")) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     // The bank this venue can draw on: the platform pack (org_id null) plus
     // this org's own questions, plus any written specifically for this venue.
@@ -327,17 +358,53 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
         await client.query("rollback");
         return res.status(409).json({ ok: false, error: "this game is full" });
       }
-      // A name already on the board means "join that table", not "collide" —
-      // which is also what the unique constraint would otherwise turn into a
-      // confusing 500 for whoever typed second.
-      const created = await client.query(
-        `insert into trivia_entrant (session_id, name, is_team)
-         values ($1, $2, $3)
-         on conflict (session_id, name) do update set name = excluded.name
-         returning id, name, is_team as "isTeam"`,
-        [session.id, name, Boolean(req.body?.isTeam)]
+      // A name collision means two different things depending on intent, and
+      // guessing wrong is costly either way:
+      //
+      //   Both sides say TEAM  -> "I'm sitting at that table". Merge: one
+      //                           entrant, one score, one answer per question.
+      //   Either side is SOLO  -> two people who happen to both be called Dave.
+      //                           Merging them would pool their scores AND make
+      //                           the one-answer-per-entrant rule refuse the
+      //                           second Dave's answer with "already answered",
+      //                           which is baffling from his side of the room.
+      //
+      // So solo joiners get a distinct entrant, disambiguated rather than
+      // rejected — a walk-up player in a loud bar should not be sent back to
+      // retype their name because a stranger shares it.
+      const wantsTeam = Boolean(req.body?.isTeam);
+      const existing = await client.query(
+        `select id, name, is_team as "isTeam" from trivia_entrant
+          where session_id = $1 and name = $2`,
+        [session.id, name]
       );
-      entrant = created.rows[0];
+      if (existing.rowCount > 0 && wantsTeam && existing.rows[0].isTeam) {
+        entrant = existing.rows[0];
+      } else {
+        // Find a free name. Bounded by MAX_ENTRANTS, so the loop cannot run
+        // away even if a whole room shares one name.
+        let candidate = name;
+        if (existing.rowCount > 0) {
+          for (let n = 2; n <= MAX_ENTRANTS + 1; n++) {
+            const suffixed = `${name} (${n})`.slice(0, MAX_ENTRANT_NAME);
+            const taken = await client.query(
+              `select 1 from trivia_entrant where session_id = $1 and name = $2`,
+              [session.id, suffixed]
+            );
+            if (taken.rowCount === 0) {
+              candidate = suffixed;
+              break;
+            }
+          }
+        }
+        const created = await client.query(
+          `insert into trivia_entrant (session_id, name, is_team)
+           values ($1, $2, $3)
+           returning id, name, is_team as "isTeam"`,
+          [session.id, candidate, wantsTeam]
+        );
+        entrant = created.rows[0];
+      }
     }
 
     const participant = await client.query(
@@ -426,7 +493,9 @@ router.get("/sessions/:id/events", async (req, res) => {
   });
   res.flushHeaders?.();
 
-  const unsubscribe = subscribe(id, res);
+  // Subscribe to THIS audience's channel only — a player connection is never
+  // on the host channel, so the answer cannot reach it even as unread bytes.
+  const unsubscribe = subscribe(channelFor(id, forHost), res);
   req.on("close", unsubscribe);
 
   // Open with the current state so a device that connects mid-question isn't
@@ -461,6 +530,20 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
 
     // Server clock, always: elapsed comes from asked_at, never the request.
     const msElapsed = ctx.askedAt ? Date.now() - new Date(ctx.askedAt).getTime() : 0;
+
+    // The countdown has to actually close answers. Checking only "has the host
+    // advanced?" meant the configured question length was decorative: while a
+    // host chatted before hitting reveal, the timer sat at 0:00 on every phone
+    // and answers were still accepted — which quietly deletes the speed bonus
+    // as a mechanic, since waiting costs nothing.
+    //
+    // The grace window is for the network, not the player: a tap at 19.9s on a
+    // busy venue wifi must not be thrown away by its own latency.
+    const deadlineMs = ctx.config.questionSeconds * 1000 + ANSWER_GRACE_MS;
+    if (ctx.askedAt && msElapsed > deadlineMs) {
+      return res.status(409).json({ ok: false, error: "time's up on that question" });
+    }
+
     const correct = choice === row.answer;
     const points = scoreAnswer(correct, msElapsed, ctx.config);
 

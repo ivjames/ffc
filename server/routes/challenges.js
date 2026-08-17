@@ -26,6 +26,7 @@ import { pool } from "../db.js";
 import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
+import { moduleLive } from "../lib/modules.js";
 import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
@@ -158,8 +159,14 @@ router.post("/", requireUser, createLimit, tenant(), async (req, res) => {
   if (variantCheck.error) return res.status(400).json({ ok: false, error: variantCheck.error });
 
   try {
-    const loc = await findTenantLocation(locationId, req.tenant);
+    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, pos, modules" });
     if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
+    // The venue's plan has to include the arcade before we record arcade work
+    // for it (lib/modules.js). The client route guard keeps players out of the
+    // UI; this keeps a hand-rolled request out of the data.
+    if (!moduleLive(loc, "arcade")) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
 
     const expires = new Date(Date.now() + CHALLENGE_TTL_DAYS * 24 * 60 * 60 * 1000);
     for (let attempt = 0; attempt < 5; attempt++) {

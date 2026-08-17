@@ -61,6 +61,7 @@ import TenantUnavailable from './features/shared/TenantUnavailable';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import GeofenceGate from './features/shared/GeofenceGate';
+import ModuleGate from './features/shared/ModuleGate';
 import AccountGate from './features/shared/AccountGate';
 import { BuildStamp } from './ui/BuildStamp';
 import FeedbackButton from './ui/FeedbackButton';
@@ -172,6 +173,10 @@ export default function App() {
             venue lacks the ordering add-on (src/lib/pos). The photo booth is
             deliberately NOT gated (it's below, outside this group). */}
         <Route element={<GeofenceGate />}>
+          {/* The arcade is a separately-sold module, so its routes sit behind
+              the entitlement gate too — hiding the nav tile did nothing about a
+              bookmark or a printed QR code. */}
+          <Route element={<ModuleGate module="arcade" />}>
           <Route path="/arcade" element={<FunZone />} />
           {/* Every mini-game's high score board for this venue, in one screen. */}
           <Route path="/arcade/scores" element={<HighScores />} />
@@ -208,6 +213,7 @@ export default function App() {
           <Route path="/arcade/watergun" element={<WaterGunRace />} />
           <Route path="/arcade/pinball" element={<Pinball />} />
           <Route path="/arcade/pusher" element={<CoinPusher />} />
+          </Route>
           {/* Native F&B ordering — POS-integration add-on, rendered only for
               venues with a paid config (src/lib/pos); each screen redirects home
               when its capability is off. */}
