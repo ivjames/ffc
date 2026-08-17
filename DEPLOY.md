@@ -120,6 +120,11 @@ On the future real domain (`infinicade.com`) this whole shape carries over —
 the org slugs, data, and vhost templates are domain-agnostic; only DNS, the
 wildcard cert, and the `FFC_FQDN`-derived names change.
 
+New tenants need **no droplet work at all**: the wildcard vhost, cert, and
+DNS record already cover every slug, so sites are provisioned on demand from
+Master Control (Provision site page → `POST /api/admin/provision`) — see
+MULTI-VENUE.md §6.
+
 ### Apex cutover runbook (one-time)
 
 Run as root on the droplet, top to bottom:

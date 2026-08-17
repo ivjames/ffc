@@ -118,7 +118,19 @@ place client-side (`src/lib/branding.ts`). Validation rejects unknown keys.
   updated. Client DNS = one CNAME/A per org slug under the platform domain (or
   a wildcard DNS record).
 
-## 6. Follow-ups
+## 6. Onboarding a new site
+
+Provisioning is a Master Control tool, not an ops task: **Provision site**
+(super_admin only, `POST /api/admin/provision`) creates the whole site in one
+transaction — org + branding + first venue (hours, POS offering selection) +
+courses, plus optionally the site's org_admin account. The subdomain is live
+immediately (the tenant cache is cleared in-process): no SSH, no DNS, no
+cert, no deploy — the wildcard vhost/cert/record already cover every slug.
+Create-only semantics: an existing org/location slug 409s, never overwrites.
+Follow-ups (logo/icon uploads, ticket caps, hunt items) happen on the
+existing org/venue pages.
+
+## 7. Follow-ups
 
 Addressed since the initial build:
 
