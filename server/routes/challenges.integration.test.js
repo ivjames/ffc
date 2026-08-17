@@ -244,6 +244,26 @@ test("an expired challenge cannot be joined or played", async () => {
   assert.equal(play.status, 409);
 });
 
+test("the list expires stale challenges instead of offering a round that will be refused", async () => {
+  // The TTL is applied lazily, and /mine was the one read that never applied
+  // it — so a week-old challenge kept its stored 'open' status, sorted into
+  // the Open section, and offered a "Play your round" button that /play then
+  // refused with a 409.
+  const a = await player("MEX");
+  const stale = await create(a.cookie);
+  await testQuery(`update challenge set expires_at = now() - interval '1 day' where id = $1`, [
+    stale.id,
+  ]);
+
+  const { challenges } = await (await call("GET", "/mine", null, a.cookie)).json();
+  const listed = challenges.find((c) => c.challenge.id === stale.id);
+  assert.equal(listed.challenge.status, "expired");
+
+  // Persisted, not merely reported: the row itself is settled now.
+  const row = await testQuery(`select status from challenge where id = $1`, [stale.id]);
+  assert.equal(row.rows[0].status, "expired");
+});
+
 test("/mine lists both sides' challenges, open ones first", async () => {
   const a = await player("MIN");
   const b = await player("MIO");

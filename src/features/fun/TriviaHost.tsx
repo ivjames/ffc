@@ -79,7 +79,12 @@ export default function TriviaHost() {
     let live = true;
     void fetchSnapshot(host.sessionId, { host: host.hostToken }).then((r) => {
       if (!live) return;
-      if (r.ok) setSnapshot(r as unknown as TriviaSnapshot);
+      // Merged, not assigned: the lobby is where a host screen opens and also
+      // where players are arriving, so the stream can land a joiner while this
+      // request is still out. Assigning would drop them, and nothing
+      // re-broadcasts until the next join — leaving the host reading a roster
+      // that is quietly one table short.
+      if (r.ok) setSnapshot((prev) => mergeSnapshot(prev, r as unknown as TriviaSnapshot));
       else if (r.status === 404) {
         saveHost(null);
         setHost(null);
@@ -123,7 +128,10 @@ export default function TriviaHost() {
     const res = await advance(host.sessionId, host.hostToken);
     setBusy(false);
     if (!res.ok) setError(res.error);
-    else setSnapshot(res as unknown as TriviaSnapshot);
+    // Merged for the same reason as the initial fetch — the advance response
+    // is the newest state of the GAME, but a join broadcast can still overtake
+    // it on the wire.
+    else setSnapshot((prev) => mergeSnapshot(prev, res as unknown as TriviaSnapshot));
   }, [host]);
 
   async function finish() {

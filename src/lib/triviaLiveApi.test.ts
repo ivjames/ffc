@@ -71,3 +71,49 @@ describe('merging frames', () => {
     expect(mergeSnapshot(revealed, lateQuestion)).toBe(revealed);
   });
 });
+
+describe('the room within one phase', () => {
+  // The lobby is a single phase that a whole room joins during, so index and
+  // status can't order these frames at all — and every screen opens with a
+  // fetch racing the stream that is already delivering joiners.
+  const room = (entrantCount: number, answeredCount = 0, status: TriviaStatus = 'lobby') =>
+    ({
+      session: { currentIndex: 0, status },
+      entrantCount,
+      answeredCount,
+      myAnswer: null,
+    }) as unknown as TriviaSnapshot;
+
+  test('a slower fetch cannot take a joiner back off the board', () => {
+    const withJoiner = room(4);
+    expect(mergeSnapshot(withJoiner, room(3))).toBe(withJoiner);
+  });
+
+  test('a new joiner still lands', () => {
+    expect(mergeSnapshot(room(3), room(4)).entrantCount).toBe(4);
+  });
+
+  test('a slower fetch cannot unwind the answered counter', () => {
+    const counted = room(4, 3, 'question');
+    expect(mergeSnapshot(counted, room(4, 1, 'question'))).toBe(counted);
+    expect(mergeSnapshot(counted, room(4, 4, 'question')).answeredCount).toBe(4);
+  });
+
+  test('a personalized refetch still delivers the result it went for', () => {
+    // The refetch is participant-scoped and may be built a moment before a
+    // late joiner lands, so it can be behind on the ROOM while holding the
+    // only copy of this phone's correctness. Folding the two halves separately
+    // is what keeps both.
+    const roomAhead = {
+      ...room(5, 4, 'reveal'),
+      myAnswer: { choice: 2 },
+    } as unknown as TriviaSnapshot;
+    const personalized = {
+      ...room(4, 4, 'reveal'),
+      myAnswer: { choice: 2, correct: true, points: 130 },
+    } as unknown as TriviaSnapshot;
+    const merged = mergeSnapshot(roomAhead, personalized);
+    expect(merged.entrantCount).toBe(5);
+    expect(merged.myAnswer).toEqual({ choice: 2, correct: true, points: 130 });
+  });
+});

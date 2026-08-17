@@ -340,6 +340,17 @@ router.post("/:id/play", requireUser, async (req, res) => {
 
 router.get("/mine", requireUser, async (req, res) => {
   try {
+    // Expire this player's stale rows before reading them. The TTL is only
+    // ever applied lazily, so without this the list is the one place a
+    // week-old challenge still reads as Open: it sorts into the Open section
+    // with a "Play your round" button that `/play` then refuses. One
+    // set-based update rather than a call per row — the list holds 50.
+    await pool.query(
+      `update challenge set status = 'expired'
+        where status = 'open' and expires_at <= now()
+          and (created_by = $1 or opponent_id = $1)`,
+      [req.user.id]
+    );
     const result = await pool.query(
       `select ${COLS} from challenge c
         where (c.created_by = $1 or c.opponent_id = $1)

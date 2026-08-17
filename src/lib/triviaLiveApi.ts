@@ -65,10 +65,25 @@ export function progressOf(snapshot: TriviaSnapshot): number {
   return snapshot.session.currentIndex * 10 + (PHASE_RANK[snapshot.session.status] ?? 0);
 }
 
-/** True when `next` is not older than `prev` — i.e. safe to render. */
+/** True when `next` is not older than `prev` — i.e. safe to render.
+ *
+ * `progressOf` alone can't separate two frames from the SAME question and
+ * phase, and the lobby is entirely one such phase: a roster frame and a slower
+ * initial fetch both score zero, so a plain `>=` lets the fetch put the room
+ * back to before the last player joined. Within one (index, phase) the roster
+ * and the answer count only ever grow, so they break the tie.
+ *
+ * They're compared in order rather than together because they're read a
+ * moment apart on the server; a frame that disagrees with itself (fewer
+ * entrants, more answers) is a race between two publishes of the same instant,
+ * where either choice is equally right. */
 export function isFresh(prev: TriviaSnapshot | null, next: TriviaSnapshot): boolean {
   if (!prev) return true;
-  return progressOf(next) >= progressOf(prev);
+  if (progressOf(next) !== progressOf(prev)) return progressOf(next) > progressOf(prev);
+  const entrants = (s: TriviaSnapshot) => s.entrantCount ?? 0;
+  const answered = (s: TriviaSnapshot) => s.answeredCount ?? 0;
+  if (entrants(next) !== entrants(prev)) return entrants(next) > entrants(prev);
+  return answered(next) >= answered(prev);
 }
 
 /**
@@ -82,20 +97,37 @@ export function isFresh(prev: TriviaSnapshot | null, next: TriviaSnapshot): bool
  * player is left permanently reading "didn't answer in time". A late answer
  * from someone else in the room is enough to trigger it.
  *
- * Returns `prev` unchanged for a stale frame, so this is also the freshness
- * gate — callers pass it straight to setState.
+ * The two halves are folded SEPARATELY, because a frame can be behind on one
+ * and ahead on the other. The room's state comes from whichever frame saw
+ * more of the room; this phone's own answer from whichever knows more about
+ * it. Picking one frame whole gets the reveal wrong in both directions: a
+ * neutral broadcast wipes the player's result, and a personalized refetch that
+ * happens to lag the roster by one late joiner would be dropped along with the
+ * only copy of their correctness.
+ *
+ * Callers pass this straight to setState — for a wholly stale frame it returns
+ * `prev` unchanged, so it is also the freshness gate.
  */
 export function mergeSnapshot(
   prev: TriviaSnapshot | null,
   next: TriviaSnapshot,
 ): TriviaSnapshot {
   if (!prev) return next;
-  if (!isFresh(prev, next)) return prev;
+  const base = isFresh(prev, next) ? next : prev;
+  // An answer only describes the question it was fetched for; across a change
+  // of question the new frame's is the only truth, null included.
   const sameQuestion = prev.session.currentIndex === next.session.currentIndex;
-  if (sameQuestion && next.myAnswer == null && prev.myAnswer != null) {
-    return { ...next, myAnswer: prev.myAnswer };
-  }
-  return next;
+  const myAnswer = sameQuestion ? richerAnswer(prev.myAnswer, next.myAnswer) : base.myAnswer;
+  return myAnswer === base.myAnswer ? base : { ...base, myAnswer };
+}
+
+/** The more informative of two records of the same answer: a known result
+ *  beats a bare choice, and any record beats none. */
+function richerAnswer(a: TriviaSnapshot['myAnswer'], b: TriviaSnapshot['myAnswer']) {
+  if (a == null) return b;
+  if (b == null) return a;
+  if (b.correct === undefined && a.correct !== undefined) return a;
+  return b;
 }
 
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string; status: number };

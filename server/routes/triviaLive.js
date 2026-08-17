@@ -358,9 +358,19 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
 
     let entrant;
     if (typeof entrantId === "string" && UUID_RE.test(entrantId)) {
+      // TEAMS ONLY, and that clause is a security boundary rather than a
+      // nicety. Every phone in the room is sent the full board, entrant ids
+      // included, so without `is_team` any participant could join as another
+      // SOLO player: the token minted below is bound to whatever entrant is
+      // named here, and one entrant answers once, so the impersonator could
+      // answer first and spend the victim's turn on a wrong choice.
+      //
+      // A team is different in kind, not degree: it is a table that several
+      // devices are meant to share, and holding the join code is exactly the
+      // claim to sit at one.
       const existing = await client.query(
         `select id, name, is_team as "isTeam" from trivia_entrant
-          where id = $1 and session_id = $2`,
+          where id = $1 and session_id = $2 and is_team = true`,
         [entrantId, session.id]
       );
       entrant = existing.rows[0];

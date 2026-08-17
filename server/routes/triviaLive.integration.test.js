@@ -267,6 +267,35 @@ test("one answer per TEAM, however many phones are at the table", async () => {
   assert.equal(view.board.find((e) => e.name === "Table 4").score, BASE_POINTS);
 });
 
+test("a solo player's entrant cannot be joined by someone else in the room", async () => {
+  const { id, hostToken, joinCode } = await createSession({ config: { speedBonus: false } });
+  const victim = await join(joinCode, "Dana");
+  // The rival is an ordinary participant — and every phone in the room is sent
+  // the full board, entrant ids included, so knowing Dana's id takes no
+  // privilege at all. Only the `is_team` clause stands between that and
+  // minting a token bound to her entrant.
+  await join(joinCode, "Rival");
+
+  const stolen = await post("/api/trivia/sessions/join", {
+    joinCode,
+    entrantId: victim.entrant.id,
+  });
+  assert.equal(stolen.status, 404, "a solo entrant is not something you can join");
+
+  // And the consequence that made it worth a test: one entrant answers once,
+  // so a successful theft would let the rival spend Dana's turn on a wrong
+  // choice before she ever taps.
+  await advance(id, hostToken);
+  const answer = await correctChoice(id);
+  const hers = await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: victim.participantToken,
+    choice: answer,
+  });
+  assert.equal(hers.status, 200);
+  const view = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+  assert.equal(view.board.find((e) => e.name === "Dana").score, BASE_POINTS);
+});
+
 test("answers are refused outside an open question", async () => {
   const { id, hostToken, joinCode } = await createSession();
   const { participantToken } = await join(joinCode, "Eager");
