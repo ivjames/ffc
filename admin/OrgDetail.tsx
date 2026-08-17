@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, type Branding, type BrandingAssetKind, type Org } from './api';
 import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
+import { deriveAppIcons } from './appIcon';
 
 // The platform defaults from MULTI-VENUE.md §2 — shown as placeholders so an
 // empty field visibly means "use the platform default". The logo trio has NO
@@ -201,6 +202,33 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
     }
   };
 
+  // "Use logo" — derive BOTH manifest icons from the logo this org already
+  // uploaded and push them through the same upload endpoint a hand-made file
+  // uses. The icon kinds demand PNG at exactly 192/512 (so the manifest cannot
+  // lie to the installer), which a logo never is; this does that conversion in
+  // the browser rather than teaching the server to resize images. See appIcon.ts.
+  //
+  // The fields are filled, not saved — Save branding stays the one explicit
+  // commit, exactly like a manual upload.
+  const [deriving, setDeriving] = useState(false);
+  async function useLogoAsIcon() {
+    setErr(null);
+    setDeriving(true);
+    try {
+      const background = values.backgroundColor.trim() || BRANDING_DEFAULTS.backgroundColor;
+      const derived = await deriveAppIcons(values.logoUrl.trim(), background);
+      for (const { kind, file } of derived) {
+        const { url } = await api.uploadBrandingAsset(org.id, kind, file);
+        set(kind === 'icon192' ? 'icon192Url' : 'icon512Url')(url);
+      }
+      toast('Icons generated from the logo — review them, then Save branding.');
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setDeriving(false);
+    }
+  }
+
   async function save() {
     setErr(null);
     setBusy(true);
@@ -304,6 +332,20 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
           accept=".png,image/png"
           onUpload={uploadFor('icon512Url')}
         />
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <Button
+          variant="ghost"
+          onClick={useLogoAsIcon}
+          disabled={deriving || values.logoUrl.trim() === ''}
+        >
+          {deriving ? 'Generating…' : 'Use logo as app icon'}
+        </Button>
+        <span className="text-xs text-slate-500">
+          {values.logoUrl.trim() === ''
+            ? 'Upload a logo first to generate the 192 and 512 icons from it.'
+            : 'Fills both icon fields with squares generated from the logo, on the background color.'}
+        </span>
       </div>
       <div className="mt-3">
         <Button onClick={save} disabled={busy}>

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import OrgDetail from './OrgDetail';
 import { api } from './api';
+import * as appIcon from './appIcon';
 
 vi.mock('./api', () => ({
   api: {
@@ -264,6 +265,65 @@ describe('OrgDetail — branding asset upload', () => {
     await waitFor(() =>
       expect(api.uploadBrandingAsset).toHaveBeenCalledWith('org-1', 'icon512', file)
     );
+  });
+
+  // "Use logo as app icon" — the icon kinds must be PNG at exactly 192/512, so
+  // a logo can never be uploaded into them directly. The button converts in the
+  // browser (appIcon.ts) and then walks the SAME upload path a hand-made file
+  // takes, which is what keeps the server's validation meaningful.
+  test('derives both icons from the logo and fills both icon fields', async () => {
+    const files = [
+      { kind: 'icon192' as const, file: new File(['a'], 'icon-192.png', { type: 'image/png' }) },
+      { kind: 'icon512' as const, file: new File(['b'], 'icon-512.png', { type: 'image/png' }) },
+    ];
+    vi.spyOn(appIcon, 'deriveAppIcons').mockResolvedValue(files);
+    vi.mocked(api.uploadBrandingAsset)
+      .mockResolvedValueOnce({ ok: true, url: '/api/brand-assets/org-1/icon192-aaaaaaaaaaaa.png' })
+      .mockResolvedValueOnce({ ok: true, url: '/api/brand-assets/org-1/icon512-bbbbbbbbbbbb.png' });
+
+    const user = userEvent.setup();
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+
+    // Nothing to derive from until a logo exists.
+    const button = screen.getByRole('button', { name: 'Use logo as app icon' });
+    expect(button).toBeDisabled();
+
+    await user.type(logoUrlInput(), '/api/brand-assets/org-1/logo-cccccccccccc.png');
+    expect(button).toBeEnabled();
+    await user.click(button);
+
+    await waitFor(() =>
+      expect(api.uploadBrandingAsset).toHaveBeenCalledWith('org-1', 'icon192', files[0].file)
+    );
+    expect(api.uploadBrandingAsset).toHaveBeenCalledWith('org-1', 'icon512', files[1].file);
+
+    // Generating fills the fields but commits nothing — Save is still explicit,
+    // exactly as for a manual upload.
+    expect(api.updateOrgBranding).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Save branding' }));
+    await waitFor(() =>
+      expect(api.updateOrgBranding).toHaveBeenCalledWith('org-1', {
+        logoUrl: '/api/brand-assets/org-1/logo-cccccccccccc.png',
+        icon192Url: '/api/brand-assets/org-1/icon192-aaaaaaaaaaaa.png',
+        icon512Url: '/api/brand-assets/org-1/icon512-bbbbbbbbbbbb.png',
+      })
+    );
+    vi.restoreAllMocks();
+  });
+
+  test('a cross-origin logo explains itself instead of failing silently', async () => {
+    vi.spyOn(appIcon, 'deriveAppIcons').mockRejectedValue(
+      new Error('That logo is hosted on another domain and cannot be read here.')
+    );
+    const user = userEvent.setup();
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    await user.type(logoUrlInput(), 'https://cdn.example/logo.png');
+    await user.click(screen.getByRole('button', { name: 'Use logo as app icon' }));
+    expect(await screen.findByText(/another domain/i)).toBeInTheDocument();
+    expect(api.uploadBrandingAsset).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 
   test('a server rejection surfaces inline and leaves the field untouched', async () => {
