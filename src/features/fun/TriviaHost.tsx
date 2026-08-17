@@ -340,7 +340,14 @@ export default function TriviaHost() {
         )}
 
         {!done && (
-          <button onClick={finish} className="mt-4 w-full text-center text-xs text-fairway-400">
+          // Disabled while an advance is in flight: the server refuses a stale
+          // transition anyway, but letting the host tap both at once invites a
+          // race they'd have to understand to recover from.
+          <button
+            onClick={finish}
+            disabled={busy}
+            className="mt-4 w-full text-center text-xs text-fairway-400 disabled:opacity-40"
+          >
             End early
           </button>
         )}

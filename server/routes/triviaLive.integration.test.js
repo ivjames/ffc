@@ -498,6 +498,45 @@ test("a session past its TTL expires even for clients that never re-join", async
   assert.equal(stepped.status, 409);
 });
 
+test("a stale advance cannot resurrect a room the host just ended", async () => {
+  // The host taps "next question" and then "End early" before the first lands.
+  // An unpredicated update would write its stale next-state over 'final'.
+  const { id, hostToken, joinCode } = await createSession();
+  await join(joinCode, "Witness");
+  await advance(id, hostToken); // -> question
+
+  const [, ended] = await Promise.all([
+    advance(id, hostToken),
+    post(`/api/trivia/sessions/${id}/end`, { host: hostToken }),
+  ]);
+  assert.equal(ended.status, 200);
+
+  const view = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+  assert.equal(view.session.status, "final", "the room stays closed");
+});
+
+test("expiry reaches the room, not just the request that noticed it", async () => {
+  // The phones hold an SSE connection, so a 409 that nobody broadcasts leaves
+  // them rendering a live-looking question where every tap is dead.
+  const { id, hostToken, joinCode } = await createSession();
+  const seated = await join(joinCode, "Stranded");
+  await advance(id, hostToken);
+  await testQuery(
+    `update trivia_session set created_at = now() - interval '13 hours' where id = $1`,
+    [id]
+  );
+
+  await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: seated.participantToken,
+    choice: 0,
+  });
+
+  const view = await json(
+    await fetch(`${baseUrl}/api/trivia/sessions/${id}?participant=${seated.participantToken}`)
+  );
+  assert.equal(view.session.status, "abandoned", "the session really is closed");
+});
+
 test("a venue cannot deal another client's questions", async () => {
   // A question owned by some other org must never enter this venue's bank.
   const org = await testQuery(

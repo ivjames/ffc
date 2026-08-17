@@ -236,6 +236,17 @@ async function broadcast(session) {
   publish(channelFor(session.id, true), "state", { host: hostView });
 }
 
+/** Re-read a session and push its CURRENT state to the room. For the paths
+ *  that change status as a side effect (expiry) and would otherwise leave
+ *  every connected phone rendering a state that no longer exists. */
+async function broadcastById(sessionId) {
+  const result = await pool.query(
+    `select ${SESSION_COLS} from trivia_session s where s.id = $1`,
+    [sessionId]
+  );
+  if (result.rows[0]) await broadcast(result.rows[0]);
+}
+
 // --- Create -----------------------------------------------------------------
 
 router.post("/sessions", requireUser, tenant(), async (req, res) => {
@@ -557,6 +568,10 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
     // a session left overnight could be resumed and scored indefinitely.
     if ((await expireIfStale(session, client)) === "abandoned") {
       await client.query("commit");
+      // Tell the room. Without this the phones sit on the old question
+      // forever, and the player UI treats the 409 as "a teammate got there
+      // first" — so the game looks live and every tap is dead.
+      await broadcastById(session.id);
       return res.status(409).json({ ok: false, error: "that game has ended" });
     }
     // And the module: a room outlives its create call, so the entitlement is
@@ -667,6 +682,7 @@ router.post("/sessions/:id/advance", async (req, res) => {
     // screen holds an SSE connection rather than re-fetching — so without this
     // the TTL never fires for the one person who can restart the game.
     if ((await expireIfStale(session)) === "abandoned") {
+      await broadcastById(session.id);
       return res.status(409).json({ ok: false, error: "that game has ended" });
     }
     if (!(await locationModuleLive(pool, session.locationId, "arcade"))) {
@@ -685,14 +701,30 @@ router.post("/sessions/:id/advance", async (req, res) => {
           : { status: "question", currentIndex: following, askedAt: new Date() };
     }
 
+    // Predicated on the status this transition was computed FROM. A host who
+    // taps "End early" while an advance is still in flight would otherwise have
+    // the slower advance write its stale next-state over 'final' and resurrect
+    // a room they just closed — the transition is only valid if nothing else
+    // moved the session in the meantime.
     const updated = await pool.query(
       `update trivia_session
           set status = $1, current_index = $2, asked_at = $3,
               ended_at = case when $1 = 'final' then now() else ended_at end
-        where id = $4
+        where id = $4 and status = $5
         returning ${SESSION_FIELDS}`,
-      [next.status, next.currentIndex, next.askedAt, session.id]
+      [next.status, next.currentIndex, next.askedAt, session.id, session.status]
     );
+    if (updated.rowCount === 0) {
+      // Someone else moved it. Answer with where the game actually IS rather
+      // than an error the host can do nothing about.
+      const current = await pool.query(
+        `select ${SESSION_COLS} from trivia_session s where s.id = $1`,
+        [session.id]
+      );
+      const now = current.rows[0];
+      if (!now) return res.status(404).json({ ok: false, error: "unknown session" });
+      return res.json({ ok: true, ...(await buildSnapshot(now, { forHost: true })) });
+    }
     const fresh = updated.rows[0];
     await broadcast(fresh);
     return res.json({ ok: true, ...(await buildSnapshot(fresh, { forHost: true })) });
