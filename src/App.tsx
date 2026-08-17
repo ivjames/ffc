@@ -22,6 +22,8 @@ import PuttGolf from './features/putt/PuttGolf';
 import FunZone from './features/fun/FunZone';
 import FunFacts from './features/fun/FunFacts';
 import HighScores from './features/fun/HighScores';
+import Challenges from './features/fun/Challenges';
+import ChallengeDetail from './features/fun/ChallengeDetail';
 import Trivia from './features/fun/Trivia';
 import TriviaLive from './features/fun/TriviaLive';
 import TriviaHost from './features/fun/TriviaHost';
@@ -173,6 +175,10 @@ export default function App() {
           <Route path="/arcade" element={<FunZone />} />
           {/* Every mini-game's high score board for this venue, in one screen. */}
           <Route path="/arcade/scores" element={<HighScores />} />
+          {/* Head-to-head challenges. Sync and async are the same record —
+              the detail screen's SSE stream is what makes sync feel sync. */}
+          <Route path="/arcade/challenges" element={<Challenges />} />
+          <Route path="/arcade/challenges/:id" element={<ChallengeDetail />} />
           {/* §12 "While You Wait" content — fun facts and trivia. */}
           <Route path="/arcade/facts" element={<FunFacts />} />
           <Route path="/arcade/trivia" element={<Trivia />} />

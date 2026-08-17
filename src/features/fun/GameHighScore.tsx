@@ -9,6 +9,8 @@ import {
   type RecordResult,
   type BoardRow,
 } from '../../lib/gameScores';
+import { activeChallengeFor, clearActiveChallenge } from '../../lib/activeChallenge';
+import { playChallenge, sideLabel, type ChallengeView } from '../../lib/challengesApi';
 
 // Drop-in high-score board for a mini-game's end screen. Same shape and same
 // self-gating contract as <GameTicketAward>: mount it with the round's score
@@ -89,6 +91,8 @@ export default function GameHighScore({
   const [result, setResult] = useState<RecordResult | null>(null);
   const [failed, setFailed] = useState(false);
   const attempted = useRef<string | null>(null);
+  const [challenge, setChallenge] = useState<ChallengeView | null>(null);
+  const challengeAttempted = useRef<string | null>(null);
 
   useEffect(() => {
     if (!signedIn || !locationId) return;
@@ -102,6 +106,27 @@ export default function GameHighScore({
     // deps so a fresh object literal each render can't re-fire the submission.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, locationId, game, variant, score, sessionId]);
+
+  // If this round was played FOR a challenge, submit it there too. The marker
+  // is matched against this exact board (game + variant), so a Boomerang
+  // challenge can't swallow a Speedway lap.
+  //
+  // Cleared on the first attempt whatever the outcome: a challenge allows one
+  // round each, so a retry that re-sent the marker could only ever produce a
+  // "you've already played" — while leaving the marker armed to eat the
+  // player's NEXT casual round.
+  useEffect(() => {
+    if (!signedIn) return;
+    const active = activeChallengeFor(game, variant ?? '');
+    if (!active) return;
+    if (challengeAttempted.current === sessionId) return;
+    challengeAttempted.current = sessionId;
+    clearActiveChallenge();
+    void playChallenge(active.challengeId, { score, detail, sessionId }).then((r) => {
+      if (r.ok) setChallenge(r as unknown as ChallengeView);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn, game, variant, score, sessionId]);
 
   // No venue resolved yet (first launch, before the catalog hydrates) — there
   // is no board to be on, so say nothing.
@@ -121,13 +146,22 @@ export default function GameHighScore({
     );
   }
 
-  if (failed) return null;
+  // The challenge result is its own card, above the board: it's the reason
+  // this round was played, so it outranks "where you sit at the venue".
+  const challengeCard = challenge ? (
+    <ChallengeCard view={challenge} />
+  ) : null;
+
+  if (failed) return challengeCard;
 
   if (!result) {
     return (
-      <div className="surface-1 mt-4 rounded-2xl border border-fairway-800/60 px-4 py-3 text-center text-sm text-fairway-100/70">
-        Checking the high score board…
-      </div>
+      <>
+        {challengeCard}
+        <div className="surface-1 mt-4 rounded-2xl border border-fairway-800/60 px-4 py-3 text-center text-sm text-fairway-100/70">
+          Checking the high score board…
+        </div>
+      </>
     );
   }
 
@@ -136,7 +170,9 @@ export default function GameHighScore({
   const tookTheCrown = standing?.rank === 1 && isPersonalBest && topRank === 1;
 
   return (
-    <div className="surface-1 mt-4 rounded-2xl border border-fairway-800/60 px-4 py-3">
+    <>
+      {challengeCard}
+      <div className="surface-1 mt-4 rounded-2xl border border-fairway-800/60 px-4 py-3">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-bold text-fairway-50">High scores</h3>
         <span className="text-xs text-fairway-400">
@@ -195,6 +231,67 @@ export default function GameHighScore({
       >
         All arcade boards →
       </button>
+      </div>
+    </>
+  );
+}
+
+/** The head-to-head outcome for a round played as a challenge. Three states:
+ *  waiting on the other side, a result, or a tie. */
+function ChallengeCard({ view }: { view: ChallengeView }) {
+  const { challenger, opponent, challenge, winnerId, tied, youWon } = view;
+  const me = challenger.isYou ? challenger : opponent;
+  const them = challenger.isYou ? opponent : challenger;
+  const unit = challenge.meta.unit;
+  const pending = challenge.status !== 'complete';
+
+  return (
+    <div className="mt-4 rounded-2xl border border-fairway-400/40 bg-fairway-400/10 px-4 py-3">
+      <div className="flex items-baseline justify-between">
+        <h3 className="text-sm font-bold text-fairway-50">Head to head</h3>
+        <span className="text-xs text-fairway-400">{challenge.meta.label}</span>
+      </div>
+
+      <p className="mt-1 text-sm font-black text-fairway-50">
+        {pending
+          ? 'Round in — waiting for them to answer.'
+          : tied
+            ? "🤝 Dead heat — you're both that good."
+            : youWon
+              ? '🏆 You win!'
+              : `${sideLabel(them)} takes it.`}
+      </p>
+
+      <div className="mt-2 flex items-stretch gap-2">
+        <ScoreCell label={sideLabel(me)} score={me?.score ?? null} unit={unit} won={winnerId != null && me?.userId === winnerId} />
+        <div className="self-center text-xs font-bold text-fairway-400">vs</div>
+        <ScoreCell label={sideLabel(them)} score={them?.score ?? null} unit={unit} won={winnerId != null && them?.userId === winnerId} />
+      </div>
+    </div>
+  );
+}
+
+function ScoreCell({
+  label,
+  score,
+  unit,
+  won,
+}: {
+  label: string;
+  score: number | null;
+  unit: RecordResult['meta']['unit'];
+  won: boolean;
+}) {
+  return (
+    <div
+      className={`flex-1 rounded-xl px-3 py-2 text-center ${
+        won ? 'bg-fairway-400/20' : 'bg-fairway-900/40'
+      }`}
+    >
+      <div className="text-xs text-fairway-400">{label}</div>
+      <div className="text-lg font-black tabular-nums text-fairway-50">
+        {score === null ? '—' : formatScore(score, unit)}
+      </div>
     </div>
   );
 }

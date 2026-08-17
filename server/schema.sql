@@ -1376,3 +1376,53 @@ select null, null, 'House Pack', v.prompt, v.choices, v.answer
    select 1 from trivia_question t
     where t.org_id is null and t.prompt = v.prompt
  );
+
+-- ---------------------------------------------------------------------------
+-- Head-to-head challenges. Two players, one arcade game, scores compared.
+--
+-- One record serves both modes the ask calls for, because they differ only in
+-- WHEN the two rounds happen, never in what is stored:
+--   async — A plays, sends the code, B plays tomorrow. The challenge sits open.
+--   sync  — both join, both play now, and the SSE stream (lib/gameBus.js) makes
+--           each side's progress visible to the other as it happens.
+-- Ranking is NOT re-derived here: the winner comes from the same per-game
+-- direction that ranks the boards (lib/gameScores.js), so a go-kart challenge
+-- is won by the FASTER lap while a skee-ball challenge is won by the higher
+-- total, without this table knowing anything about either game.
+-- ---------------------------------------------------------------------------
+create table if not exists challenge (
+  id           uuid primary key default gen_random_uuid(),
+  location_id  uuid not null references location(id) on delete cascade,
+  game         text not null,                    -- lib/gameScores.js key
+  variant      text not null default '',         -- sub-board, as on game_score
+  invite_code  text not null,
+  created_by   uuid not null references app_user(id) on delete cascade,
+  -- Null until someone claims it: a challenge is issued to whoever has the
+  -- code, which is what makes "send it to a friend" work without a friend
+  -- graph, an address book, or an invite that can only ever go to one person.
+  opponent_id  uuid references app_user(id) on delete cascade,
+  status       text not null default 'open',     -- open | complete | expired
+  expires_at   timestamptz not null,
+  created_at   timestamptz not null default now(),
+  completed_at timestamptz
+);
+-- Invite codes need to be unique only among LIVE challenges, like every other
+-- join code here; a finished one retires its code back into the pool.
+create unique index if not exists challenge_code_live_idx
+  on challenge (invite_code) where status = 'open';
+create index if not exists challenge_creator_idx on challenge (created_by, status);
+create index if not exists challenge_opponent_idx on challenge (opponent_id, status);
+
+-- One round per player per challenge. The primary key is the rule: a player
+-- gets ONE attempt, so a challenge can't be won by replaying until the score
+-- is good enough. (Both sides' rounds also land on the venue's high score
+-- board — a challenge round is a real round.)
+create table if not exists challenge_entry (
+  challenge_id uuid not null references challenge(id) on delete cascade,
+  app_user_id  uuid not null references app_user(id) on delete cascade,
+  score        bigint not null,
+  detail       jsonb  not null default '{}',
+  session_id   text   not null,
+  played_at    timestamptz not null default now(),
+  primary key (challenge_id, app_user_id)
+);

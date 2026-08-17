@@ -249,6 +249,30 @@ export default function FunZone() {
           <span className="shrink-0 text-sm font-semibold text-fairway-400">→</span>
         </button>
 
+        <button
+          onClick={() => {
+            playClick();
+            navigate('/arcade/challenges');
+          }}
+          className="surface-1 mb-3 flex w-full items-center gap-2.5 rounded-xl border border-fairway-800/60 px-3 py-2.5 text-left transition-transform active:translate-y-px"
+        >
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl"
+            style={{ background: '#38bdf822', border: '1px solid #38bdf855' }}
+          >
+            ⚔️
+          </span>
+          <span className="block min-w-0 flex-1">
+            <span className="block text-sm font-bold leading-tight text-fairway-50">
+              Head to Head
+            </span>
+            <span className="block text-xs leading-tight text-fairway-100/70">
+              Challenge a friend — together or whenever.
+            </span>
+          </span>
+          <span className="shrink-0 text-sm font-semibold text-fairway-400">→</span>
+        </button>
+
         <div className="grid grid-cols-2 gap-2">
           {TILES.map((t, i) => (
             <button
