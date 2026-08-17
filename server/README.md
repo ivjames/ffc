@@ -81,10 +81,10 @@ Request:
   (hole-in-one; under par on a full card; hunt master when the player's verified
   finds cover the course's active non-countable hunt list) are written to
   `reward_grant` in the same transaction — one row per (player, achievement),
-  identified by its UUID. They pay out as tickets on the player's loyalty card;
-  no redemption code is minted (since #157 tickets are the only player-facing
-  payout). A duplicate re-sync never re-grants. See `GET /api/rewards` and the
-  admin rewards reporting below.
+  identified by its UUID. Grants are **badges and pay nothing** — no tickets, no
+  loyalty-card credit, no redemption code — so a grant is a pure record of what
+  a round earned. A duplicate re-sync never re-grants. See `GET /api/rewards`
+  and the admin rewards reporting below.
 
 Responses:
 - `200 { "ok": true, "roundId": "<uuid>" }` — created, or the existing round id

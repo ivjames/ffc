@@ -189,7 +189,7 @@ export default function Rewards() {
     <div className="space-y-4">
       <PageHeader
         title="Rewards & usage"
-        description="Tickets are the only player-facing reward — golf achievements pay straight to a loyalty card, so there are no counter codes to redeem."
+        description="Golf achievements are badges and pay nothing — this reports what players are earning. Tickets come from the app's mini-games, below."
         actions={
           <Select value={days} onChange={(e) => setDays(Number(e.target.value))}>
             <option value={7}>Last 7 days</option>
