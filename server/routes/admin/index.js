@@ -25,6 +25,7 @@ import { router as feedbackRouter } from "./feedback.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as gameRewardsAdminRouter } from "./gameRewards.js";
 import { router as exportRouter } from "./export.js";
+import { router as provisionRouter } from "./provision.js";
 import { router as syntheticBotRouter } from "./syntheticBot.js";
 import {
   router as visionBakeoffRouter,
@@ -58,6 +59,9 @@ router.use("/rewards", rewardsRouter);
 // Game ticket economy — caps metadata + app-issued ticket rollup.
 router.use("/game-rewards", gameRewardsAdminRouter);
 router.use("/export", exportRouter);
+// One-shot site provisioning (super_admin only) — org + location + courses
+// (+ optional org_admin) created atomically; see provision.js.
+router.use("/provision", provisionRouter);
 // Synthetic load/soak bot control plane (super_admin drives start/stop) — a
 // fixed script spawned with validated args; the key stays server-side.
 router.use("/synthetic-bot", syntheticBotRouter);
