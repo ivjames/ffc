@@ -25,6 +25,7 @@ import { router as rewardsRouter } from "./routes/rewards.js";
 import { router as gameRewardsRouter } from "./routes/gameRewards.js";
 import { router as eventsRouter } from "./routes/events.js";
 import { router as feedbackRouter } from "./routes/feedback.js";
+import { router as launchSignupRouter } from "./routes/launchSignup.js";
 
 export const app = express();
 
@@ -156,6 +157,8 @@ app.use("/api/photos", photosRouter);
 // widget that writes here is dev-mode-only in the client; the endpoint carries
 // its own 16mb parser for the optional screenshot (see above).
 app.use("/api/feedback", feedbackRouter);
+// Marketing landing page's launch-signup capture — open write, honeypot + IP cap inside.
+app.use("/api/launch-signup", launchSignupRouter);
 
 // 404 fallback for unknown /api routes.
 app.use((req, res) => {

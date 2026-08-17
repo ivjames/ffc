@@ -26,6 +26,7 @@ import { router as feedbackRouter } from "./feedback.js";
 import { router as rewardsRouter } from "./rewards.js";
 import { router as gameRewardsAdminRouter } from "./gameRewards.js";
 import { router as exportRouter } from "./export.js";
+import { router as launchSignupsRouter } from "./launchSignups.js";
 import { router as provisionRouter } from "./provision.js";
 import { router as syntheticBotRouter } from "./syntheticBot.js";
 import {
@@ -61,6 +62,8 @@ router.use("/rewards", rewardsRouter);
 // Game ticket economy — caps metadata + app-issued ticket rollup.
 router.use("/game-rewards", gameRewardsAdminRouter);
 router.use("/export", exportRouter);
+// Landing-page launch signups (super_admin only) — list + CSV export.
+router.use("/launch-signups", launchSignupsRouter);
 // One-shot site provisioning (super_admin only) — org + location + courses
 // (+ optional org_admin) created atomically; see provision.js.
 router.use("/provision", provisionRouter);
