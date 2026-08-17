@@ -83,6 +83,15 @@ export default function Account() {
     });
   }, []);
 
+  // A magic link that had already been used, or had expired, bounces here with
+  // ?link=expired. Without this the player lands on a bare sign-in form having
+  // just tapped a button that plainly said "Sign in", with no explanation.
+  useEffect(() => {
+    if (params.get('link') === 'expired') {
+      setError('That sign-in link has expired or was already used — send a fresh one.');
+    }
+  }, [params]);
+
   // Where to go once signed in. AccountGate sends people here with ?next= so a
   // player who tapped "Rewards card" lands back on it instead of being left on
   // the profile screen wondering what happened.
@@ -115,7 +124,10 @@ export default function Account() {
       ...(displayName.trim() !== '' ? { displayName } : {}),
       ...(defaultTag !== '' ? { defaultTag } : {}),
     };
-    const res = await requestCode(normalized, profile);
+    // Carry ?next= into the emailed link, so tapping it lands the player on the
+    // screen the gate interrupted rather than the app root — the same
+    // destination goToNext() uses for the typed-code path.
+    const res = await requestCode(normalized, profile, params.get('next'));
     if (!res.ok) {
       setBusy(false);
       setError(res.error ?? 'Could not send the code — try again.');

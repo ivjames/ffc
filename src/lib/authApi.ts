@@ -31,8 +31,12 @@ async function post(path: string, body?: unknown): Promise<Response> {
 export async function requestCode(
   email: string,
   profile?: Profile,
+  /** Where the player was headed before the gate stopped them. The emailed
+   *  link carries it, so tapping it lands them there instead of the app root.
+   *  Server-validated to a same-app path (server/lib/appOrigin.js). */
+  next?: string | null,
 ): Promise<{ ok: boolean; error?: string; bypassCode?: string }> {
-  const res = await post('/api/auth/request-code', { email, profile });
+  const res = await post('/api/auth/request-code', { email, profile, next });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
   return { ok: true, bypassCode: data.bypassCode };

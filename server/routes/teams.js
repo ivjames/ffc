@@ -15,6 +15,7 @@ import { requireUser } from "../lib/userAuth.js";
 import { normalizeEmail } from "../lib/validateUser.js";
 import { sha256 } from "../lib/authCodes.js";
 import { sendMail } from "../lib/mailer.js";
+import { appOrigin, escapeHtml } from "../lib/appOrigin.js";
 import { tenant } from "../lib/tenant.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { UUID_RE } from "../lib/validateLocation.js";
@@ -190,7 +191,10 @@ router.post("/:id/invites", inviteLimit, tenant(), async (req, res) => {
       [id, email, sha256(token), req.user.id]
     );
 
-    const appUrl = (process.env.PUBLIC_APP_URL || "http://localhost:5173").replace(/\/$/, "");
+    // Per-tenant origin, not the global PUBLIC_APP_URL: an invite mailed to a
+    // player at one venue must open THAT venue's app — and the session the
+    // accept flow establishes is a host-only cookie (lib/appOrigin.js).
+    const appUrl = appOrigin(req);
     const link = `${appUrl}/teams/accept?token=${token}`;
     const teamName = team.rows[0].name;
     const inviter = req.user.displayName || req.user.email;
@@ -207,8 +211,11 @@ router.post("/:id/invites", inviteLimit, tenant(), async (req, res) => {
         ``,
         `The invite expires in 7 days. If you weren't expecting it, ignore this email.`,
       ].join("\n"),
+      // Both interpolations are user-controlled text (a display name the
+      // inviter chose, a team name someone typed), so they are escaped — this
+      // is the one place the codebase hand-assembles HTML.
       html: [
-        `<p>${inviter} invited you to join <b>${teamName}</b> on FFC Mini Golf.</p>`,
+        `<p>${escapeHtml(inviter)} invited you to join <b>${escapeHtml(teamName)}</b> on FFC Mini Golf.</p>`,
         `<p><a href="${link}">Accept the invite</a> — you'll sign in with your email, no password.</p>`,
         `<p>The invite expires in 7 days. If you weren't expecting it, ignore this email.</p>`,
       ].join("\n"),

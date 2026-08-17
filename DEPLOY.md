@@ -197,14 +197,30 @@ ffc vhost        # apex returns to the player vhost automatically
 
 Two features lean on infrastructure beyond the code:
 
-- **Outbound email** (sign-in codes, team invites): set `MAIL_PROVIDER=resend`
-  + `RESEND_API_KEY` + `MAIL_FROM` in `server/.env`, and set `PUBLIC_APP_URL`
-  to the player origin (after the apex cutover that's the default org's
-  subdomain, e.g. `https://bullwinkles.ffc.lab980.com`) so magic links and
-  invite links point at production. **Before flipping to `resend`, verify the
-  sending domain in Resend (SPF + DKIM DNS records)** — unverified domains
-  don't deliver. Until then the default `console` provider logs codes to the
-  pm2 log (fine for dev, warned-about in production).
+- **Outbound email** (sign-in links + codes, team invites): set
+  `MAIL_PROVIDER=resend` + `RESEND_API_KEY` + `MAIL_FROM` in `server/.env`.
+  **Before flipping to `resend`, verify the sending domain in Resend (SPF +
+  DKIM DNS records)** — unverified domains don't deliver, silently. Until then
+  the default `console` provider logs codes to the pm2 log (fine for dev,
+  warned-about in production).
+
+  Then **confirm it works before a player finds out for you**: as a
+  super_admin, `GET /api/admin/mail/status` reports the provider, whether its
+  credential is set, the `MAIL_FROM`, and the origin magic links will actually
+  point at; `POST /api/admin/mail/test {"to":"you@example.com"}` sends one real
+  message and reports the provider's own error text if it fails. A green
+  `status` with a failing `test` almost always means the `MAIL_FROM` domain
+  isn't the one verified in Resend.
+
+  `PUBLIC_APP_URL` is now a **fallback**, not the link origin. Emailed links
+  are built from the host the request arrived on, so each venue's players get
+  links to their own subdomain — which matters because the session cookie is
+  host-only, and a link to another venue's host signs a player in there and
+  leaves them signed out at their own. Set `PLATFORM_FQDN` (it is what makes a
+  venue subdomain a recognised host) and keep `PUBLIC_APP_URL` pointed at the
+  default org's origin for requests whose host isn't recognised. Hosts outside
+  that allow-list never appear in an outbound link — that is deliberate, and it
+  is what stops the sign-in form being usable as a phishing relay.
 - **SSE** (`GET /api/games/:id/events` — live shared scorecards): the endpoint
   already sends `X-Accel-Buffering: no` so nginx doesn't buffer the stream,
   and heartbeats every 25 s keep the connection inside nginx's default

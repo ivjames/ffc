@@ -16,6 +16,8 @@ import { normalizeEmail, normalizeProfile } from "../lib/validateUser.js";
 import { createAuthCode, verifyAuthCode, verifyMagicToken } from "../lib/authCodes.js";
 import { sendMail, isMailDeliveryConfigured } from "../lib/mailer.js";
 import { tenant } from "../lib/tenant.js";
+import { appOrigin, safeNextPath, escapeHtml } from "../lib/appOrigin.js";
+import { resolveBranding } from "../lib/branding.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import {
   USER_COOKIE_NAME,
@@ -50,28 +52,49 @@ export function resetAuthRateLimits() {
   verifyLimit.reset();
 }
 
-function publicAppUrl() {
-  return process.env.PUBLIC_APP_URL || "http://localhost:5173";
-}
-
-function codeEmail(code, magicToken) {
-  const link = `${publicAppUrl().replace(/\/$/, "")}/api/auth/magic?token=${magicToken}`;
+/**
+ * The sign-in email. LINK-FIRST: the button is the primary action and the
+ * 6-digit code is the fallback below it, because one tap beats reading six
+ * digits off one screen and typing them into another.
+ *
+ * The code still matters and is never dropped — a link opens in whatever
+ * browser the mail app hands it to, which on a phone is often NOT the browser
+ * (or the installed PWA) the player started in. When that happens the link
+ * signs them in somewhere they weren't, and the code is the only thing that
+ * finishes the flow on the original device. So: both, link first.
+ *
+ * `origin` is per-tenant (lib/appOrigin.js), not a global constant — see the
+ * note there on why a venue's link must point at that venue's own host.
+ */
+function codeEmail({ code, magicToken, origin, appName, next }) {
+  const params = new URLSearchParams({ token: magicToken });
+  if (next) params.set("next", next);
+  const link = `${origin}/api/auth/magic?${params}`;
+  const brand = appName || "FFC";
   const text = [
-    `Your FFC sign-in code is: ${code}`,
-    ``,
-    `Type it into the app, or open this link on the device you're signing in on:`,
+    `Tap to sign in to ${brand}:`,
     link,
     ``,
-    `The code expires in 10 minutes. If you didn't request it, ignore this email.`,
+    `Or type this code into the app instead: ${code}`,
+    ``,
+    `Use the code if you opened this email somewhere other than the device`,
+    `you're signing in on — the link signs in whichever browser opens it.`,
+    ``,
+    `Both expire in 10 minutes. If you didn't request this, ignore this email.`,
   ].join("\n");
   const html = [
-    `<p>Your FFC sign-in code is:</p>`,
+    `<p style="font-size:16px">Tap to sign in to <b>${escapeHtml(brand)}</b>:</p>`,
+    `<p><a href="${link}" style="display:inline-block;padding:12px 28px;border-radius:999px;`,
+    `background:#15803d;color:#ffffff;font-weight:bold;font-size:16px;text-decoration:none">Sign in</a></p>`,
+    `<p style="color:#555">Or type this code into the app instead:</p>`,
     `<p style="font-size:28px;font-weight:bold;letter-spacing:4px">${code}</p>`,
-    `<p>Type it into the app, or <a href="${link}">open this link</a> on the device you're signing in on.</p>`,
-    `<p>The code expires in 10 minutes. If you didn't request it, ignore this email.</p>`,
+    `<p style="color:#555;font-size:13px">Use the code if you opened this email somewhere other than`,
+    ` the device you're signing in on — the link signs in whichever browser opens it.</p>`,
+    `<p style="color:#555;font-size:13px">Both expire in 10 minutes. If you didn't request this, ignore this email.</p>`,
   ].join("\n");
-  return { subject: `${code} is your FFC sign-in code`, text, html };
+  return { subject: `Sign in to ${brand} (code ${code})`, text, html };
 }
+
 
 // tenant() resolves the org this subdomain serves so the OTP send is metered
 // against THAT org's MAIL_DAILY_CAP pool (lib/mailer.js) — one client's busy
@@ -82,9 +105,23 @@ router.post("/request-code", ipSendLimit, emailSendLimit, tenant(), async (req, 
   if (!email) return res.status(400).json({ ok: false, error: "email must be a valid address" });
   const profileCheck = normalizeProfile(req.body?.profile);
   if (profileCheck.error) return res.status(400).json({ ok: false, error: profileCheck.error });
+  // Where the player was heading before the sign-in gate stopped them, so the
+  // link returns them THERE instead of the app root. Path-only and validated
+  // (lib/appOrigin.js) — an emailed redirect target is a phishing primitive if
+  // it can point off-site.
+  const next = safeNextPath(req.body?.next);
   try {
     const { code, magicToken } = await createAuthCode(email, profileCheck.row);
-    const { subject, text, html } = codeEmail(code, magicToken);
+    const { subject, text, html } = codeEmail({
+      code,
+      magicToken,
+      // Per tenant, not the global PUBLIC_APP_URL: the session cookie the link
+      // sets is host-only, so a link pointing at another venue's host signs
+      // the player in on that host and leaves them signed out on their own.
+      origin: appOrigin(req),
+      appName: resolveBranding(req.tenant?.org?.branding).appName,
+      next,
+    });
     await sendMail({
       to: email,
       subject,
@@ -136,16 +173,21 @@ router.post("/verify", verifyLimit, async (req, res) => {
 });
 
 router.get("/magic", verifyLimit, async (req, res) => {
-  const appUrl = publicAppUrl();
+  // Redirect to the origin THIS request arrived on, not a global constant: the
+  // session cookie just set is host-only, so landing the browser anywhere else
+  // would hand it a session it can't see.
+  const appUrl = appOrigin(req);
+  const next = safeNextPath(req.query?.next);
   try {
     const result = await verifyMagicToken(req.query?.token);
     if (!result.ok) {
       // Send the browser somewhere sensible either way — the app shows its
-      // signed-out state and the user can request a fresh code.
-      return res.redirect(302, `${appUrl.replace(/\/$/, "")}/me/account?link=expired`);
+      // signed-out state and the user can request a fresh code. `link=expired`
+      // is what the account screen reads to explain what happened.
+      return res.redirect(302, `${appUrl}/me/account?link=expired`);
     }
     await establishSession(res, result.email, result.profile);
-    return res.redirect(302, appUrl);
+    return res.redirect(302, `${appUrl}${next ?? "/"}`);
   } catch (err) {
     console.error("[auth] magic error:", err);
     return res.redirect(302, appUrl);
