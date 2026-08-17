@@ -23,10 +23,11 @@ const slugA = `tenant-a-${stamp}`;
 const slugB = `tenant-b-${stamp}`;
 const slugArchived = `tenant-arch-${stamp}`;
 const slugSuspended = `tenant-susp-${stamp}`;
+const slugEmpty = `tenant-empty-${stamp}`; // live org, zero locations (onboarding)
 
 const ORG_A_BRANDING = { appName: "Org A Golf", themeColor: "#123abc" };
 
-let orgAId, orgBId, orgArchivedId, orgSuspendedId;
+let orgAId, orgBId, orgArchivedId, orgSuspendedId, orgEmptyId;
 let locAId, locBId, locArchivedOrgId, locSuspendedOrgId, locOrglessId;
 let courseAId, courseBId;
 const announcementIds = [];
@@ -62,6 +63,7 @@ before(async () => {
   orgSuspendedId = await insertOrg(`Tenant Suspended ${stamp}`, slugSuspended, {
     status: "suspended",
   });
+  orgEmptyId = await insertOrg(`Tenant Empty ${stamp}`, slugEmpty);
 
   locAId = await insertLocation(`Tenant Loc A ${stamp}`, `tenant-loc-a-${stamp}`, orgAId);
   locBId = await insertLocation(`Tenant Loc B ${stamp}`, `tenant-loc-b-${stamp}`, orgBId);
@@ -108,7 +110,7 @@ after(async () => {
     [locAId, locBId, locArchivedOrgId, locSuspendedOrgId, locOrglessId],
   ]);
   await testQuery(`delete from org where id = any($1::uuid[])`, [
-    [orgAId, orgBId, orgArchivedId, orgSuspendedId],
+    [orgAId, orgBId, orgArchivedId, orgSuspendedId, orgEmptyId],
   ]);
   const { pool } = await import("../db.js");
   await pool.end();
@@ -160,16 +162,33 @@ test("unknown label falls back to the default org and sweeps in org-less locatio
 // through to the default org (that would serve the default tenant's brand and
 // catalog on a suspended client's host — a cross-brand leak).
 
+// The dark payload — and ONLY the dark payload — carries `unavailable: true`,
+// the client's cue to dead-end ("no venue at this address") instead of
+// rendering the empty app.
+const DARK_BODY = { unavailable: true, org: null, locations: [], courses: [] };
+
 test("a suspended org's subdomain serves an empty catalog, not the default org", async () => {
   const res = await get("/api/content", slugSuspended);
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { org: null, locations: [], courses: [] });
+  assert.deepEqual(res.body, DARK_BODY);
 });
 
 test("an archived org's subdomain goes dark the same way", async () => {
   const res = await get("/api/content", slugArchived);
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { org: null, locations: [], courses: [] });
+  assert.deepEqual(res.body, DARK_BODY);
+});
+
+test("a live org with ZERO locations is empty but NOT unavailable (onboarding)", async () => {
+  const res = await get("/api/content", slugEmpty);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.org.id, orgEmptyId, "the org itself resolves");
+  assert.deepEqual(res.body.locations, []);
+  assert.deepEqual(res.body.courses, []);
+  assert.ok(
+    !("unavailable" in res.body),
+    "empty-but-real tenant keeps the normal app (empty states), not the dead-end"
+  );
 });
 
 test("suspended tenant's manifest is all platform defaults", async () => {
@@ -223,7 +242,7 @@ test("a suspended DEFAULT org darkens unmatched hosts instead of leaking another
     assert.equal(res.status, 200);
     assert.deepEqual(
       res.body,
-      { org: null, locations: [], courses: [] },
+      DARK_BODY,
       "unmatched host is dark — orgs A/B are live but must not be served here"
     );
 
@@ -242,7 +261,7 @@ test("a suspended DEFAULT org darkens unmatched hosts instead of leaking another
     process.env.DEFAULT_ORG_SLUG = slugArchived;
     const arch = await get("/api/content", `nope-${stamp}`);
     assert.equal(arch.status, 200);
-    assert.deepEqual(arch.body, { org: null, locations: [], courses: [] });
+    assert.deepEqual(arch.body, DARK_BODY);
   } finally {
     delete process.env.DEFAULT_ORG_SLUG;
     clearTenantCache();
@@ -296,6 +315,7 @@ test("PLATFORM_FQDN set: apex/www keep the default org, unknown subdomains go da
       apex.body.locations.map((l) => l.id).includes(locOrglessId),
       "apex keeps the org-less legacy sweep"
     );
+    assert.ok(!("unavailable" in apex.body), "apex/default payload never dead-ends");
 
     const www = await getAtHost("/api/content", `www.${PLATFORM}`);
     assert.equal(www.status, 200);
@@ -305,12 +325,12 @@ test("PLATFORM_FQDN set: apex/www keep the default org, unknown subdomains go da
     // default org's catalog.
     const dark = await getAtHost("/api/content", `typo-${stamp}.${PLATFORM}`);
     assert.equal(dark.status, 200);
-    assert.deepEqual(dark.body, { org: null, locations: [], courses: [] });
+    assert.deepEqual(dark.body, DARK_BODY);
 
     // ...case-insensitively (Host headers arrive in any case)...
     const shouty = await getAtHost("/api/content", `TYPO-${stamp}.FFC.${DOMAIN.toUpperCase()}`);
     assert.equal(shouty.status, 200);
-    assert.deepEqual(shouty.body, { org: null, locations: [], courses: [] });
+    assert.deepEqual(shouty.body, DARK_BODY);
 
     // ...and its manifest is all platform defaults, not the default org's.
     const manifest = await getAtHost("/api/manifest.webmanifest", `typo-${stamp}.${PLATFORM}`);
@@ -347,6 +367,7 @@ test("PLATFORM_FQDN unset: an unknown platform subdomain still falls back (legac
     res.body.locations.map((l) => l.id).includes(locOrglessId),
     "full fallback semantics, org-less sweep included"
   );
+  assert.ok(!("unavailable" in res.body), "legacy fallback payload never dead-ends");
 });
 
 test("unsuspending restores the tenant's own resolution", async () => {

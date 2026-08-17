@@ -170,7 +170,7 @@ test("force-suspending the default org takes unmatched hosts dark, not to anothe
     assert.equal(content.status, 200);
     assert.deepEqual(
       content.body,
-      { org: null, locations: [], courses: [] },
+      { unavailable: true, org: null, locations: [], courses: [] },
       "unmatched host is dark — the second live org is not served here"
     );
 

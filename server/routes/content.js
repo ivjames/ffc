@@ -10,6 +10,13 @@
 // default org) also sweeps up org-less legacy rows as a safety net; no tenant
 // at all (no live orgs) preserves the pre-org unfiltered behavior.
 //
+// The dark sentinel (suspended/archived org, or an unknown subdomain of
+// PLATFORM_FQDN) additionally carries `unavailable: true`, and ONLY that case
+// does: it means "this host serves no venue", and the PWA renders a dead-end
+// page instead of the empty app. A live org with zero locations is NOT
+// unavailable (onboarding in progress → normal empty states), and neither is
+// the legacy no-tenant unfiltered case.
+//
 // The build-time exporter (scripts/export-content.mjs) pulls this to regenerate
 // src/data/content.generated.ts, so the DB stays the single source of truth and
 // a rebuild publishes changes. Shapes mirror GeneratedLocation/GeneratedCourse.
@@ -43,11 +50,14 @@ function sparseBranding(raw) {
 
 router.get("/", tenant(), async (req, res) => {
   const t = req.tenant;
-  // A suspended/archived org's subdomain serves an EMPTY catalog with no org —
-  // never the default org's brand and venues (lib/tenant.js). The client
-  // accepts empty-with-org-key payloads and shows its empty state (PR #191).
+  // A suspended/archived org's subdomain — and an unknown subdomain of the
+  // platform domain, which shares the sentinel — serves an EMPTY catalog with
+  // no org, never the default org's brand and venues (lib/tenant.js).
+  // `unavailable: true` is the explicit "no venue at this address" marker the
+  // client dead-ends on; every other shape omits it, so a normal hydrate
+  // clears a previously cached flag (org unsuspended, org created).
   if (t?.via === "suspended") {
-    return res.json({ org: null, locations: [], courses: [] });
+    return res.json({ unavailable: true, org: null, locations: [], courses: [] });
   }
   const orgFilter =
     t == null
