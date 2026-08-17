@@ -75,10 +75,14 @@ items except player registration, which is a separate effort):
 - **Food & Drink card** — per-location menu/ordering deep links set in Master
   Control, shown on Home when set (grayed out offline). Ships via the normal
   content export.
-- **Rewards** — completed rounds earn achievements server-side (Hole-in-One,
-  Under Par, Hunt Master), each with a short redemption code shown on the final
-  scorecard; staff look codes up under Master Control → Rewards and mark them
-  redeemed at the counter.
+- **Achievements** — completed rounds earn achievements server-side (Hole-in-One,
+  Under Par, Hunt Master), shown as badges on the final scorecard and on the
+  Me → Achievements wall. They pay **nothing**: no tickets, no loyalty-card
+  credit, no counter codes. Golf scores are self-reported on a device the group
+  controls, so paying against them was the weakest trust surface in the ticket
+  economy; app-earned tickets come from the mini-games and the one-time adoption
+  bonuses instead. Master Control → Rewards reports issuance — what players are
+  earning — rather than anything owed.
 - **Score sharing** — "Share this round" on the final scorecard renders a
   branded score image client-side (canvas → Web Share API, download fallback).
   Numbers only — no photos, so no moderation surface.

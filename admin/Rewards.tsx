@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { api, type GameRewardsMeta } from './api';
 import { Card, Banner, EmptyState, PageHeader, Select, Spinner, Table, Th, Td, useAsync } from './ui';
 
-// Rewards & usage reporting. Since #157 tickets are the only player-facing
-// reward — golf achievements pay straight to a loyalty card and no counter
-// codes are surfaced anywhere — so Master Control reports on what's being
-// minted (this page) rather than redeeming codes at a counter. Two ledgers:
-// golf achievements (reward_grant) and app/arcade rounds (game_ticket_award),
-// which share one per-card daily cap.
+// Rewards & usage reporting. Two independent things live here, and only one of
+// them is money-shaped: golf ACHIEVEMENTS (reward_grant) are badges that pay
+// nothing, reported purely as issuance — what players are earning — while
+// app/arcade rounds (game_ticket_award) are the actual ticket economy, subject
+// to the per-card daily cap. Achievements stopped paying because golf scores
+// are self-reported, so there was nothing verifying what a payout rewarded.
 
 const ACHIEVEMENT_LABELS: Record<string, string> = {
   hole_in_one: 'Hole-in-One',
@@ -16,19 +16,14 @@ const ACHIEVEMENT_LABELS: Record<string, string> = {
 };
 const achLabel = (key: string) => ACHIEVEMENT_LABELS[key] ?? key;
 
-// Golf achievement issuance — earned vs. banked to a card, and tickets paid.
+// Golf achievement issuance — what players are earning. No ticket columns:
+// achievements pay nothing, so there is no claimed/unclaimed state to report.
 function AchievementRewards({ days }: { days: number }) {
   const summary = useAsync(() => api.rewardsSummary(days), [days]);
 
   const totals = summary.data?.byAchievement.reduce(
-    (acc, a) => ({
-      granted: acc.granted + a.granted,
-      cardClaims: acc.cardClaims + a.cardClaims,
-      pending: acc.pending + a.pending,
-      unclaimed: acc.unclaimed + a.unclaimed,
-      tickets: acc.tickets + a.tickets,
-    }),
-    { granted: 0, cardClaims: 0, pending: 0, unclaimed: 0, tickets: 0 }
+    (acc, a) => ({ granted: acc.granted + a.granted }),
+    { granted: 0 }
   );
 
   return (
@@ -48,22 +43,14 @@ function AchievementRewards({ days }: { days: number }) {
                 <tr>
                   <Th>Achievement</Th>
                   <Th align="right">Earned</Th>
-                  <Th align="right">Banked to card</Th>
-                  <Th align="right">Pending</Th>
-                  <Th align="right">Unclaimed</Th>
-                  <Th align="right">Tickets paid</Th>
                 </tr>
               </thead>
               <tbody>
                 {summary.data.byAchievement.map((a) => (
                   <tr key={a.achievement}>
                     <Td>{achLabel(a.achievement)}</Td>
-                    <Td align="right">{a.granted.toLocaleString()}</Td>
-                    <Td align="right">{a.cardClaims.toLocaleString()}</Td>
-                    <Td align="right">{a.pending > 0 ? a.pending.toLocaleString() : ''}</Td>
-                    <Td align="right">{a.unclaimed > 0 ? a.unclaimed.toLocaleString() : ''}</Td>
                     <Td align="right" className="font-semibold">
-                      {a.tickets.toLocaleString()}
+                      {a.granted.toLocaleString()}
                     </Td>
                   </tr>
                 ))}
@@ -72,10 +59,6 @@ function AchievementRewards({ days }: { days: number }) {
                 <tr className="font-semibold text-slate-600">
                   <Td>Total</Td>
                   <Td align="right">{totals.granted.toLocaleString()}</Td>
-                  <Td align="right">{totals.cardClaims.toLocaleString()}</Td>
-                  <Td align="right">{totals.pending > 0 ? totals.pending.toLocaleString() : ''}</Td>
-                  <Td align="right">{totals.unclaimed > 0 ? totals.unclaimed.toLocaleString() : ''}</Td>
-                  <Td align="right">{totals.tickets.toLocaleString()}</Td>
                 </tr>
               </tfoot>
             </Table>
@@ -90,9 +73,6 @@ function AchievementRewards({ days }: { days: number }) {
                     <Th>Venue</Th>
                     <Th>Achievement</Th>
                     <Th align="right">Earned</Th>
-                    <Th align="right">Banked</Th>
-                    <Th align="right">Pending</Th>
-                    <Th align="right">Tickets</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -101,11 +81,8 @@ function AchievementRewards({ days }: { days: number }) {
                       <Td className="whitespace-nowrap">{r.day.slice(0, 10)}</Td>
                       <Td>{r.locationName ?? '—'}</Td>
                       <Td>{achLabel(r.achievement)}</Td>
-                      <Td align="right">{r.granted.toLocaleString()}</Td>
-                      <Td align="right">{r.cardClaims.toLocaleString()}</Td>
-                      <Td align="right">{r.pending > 0 ? r.pending.toLocaleString() : ''}</Td>
                       <Td align="right" className="font-semibold">
-                        {r.tickets.toLocaleString()}
+                        {r.granted.toLocaleString()}
                       </Td>
                     </tr>
                   ))}
@@ -212,7 +189,7 @@ export default function Rewards() {
     <div className="space-y-4">
       <PageHeader
         title="Rewards & usage"
-        description="Tickets are the only player-facing reward — golf achievements pay straight to a loyalty card, so there are no counter codes to redeem."
+        description="Golf achievements are badges and pay nothing — this reports what players are earning. Tickets come from the app's mini-games, below."
         actions={
           <Select value={days} onChange={(e) => setDays(Number(e.target.value))}>
             <option value={7}>Last 7 days</option>

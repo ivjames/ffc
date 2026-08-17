@@ -15,8 +15,8 @@ vi.mock('./api', () => ({
 const SUMMARY: RewardSummary = {
   days: 30,
   byAchievement: [
-    { achievement: 'hole_in_one', granted: 12, cardClaims: 9, pending: 1, unclaimed: 2, tickets: 900 },
-    { achievement: 'under_par', granted: 5, cardClaims: 5, pending: 0, unclaimed: 0, tickets: 250 },
+    { achievement: 'hole_in_one', granted: 12 },
+    { achievement: 'under_par', granted: 5 },
   ],
   rows: [
     {
@@ -25,9 +25,6 @@ const SUMMARY: RewardSummary = {
       locationName: 'Upland',
       achievement: 'hole_in_one',
       granted: 3,
-      cardClaims: 2,
-      pending: 1,
-      tickets: 200,
     },
   ],
 };
@@ -50,13 +47,15 @@ beforeEach(() => {
 });
 
 describe('Rewards', () => {
-  test('reports achievement issuance with labels, banked counts and tickets paid', async () => {
+  test('reports achievement issuance with labels and earned counts', async () => {
     render(<Rewards />);
     // Hole-in-One appears in both the summary and the per-day drilldown.
     expect((await screen.findAllByText('Hole-in-One')).length).toBeGreaterThan(0);
     expect(screen.getByText('Under Par')).toBeInTheDocument();
-    // Tickets paid for hole-in-one appears in the summary table.
-    expect(screen.getByText('900')).toBeInTheDocument();
+    // Earned counts are reported; achievements pay nothing, so there is no
+    // ticket column to assert on.
+    expect(screen.getByText('12')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
     // The per-day drilldown shows the venue.
     expect(screen.getByText('Upland')).toBeInTheDocument();
   });

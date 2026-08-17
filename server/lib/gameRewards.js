@@ -11,10 +11,12 @@
 // Every mini-game key that may earn tickets, with its Master Control label.
 // Mirrors the `game=` props under src/features/fun/ — a key missing here makes
 // that game's awards 400 server-side, so keep the two in sync when adding a
-// game. The coin pusher is deliberately absent: it's pure chance, so it never
-// earns (the skill-only decision, PR #140). The claw machine used to sit beside
-// it, but its grip is now a deterministic skill rubric, so it earns like the
-// rest.
+// game. Only skill games earn (the skill-only decision, PR #140): the coin
+// pusher was the standing exception as pure chance, and has since been removed
+// from the app entirely, so every remaining game is listed here. The claw
+// machine used to sit beside it, but its grip is now a deterministic skill
+// rubric, so it earns like the rest. `coinpusher` survives in the tests as the
+// canonical unknown-game key — a retired name is a good permanent stand-in.
 export const GAME_REWARD_GAMES = [
   { key: "airhockey", label: "Air Hockey" },
   { key: "axethrow", label: "Axe Throw" },

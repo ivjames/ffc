@@ -7,7 +7,7 @@ import {
   fetchSnapshot,
   submitAnswer,
   subscribeSession,
-  isFresh,
+  mergeSnapshot,
   type TriviaSnapshot,
 } from '../../lib/triviaLiveApi';
 
@@ -110,7 +110,13 @@ export default function TriviaLive() {
     let live = true;
     void fetchSnapshot(sessionId, { participant: stored.participantToken }).then((r) => {
       if (!live) return;
-      if (r.ok) setSnapshot(r as unknown as TriviaSnapshot);
+      // Freshness applies to this one-time GET as much as to the stream: if the
+      // host advances while it's in flight, a newer SSE frame can render first
+      // and this slower response would otherwise restore the old question.
+      if (r.ok) {
+        const next = r as unknown as TriviaSnapshot;
+        setSnapshot((prev) => mergeSnapshot(prev, next));
+      }
       // A token for a game that has ended or been cleaned up: drop it rather
       // than leaving the player staring at a spinner forever.
       else if (r.status === 404) {
@@ -119,8 +125,9 @@ export default function TriviaLive() {
       }
     });
     const stop = subscribeSession(sessionId, { participant: stored.participantToken }, (s) => {
-      // Drop a frame that would move the room backwards (see isFresh).
-      if (live) setSnapshot((prev) => (isFresh(prev, s) ? s : prev));
+      // Drop stale frames, and never let a viewer-neutral one wipe this
+      // phone's own reveal result (see mergeSnapshot).
+      if (live) setSnapshot((prev) => mergeSnapshot(prev, s));
     });
     return () => {
       live = false;

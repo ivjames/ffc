@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isFresh, progressOf } from './triviaLiveApi';
+import { isFresh, mergeSnapshot, progressOf } from './triviaLiveApi';
 import type { TriviaSnapshot, TriviaStatus } from './triviaLiveApi';
 
 // Frame ordering. An answer's broadcast and the host's advance are ordered
@@ -38,5 +38,36 @@ describe('frame ordering', () => {
     // Equal progress must pass: most frames in a question are the same phase
     // with a new "N of M answered" count.
     expect(isFresh(snap(0, 'question'), snap(0, 'question'))).toBe(true);
+  });
+});
+
+describe('merging frames', () => {
+  const withAnswer = (currentIndex: number, status: TriviaStatus, myAnswer: unknown) =>
+    ({ session: { currentIndex, status }, myAnswer }) as unknown as TriviaSnapshot;
+
+  test('a viewer-neutral frame does not wipe this phone\'s reveal result', () => {
+    // Broadcast frames always carry myAnswer: null — that is "I know nothing
+    // about you", not "you didn't answer". A late answer from anyone else in
+    // the room produces one at equal progress, and assigning it wholesale left
+    // the player permanently reading "didn't answer in time".
+    const personalized = withAnswer(0, 'reveal', { choice: 2, correct: true, points: 130 });
+    const neutral = withAnswer(0, 'reveal', null);
+    expect(mergeSnapshot(personalized, neutral).myAnswer).toEqual({
+      choice: 2,
+      correct: true,
+      points: 130,
+    });
+  });
+
+  test('a new question does clear the previous answer', () => {
+    const personalized = withAnswer(0, 'reveal', { choice: 2, correct: true });
+    const nextQuestion = withAnswer(1, 'question', null);
+    expect(mergeSnapshot(personalized, nextQuestion).myAnswer).toBeNull();
+  });
+
+  test('a stale frame is rejected outright', () => {
+    const revealed = withAnswer(0, 'reveal', { choice: 1, correct: false });
+    const lateQuestion = withAnswer(0, 'question', null);
+    expect(mergeSnapshot(revealed, lateQuestion)).toBe(revealed);
   });
 });

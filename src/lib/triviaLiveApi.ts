@@ -71,6 +71,33 @@ export function isFresh(prev: TriviaSnapshot | null, next: TriviaSnapshot): bool
   return progressOf(next) >= progressOf(prev);
 }
 
+/**
+ * Fold an incoming frame into what the screen already has, keeping anything
+ * the frame cannot know.
+ *
+ * Broadcast frames are viewer-neutral, so `myAnswer` is ALWAYS null on them —
+ * they aren't saying "you didn't answer", they're saying nothing about you at
+ * all. Assigning one wholesale over a personalized snapshot wipes the reveal
+ * result, and since the frame carries equal progress nothing re-fetches it: the
+ * player is left permanently reading "didn't answer in time". A late answer
+ * from someone else in the room is enough to trigger it.
+ *
+ * Returns `prev` unchanged for a stale frame, so this is also the freshness
+ * gate — callers pass it straight to setState.
+ */
+export function mergeSnapshot(
+  prev: TriviaSnapshot | null,
+  next: TriviaSnapshot,
+): TriviaSnapshot {
+  if (!prev) return next;
+  if (!isFresh(prev, next)) return prev;
+  const sameQuestion = prev.session.currentIndex === next.session.currentIndex;
+  if (sameQuestion && next.myAnswer == null && prev.myAnswer != null) {
+    return { ...next, myAnswer: prev.myAnswer };
+  }
+  return next;
+}
+
 type Result<T> = ({ ok: true } & T) | { ok: false; error: string; status: number };
 
 async function call<T>(path: string, init?: RequestInit): Promise<Result<T>> {

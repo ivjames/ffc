@@ -19,11 +19,21 @@ export type ActiveChallenge = {
   game: string;
   /** '' for single-board games, matching game_score.variant. */
   variant: string;
+  /** When the marker was armed, ms epoch. See ARM_TTL_MS. */
+  armedAt?: number;
 };
+
+// How long an armed marker stays valid. A player who taps "Play your round"
+// and then backs out leaves the marker behind, and their NEXT casual round of
+// the same game would otherwise be silently consumed as their one challenge
+// attempt — which they cannot take back, because a challenge allows one round
+// each. Returning to the arcade hub clears it (FunZone), and this bounds the
+// paths that don't go through there.
+const ARM_TTL_MS = 30 * 60 * 1000;
 
 export function setActiveChallenge(value: ActiveChallenge): void {
   try {
-    sessionStorage.setItem(KEY, JSON.stringify(value));
+    sessionStorage.setItem(KEY, JSON.stringify({ ...value, armedAt: Date.now() }));
   } catch {
     // Storage disabled — the challenge is still playable from its own screen,
     // it just won't auto-attach to the round.
@@ -57,5 +67,10 @@ export function activeChallengeFor(game: string, variant = ''): ActiveChallenge 
   const active = getActiveChallenge();
   if (!active) return null;
   if (active.game !== game || active.variant !== variant) return null;
+  // An armed-but-abandoned marker must not lie in wait for a later round.
+  if (active.armedAt != null && Date.now() - active.armedAt > ARM_TTL_MS) {
+    clearActiveChallenge();
+    return null;
+  }
   return active;
 }

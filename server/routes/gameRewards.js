@@ -32,6 +32,7 @@ import { isBonusKind, effectiveAdoptionBonus } from "../lib/adoptionBonus.js";
 import { rewardTickets } from "../lib/posLoyalty.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
+import { moduleLive } from "../lib/modules.js";
 import { requireUser } from "../lib/userAuth.js";
 import { linkedCardFor } from "../lib/cardLink.js";
 
@@ -62,10 +63,21 @@ router.post("/award", tenant(), requireUser, async (req, res) => {
     // Tenant-scoped: a foreign tenant's location id 404s exactly like a
     // nonexistent one — a guessed id must not draw down (or write ledger rows
     // against) another client's ticket system.
-    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, tz, pos" });
+    const loc = await findTenantLocation(locationId, req.tenant, {
+      cols: "id, tz, pos, modules",
+    });
     if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
     const loyalty = loc.pos?.loyalty ?? null;
     if (!loyalty?.gameRewards) {
+      return res.status(403).json({ ok: false, error: "game rewards not enabled for this venue" });
+    }
+    // The ENTITLEMENT, not just the wiring. The whole point of separating the
+    // two (lib/modules.js) is that a venue can switch tickets off while its POS
+    // credentials stay in place — so authorizing on the legacy
+    // pos.loyalty.gameRewards flag alone would leave this endpoint minting
+    // tickets for a module the venue no longer has. The client hides the path;
+    // this is what closes it.
+    if (!moduleLive(loc, "gameTickets")) {
       return res.status(403).json({ ok: false, error: "game rewards not enabled for this venue" });
     }
 
@@ -101,8 +113,10 @@ router.post("/award", tenant(), requireUser, async (req, res) => {
         duplicate = true;
         await client.query("commit");
       } else {
-        // One shared daily pool: count golf achievement claims too, so games
-        // and golf draw down the same per-card budget (lib/dailyTickets.js).
+        // Today's spend for this card at this venue (lib/dailyTickets.js).
+        // Mini-games are now the only lane that draws on the budget — golf
+        // achievements pay nothing — but the sum stays behind that module so a
+        // future earning lane joins the cap rather than bypassing it.
         const spent = await dailySpentTickets(client, {
           locationId,
           cardId: playerId,

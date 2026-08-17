@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
-import type { CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { Screen, TopBar, Content } from '../../ui/components';
 import { playClick } from '../../lib/sound';
 import { usePos } from '../../lib/pos';
+import { clearActiveChallenge } from '../../lib/activeChallenge';
 
 // The Arcade section (formerly "While You Wait") — the venue's whole roster of
 // offline line-entertainment: ~24 attraction mini-games plus fun facts, trivia,
@@ -17,9 +18,9 @@ type Tile = {
   accent: string;
   // Games that credit tickets on the linked card — mirrors the server's
   // GAME_REWARD_GAMES registry (server/lib/gameRewards.js), i.e. the tiles whose
-  // screen mounts <GameTicketAward>. The coin pusher (pure chance), Arcade Putt,
-  // and Fun Facts don't earn, so they carry no flag. Drives the 🎟️ hint, shown
-  // only where the venue actually sells game rewards.
+  // screen mounts <GameTicketAward>. Arcade Putt and Fun Facts don't earn, so
+  // they carry no flag. Drives the 🎟️ hint, shown only where the venue actually
+  // sells game rewards.
   earns?: boolean;
 };
 
@@ -197,13 +198,6 @@ const TILES: Tile[] = [
     accent: '#d946ef',
     earns: true,
   },
-  {
-    to: '/arcade/pusher',
-    emoji: '🪙',
-    title: 'Coin Pusher',
-    blurb: 'Time your drops — push the shelf over the edge.',
-    accent: '#fbbf24',
-  },
 ];
 
 export default function FunZone() {
@@ -211,6 +205,14 @@ export default function FunZone() {
   // The 🎟️ hint only makes sense where the venue actually credits tickets — if
   // this location doesn't sell game rewards, no game pays out, so show nothing.
   const { gameRewards } = usePos();
+
+  // Landing back on the hub means the player left whatever game they were in.
+  // If they had armed a challenge round and backed out, disarm it here: a
+  // challenge allows ONE round each, so a marker left lying around would spend
+  // that attempt on the next casual game they happened to open.
+  useEffect(() => {
+    clearActiveChallenge();
+  }, []);
 
   return (
     <Screen>
