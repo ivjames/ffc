@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { normalizeHuntItem } from "./validateHuntItem.js";
 
 const COURSE_ID = "a1111111-1111-4111-8111-111111111111";
+const LOCATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 function validBody(overrides = {}) {
   return {
@@ -30,7 +31,35 @@ test("normalizeHuntItem rejects a non-object body", () => {
 
 test("normalizeHuntItem requires a uuid courseId", () => {
   assert.match(normalizeHuntItem(validBody({ courseId: "nope" })).error, /courseId/);
-  assert.match(normalizeHuntItem(validBody({ courseId: undefined })).error, /courseId/);
+});
+
+test("normalizeHuntItem takes a locationId instead — the course-free venue hunt", () => {
+  const result = normalizeHuntItem({
+    locationId: LOCATION_ID,
+    slug: "ferris-wheel",
+    name: "The ferris wheel",
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.row.locationId, LOCATION_ID);
+  assert.equal(result.row.courseId, null, "the unused owner is nulled, not left undefined");
+  assert.match(normalizeHuntItem(validBody({ courseId: undefined, locationId: "nope" })).error, /locationId/);
+});
+
+test("normalizeHuntItem demands exactly one owner (the check constraint, as a 400)", () => {
+  // Neither: the old "courseId is required" case, now stated as the real rule.
+  assert.match(normalizeHuntItem(validBody({ courseId: undefined })).error, /exactly one/);
+  assert.match(normalizeHuntItem(validBody({ courseId: null })).error, /exactly one/);
+  // Both: an item can't be played from a course list AND a venue list.
+  assert.match(
+    normalizeHuntItem(validBody({ locationId: LOCATION_ID })).error,
+    /exactly one/
+  );
+});
+
+test("normalizeHuntItem nulls the unused owner on a course item too", () => {
+  const result = normalizeHuntItem(validBody());
+  assert.equal(result.row.courseId, COURSE_ID);
+  assert.equal(result.row.locationId, null);
 });
 
 test("normalizeHuntItem enforces the slug shape", () => {

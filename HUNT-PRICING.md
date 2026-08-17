@@ -19,10 +19,27 @@ none). Haiku 4.5 list pricing: **$1 / 1M input tokens, $5 / 1M output tokens**.
 If the model, image size, or `max_tokens` changes, re-derive this table first —
 everything below scales from it.
 
+## Two modes, one cost model
+
+The hunt runs in two modes and they cost exactly the same per scan:
+
+- **Course hunt** — a themed list played during a mini-golf round.
+- **Venue hunt** — the course-free list, for sites with no mini golf (opt-in per
+  venue via `location.hunt.venueMode`). No round required: a group starts a
+  hunt session on the device and plays the venue's own list.
+
+Every control below is mode-blind. The venue hunt bills through the same
+`hunt_scan` rows (with `course_id` null and `location_id` carrying the venue),
+obeys the same per-round/per-item/per-venue caps, and lands in the same rollup.
+The only thing venue mode changes about spend is **who can start one**: a venue
+hunt has no round gating it, so the daily venue cap (`dailyScanCap`) does more
+work there — set one when you switch it on.
+
 ## What one round costs
 
 The billing unit is the **hunt round**: one group (up to 4 players) playing one
-course's list (up to 20 items).
+list (up to 20 items). On a venue hunt the same unit is a hunt *session* — one
+group's `roundClientId`, counted identically.
 
 Spend per round is bounded by three server-side controls (`server/routes/hunt.js`):
 
@@ -105,10 +122,14 @@ select l.name as venue, date_trunc('month', s.created_at) as month,
        count(distinct s.round_client_id) as hunt_rounds, count(*) as scans,
        round((sum(s.input_tokens) * 1.00 + sum(s.output_tokens) * 5.00) / 1e6, 2) as api_cost_usd
   from hunt_scan s
-  join course c on c.id = s.course_id
-  join location l on l.id = c.location_id
+  left join course c on c.id = s.course_id
+  join location l on l.id = coalesce(c.location_id, s.location_id)
  group by 1, 2 order by 2 desc, 1;
 ```
+
+(`coalesce(c.location_id, s.location_id)` is what makes this cover both modes:
+a venue-hunt scan has no course, so its venue comes from its own stamp. An
+inner `join course` here silently drops every course-free hunt's spend.)
 
 (The `1.00` / `5.00` literals are the Haiku 4.5 $/MTok rates — update alongside
 any model change.)

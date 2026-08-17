@@ -31,10 +31,17 @@ const PHOTO_COLS = `f.id, f.player_tag as "playerTag", f.created_at as "createdA
   f.moderation, f.people_present as "peoplePresent", f.minors_present as "minorsPresent",
   i.name as "itemName", c.name as "courseName", l.name as "locationName"`;
 
+// A find's venue is reached through its item's owner, which is a course OR a
+// location (hunt_item's exactly-one-owner rule). Joining course inner-ly —
+// as this did before venue hunts existed — would silently hide every
+// course-free hunt's photos from moderation, the one place they must never be
+// hidden from. `coalesce` walks whichever owner the item actually has;
+// courseName is simply null for a venue hunt, which the UI renders as the
+// venue-wide list.
 const PHOTO_FROM = `from hunt_find f
   join hunt_item i on i.id = f.item_id
-  join course c on c.id = i.course_id
-  left join location l on l.id = c.location_id`;
+  left join course c on c.id = i.course_id
+  left join location l on l.id = coalesce(c.location_id, i.location_id)`;
 
 const MEDIA_BY_EXT = {
   jpg: "image/jpeg",

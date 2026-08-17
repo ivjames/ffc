@@ -81,6 +81,13 @@ export type LocationSeed = {
   // native food-ordering / rewards surfaces (src/lib/pos). Unset = no
   // integration; the deep links above remain the fallback.
   pos?: PosConfig;
+  // The course-free scavenger hunt is offered here: this venue switched
+  // venueMode on AND has at least one active item on its venue-wide list.
+  // Derived server-side (GET /api/content) so the app never has to decide
+  // what "available" means; gates the Home tile and the /hunt route. Unset
+  // or false = the venue has no course-free hunt (every venue, until one
+  // opts in).
+  venueHunt?: boolean;
 };
 
 // §4 Course seed (bundled JSON for v1).

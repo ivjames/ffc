@@ -43,9 +43,23 @@ export type VerifyResult = {
   count?: number;
 };
 
-// Each course has its own themed list, so items are fetched by course.
-export async function fetchHuntItems(courseId: string): Promise<HuntItem[]> {
-  const res = await fetch(apiUrl(`/api/hunt/items?course=${encodeURIComponent(courseId)}`));
+/**
+ * Which hunt a call is about. A list belongs to a course (the on-course hunt,
+ * themed per course) or to a venue (the course-free hunt at sites without mini
+ * golf) — exactly one, which the server enforces. Every hunt call takes this
+ * same shape so the two modes stay one code path on both sides of the wire.
+ */
+export type HuntOwner = { courseId: string } | { locationId: string };
+
+function ownerQuery(owner: HuntOwner): string {
+  return 'courseId' in owner
+    ? `course=${encodeURIComponent(owner.courseId)}`
+    : `location=${encodeURIComponent(owner.locationId)}`;
+}
+
+// Each hunt has its own list, so items are fetched by owner.
+export async function fetchHuntItems(owner: HuntOwner): Promise<HuntItem[]> {
+  const res = await fetch(apiUrl(`/api/hunt/items?${ownerQuery(owner)}`));
   if (!res.ok) throw new Error(`Hunt items failed: HTTP ${res.status}`);
   return res.json();
 }
@@ -59,19 +73,25 @@ export async function fetchHuntProgress(roundClientId: string): Promise<HuntFind
 /**
  * Submit a photo for verification. `imageBase64` is the raw base64 (no data:
  * prefix); `mediaType` is the file's MIME type.
+ *
+ * `roundClientId` is the GROUP KEY, whichever mode this is: the in-progress
+ * round's clientId on a course hunt, the venue-hunt session's clientId
+ * otherwise (see venueSession.ts). Finds, dedupe and the per-group scan budget
+ * are all scoped by it.
  */
 export async function verifyFind(args: {
   itemId: string;
-  courseId: string; // the round's course — the item must belong to it
+  owner: HuntOwner; // the hunt this item must belong to
   playerTag: string;
-  roundClientId: string; // required — the hunt is tied to an in-progress round
+  roundClientId: string;
   imageBase64: string;
   mediaType: string;
 }): Promise<VerifyResult> {
+  const { owner, ...rest } = args;
   const res = await fetch(apiUrl('/api/hunt/verify'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(args),
+    body: JSON.stringify({ ...rest, ...owner }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
