@@ -159,55 +159,29 @@ Centered `PRESS START` (`clamp(38px, 7.4vw, 92px)`; "START" in lime blinking
 via `steps(2)` 1.4s), short pitch, lime mailto button
 (`hello@infinicade.com`), small-print `no credit card · no app store · just play`.
 
-## 5. Hero arcade stage (five playable micro-games)
+## 5. Hero arcade stage (the real games, on a phone)
 
-The stage rotates between five playable scenes — pill tabs bottom-left,
-auto-advancing every 9s until the visitor interacts (never under
-reduced-motion). Per-game scores persist for the visit, and the card
-re-skins per game (turf / skee lane / bowling boards / plank wall / carnival stripes) via
-`.stage-<mode>` classes:
+The hero's right column is a light phone frame whose screen is a canvas
+running **the app's actual Fun Zone games** — scene rendering, geometry,
+palettes, and mechanics ported from the app sources (trimmed only of venue
+plumbing: logo assets swapped for an INFINICADE mark, no ticket awards or
+ball/round counts):
 
-1. **Mini golf** — the drag-to-putt game described below.
-2. **Skee-ball** — the same slingshot physics aimed up the lane at
-   concentric 20/30/50/100 rings; the ball scores where it stops, with
-   floating "+N" text and a coral burst on 50+.
-3. **Bowling** — ported from the app's `Bowling.tsx`: the 4-row rack
-   geometry, 6:1 ball/pin mass ratio with 0.5 restitution, purple house
-   ball, and white pins with the red neck ring, flattened to a top-down
-   lane with gutters and lane arrows. Flick to roll; real ball→pin→pin
-   collisions; pins downed by displacement; standing pins persist between
-   rolls, full rack resets when all ten fall. STRIKE! on a 10-pin roll.
-4. **Axe throw** — two-phase tap-timing ported from the app's real game
-   (`src/features/fun/AxeThrow.tsx`): the same ring palette, wood grain,
-   axe sprite + head-center anchor, and amber neon guides — first tap
-   locks the sweeping vertical line (x), second locks the horizontal (y),
-   the axe flies in spinning and sticks; rings score 1–5, bullseye bursts.
-5. **High striker** — tap-timing: an oscillating power meter, a puck
-   launched up the tower, bell at ≥~93% power (DING!, confetti, counter).
+| Tab | Ported from | Interaction |
+| --- | --- | --- |
+| SKEE | `SkeeBall.tsx` — green felt cabinet, neon ring funnels (10–100), drop holes | drag from ball, arc flight, sink-into-hole roll |
+| BOWL | `Bowling.tsx` — POV lane projection, gutters, foul line, drawn pins, purple house ball | drag from ball; top-down sim with real ball→pin→pin collisions + hook |
+| AXE | `AxeThrow.tsx` — plank wall, painted board, clutch dots, amber sweep guides | two taps (lock x, lock y), spinning flight, sticks + marks persist |
+| STRIKER | `HighStriker.tsx` — carnival night, zone tower, bell, mallet + strongman, power meter | tap at the meter peak; DING at a perfect 100 |
 
-Tab labels are single words (GOLF / SKEE / BOWL / AXE / STRIKER) so all
-five fit one row; ball spawns sit at ≤0.78H so the tab row never covers
-the draggable ball.
-
-The game lives in a visible putting-green card (`.putt-stage`) that is the
-hero's right column (stacks below the copy <900px) — turf stripes, pale
-lime/cyan gradient, hint + score chip inside. An invisible 60px `#ballHandle`
-div (`touch-action: none`) tracks the ball so page scrolling is never
-hijacked — only grabbing the ball captures the pointer.
-
-- **Aim:** drag from ball = slingshot; dotted cyan aim line + coral power
-  ring; power = drag distance clamped to 200px; launch velocity = 21 × power
-  fraction, opposite the drag.
-- **Physics:** friction ×0.985/frame, wall bounce ×−0.72, stop below 0.05.
-- **Hole:** lime-ringed cup + coral flag. Capture requires dist < r−2 **and**
-  speed < 9; faster near-misses roll over the cup ("too hot! ease up").
-- **Sink:** 26-particle lime burst, ball shrink, counter chip
-  (`PUTTS SUNK · NN`), escalating hint lines, respawn at a random spot ~700ms
-  later.
-- **Placement:** relative to the stage — hole ≈ (0.72W, 0.38H), ball
-  spawns ≈ (0.26W, 0.68H). The walls are the card's edges, so every bounce
-  stays inside the green at all viewports (no desktop/mobile branching).
-- Canvas is DPR-aware (capped ×2) and relayouts on resize.
+Shared plumbing is the app's own `fx.ts` toolkit (spheres, neon lines,
+particles, floaters, shake/flash/trails), ported wholesale. Each game keeps
+its logical coordinate space (340–360 × 560); the screen's `aspect-ratio`
+follows the active game and pointer events are mapped through the scale.
+Pill tabs sit under the phone; hint + per-game score chips sit above it.
+Auto-rotates every 12s until first interaction (never under reduced
+motion); per-game scores persist for the visit. `touch-action: none` on
+the canvas only — page scrolling is unaffected outside the screen.
 
 ## 6. Motion inventory
 
@@ -221,7 +195,7 @@ hijacked — only grabbing the ball captures the pointer.
 | Ticket count-up | 0 → 1,250, 1.6s cubic ease-out on first view | jumps to final |
 | Rewards toggle flicker | every 3.4s | off |
 | Venue auto-cycle | 4s | off |
-| Stage auto-rotate | 9s | off |
+| Stage auto-rotate | 12s | off |
 | Scanline / pulses / blink | 1.4–2.6s loops | off |
 | Cursor glow | rAF lerp 0.08 | off |
 | Putt game | rAF, user-initiated | kept (interaction, not ambient); idle hole pulse stilled |

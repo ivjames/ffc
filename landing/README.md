@@ -14,10 +14,9 @@ embedded as data URIs — so it makes zero external requests and can be
 previewed by opening `index.html` directly in a browser.
 
 Interactive touches (all vanilla JS, all degrade gracefully without it, and
-all respect `prefers-reduced-motion`): a five-game arcade stage in the
-hero (drag-to-putt mini golf, skee-ball with scored rings, bowling with
-real pin physics, two-phase axe throw, a tap-timing high striker — the
-latter three using the real app's art and mechanics), a live-reshuffling leaderboard mock, an AI-hunt verify loop, a
+all respect `prefers-reduced-motion`): a phone in the hero running
+the app's actual Fun Zone games (skee-ball, bowling, axe throw, high
+striker — scenes and mechanics ported from src/features/fun/*), a live-reshuffling leaderboard mock, an AI-hunt verify loop, a
 ticket count-up, and a white-label venue switcher that re-skins a phone
 mockup per tenant.
 

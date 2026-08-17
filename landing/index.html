@@ -149,45 +149,26 @@ img, svg { display: block; }
 @media (max-width: 900px) {
   .hero-inner { grid-template-columns: 1fr; gap: 30px; padding-top: 120px; padding-bottom: 44px; }
 }
-.putt-stage {
-  position: relative; min-height: 340px; border-radius: var(--r-lg); overflow: hidden;
-  background:
-    repeating-linear-gradient(90deg, rgba(122, 163, 0, 0.045) 0 30px, transparent 30px 60px),
-    radial-gradient(120% 90% at 72% 16%, rgba(0, 196, 234, 0.12), transparent 62%),
-    linear-gradient(150deg, #f2fbdd, #ddf3e8 55%, #dbeefb);
-  border: 1px solid rgba(122, 163, 0, 0.28);
-  box-shadow: 0 20px 50px rgba(16, 20, 60, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+.arcade-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.arcade-stage .hint {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim);
+  user-select: none; pointer-events: none; text-align: center; min-height: 34px;
 }
-@media (max-width: 900px) { .putt-stage { min-height: 280px; } }
-.putt-stage.stage-skee {
-  background:
-    repeating-linear-gradient(0deg, rgba(180, 120, 30, 0.05) 0 26px, transparent 26px 52px),
-    radial-gradient(120% 90% at 72% 16%, rgba(255, 46, 115, 0.08), transparent 62%),
-    linear-gradient(150deg, #fdf4de, #fbe9d2 55%, #f7e3ee);
-  border-color: rgba(214, 138, 40, 0.35);
+.game-phone {
+  width: min(270px, 80vw);
+  border-radius: 36px; border: 1px solid rgba(23, 28, 77, 0.16);
+  background: #fdfdff;
+  box-shadow: 0 30px 70px rgba(16, 20, 60, 0.20), inset 0 0 0 7px #eef0fa;
+  padding: 13px 12px 15px;
 }
-.putt-stage.stage-striker {
-  background:
-    repeating-linear-gradient(90deg, rgba(109, 53, 255, 0.04) 0 30px, transparent 30px 60px),
-    radial-gradient(120% 90% at 72% 16%, rgba(255, 46, 115, 0.10), transparent 62%),
-    linear-gradient(150deg, #fdeef3, #eeeafc 55%, #ddf1fb);
-  border-color: rgba(255, 46, 115, 0.30);
+.gp-notch { width: 74px; height: 5px; border-radius: 4px; background: #d9ddf0; margin: 0 auto 9px; }
+.game-screen {
+  border-radius: 20px; overflow: hidden; aspect-ratio: 340 / 560;
+  background: #0b0a16;
 }
-.putt-stage.stage-axe {
-  background:
-    repeating-linear-gradient(90deg, rgba(120, 72, 20, 0.06) 0 24px, transparent 24px 48px),
-    radial-gradient(120% 90% at 72% 16%, rgba(251, 191, 36, 0.14), transparent 62%),
-    linear-gradient(150deg, #f8eeda, #f2e2c8 55%, #efe0d6);
-  border-color: rgba(180, 120, 40, 0.40);
-}
-.putt-stage.stage-bowl {
-  background:
-    repeating-linear-gradient(90deg, rgba(150, 110, 50, 0.07) 0 22px, transparent 22px 44px),
-    radial-gradient(120% 90% at 72% 16%, rgba(168, 85, 247, 0.10), transparent 62%),
-    linear-gradient(150deg, #faf3e3, #f3e9d2 55%, #efe6f6);
-  border-color: rgba(180, 140, 60, 0.38);
-}
-.stage-tabs { position: absolute; left: 12px; bottom: 12px; z-index: 4; display: flex; gap: 8px; flex-wrap: wrap; }
+.game-screen canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: pointer; }
+.stage-tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .s-tab {
   font-family: var(--display); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
   padding: 8px 12px; border-radius: 999px; cursor: pointer;
@@ -196,7 +177,6 @@ img, svg { display: block; }
 }
 .s-tab:hover { color: var(--ink); transform: translateY(-1px); }
 .s-tab.active { background: var(--ink); color: #ffffff; border-color: transparent; }
-#putt { position: absolute; inset: 0; }
 .eyebrow {
   display: inline-flex; align-items: center; gap: 10px;
   font-size: 13px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--dim);
@@ -237,23 +217,12 @@ h1 .dot { color: var(--coral); }
 .btn-line { color: var(--ink); border: 1px solid rgba(16, 20, 60, 0.18); background: rgba(255, 255, 255, 0.72); }
 .btn-line:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 8px 32px rgba(0, 196, 234, 0.22); }
 
-.hint {
-  position: absolute; left: 16px; top: 14px; z-index: 3;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
-  font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim);
-  user-select: none; pointer-events: none;
-}
 .hint .score {
   font-family: var(--display); font-size: 12px; color: var(--coral);
   border: 1px solid rgba(255, 46, 115, 0.35); border-radius: 999px; padding: 8px 16px;
   background: rgba(255, 255, 255, 0.75);
 }
 
-#ballHandle {
-  position: absolute; z-index: 4; width: 60px; height: 60px; margin: -30px 0 0 -30px;
-  border-radius: 50%; cursor: grab; touch-action: none;
-}
-#ballHandle:active { cursor: grabbing; }
 
 /* ---------- marquee ---------- */
 .marquee {
@@ -554,7 +523,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
 <div class="dots" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
 <div class="glow-cursor" aria-hidden="true" id="glowCursor"></div>
-<noscript><style>.reveal { opacity: 1; transform: none; } .hint, #ballHandle { display: none; }</style></noscript>
+<noscript><style>.reveal { opacity: 1; transform: none; } .hint, .stage-tabs, .game-phone { display: none; }</style></noscript>
 
 <nav class="nav" aria-label="Main">
   <a class="logo" href="#top">
@@ -588,12 +557,14 @@ footer .logo { font-size: 12px; color: var(--ink); }
           <a class="btn btn-line" href="#platform">EXPLORE THE PLATFORM ↓</a>
         </div>
       </div>
-      <div class="putt-stage" id="stage">
-        <canvas id="putt" aria-hidden="true"></canvas>
-        <div id="ballHandle" aria-hidden="true"></div>
+      <div class="arcade-stage">
         <div class="hint" aria-hidden="true">
-          <span id="hintText">⛳ grab the ball · drag · release</span>
-          <span class="score" id="puttScore">PUTTS SUNK · 00</span>
+          <span id="hintText">🎯 drag from the ball · flick up the lane</span>
+          <span class="score" id="puttScore">SKEE · 000</span>
+        </div>
+        <div class="game-phone">
+          <div class="gp-notch"></div>
+          <div class="game-screen"><canvas id="game"></canvas></div>
         </div>
         <div class="stage-tabs" id="stageTabs" aria-label="Try another game"></div>
       </div>
@@ -796,545 +767,1241 @@ footer .logo { font-size: 12px; color: var(--ink); }
     })();
   }
 
-  /* ---------- hero arcade stage: three playable micro-games ---------- */
-  const stage = document.getElementById("stage");
-  const canvas = document.getElementById("putt");
-  const handle = document.getElementById("ballHandle");
+  /* ---------- hero arcade stage ----------
+     A phone running the ACTUAL Fun Zone games. The scene rendering, geometry,
+     colors, and mechanics below are ported from the app itself:
+       src/features/fun/fx.ts         (shared juice toolkit)
+       src/features/fun/SkeeBall.tsx  (green cabinet, ring funnels, arc shots)
+       src/features/fun/Bowling.tsx   (POV lane projection, pins, purple ball)
+       src/features/fun/AxeThrow.tsx  (plank wall, painted board, amber sweeps)
+       src/features/fun/HighStriker.tsx (carnival night, tower, mallet, meter)
+     Trimmed only where the app depends on venue plumbing (logo assets, ticket
+     awards, round/ball counts) — the look and feel is the real thing. */
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
   const scoreEl = document.getElementById("puttScore");
   const hintEl = document.getElementById("hintText");
   const tabsEl = document.getElementById("stageTabs");
-  const ctx = canvas.getContext("2d");
-  let W = 0, H = 0, dpr = 1;
+  let GW = 360, GH = 560;         // logical dims of the active game
+  let dpr = 1;
 
-  const pad2 = n => String(n).padStart(2, "0");
-  const ball = { x: 120, y: 200, vx: 0, vy: 0, r: 11 };
-  const hole = { x: 0, y: 0, r: 17 };
-  const parts = [];
-  let dragging = false, drag = { x: 0, y: 0 };
-  let sinking = 0, launched = false, restTimer = 0;
-  let flash = null;
-  const striker = { phase: 0, meter: 0, hp: -1, vel: 0, glow: 0, swinging: false, scored: false };
-  const scores = { golf: 0, skee: 0, bowl: 0, axe: 0, striker: 0 };
-  let mode = "golf";
-
-  const MODES = {
-    golf: { icon: "\u26f3", label: "GOLF", hint: "\u26f3 grab the ball \u00b7 drag \u00b7 release",
-            score: () => "PUTTS SUNK \u00b7 " + pad2(scores.golf) },
-    skee: { icon: "\ud83c\udfaf", label: "SKEE", hint: "\ud83c\udfaf flick the ball up the lane",
-            score: () => "SKEE \u00b7 " + String(scores.skee).padStart(3, "0") },
-    bowl: { icon: "\ud83c\udfb3", label: "BOWL", hint: "\ud83c\udfb3 flick to roll \u2014 real pin physics",
-            score: () => "PINS \u00b7 " + String(scores.bowl).padStart(3, "0") },
-    axe: { icon: "\ud83e\ude93", label: "AXE", hint: "\ud83e\ude93 tap to lock the line \u2014 twice",
-           score: () => "AXE \u00b7 " + String(scores.axe).padStart(3, "0") },
-    striker: { icon: "\ud83d\udd28", label: "STRIKER", hint: "\ud83d\udd28 tap when the power peaks",
-               score: () => "BELLS RUNG \u00b7 " + pad2(scores.striker) },
-  };
-
-  function layout() {
-    dpr = Math.min(devicePixelRatio || 1, 2);
-    W = stage.clientWidth; H = stage.clientHeight;
-    canvas.width = W * dpr; canvas.height = H * dpr;
-    canvas.style.width = W + "px"; canvas.style.height = H + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    hole.x = W * 0.72; hole.y = H * 0.38;
-    if (!dragging && ball.vx === 0 && ball.vy === 0 && sinking <= 0) respawnBall(false);
+  // —— fx.ts (ported) ——
+  const TWO_PI = Math.PI * 2;
+  let fxSeed = 0x9e3779b9 >>> 0;
+  function fxRandom() {
+    fxSeed = (fxSeed + 0x6d2b79f5) >>> 0;
+    let t = fxSeed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
-  function respawnBall(random) {
-    if (mode === "skee") { ball.x = W * (random ? 0.35 + Math.random() * 0.3 : 0.5); ball.y = H * 0.78; }
-    else if (mode === "bowl") { ball.x = W * (random ? 0.38 + Math.random() * 0.24 : 0.5); ball.y = H * 0.78; }
-    else { ball.x = W * (random ? 0.16 + Math.random() * 0.30 : 0.26); ball.y = H * (random ? 0.52 + Math.random() * 0.30 : 0.68); }
-    ball.vx = ball.vy = 0; launched = false; ball.gutter = false;
+  function withAlpha(hex, a) {
+    const h = hex.replace("#", "");
+    const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+    const n = parseInt(full, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+  function roundRectPath(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+  function drawShadow(c, x, y, rx, ry, alpha = 0.35) {
+    c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, TWO_PI);
+    c.fillStyle = `rgba(0,0,0,${alpha})`; c.fill();
+  }
+  function drawSphere(c, x, y, r, light, base, dark, opts = {}) {
+    const { specular = true, rim = false } = opts;
+    const g = c.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.12, x, y, r);
+    g.addColorStop(0, light); g.addColorStop(0.6, base); g.addColorStop(1, dark);
+    c.beginPath(); c.arc(x, y, r, 0, TWO_PI); c.fillStyle = g; c.fill();
+    if (rim) {
+      c.beginPath(); c.arc(x, y, r - Math.max(1, r * 0.06), Math.PI * 1.05, Math.PI * 1.6);
+      c.strokeStyle = "rgba(255,255,255,0.55)"; c.lineWidth = Math.max(1.5, r * 0.08); c.stroke();
+    }
+    if (specular) {
+      c.beginPath(); c.arc(x - r * 0.32, y - r * 0.36, r * 0.22, 0, TWO_PI);
+      c.fillStyle = "rgba(255,255,255,0.85)"; c.fill();
+    }
+  }
+  function neonLine(c, x0, y0, x1, y1, color, width = 4, blur = 14) {
+    c.save();
+    c.strokeStyle = color; c.lineWidth = width; c.lineCap = "round";
+    c.shadowColor = color; c.shadowBlur = blur;
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+    c.restore();
+  }
+  function spawnBurst(list, x, y, n, speed, color) {
+    for (let i = 0; i < n; i++) {
+      const a = fxRandom() * TWO_PI;
+      const s = speed * (0.35 + fxRandom() * 0.65);
+      const max = 260 + fxRandom() * 300;
+      list.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: max, max, r: 1.4 + fxRandom() * 2.6, color });
+    }
+  }
+  function stepParticles(list, dt, damp = 0.02, gravity = 0) {
+    const dts = dt / 1000;
+    const k = Math.pow(damp, dts);
+    for (const p of list) {
+      p.x += p.vx * dts; p.y += p.vy * dts;
+      p.vx *= k; p.vy = p.vy * k + gravity * dts;
+      p.life -= dt;
+    }
+    return list.filter(p => p.life > 0);
+  }
+  function drawParticles(c, list) {
+    if (!list.length) return;
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    for (const p of list) {
+      const a = Math.max(0, p.life / p.max);
+      c.beginPath(); c.arc(p.x, p.y, p.r, 0, TWO_PI);
+      c.fillStyle = withAlpha(p.color, a); c.fill();
+    }
+    c.restore();
+  }
+  function spawnFloater(list, x, y, text, color, opts = {}) {
+    const max = opts.life != null ? opts.life : 650;
+    list.push({ x, y, text, color, life: max, max, size: opts.size != null ? opts.size : 20 });
+  }
+  function stepFloaters(list, dt, rise = 0.045) {
+    for (const f of list) { f.y -= dt * rise; f.life -= dt; }
+    return list.filter(f => f.life > 0);
+  }
+  function drawFloaters(c, list) {
+    if (!list.length) return;
+    c.save();
+    c.textAlign = "center";
+    for (const f of list) {
+      c.globalAlpha = Math.max(0, f.life / f.max);
+      c.font = `bold ${f.size}px system-ui, sans-serif`;
+      c.fillStyle = f.color;
+      c.shadowColor = f.color; c.shadowBlur = 10;
+      c.fillText(f.text, f.x, f.y);
+    }
+    c.restore();
+  }
+  function pushTrail(trail, x, y, cap = 16) {
+    trail.push({ x, y });
+    if (trail.length > cap) trail.shift();
+    return trail;
+  }
+  function decay(v, dt, perMs) { return v > 0 ? Math.max(0, v - dt * perMs) : 0; }
+  function shakeOffset(mag) { return { x: (fxRandom() * 2 - 1) * mag, y: (fxRandom() * 2 - 1) * mag }; }
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const triWave = (now, period) => {
+    const u = (now % period) / period;
+    return u < 0.5 ? u * 2 : 2 - u * 2;
+  };
+  // The app stamps the venue logo into each scene; here the house mark is ours.
+  function drawLogo(c, cx, cy, { width, tint, alpha, badge }) {
+    c.save();
+    c.globalAlpha = alpha;
+    c.fillStyle = tint;
+    c.textAlign = "center"; c.textBaseline = "middle";
+    if (badge) {
+      c.font = `800 ${Math.round(width * 0.6)}px 'Unbounded', sans-serif`;
+      c.fillText("∞", cx, cy);
+    } else {
+      c.font = `800 ${Math.max(10, Math.round(width / 7.6))}px 'Unbounded', sans-serif`;
+      c.fillText("INFINICADE", cx, cy);
+    }
+    c.restore();
+  }
+
+  // —— canvas sizing / pointer mapping ——
+  function layout() {
+    const scr = canvas.parentElement;
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = scr.clientWidth * dpr;
+    canvas.height = scr.clientHeight * dpr;
+  }
+  function frameTransform() {
+    ctx.setTransform(canvas.width / GW, 0, 0, canvas.height / GH, 0, 0);
+  }
+  function toLogical(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (GW / r.width), y: (e.clientY - r.top) * (GH / r.height) };
   }
   layout();
   addEventListener("resize", layout);
 
+  const scores = { skee: 0, bowl: 0, axe: 0, striker: 0 };
+  const pad2 = n => String(n).padStart(2, "0");
+  const pad3 = n => String(n).padStart(3, "0");
+
+  /* ============================== SKEE-BALL ============================== */
+  const SKEE = (() => {
+    const W = 360, H = 560, BALL_R = 12;
+    const START = { x: W / 2, y: 500 };
+    const HOLES = [
+      { cx: 88, cy: 74, R: 18, pts: 100, color: "#22c55e" },
+      { cx: W - 88, cy: 74, R: 18, pts: 100, color: "#22c55e" },
+      { cx: W / 2, cy: 96, R: 26, pts: 50, color: "#f59e0b" },
+      { cx: W / 2, cy: 160, R: 30, pts: 40, color: "#ec4899" },
+      { cx: W / 2, cy: 226, R: 32, pts: 30, color: "#a855f7" },
+      { cx: W / 2, cy: 292, R: 34, pts: 20, color: "#3b82f6" },
+      { cx: W / 2, cy: 358, R: 36, pts: 10, color: "#38bdf8" },
+    ];
+    const HOLE_R = 8, GRAV = 0.5, MIN_V = 11, MAX_V = 25, MAX_DRAG = 300;
+    const FLIGHT_MS = 560, SINK_MS = 440, NEXT_DELAY_MS = 850, FADE_END_Y = 350;
+    const holeDrop = h => ({ x: h.cx, y: h.cy + h.R - HOLE_R - 4 });
+    function sinkPos(h, land, q) {
+      const r0 = Math.hypot(land.x - h.cx, land.y - h.cy);
+      const rHole = h.R - HOLE_R - 4;
+      const th0 = Math.atan2(land.y - h.cy, land.x - h.cx);
+      const BOTTOM = Math.PI / 2;
+      const dth = ((((BOTTOM - th0 + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI) - Math.PI;
+      const e = q * q;
+      const th = th0 + dth * e;
+      const endRad = clamp(r0, rHole, rHole + HOLE_R);
+      const rad = r0 + (endRad - r0) * e;
+      return { x: h.cx + Math.cos(th) * rad, y: Math.max(h.cy + Math.sin(th) * rad, land.y) };
+    }
+    function launchVelocity(dx, dy) {
+      const len = Math.hypot(dx, dy);
+      if (len < 10) return null;
+      if (dy / len > -0.25) return null;
+      const power = Math.min(len / MAX_DRAG, 1);
+      const speed = MIN_V + power * (MAX_V - MIN_V);
+      return { vx0: (dx / len) * speed, vy0: (dy / len) * speed };
+    }
+    const trajectory = (v, t) => ({ x: START.x + v.vx0 * t, y: START.y + v.vy0 * t + 0.5 * GRAV * t * t });
+    const apexTime = v => -v.vy0 / GRAV;
+    function landingPoint(v) { return v.vy0 >= 0 ? null : trajectory(v, apexTime(v)); }
+    function holeAt(p) {
+      if (!p) return null;
+      let best = null, bestD = Infinity;
+      for (const h of HOLES) {
+        const d = Math.hypot(p.x - h.cx, p.y - h.cy);
+        if (d <= h.R && d < bestD) { best = h; bestD = d; }
+      }
+      return best;
+    }
+    let gs, fx;
+    function enter() {
+      gs = { phase: "aim", ball: { x: START.x, y: START.y }, ballR: BALL_R, drag: { active: false, sx: 0, sy: 0, dx: 0, dy: 0 }, shot: null, lastPts: null, nextAt: 0 };
+      fx = { trail: [], particles: [], shake: 0, flash: 0, flashColor: "#4ade80" };
+    }
+    function down(p) {
+      if (gs.phase !== "aim") return;
+      if (Math.hypot(p.x - gs.ball.x, p.y - gs.ball.y) > 80) return;
+      gs.drag = { active: true, sx: p.x, sy: p.y, dx: 0, dy: 0 };
+    }
+    function move(p) {
+      if (gs.drag.active) { gs.drag.dx = p.x - gs.drag.sx; gs.drag.dy = p.y - gs.drag.sy; }
+    }
+    function up(now) {
+      if (!gs.drag.active) return;
+      const v = launchVelocity(gs.drag.dx, gs.drag.dy);
+      gs.drag.active = false;
+      if (!v) return;
+      const land = landingPoint(v);
+      const hole = holeAt(land);
+      gs.shot = { v, land, hole, score: hole ? hole.pts : 0, startedAt: now, sinkAt: 0 };
+      gs.phase = "flight";
+      spawnBurst(fx.particles, START.x, START.y, 6, 90, "#bfdbfe");
+    }
+    function frame(now, dt) {
+      fx.particles = stepParticles(fx.particles, dt, 0.02);
+      fx.shake = decay(fx.shake, dt, 0.02);
+      fx.flash = decay(fx.flash, dt, 0.0022);
+      if (gs.phase === "flight" && gs.shot) {
+        const k = Math.min((now - gs.shot.startedAt) / FLIGHT_MS, 1);
+        const p = trajectory(gs.shot.v, k * apexTime(gs.shot.v));
+        gs.ball.x = p.x; gs.ball.y = p.y;
+        pushTrail(fx.trail, p.x, p.y, 14);
+        if (k >= 1) {
+          if (gs.shot.hole) { gs.phase = "sink"; gs.shot.sinkAt = now; }
+          else settle(now);
+        }
+      } else if (gs.phase === "sink" && gs.shot) {
+        const q = Math.min((now - gs.shot.sinkAt) / SINK_MS, 1);
+        const p = sinkPos(gs.shot.hole, gs.shot.land, q);
+        gs.ball.x = p.x; gs.ball.y = p.y;
+        gs.ballR = BALL_R * (1 - q * 0.75);
+        if (q >= 1) settle(now);
+      } else if (gs.phase === "scored" && now >= gs.nextAt) {
+        gs.phase = "aim";
+        gs.ball = { x: START.x, y: START.y };
+        gs.ballR = BALL_R;
+        gs.lastPts = null;
+        fx.trail = [];
+      }
+    }
+    function settle(now) {
+      const pts = gs.shot.score;
+      gs.lastPts = pts;
+      scores.skee += pts;
+      updateScore();
+      hintEl.textContent = pts >= 100 ? "🎯 HUNDRED! corner pocket" : pts >= 40 ? "🎯 +" + pts + " — nice arc" : pts > 0 ? "🎯 +" + pts : "🎯 gutter — flick harder";
+      if (pts >= 100) { fx.flash = 1; fx.flashColor = "#4ade80"; fx.shake = 7; }
+      if (pts > 0 && gs.shot.hole) spawnBurst(fx.particles, gs.shot.hole.cx, gs.shot.hole.cy, 16, 160, gs.shot.hole.color);
+      gs.phase = "scored";
+      gs.nextAt = now + NEXT_DELAY_MS;
+    }
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      const back = ctx.createLinearGradient(0, 0, 0, H);
+      back.addColorStop(0, "#071a12"); back.addColorStop(0.5, "#05130d"); back.addColorStop(1, "#040d09");
+      ctx.fillStyle = back; ctx.fillRect(0, 0, W, H);
+      const sheen = ctx.createRadialGradient(W / 2, H * 0.24, 20, W / 2, H * 0.24, H * 0.7);
+      sheen.addColorStop(0, "rgba(74,222,128,0.14)"); sheen.addColorStop(1, "rgba(74,222,128,0)");
+      ctx.fillStyle = sheen; ctx.fillRect(0, 0, W, H);
+      const laneX = 24, laneW = W - 48;
+      const lane = ctx.createLinearGradient(laneX, 0, laneX + laneW, 0);
+      lane.addColorStop(0, "#0a2318"); lane.addColorStop(0.5, "#124a30"); lane.addColorStop(1, "#0a2318");
+      ctx.save();
+      roundRectPath(ctx, laneX, -20, laneW, H + 40, 22);
+      ctx.fillStyle = lane; ctx.fill();
+      const laneSheen = ctx.createLinearGradient(0, 0, 0, H);
+      laneSheen.addColorStop(0, "rgba(120,240,170,0.10)");
+      laneSheen.addColorStop(0.55, "rgba(120,240,170,0.03)");
+      laneSheen.addColorStop(1, "rgba(0,0,0,0.18)");
+      ctx.fillStyle = laneSheen; ctx.fill();
+      ctx.restore();
+      ctx.save();
+      roundRectPath(ctx, 22, -20, laneW + 4, H + 40, 24);
+      ctx.lineWidth = 5;
+      const rail = ctx.createLinearGradient(0, 0, 0, H);
+      rail.addColorStop(0, "rgba(134,239,172,0.55)");
+      rail.addColorStop(0.5, "rgba(34,197,94,0.4)");
+      rail.addColorStop(1, "rgba(20,83,45,0.5)");
+      ctx.strokeStyle = rail; ctx.stroke();
+      ctx.restore();
+      drawLogo(ctx, W / 2, 432, { width: 140, tint: "#86efac", alpha: 0.4 });
+      const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.72);
+      vig.addColorStop(0, "rgba(0,0,0,0)"); vig.addColorStop(1, "rgba(0,0,0,0.5)");
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.save();
+      if (fx.shake > 0.05) { const s = shakeOffset(fx.shake); ctx.translate(s.x, s.y); }
+      const ordered = [...HOLES].sort((a, b) => b.cy - a.cy);
+      for (const h of ordered) {
+        const dish = ctx.createRadialGradient(h.cx, h.cy - h.R * 0.3, h.R * 0.1, h.cx, h.cy, h.R);
+        dish.addColorStop(0, withAlpha(h.color, 0.32));
+        dish.addColorStop(0.7, withAlpha(h.color, 0.14));
+        dish.addColorStop(1, "rgba(3,10,7,0.55)");
+        ctx.beginPath(); ctx.arc(h.cx, h.cy, h.R, 0, TWO_PI); ctx.fillStyle = dish; ctx.fill();
+        ctx.save();
+        ctx.beginPath(); ctx.arc(h.cx, h.cy, h.R, 0, TWO_PI);
+        ctx.strokeStyle = h.color; ctx.lineWidth = 3;
+        ctx.shadowColor = h.color; ctx.shadowBlur = 12; ctx.stroke();
+        ctx.restore();
+        ctx.save();
+        ctx.fillStyle = "#eafff2"; ctx.font = "bold 12px system-ui, sans-serif";
+        ctx.shadowColor = withAlpha(h.color, 0.9); ctx.shadowBlur = 6;
+        ctx.fillText(String(h.pts), h.cx, h.cy - h.R * 0.42);
+        ctx.restore();
+        const dp = holeDrop(h);
+        const pit = ctx.createRadialGradient(dp.x, dp.y - HOLE_R * 0.4, 1, dp.x, dp.y, HOLE_R);
+        pit.addColorStop(0, "#0a1710"); pit.addColorStop(1, "#03070a");
+        ctx.beginPath(); ctx.arc(dp.x, dp.y, HOLE_R, 0, TWO_PI); ctx.fillStyle = pit; ctx.fill();
+        ctx.strokeStyle = withAlpha(h.color, 0.6); ctx.lineWidth = 1.5; ctx.stroke();
+      }
+      if (gs.phase === "aim" && gs.drag.active) {
+        const v = launchVelocity(gs.drag.dx, gs.drag.dy);
+        if (v && v.vy0 < 0) {
+          const tStar = apexTime(v);
+          ctx.save();
+          ctx.fillStyle = "#dbe7ff";
+          ctx.shadowColor = "rgba(203,213,225,0.8)"; ctx.shadowBlur = 6;
+          for (let i = 1; i <= 30; i++) {
+            const p = trajectory(v, (i / 30) * tStar);
+            const a = clamp((p.y - FADE_END_Y) / (START.y - FADE_END_Y), 0, 1);
+            if (a <= 0.03) continue;
+            ctx.globalAlpha = a * a * 0.7;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, TWO_PI); ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+          ctx.restore();
+        }
+      }
+      if (fx.trail.length > 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (let i = 0; i < fx.trail.length; i++) {
+          const t = fx.trail[i];
+          const k = i / fx.trail.length;
+          ctx.beginPath(); ctx.arc(t.x, t.y, gs.ballR * (0.25 + k * 0.7), 0, TWO_PI);
+          ctx.fillStyle = `rgba(190,230,255,${0.02 + k * 0.09})`; ctx.fill();
+        }
+        ctx.restore();
+      }
+      if (gs.ballR > 0.5) {
+        drawShadow(ctx, gs.ball.x, gs.ball.y + gs.ballR * 0.5, gs.ballR * 0.95, gs.ballR * 0.45, 0.35);
+        drawSphere(ctx, gs.ball.x, gs.ball.y, gs.ballR, "#ffffff", "#d3ddec", "#8794a6");
+      }
+      drawParticles(ctx, fx.particles);
+      if (gs.phase === "scored" && gs.shot && gs.lastPts !== null) {
+        const at = gs.shot.hole ? holeDrop(gs.shot.hole) : gs.shot.land;
+        const col = gs.lastPts >= 100 ? "#4ade80" : gs.lastPts > 0 ? "#fbbf24" : "#94a3b8";
+        ctx.save();
+        ctx.font = "bold 22px system-ui, sans-serif";
+        ctx.fillStyle = col;
+        ctx.shadowColor = withAlpha(col, 0.9); ctx.shadowBlur = 14;
+        ctx.fillText(gs.lastPts > 0 ? `+${gs.lastPts}` : "MISS", at.x, Math.max(at.y - 24, 20));
+        ctx.restore();
+      }
+      ctx.restore();
+      if (fx.flash > 0) {
+        ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+    return { W, H, enter, down, move, up, frame, draw,
+             icon: "🎯", label: "SKEE", hint: "🎯 drag from the ball · flick up the lane",
+             score: () => "SKEE · " + pad3(scores.skee) };
+  })();
+
+  /* =============================== BOWLING =============================== */
+  const BOWL = (() => {
+    const W = 340, H = 560;
+    const LANE_L = 40, LANE_R = W - 40, BALL_R = 12, PIN_R = 9;
+    const HEAD_Y = 150, PIN_GAP_X = 22, PIN_GAP_Y = 24;
+    const START = { x: W / 2, y: H - 40 };
+    const MIN_V = 4, MAX_V = 9, MAX_DRAG = 260, HOOK = 0.006, DOWN_DIST = 6;
+    const PURPLE_LIGHT = "#e9d5ff", PURPLE = "#a855f7", PURPLE_DEEP = "#6b21a8";
+    const CAM_D = 140, HORIZON = 56, NEAR_Y = H - 4, PIN_VIEW = 2.5, RACK_SPREAD = 1.6;
+    function project(x, y) {
+      const s = CAM_D / (CAM_D + (H - y));
+      return { x: W / 2 + (x - W / 2) * s, y: HORIZON + (NEAR_Y - HORIZON) * s, s };
+    }
+    const projectPin = (x, y) => project(x, HEAD_Y + (y - HEAD_Y) * RACK_SPREAD);
+    function makePins() {
+      const pins = [];
+      for (let r = 0; r < 4; r++) for (let i = 0; i <= r; i++) {
+        const x = W / 2 + (i - r / 2) * PIN_GAP_X;
+        const y = HEAD_Y - r * PIN_GAP_Y;
+        pins.push({ x, y, vx: 0, vy: 0, ox: x, oy: y, down: false });
+      }
+      return pins;
+    }
+    function launch(dx, dy) {
+      const len = Math.hypot(dx, dy);
+      if (len < 10) return null;
+      if (dy / len > -0.3) return null;
+      const power = Math.min(len / MAX_DRAG, 1);
+      const speed = MIN_V + power * (MAX_V - MIN_V);
+      return { vx0: (dx / len) * speed, vy0: (dy / len) * speed, spin: Math.max(-1, Math.min(1, dx / MAX_DRAG)) };
+    }
+    function drawPinShape(c) {
+      const R = PIN_R;
+      const g = c.createLinearGradient(0, -R, 0, R);
+      g.addColorStop(0, "#f6f8fb"); g.addColorStop(0.55, "#dfe6ef"); g.addColorStop(1, "#a9b3c3");
+      c.fillStyle = g;
+      c.beginPath();
+      c.moveTo(-R * 1.48, -R * 0.33);
+      c.bezierCurveTo(-R * 1.15, -R * 0.72, -R * 0.55, -R * 0.78, 0, -R * 0.78);
+      c.bezierCurveTo(R * 0.85, -R * 0.78, R * 1.3, -R * 0.42, R * 1.8, -R * 0.3);
+      c.bezierCurveTo(R * 2.1, -R * 0.24, R * 2.3, -R * 0.3, R * 2.45, -R * 0.36);
+      c.arc(R * 2.8, 0, R * 0.42, -Math.PI * 0.72, Math.PI * 0.72);
+      c.bezierCurveTo(R * 2.3, R * 0.3, R * 2.1, R * 0.24, R * 1.8, R * 0.3);
+      c.bezierCurveTo(R * 1.3, R * 0.42, R * 0.85, R * 0.78, 0, R * 0.78);
+      c.bezierCurveTo(-R * 0.55, R * 0.78, -R * 1.15, R * 0.72, -R * 1.48, R * 0.33);
+      c.closePath();
+      c.fill();
+      c.strokeStyle = "rgba(105,115,135,0.45)"; c.lineWidth = 1.2; c.stroke();
+      c.fillStyle = withAlpha(PURPLE, 0.9);
+      c.fillRect(R * 1.42, -R * 0.34, R * 0.17, R * 0.68);
+      c.fillRect(R * 1.7, -R * 0.31, R * 0.15, R * 0.62);
+      c.strokeStyle = "rgba(255,255,255,0.55)"; c.lineWidth = 1.2;
+      c.beginPath();
+      c.moveTo(-R * 1.0, -R * 0.55);
+      c.quadraticCurveTo(-R * 0.1, -R * 0.68, R * 0.7, -R * 0.45);
+      c.stroke();
+    }
+    function drawStandingPin(p) {
+      const q = projectPin(p.x, p.y);
+      const sc = q.s * PIN_VIEW;
+      drawShadow(ctx, q.x, q.y + 1.5, PIN_R * 1.1 * sc, PIN_R * 0.36 * sc, 0.3);
+      ctx.save();
+      ctx.translate(q.x, q.y); ctx.scale(sc, sc); ctx.rotate(-Math.PI / 2);
+      ctx.translate(PIN_R * 1.48, 0);
+      drawPinShape(ctx);
+      ctx.restore();
+    }
+    function drawFallenPin(p) {
+      const q = projectPin(p.x, p.y);
+      const sc = q.s * PIN_VIEW;
+      drawShadow(ctx, q.x + 1.5, q.y + 1.5, PIN_R * 2.1 * sc, PIN_R * 0.45 * sc, 0.18);
+      ctx.save();
+      ctx.translate(q.x, q.y); ctx.scale(sc, sc * 0.62);
+      ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
+      drawPinShape(ctx);
+      ctx.restore();
+    }
+    const ballView = s => 1 + (1 - s) * 1.35;
+    function drawBallP(x, y) {
+      const q = project(x, y);
+      const r = Math.max(3, BALL_R * q.s * ballView(q.s));
+      drawShadow(ctx, q.x, q.y + r * 0.3, r * 0.95, r * 0.4, 0.35);
+      drawSphere(ctx, q.x, q.y - r * 0.45, r, PURPLE_LIGHT, PURPLE, PURPLE_DEEP, { rim: true });
+    }
+    let gs, fx;
+    function enter() {
+      gs = { phase: "aim", ball: { x: START.x, y: START.y, vx: 0, vy: 0, spin: 0, gutter: false },
+             pins: makePins(), drag: { active: false, sx: 0, sy: 0, dx: 0, dy: 0 },
+             downAtStart: 0, sweepAt: 0 };
+      fx = { trail: [], particles: [], floaters: [], shake: 0, flash: 0 };
+    }
+    function down(p) {
+      if (gs.phase !== "aim") return;
+      const q = project(gs.ball.x, gs.ball.y);
+      if (Math.hypot(p.x - q.x, p.y - q.y) > 70) return;
+      gs.drag = { active: true, sx: p.x, sy: p.y, dx: 0, dy: 0 };
+    }
+    function move(p) {
+      if (gs.drag.active) { gs.drag.dx = p.x - gs.drag.sx; gs.drag.dy = p.y - gs.drag.sy; }
+    }
+    function up() {
+      if (!gs.drag.active) return;
+      const v = launch(gs.drag.dx, gs.drag.dy);
+      gs.drag.active = false;
+      if (!v) return;
+      gs.ball.vx = v.vx0; gs.ball.vy = v.vy0; gs.ball.spin = v.spin;
+      gs.downAtStart = gs.pins.filter(p => p.down).length;
+      gs.phase = "rolling";
+    }
+    function collide(a, b, ra, rb, ma, mb) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.01;
+      const overlap = ra + rb - dist;
+      if (overlap <= 0) return;
+      const nx = dx / dist, ny = dy / dist;
+      a.x -= nx * overlap * (mb / (ma + mb)); a.y -= ny * overlap * (mb / (ma + mb));
+      b.x += nx * overlap * (ma / (ma + mb)); b.y += ny * overlap * (ma / (ma + mb));
+      const rv = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+      if (rv <= 0) return;
+      const imp = 1.5 * rv / (1 / ma + 1 / mb);
+      a.vx -= imp * nx / ma; a.vy -= imp * ny / ma;
+      b.vx += imp * nx / mb; b.vy += imp * ny / mb;
+    }
+    function frame(now, dt) {
+      fx.particles = stepParticles(fx.particles, dt, 0.02);
+      fx.floaters = stepFloaters(fx.floaters, dt);
+      fx.shake = decay(fx.shake, dt, 0.02);
+      fx.flash = decay(fx.flash, dt, 0.0022);
+      const b = gs.ball;
+      if (gs.phase === "rolling") {
+        const steps = Math.max(1, Math.round(dt / 8));
+        for (let s = 0; s < steps; s++) {
+          b.vx += b.spin * HOOK * 8;
+          b.x += b.vx; b.y += b.vy;
+          b.vx *= 0.996; b.vy *= 0.996;
+          if (!b.gutter && (b.x < LANE_L + BALL_R || b.x > LANE_R - BALL_R) && b.y < H - 80) {
+            b.gutter = true; b.vx = 0;
+            b.x = b.x < W / 2 ? (10 + LANE_L) / 2 : (LANE_R + W - 10) / 2;
+          }
+          if (!b.gutter) for (const p of gs.pins) collide(b, p, BALL_R, PIN_R, 6, 1);
+          for (let i = 0; i < gs.pins.length; i++) for (let j = i + 1; j < gs.pins.length; j++)
+            collide(gs.pins[i], gs.pins[j], PIN_R, PIN_R, 1, 1);
+          for (const p of gs.pins) {
+            p.x += p.vx; p.y += p.vy;
+            p.vx *= 0.93; p.vy *= 0.93;
+            if (Math.abs(p.vx) < 0.02) p.vx = 0;
+            if (Math.abs(p.vy) < 0.02) p.vy = 0;
+            if (!p.down && Math.hypot(p.x - p.ox, p.y - p.oy) > DOWN_DIST) p.down = true;
+          }
+        }
+        pushTrail(fx.trail, b.x, b.y, 12);
+        const speed = Math.hypot(b.vx, b.vy);
+        const off = b.y < -30;
+        if (off || speed < 0.35) {
+          b.vx = b.vy = 0;
+          const downs = gs.pins.filter(p => p.down).length;
+          const gained = Math.max(downs - gs.downAtStart, 0);
+          scores.bowl += gained;
+          updateScore();
+          const strike = gained === 10 && gs.downAtStart === 0;
+          const deck = project(W / 2, HEAD_Y);
+          spawnFloater(fx.floaters, W / 2, deck.y + 44,
+            strike ? "STRIKE!" : gained > 0 ? `+${gained}` : b.gutter ? "GUTTER" : "MISS",
+            strike ? "#e9d5ff" : gained > 0 ? "#d8b4fe" : "#94a3b8", { size: strike ? 26 : 22, life: 800 });
+          if (strike) { fx.flash = 1; fx.shake = 9; spawnBurst(fx.particles, deck.x, deck.y, 22, 200, PURPLE); }
+          else if (gained > 0) fx.shake = 4;
+          hintEl.textContent = strike ? "🎳 STRIKE!" : gained > 0 ? "🎳 +" + gained + " pins" : b.gutter ? "🎳 gutter ball" : "🎳 they survived — again";
+          gs.phase = "sweep";
+          gs.sweepAt = now + 950;
+        }
+      } else if (gs.phase === "sweep" && now >= gs.sweepAt) {
+        if (gs.pins.every(p => p.down)) gs.pins = makePins();
+        gs.ball = { x: START.x, y: START.y, vx: 0, vy: 0, spin: 0, gutter: false };
+        fx.trail = [];
+        gs.phase = "aim";
+      }
+    }
+    function draw(now) {
+      ctx.clearRect(0, 0, W, H);
+      const nearL = project(LANE_L, H), nearR = project(LANE_R, H);
+      const farL = project(LANE_L, 0), farR = project(LANE_R, 0);
+      const deck = project(W / 2, HEAD_Y);
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#0b0a16"); bg.addColorStop(0.3, "#1a1330");
+      bg.addColorStop(0.55, "#121026"); bg.addColorStop(1, "#0b0a16");
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      const sheen = ctx.createRadialGradient(W / 2, deck.y - 14, 8, W / 2, deck.y - 14, H * 0.42);
+      sheen.addColorStop(0, withAlpha(PURPLE, 0.2)); sheen.addColorStop(1, withAlpha(PURPLE, 0));
+      ctx.fillStyle = sheen; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#07060d";
+      ctx.fillRect(farL.x - 16, farL.y - 30, farR.x - farL.x + 32, 30);
+      neonLine(ctx, farL.x - 16, farL.y - 30, farR.x + 16, farL.y - 30, PURPLE, 2, 10);
+      drawLogo(ctx, W / 2, farL.y - 16, { width: 76, tint: PURPLE, alpha: 0.8 });
+      const gut = ctx.createLinearGradient(0, farL.y, 0, nearL.y);
+      gut.addColorStop(0, "#0a0813"); gut.addColorStop(1, "#141021");
+      ctx.fillStyle = gut;
+      for (const [x0, x1] of [[10, LANE_L], [LANE_R, W - 10]]) {
+        const a = project(x0, H), b2 = project(x1, H), c2 = project(x1, 0), d2 = project(x0, 0);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.lineTo(c2.x, c2.y); ctx.lineTo(d2.x, d2.y);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.moveTo(nearL.x, nearL.y); ctx.lineTo(nearR.x, nearR.y);
+      ctx.lineTo(farR.x, farR.y); ctx.lineTo(farL.x, farL.y);
+      ctx.closePath();
+      const wood = ctx.createLinearGradient(0, farL.y, 0, nearL.y);
+      wood.addColorStop(0, "#3d3020"); wood.addColorStop(0.45, "#5a4526"); wood.addColorStop(1, "#6b5330");
+      ctx.fillStyle = wood; ctx.fill();
+      const gloss = ctx.createLinearGradient(nearL.x, 0, nearR.x, 0);
+      gloss.addColorStop(0, "rgba(0,0,0,0.25)");
+      gloss.addColorStop(0.5, "rgba(255,236,190,0.10)");
+      gloss.addColorStop(1, "rgba(0,0,0,0.25)");
+      ctx.fillStyle = gloss; ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.20)"; ctx.lineWidth = 1;
+      for (let x = LANE_L + 20; x < LANE_R; x += 20) {
+        const a = project(x, H), b2 = project(x, 0);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
+      }
+      ctx.strokeStyle = "rgba(0,0,0,0.10)";
+      for (let y = 120; y < H - 60; y += 90) {
+        const a = project(LANE_L, y), b2 = project(LANE_R, y);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
+      }
+      ctx.save();
+      ctx.fillStyle = withAlpha(PURPLE, 0.5);
+      ctx.shadowColor = withAlpha(PURPLE, 0.7); ctx.shadowBlur = 6;
+      for (let i = -2; i <= 2; i++) {
+        const q = project(W / 2 + i * 26, HEAD_Y + 150 + Math.abs(i) * 14);
+        const sz = 5 * q.s + 2;
+        ctx.beginPath();
+        ctx.moveTo(q.x, q.y - sz * 1.6);
+        ctx.lineTo(q.x - sz * 0.55, q.y);
+        ctx.lineTo(q.x + sz * 0.55, q.y);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      const foulL = project(LANE_L, H - 70), foulR = project(LANE_R, H - 70);
+      neonLine(ctx, foulL.x, foulL.y, foulR.x, foulR.y, PURPLE, 3, 12);
+      const vig = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.28, W / 2, H * 0.5, H * 0.72);
+      vig.addColorStop(0, "rgba(0,0,0,0)"); vig.addColorStop(1, "rgba(0,0,0,0.5)");
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      if (fx.shake > 0.05) { const s = shakeOffset(fx.shake); ctx.translate(s.x, s.y); }
+      for (let i = 0; i < fx.trail.length; i++) {
+        const t = fx.trail[i];
+        const k = i / fx.trail.length;
+        const q = project(t.x, t.y);
+        const br = BALL_R * q.s * ballView(q.s);
+        ctx.beginPath(); ctx.arc(q.x, q.y - br * 0.5, br * (0.3 + k * 0.6), 0, TWO_PI);
+        ctx.fillStyle = withAlpha(PURPLE, 0.04 + k * 0.14); ctx.fill();
+      }
+      const items = gs.pins.map(p => ({
+        sy: projectPin(p.x, p.y).y,
+        d: p.down ? () => drawFallenPin(p) : () => drawStandingPin(p),
+      }));
+      items.push({ sy: project(gs.ball.x, gs.ball.y).y, d: () => drawBallP(gs.ball.x, gs.ball.y) });
+      items.sort((a, b2) => a.sy - b2.sy);
+      for (const it of items) it.d();
+      if (gs.phase === "aim" && gs.drag.active) {
+        const v = launch(gs.drag.dx, gs.drag.dy);
+        if (v) {
+          const len = 150;
+          const sp = Math.hypot(v.vx0, v.vy0);
+          const from = project(START.x, START.y);
+          const to = project(START.x + (v.vx0 / sp) * len, START.y + (v.vy0 / sp) * len);
+          ctx.save();
+          ctx.strokeStyle = withAlpha("#38bdf8", 0.85);
+          ctx.shadowColor = withAlpha("#38bdf8", 0.8); ctx.shadowBlur = 10;
+          ctx.lineWidth = 3; ctx.lineCap = "round";
+          ctx.setLineDash([6, 6]);
+          ctx.beginPath(); ctx.moveTo(from.x, from.y - 6); ctx.lineTo(to.x, to.y); ctx.stroke();
+          ctx.restore();
+        }
+      }
+      drawParticles(ctx, fx.particles);
+      drawFloaters(ctx, fx.floaters);
+      ctx.restore();
+      if (fx.flash > 0) {
+        ctx.fillStyle = withAlpha(PURPLE, fx.flash * 0.22);
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+    return { W, H, enter, down, move, up, frame, draw,
+             icon: "🎳", label: "BOWL", hint: "🎳 drag from the ball · roll it",
+             score: () => "PINS · " + pad3(scores.bowl) };
+  })();
+
+  /* ============================== AXE THROW ============================== */
+  const AXE = (() => {
+    const W = 340, H = 560;
+    const CENTER = { x: W / 2, y: 220 };
+    const RINGS = [
+      { r: 150, pts: 1, fill: "#3f2d1a" },
+      { r: 116, pts: 2, fill: "#6b4a24" },
+      { r: 84, pts: 3, fill: "#1e3a5f" },
+      { r: 54, pts: 4, fill: "#2563eb" },
+      { r: 26, pts: 5, fill: "#dc2626" },
+    ];
+    const CLUTCH = [
+      { x: CENTER.x - 100, y: CENTER.y - 100 },
+      { x: CENTER.x + 100, y: CENTER.y - 100 },
+    ];
+    const CLUTCH_R = 15, CLUTCH_PTS = 7;
+    const SWEEP_X0 = 22, SWEEP_X1 = W - 22, SWEEP_Y0 = 74, SWEEP_Y1 = 366;
+    const SWEEP_X_MS = 1300, SWEEP_Y_MS = 1100;
+    const FLIGHT_MS = 480, NEXT_DELAY_MS = 800;
+    const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+    function scoreAt(x, y) {
+      for (const c of CLUTCH) if (dist(x, y, c.x, c.y) <= CLUTCH_R) return CLUTCH_PTS;
+      const d = dist(x, y, CENTER.x, CENTER.y);
+      for (let i = RINGS.length - 1; i >= 0; i--) if (d <= RINGS[i].r) return RINGS[i].pts;
+      return 0;
+    }
+    function drawAxeSprite(c, x, y, angle, scale = 1) {
+      c.save();
+      c.translate(x, y); c.rotate(angle); c.scale(scale, scale);
+      const hg = c.createLinearGradient(-2.5, 0, 2.5, 0);
+      hg.addColorStop(0, "#4a2f18"); hg.addColorStop(0.45, "#a06a34");
+      hg.addColorStop(0.6, "#8b5a2b"); hg.addColorStop(1, "#3d2713");
+      c.fillStyle = hg; c.fillRect(-2.5, -6, 5, 26);
+      const mg = c.createLinearGradient(-2, -14, 12, -1);
+      mg.addColorStop(0, "#f1f5f9"); mg.addColorStop(0.5, "#cbd5e1"); mg.addColorStop(1, "#64748b");
+      c.beginPath();
+      c.moveTo(-2, -10); c.lineTo(12, -14); c.lineTo(12, -1); c.lineTo(-2, -4);
+      c.closePath(); c.fillStyle = mg; c.fill();
+      c.strokeStyle = "rgba(255,255,255,0.75)"; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(11.4, -13); c.lineTo(11.4, -1.6); c.stroke();
+      c.restore();
+    }
+    const AXE_HEAD = { x: 5.86, y: -7.28 };
+    function drawAxeStuck(hx, hy, angle, scale = 1) {
+      const co = Math.cos(angle), sn = Math.sin(angle);
+      const ox = (AXE_HEAD.x * co - AXE_HEAD.y * sn) * scale;
+      const oy = (AXE_HEAD.x * sn + AXE_HEAD.y * co) * scale;
+      drawAxeSprite(ctx, hx - ox, hy - oy, angle, scale);
+    }
+    function drawBoard() {
+      const bx = 28, by = 60, bw = W - 56, bh = 320;
+      drawShadow(ctx, CENTER.x, by + bh + 6, bw * 0.5, 20, 0.4);
+      ctx.save();
+      roundRectPath(ctx, bx, by, bw, bh, 12);
+      ctx.clip();
+      const wood = ctx.createRadialGradient(CENTER.x, CENTER.y - 20, 20, CENTER.x, CENTER.y, 230);
+      wood.addColorStop(0, "#5a3f22"); wood.addColorStop(0.6, "#3f2c17"); wood.addColorStop(1, "#241910");
+      ctx.fillStyle = wood; ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = "rgba(0,0,0,0.14)"; ctx.lineWidth = 1;
+      for (let gx = bx + 10; gx < bx + bw; gx += 16) {
+        ctx.beginPath(); ctx.moveTo(gx, by); ctx.lineTo(gx + 4, by + bh); ctx.stroke();
+      }
+      ctx.restore();
+      ctx.strokeStyle = "rgba(20,13,7,0.9)"; ctx.lineWidth = 5;
+      roundRectPath(ctx, bx, by, bw, bh, 12); ctx.stroke();
+      ctx.strokeStyle = "rgba(180,130,70,0.25)"; ctx.lineWidth = 1.5;
+      roundRectPath(ctx, bx + 2, by + 2, bw - 4, bh - 4, 10); ctx.stroke();
+      for (const ring of RINGS) {
+        ctx.beginPath(); ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
+        ctx.fillStyle = ring.fill; ctx.fill();
+        const g = ctx.createLinearGradient(0, CENTER.y - ring.r, 0, CENTER.y + ring.r);
+        g.addColorStop(0, "rgba(255,255,255,0.06)"); g.addColorStop(1, "rgba(0,0,0,0.16)");
+        ctx.fillStyle = g; ctx.fill();
+      }
+      ctx.save();
+      ctx.beginPath(); ctx.arc(CENTER.x, CENTER.y, RINGS[0].r, 0, TWO_PI); ctx.clip();
+      ctx.strokeStyle = "rgba(0,0,0,0.12)"; ctx.lineWidth = 1;
+      for (let gx = CENTER.x - RINGS[0].r + 6; gx < CENTER.x + RINGS[0].r; gx += 16) {
+        ctx.beginPath();
+        ctx.moveTo(gx, CENTER.y - RINGS[0].r); ctx.lineTo(gx + 4, CENTER.y + RINGS[0].r);
+        ctx.stroke();
+      }
+      ctx.restore();
+      for (const ring of RINGS) {
+        ctx.beginPath(); ctx.arc(CENTER.x, CENTER.y, ring.r, 0, TWO_PI);
+        ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5; ctx.stroke();
+      }
+      for (const c of CLUTCH) {
+        ctx.beginPath(); ctx.arc(c.x, c.y, CLUTCH_R, 0, TWO_PI);
+        ctx.fillStyle = "#22c55e"; ctx.fill();
+        const g = ctx.createLinearGradient(0, c.y - CLUTCH_R, 0, c.y + CLUTCH_R);
+        g.addColorStop(0, "rgba(255,255,255,0.08)"); g.addColorStop(1, "rgba(0,0,0,0.2)");
+        ctx.fillStyle = g; ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 2; ctx.stroke();
+      }
+    }
+    function drawWoodWall() {
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#2e1f10"); bg.addColorStop(0.55, "#24170b"); bg.addColorStop(1, "#140c05");
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      const PLANK_H = 46;
+      for (let row = 0, y = 0; y < H; row++, y += PLANK_H) {
+        const t = ((row * 73) % 7) / 7 - 0.5;
+        ctx.fillStyle = t > 0 ? `rgba(214,164,96,${t * 0.07})` : `rgba(0,0,0,${-t * 0.12})`;
+        ctx.fillRect(0, y, W, PLANK_H);
+        ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.lineWidth = 1;
+        for (let k = 0; k < 3; k++) {
+          const gy = y + ((row * 31 + k * 17) % PLANK_H);
+          ctx.beginPath();
+          ctx.moveTo(0, gy);
+          ctx.bezierCurveTo(W * 0.3, gy + 2, W * 0.7, gy - 2, W, gy + 1);
+          ctx.stroke();
+        }
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.fillRect(0, y + PLANK_H - 1.5, W, 1.5);
+        ctx.fillRect((row * 149) % W, y, 1.5, PLANK_H);
+      }
+    }
+    let gs, fx;
+    function enter(now) {
+      gs = { phase: "aimX", lockX: CENTER.x, land: null, score: 0, flyStart: 0, nextAt: 0, marks: [], sweepBase: now };
+      fx = { trail: [], particles: [], shake: 0, flash: 0, flashColor: "#fbbf24" };
+    }
+    function down(p, now) {
+      if (gs.phase === "aimX") {
+        gs.lockX = SWEEP_X0 + (SWEEP_X1 - SWEEP_X0) * triWave(now - gs.sweepBase, SWEEP_X_MS);
+        gs.phase = "aimY";
+        gs.sweepBase = now;
+        hintEl.textContent = "🪓 tap again to lock the height";
+      } else if (gs.phase === "aimY") {
+        const y = SWEEP_Y0 + (SWEEP_Y1 - SWEEP_Y0) * triWave(now - gs.sweepBase, SWEEP_Y_MS);
+        gs.land = { x: gs.lockX, y };
+        gs.score = scoreAt(gs.lockX, y);
+        gs.phase = "flying";
+        gs.flyStart = now;
+        spawnBurst(fx.particles, W / 2, H - 24, 7, 120, "#c8963e");
+      }
+    }
+    function frame(now, dt) {
+      fx.particles = stepParticles(fx.particles, dt, 0.02, 220);
+      fx.shake = decay(fx.shake, dt, 0.02);
+      fx.flash = decay(fx.flash, dt, 0.0022);
+      if (gs.phase === "flying" && gs.land) {
+        const p = Math.min((now - gs.flyStart) / FLIGHT_MS, 1);
+        const x = W / 2 + (gs.land.x - W / 2) * p;
+        const y = (H - 24) + (gs.land.y - (H - 24)) * p;
+        pushTrail(fx.trail, x, y, 12);
+        if (p >= 1) {
+          scores.axe += gs.score;
+          updateScore();
+          gs.marks.push({ x: gs.land.x, y: gs.land.y });
+          if (gs.marks.length > 5) gs.marks = [];
+          spawnBurst(fx.particles, gs.land.x, gs.land.y, 10, 150, gs.score >= 5 ? "#fde68a" : "#c8963e");
+          if (gs.score >= 5) { fx.flash = 1; fx.flashColor = gs.score >= 7 ? "#4ade80" : "#fbbf24"; fx.shake = 7; }
+          hintEl.textContent = gs.score >= 7 ? "🪓 CLUTCH! +7" : gs.score >= 5 ? "🪓 BULLSEYE! +5" : gs.score > 0 ? "🪓 +" + gs.score + " — stuck it" : "🪓 off the board!";
+          gs.phase = "scored";
+          gs.nextAt = now + NEXT_DELAY_MS;
+        }
+      } else if (gs.phase === "scored" && now >= gs.nextAt) {
+        gs.phase = "aimX";
+        gs.sweepBase = now;
+        gs.land = null;
+        fx.trail = [];
+        hintEl.textContent = MODES.axe.hint;
+      }
+    }
+    function draw(now) {
+      ctx.clearRect(0, 0, W, H);
+      drawWoodWall();
+      drawLogo(ctx, W / 2, 432, { width: 150, tint: "#fbbf24", alpha: 0.5 });
+      const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
+      vig.addColorStop(0, "rgba(0,0,0,0)"); vig.addColorStop(1, "rgba(0,0,0,0.5)");
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+      drawBoard();
+      ctx.save();
+      if (fx.shake > 0.05) { const s = shakeOffset(fx.shake); ctx.translate(s.x, s.y); }
+      for (let i = 0; i < fx.trail.length; i++) {
+        const t = fx.trail[i];
+        const k = i / fx.trail.length;
+        ctx.beginPath(); ctx.arc(t.x, t.y, 2 + k * 5, 0, TWO_PI);
+        ctx.fillStyle = `rgba(251,191,36,${0.03 + k * 0.16})`; ctx.fill();
+      }
+      for (const m of gs.marks) drawAxeStuck(m.x, m.y, -0.35, 0.8);
+      if (gs.phase === "aimX") {
+        const x = SWEEP_X0 + (SWEEP_X1 - SWEEP_X0) * triWave(now - gs.sweepBase, SWEEP_X_MS);
+        neonLine(ctx, x, 60, x, 380, "#fbbf24", 2.5, 12);
+      } else if (gs.phase === "aimY") {
+        const y = SWEEP_Y0 + (SWEEP_Y1 - SWEEP_Y0) * triWave(now - gs.sweepBase, SWEEP_Y_MS);
+        ctx.save();
+        ctx.strokeStyle = "rgba(251,191,36,0.4)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(gs.lockX, 60); ctx.lineTo(gs.lockX, 380); ctx.stroke();
+        ctx.restore();
+        neonLine(ctx, 28, y, W - 28, y, "#fbbf24", 2.5, 12);
+        ctx.save();
+        ctx.beginPath(); ctx.arc(gs.lockX, y, 5, 0, TWO_PI);
+        ctx.fillStyle = "#fde68a";
+        ctx.shadowColor = "#fbbf24"; ctx.shadowBlur = 12;
+        ctx.fill();
+        ctx.restore();
+      }
+      if (gs.phase === "flying" && gs.land) {
+        const p = Math.min((now - gs.flyStart) / FLIGHT_MS, 1);
+        const x = W / 2 + (gs.land.x - W / 2) * p;
+        const y = (H - 24) + (gs.land.y - (H - 24)) * p;
+        drawAxeStuck(x, y, p * Math.PI * 6);
+      }
+      if (gs.phase === "scored" && gs.land) {
+        drawAxeStuck(gs.land.x, gs.land.y, -0.35);
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.shadowBlur = 12;
+        if (gs.score >= 5) {
+          const big = gs.score >= 7;
+          const label = big ? "CLUTCH!" : "BULLSEYE!";
+          const col = big ? "#4ade80" : "#fbbf24";
+          ctx.font = "bold 18px system-ui, sans-serif";
+          ctx.fillStyle = col; ctx.shadowColor = col;
+          ctx.fillText(label, gs.land.x, gs.land.y - 40);
+        }
+        ctx.font = "bold 22px system-ui, sans-serif";
+        const sc = gs.score >= 7 ? "#4ade80" : gs.score > 0 ? "#fde68a" : "#94a3b8";
+        ctx.fillStyle = sc; ctx.shadowColor = sc;
+        ctx.fillText(gs.score > 0 ? `+${gs.score}` : "MISS", gs.land.x, gs.land.y - 20);
+        ctx.restore();
+      }
+      if (gs.phase === "aimX" || gs.phase === "aimY") drawAxeSprite(ctx, W / 2, H - 24, 0);
+      drawParticles(ctx, fx.particles);
+      ctx.restore();
+      if (fx.flash > 0) {
+        ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+    return { W, H, enter, down, move: () => {}, up: () => {}, frame, draw,
+             icon: "🪓", label: "AXE", hint: "🪓 tap to lock the sweep — twice",
+             score: () => "AXE · " + pad3(scores.axe) };
+  })();
+
+  /* ============================ HIGH STRIKER ============================= */
+  const STRIKER = (() => {
+    const W = 340, H = 560;
+    const BELL = { x: W / 2, y: 64, r: 24 };
+    const PUCK_R = 9;
+    const REST_Y = 456;
+    const BELL_HIT_Y = BELL.y + BELL.r + PUCK_R;
+    const RISE_MAX = REST_Y - BELL_HIT_Y;
+    const POST_DX = 46;
+    const PAD = { x: W / 2, y: 472 };
+    const METER = { x: 296, y: 336, w: 20, h: 156 };
+    const MALLET = { x: 92, y: 500, len: 56 };
+    const ZONES = [
+      { min: 0, label: "Soggy Noodle", color: "#94a3b8" },
+      { min: 25, label: "Warm-Up", color: "#60a5fa" },
+      { min: 50, label: "Solid Hit", color: "#4ade80" },
+      { min: 75, label: "Heavy Hitter", color: "#fbbf24" },
+      { min: 90, label: "RING THE BELL!", color: "#ef4444" },
+    ];
+    const METER_MS = 1050, PERFECT_T = 0.97;
+    const STRIKE_MS = 110, RETURN_MS = 380, NEXT_DELAY_MS = 750;
+    const GRAV = 0.00145;
+    function zoneFor(score) {
+      let z = ZONES[0];
+      for (const zone of ZONES) if (score >= zone.min) z = zone;
+      return z;
+    }
+    const scoreToY = s => REST_Y - (RISE_MAX * s) / 100;
+    let gs, fx;
+    function enter(now) {
+      gs = { phase: "aim", meterBase: now, power: 0, puckY: 0, v0: 0, launchAt: 0, strikeAt: 0, rang: false, nextAt: 0 };
+      fx = { trail: [], particles: [], floaters: [], shake: 0, flash: 0, flashColor: "#fbbf24", bellSwing: 0 };
+    }
+    function down(p, now) {
+      if (gs.phase !== "aim") return;
+      const t = triWave(now - gs.meterBase, METER_MS);
+      gs.power = t >= PERFECT_T ? 1 : t;
+      gs.strikeAt = now;
+      gs.launchAt = now + STRIKE_MS;
+      gs.phase = "flight";
+      gs.rang = false;
+      gs.v0 = Math.sqrt(2 * GRAV * RISE_MAX * gs.power);
+    }
+    function frame(now, dt) {
+      fx.particles = stepParticles(fx.particles, dt, 0.02);
+      fx.floaters = stepFloaters(fx.floaters, dt);
+      fx.shake = decay(fx.shake, dt, 0.02);
+      fx.flash = decay(fx.flash, dt, 0.0022);
+      fx.bellSwing = decay(fx.bellSwing, dt, 0.001);
+      if (gs.phase === "flight" && now >= gs.launchAt) {
+        const t = now - gs.launchAt;
+        const y = gs.v0 * t - 0.5 * GRAV * t * t;
+        gs.puckY = Math.max(0, Math.min(y, RISE_MAX));
+        pushTrail(fx.trail, W / 2, REST_Y - gs.puckY, 12);
+        if (!gs.rang && gs.puckY >= RISE_MAX - 0.5 && gs.power >= 0.999) {
+          gs.rang = true;
+          scores.striker++;
+          updateScore();
+          fx.flash = 1; fx.flashColor = "#fbbf24"; fx.shake = 10; fx.bellSwing = 1;
+          spawnBurst(fx.particles, BELL.x, BELL.y, 26, 240, "#fbbf24");
+          spawnFloater(fx.floaters, W / 2, BELL.y + 60, "DING!", "#fbbf24", { size: 26, life: 900 });
+          hintEl.textContent = "🔨 DING! rang the bell";
+        }
+        const falling = gs.v0 - GRAV * t < 0;
+        if (falling && gs.puckY <= 0.5) {
+          gs.puckY = 0;
+          if (!gs.rang) {
+            const sc = Math.round(gs.power * 100);
+            const z = zoneFor(sc);
+            spawnFloater(fx.floaters, W / 2, scoreToY(sc) - 16, z.label, z.color, { size: 15, life: 800 });
+            hintEl.textContent = "🔨 " + z.label.toLowerCase() + " — tap at the very top";
+          }
+          gs.phase = "settle";
+          gs.nextAt = now + NEXT_DELAY_MS;
+        }
+      } else if (gs.phase === "settle" && now >= gs.nextAt) {
+        gs.phase = "aim";
+        gs.meterBase = now;
+        fx.trail = [];
+      }
+    }
+    function drawBackdrop() {
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#221338"); bg.addColorStop(0.55, "#150e26"); bg.addColorStop(1, "#0a0716");
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < 26; i++) {
+        const x = (i * 97 + 13) % W;
+        const y = (i * 61 + 29) % Math.floor(H * 0.45);
+        ctx.beginPath(); ctx.arc(x, y, 0.9 + (i % 3) * 0.4, 0, TWO_PI);
+        ctx.fillStyle = `rgba(255,255,255,${0.1 + (i % 4) * 0.06})`; ctx.fill();
+      }
+      const bulbColors = ["#fbbf24", "#ef4444", "#4ade80", "#60a5fa"];
+      for (let i = 0, x = 10; x < W; i++, x += 24) {
+        const c = bulbColors[i % bulbColors.length];
+        ctx.beginPath(); ctx.arc(x, 12 + (i % 2) * 5, 3, 0, TWO_PI);
+        ctx.fillStyle = c;
+        ctx.save();
+        ctx.shadowColor = c; ctx.shadowBlur = 8; ctx.fill();
+        ctx.restore();
+      }
+      const ground = ctx.createLinearGradient(0, 500, 0, H);
+      ground.addColorStop(0, "#241a10"); ground.addColorStop(1, "#120d08");
+      ctx.fillStyle = ground; ctx.fillRect(0, 500, W, H - 500);
+      ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(0, 500, W, 2);
+      const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.74);
+      vig.addColorStop(0, "rgba(0,0,0,0)"); vig.addColorStop(1, "rgba(0,0,0,0.5)");
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+    }
+    function drawTower() {
+      const top = scoreToY(100) - PUCK_R - 2;
+      const bot = PAD.y - 2;
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.fillRect(W / 2 - POST_DX + 8, top, (POST_DX - 8) * 2, bot - top);
+      ctx.save();
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      for (let i = 0; i < ZONES.length; i++) {
+        const z = ZONES[i];
+        const hi = i + 1 < ZONES.length ? ZONES[i + 1].min : 100;
+        const yTop = scoreToY(hi);
+        const yBot = scoreToY(z.min);
+        ctx.fillStyle = withAlpha(z.color, 0.14);
+        ctx.fillRect(W / 2 - POST_DX + 8, yTop, (POST_DX - 8) * 2, yBot - yTop);
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(W / 2 - POST_DX + 8, yBot - 1, (POST_DX - 8) * 2, 1.5);
+        const big = z.min >= 90;
+        ctx.font = `bold ${big ? 9 : 10}px system-ui, sans-serif`;
+        ctx.fillStyle = withAlpha(z.color, 0.85);
+        ctx.fillText(z.label, W / 2, (yTop + yBot) / 2);
+      }
+      ctx.restore();
+      for (const side of [-1, 1]) {
+        const px = W / 2 + side * POST_DX - 4.5;
+        const wood = ctx.createLinearGradient(px, 0, px + 9, 0);
+        wood.addColorStop(0, side < 0 ? "#6b4a24" : "#3d2713");
+        wood.addColorStop(0.5, "#8b5a2b");
+        wood.addColorStop(1, side < 0 ? "#3d2713" : "#6b4a24");
+        ctx.fillStyle = wood;
+        ctx.fillRect(px, top - 6, 9, bot - top + 6);
+        for (let r = 0, ry = top + 8; ry < bot - 4; r++, ry += 26) {
+          ctx.beginPath(); ctx.arc(px + 4.5, ry, 1.6, 0, TWO_PI);
+          ctx.fillStyle = r % 2 ? "#cbd5e1" : "#94a3b8"; ctx.fill();
+        }
+      }
+      const rail = ctx.createLinearGradient(W / 2 - 2, 0, W / 2 + 2, 0);
+      rail.addColorStop(0, "#475569"); rail.addColorStop(0.5, "#94a3b8"); rail.addColorStop(1, "#334155");
+      ctx.fillStyle = rail;
+      ctx.fillRect(W / 2 - 1.5, top, 3, bot - top);
+    }
+    function drawBellFn(now) {
+      ctx.save();
+      ctx.translate(BELL.x, BELL.y - BELL.r - 6);
+      if (fx.bellSwing > 0.01) ctx.rotate(Math.sin(now * 0.02) * fx.bellSwing * 0.16);
+      ctx.translate(0, BELL.r + 6);
+      ctx.fillStyle = "#3f2d1a";
+      ctx.fillRect(-8, -BELL.r - 10, 16, 8);
+      drawSphere(ctx, 0, 0, BELL.r, "#fef3c7", "#fbbf24", "#92600a", { rim: true });
+      ctx.fillStyle = "#b45309";
+      ctx.fillRect(-BELL.r - 2, BELL.r - 5, BELL.r * 2 + 4, 5);
+      ctx.beginPath(); ctx.arc(0, BELL.r + 2, 3, 0, TWO_PI);
+      ctx.fillStyle = "#78350f"; ctx.fill();
+      ctx.restore();
+    }
+    function drawPad() {
+      drawShadow(ctx, PAD.x, PAD.y + 26, 44, 9, 0.4);
+      const ped = ctx.createLinearGradient(0, PAD.y, 0, PAD.y + 26);
+      ped.addColorStop(0, "#4b3320"); ped.addColorStop(1, "#241910");
+      ctx.fillStyle = ped;
+      roundRectPath(ctx, PAD.x - 36, PAD.y, 72, 26, 5); ctx.fill();
+      const padG = ctx.createLinearGradient(0, PAD.y - 10, 0, PAD.y + 4);
+      padG.addColorStop(0, "#f87171"); padG.addColorStop(1, "#991b1b");
+      ctx.beginPath(); ctx.ellipse(PAD.x, PAD.y - 2, 32, 9, 0, 0, TWO_PI);
+      ctx.fillStyle = padG; ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    function drawMallet(angle) {
+      ctx.fillStyle = "#1f2937";
+      ctx.fillRect(MALLET.x - 22, MALLET.y - 14, 7, 22);
+      ctx.fillRect(MALLET.x - 8, MALLET.y - 14, 7, 22);
+      ctx.beginPath(); ctx.ellipse(MALLET.x - 14, MALLET.y - 28, 13, 17, 0.18, 0, TWO_PI); ctx.fill();
+      ctx.beginPath(); ctx.arc(MALLET.x - 12, MALLET.y - 50, 7, 0, TWO_PI);
+      ctx.fillStyle = "#374151"; ctx.fill();
+      ctx.save();
+      ctx.translate(MALLET.x, MALLET.y); ctx.rotate(angle);
+      const hg = ctx.createLinearGradient(0, -3, 0, 3);
+      hg.addColorStop(0, "#a06a34"); hg.addColorStop(1, "#4a2f18");
+      ctx.fillStyle = hg;
+      ctx.fillRect(0, -3, MALLET.len, 6);
+      const head = ctx.createLinearGradient(MALLET.len - 9, -16, MALLET.len + 9, 16);
+      head.addColorStop(0, "#e2e8f0"); head.addColorStop(0.5, "#94a3b8"); head.addColorStop(1, "#475569");
+      roundRectPath(ctx, MALLET.len - 9, -16, 18, 32, 5);
+      ctx.fillStyle = head; ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.fillRect(MALLET.len - 9, -6, 18, 2);
+      ctx.fillRect(MALLET.len - 9, 4, 18, 2);
+      ctx.restore();
+    }
+    function drawMeter(value) {
+      const { x, y, w, h } = METER;
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      roundRectPath(ctx, x, y, w, h, 5); ctx.fill();
+      const fh = (h - 4) * value;
+      if (fh > 0.5) {
+        const c = zoneFor(value * 100).color;
+        ctx.save();
+        roundRectPath(ctx, x + 2, y + 2 + (h - 4 - fh), w - 4, fh, 3);
+        ctx.fillStyle = withAlpha(c, 0.9);
+        ctx.shadowColor = c; ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.restore();
+      }
+      for (const z of ZONES) {
+        if (z.min === 0) continue;
+        const ty = y + 2 + (h - 4) * (1 - z.min / 100);
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.fillRect(x + 2, ty, w - 4, 1);
+      }
+      ctx.strokeStyle = "rgba(148,163,184,0.6)"; ctx.lineWidth = 1.5;
+      roundRectPath(ctx, x, y, w, h, 5); ctx.stroke();
+      ctx.save();
+      ctx.font = "bold 9px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(226,232,240,0.7)";
+      ctx.fillText("POWER", x + w / 2, y + h + 12);
+      ctx.restore();
+    }
+    function draw(now) {
+      ctx.clearRect(0, 0, W, H);
+      drawBackdrop();
+      drawLogo(ctx, 272, 168, { width: 100, tint: "#fbbf24", alpha: 0.3, badge: true });
+      ctx.save();
+      if (fx.shake > 0.05) { const s = shakeOffset(fx.shake); ctx.translate(s.x, s.y); }
+      drawTower();
+      drawBellFn(now);
+      drawPad();
+      const REST_ANG = -2.45, HIT_ANG = -0.5;
+      let angle = REST_ANG;
+      if (gs.strikeAt) {
+        const t = now - gs.strikeAt;
+        if (t < STRIKE_MS) {
+          const p = t / STRIKE_MS;
+          angle = REST_ANG + (HIT_ANG - REST_ANG) * p * p;
+        } else if (t < STRIKE_MS + RETURN_MS) {
+          angle = HIT_ANG + (REST_ANG - HIT_ANG) * ((t - STRIKE_MS) / RETURN_MS);
+        }
+      }
+      drawMallet(angle);
+      const meterVal = gs.phase === "aim" ? triWave(now - gs.meterBase, METER_MS) : gs.phase === "flight" ? gs.power : 0;
+      drawMeter(meterVal);
+      for (let i = 0; i < fx.trail.length; i++) {
+        const t = fx.trail[i];
+        const k = i / fx.trail.length;
+        ctx.beginPath(); ctx.arc(t.x, t.y, 2 + k * 5, 0, TWO_PI);
+        ctx.fillStyle = `rgba(248,113,113,${0.03 + k * 0.15})`; ctx.fill();
+      }
+      drawSphere(ctx, W / 2, REST_Y - gs.puckY, PUCK_R, "#fecaca", "#ef4444", "#7f1d1d", { rim: true });
+      drawParticles(ctx, fx.particles);
+      ctx.restore();
+      drawFloaters(ctx, fx.floaters);
+      if (fx.flash > 0) {
+        ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.26);
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+    return { W, H, enter, down, move: () => {}, up: () => {}, frame, draw,
+             icon: "🔨", label: "STRIKER", hint: "🔨 tap when the power peaks",
+             score: () => "BELLS RUNG · " + pad2(scores.striker) };
+  })();
+
+  /* ---------- mode manager ---------- */
+  const MODES = { skee: SKEE, bowl: BOWL, axe: AXE, striker: STRIKER };
+  let mode = "skee";
   function updateScore() { scoreEl.textContent = MODES[mode].score(); }
   function setMode(m, byUser) {
-    mode = m; sinking = 0; flash = null; restTimer = 0;
-    striker.hp = -1; striker.swinging = false; striker.glow = 0;
-    axe.phase = "x"; axe.fly = 0; axe.rest = 0;
-    bowl.rest = 0;
-    if (m === "bowl") rackPins();
-    stage.classList.remove("stage-golf", "stage-skee", "stage-striker");
-    stage.classList.add("stage-" + m);
-    handle.style.display = (m === "striker" || m === "axe") ? "none" : "";
-    hintEl.textContent = MODES[m].hint;
+    mode = m;
+    const game = MODES[m];
+    GW = game.W; GH = game.H;
+    canvas.parentElement.style.aspectRatio = GW + " / " + GH;
+    layout();
+    game.enter(performance.now());
+    hintEl.textContent = game.hint;
     updateScore();
-    respawnBall(false);
     [...tabsEl.children].forEach(b => b.classList.toggle("active", b.dataset.mode === m));
     if (byUser) stopAuto();
   }
   let autoRotate = null;
   function stopAuto() { if (autoRotate) { clearInterval(autoRotate); autoRotate = null; } }
-
-  Object.entries(MODES).forEach(([m, cfg]) => {
+  Object.entries(MODES).forEach(([m, game]) => {
     const b = document.createElement("button");
     b.type = "button"; b.className = "s-tab"; b.dataset.mode = m;
-    b.textContent = cfg.icon + " " + cfg.label;
-    b.addEventListener("pointerdown", e => e.stopPropagation());
+    b.textContent = game.icon + " " + game.label;
     b.addEventListener("click", () => setMode(m, true));
     tabsEl.appendChild(b);
   });
   if (!reduced) autoRotate = setInterval(() => {
-    if (dragging || striker.swinging) return;
     const order = Object.keys(MODES);
     setMode(order[(order.indexOf(mode) + 1) % order.length], false);
-  }, 9000);
+  }, 12000);
 
-  handle.addEventListener("pointerdown", e => {
-    e.preventDefault(); stopAuto();
-    dragging = true; drag.x = e.clientX; drag.y = e.clientY;
-    handle.setPointerCapture(e.pointerId);
-  });
-  handle.addEventListener("pointermove", e => { if (dragging) { drag.x = e.clientX; drag.y = e.clientY; } });
-  handle.addEventListener("pointerup", () => {
-    if (!dragging) return;
-    dragging = false;
-    const rect = stage.getBoundingClientRect();
-    const dx = ball.x - (drag.x - rect.left), dy = ball.y - (drag.y - rect.top);
-    const d = Math.hypot(dx, dy);
-    if (d > 6) {
-      const p = Math.min(d, 200) / 200;
-      ball.vx = (dx / d) * p * 21; ball.vy = (dy / d) * p * 21;
-      launched = true;
-      if (mode === "golf") hintEl.textContent = "\u26f3 nice stroke";
-      if (mode === "bowl") bowl.downAtRollStart = bowl.pins.filter(pn => pn.down).length;
-    }
-  });
-
-  stage.addEventListener("pointerdown", () => {
+  canvas.addEventListener("pointerdown", e => {
+    e.preventDefault();
     stopAuto();
-    if (mode === "axe") {
-      if (axe.phase === "x") { axe.phase = "y"; hintEl.textContent = "\ud83e\ude93 tap again to lock the height"; }
-      else if (axe.phase === "y") { axe.phase = "fly"; axe.fly = 0; }
-      return;
-    }
-    if (mode !== "striker" || striker.swinging) return;
-    striker.swinging = true; striker.scored = false;
-    const T = H * 0.60;
-    striker.hp = 0;
-    striker.vel = striker.meter * Math.sqrt(2 * 0.55 * T * 1.1);
+    canvas.setPointerCapture(e.pointerId);
+    MODES[mode].down(toLogical(e), performance.now());
   });
+  canvas.addEventListener("pointermove", e => MODES[mode].move(toLogical(e)));
+  canvas.addEventListener("pointerup", () => MODES[mode].up(performance.now()));
 
-  function burst(x, y, color) {
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 5;
-      parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5, life: 1, color });
-    }
-  }
-  function physicsStep() {
-    if (dragging) return;
-    ball.x += ball.vx; ball.y += ball.vy;
-    ball.vx *= 0.985; ball.vy *= 0.985;
-    if (Math.abs(ball.vx) < 0.05) ball.vx = 0;
-    if (Math.abs(ball.vy) < 0.05) ball.vy = 0;
-    if (ball.x < ball.r) { ball.x = ball.r; ball.vx *= -0.72; }
-    if (ball.x > W - ball.r) { ball.x = W - ball.r; ball.vx *= -0.72; }
-    if (ball.y < ball.r) { ball.y = ball.r; ball.vy *= -0.72; }
-    if (ball.y > H - ball.r) { ball.y = H - ball.r; ball.vy *= -0.72; }
-  }
-  function drawAim(rect) {
-    if (!dragging) return;
-    const px = drag.x - rect.left, py = drag.y - rect.top;
-    const dx = ball.x - px, dy = ball.y - py;
-    const d = Math.min(Math.hypot(dx, dy), 200);
-    const a = Math.atan2(dy, dx);
-    ctx.setLineDash([4, 9]);
-    ctx.strokeStyle = "rgba(0,170,210,0.95)"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(ball.x, ball.y);
-    ctx.lineTo(ball.x + Math.cos(a) * d * 1.4, ball.y + Math.sin(a) * d * 1.4);
-    ctx.stroke(); ctx.setLineDash([]);
-    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r + 6 + d / 12, 0, 7);
-    ctx.strokeStyle = `rgba(255,46,115,${0.25 + (d / 200) * 0.55})`; ctx.stroke();
-  }
-  function drawBall(top, bottom, stroke) {
-    if (sinking > 0 && sinking <= 0.35) return;
-    const shrink = sinking > 0 ? sinking : 1;
-    ctx.beginPath(); ctx.ellipse(ball.x, ball.y + ball.r * 0.9, ball.r * 0.95, ball.r * 0.4, 0, 0, 7);
-    ctx.fillStyle = "rgba(16,20,60,0.15)"; ctx.fill();
-    const bg = ctx.createRadialGradient(ball.x - 3, ball.y - 4, 1, ball.x, ball.y, ball.r);
-    bg.addColorStop(0, top); bg.addColorStop(1, bottom);
-    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r * shrink, 0, 7);
-    ctx.fillStyle = bg; ctx.fill();
-    ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke();
-  }
-  function rr(x, y, w, h, r) {
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
-  }
-
-  function drawGolf(rect) {
-    const pulse = reduced ? 0 : Math.sin(performance.now() / 500) * 2;
-    ctx.beginPath(); ctx.arc(hole.x, hole.y, hole.r + 8 + pulse, 0, 7);
-    ctx.strokeStyle = "rgba(0,180,220,0.40)"; ctx.lineWidth = 2; ctx.stroke();
-    const hg = ctx.createRadialGradient(hole.x, hole.y, 2, hole.x, hole.y, hole.r);
-    hg.addColorStop(0, "#0b0e28"); hg.addColorStop(1, "#39407c");
-    ctx.beginPath(); ctx.arc(hole.x, hole.y, hole.r, 0, 7); ctx.fillStyle = hg; ctx.fill();
-    ctx.strokeStyle = "rgba(0,170,210,0.90)"; ctx.lineWidth = 1.6; ctx.stroke();
-    ctx.strokeStyle = "rgba(16,20,60,0.65)"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(hole.x, hole.y - 4); ctx.lineTo(hole.x, hole.y - 46); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(hole.x, hole.y - 46); ctx.lineTo(hole.x + 22, hole.y - 38); ctx.lineTo(hole.x, hole.y - 30); ctx.closePath();
-    ctx.fillStyle = "#ff2e73"; ctx.fill();
-
-    if (sinking > 0) {
-      sinking -= 0.06;
-      if (sinking <= 0) respawnBall(true);
-    } else {
-      physicsStep();
-      const dh = Math.hypot(ball.x - hole.x, ball.y - hole.y);
-      const speed = Math.hypot(ball.vx, ball.vy);
-      if (dh < hole.r - 2 && speed < 9) {
-        scores.golf++; sinking = 1;
-        updateScore();
-        hintEl.textContent = ["\u26f3 sunk it!", "\u26f3 hole in one energy", "\u26f3 the crowd goes wild", "\u26f3 unstoppable"][Math.min(scores.golf - 1, 3)];
-        burst(hole.x, hole.y, "#ff2e73");
-      } else if (dh < hole.r + 4 && speed >= 9) {
-        hintEl.textContent = "\u26f3 too hot! ease up";
-      }
-    }
-    drawAim(rect);
-    drawBall("#ffffff", "#b9c2e8", "rgba(16,20,60,0.30)");
-  }
-
-  const ringDefs = () => {
-    const base = Math.min(W, H);
-    return [
-      { r: base * 0.07, pts: 100, c: "#ff2e73" },
-      { r: base * 0.14, pts: 50, c: "#6d35ff" },
-      { r: base * 0.21, pts: 30, c: "#0089ab" },
-      { r: base * 0.28, pts: 20, c: "#7aa300" },
-    ];
-  };
-  function drawSkee(rect) {
-    const cx = W * 0.5, cy = H * 0.30;
-    const rs = ringDefs();
-    for (let i = rs.length - 1; i >= 0; i--) {
-      ctx.beginPath(); ctx.arc(cx, cy, rs[i].r, 0, 7);
-      ctx.fillStyle = i % 2 ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.30)";
-      ctx.fill();
-      ctx.strokeStyle = rs[i].c; ctx.lineWidth = 2; ctx.stroke();
-    }
-    ctx.font = "700 10px 'Space Grotesk', sans-serif"; ctx.textAlign = "center";
-    rs.forEach((rg, i) => {
-      ctx.fillStyle = rg.c;
-      ctx.fillText(String(rg.pts), cx, i === 0 ? cy + 3 : cy - rg.r + 12);
-    });
-    ctx.textAlign = "start";
-
-    if (restTimer > 0) {
-      restTimer--;
-      if (restTimer === 0) respawnBall(true);
-    } else {
-      physicsStep();
-      const speed = Math.hypot(ball.vx, ball.vy);
-      if (launched && !dragging && speed === 0) {
-        const d = Math.hypot(ball.x - cx, ball.y - cy);
-        const hit = rs.find(rg => d <= rg.r);
-        const pts = hit ? hit.pts : 0;
-        scores.skee += pts;
-        flash = { text: pts ? "+" + pts : "MISS", x: ball.x - 16, y: ball.y - 20, life: 1, c: pts >= 50 ? "#ff2e73" : pts ? "#0089ab" : "#5a6296" };
-        if (pts >= 50) burst(ball.x, ball.y, "#ff2e73");
-        hintEl.textContent = pts >= 100 ? "\ud83c\udfb3 hundred! dead center" : pts >= 50 ? "\ud83c\udfb3 +" + pts + " \u2014 nice arc" : pts ? "\ud83c\udfb3 +" + pts : "\ud83c\udfb3 gutter \u2014 flick harder";
-        updateScore();
-        launched = false; restTimer = 55;
-      }
-    }
-    drawAim(rect);
-    drawBall("#f7c866", "#b8791f", "rgba(120,70,10,0.40)");
-  }
-
-  /* Bowling — ported from the app's Bowling.tsx: the 4-row rack geometry,
-     ball/pin mass ratio and restitution, purple house ball, and white pins
-     with the red neck ring — flattened to the stage's top-down view. */
-  const bowl = { pins: [], rest: 0, downAtRollStart: 0 };
-  const PIN_RAD = 7;
-  function rackPins() {
-    bowl.pins = [];
-    const cx = W * 0.5, headY = H * 0.36, gapX = Math.min(W, H) * 0.085, gapY = Math.min(W, H) * 0.075;
-    for (let r = 0; r < 4; r++) for (let i = 0; i <= r; i++) {
-      const x = cx + (i - r / 2) * gapX, y = headY - r * gapY;
-      bowl.pins.push({ x, y, vx: 0, vy: 0, ox: x, oy: y, down: false, flat: false });
-    }
-  }
-  function collide(a, b, ra, rb, ma, mb) {
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const dist = Math.hypot(dx, dy) || 0.01;
-    const overlap = ra + rb - dist;
-    if (overlap <= 0) return;
-    const nx = dx / dist, ny = dy / dist;
-    a.x -= nx * overlap * (mb / (ma + mb)); a.y -= ny * overlap * (mb / (ma + mb));
-    b.x += nx * overlap * (ma / (ma + mb)); b.y += ny * overlap * (ma / (ma + mb));
-    const rv = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
-    if (rv <= 0) return;
-    const imp = 1.5 * rv / (1 / ma + 1 / mb);
-    a.vx -= imp * nx / ma; a.vy -= imp * ny / ma;
-    b.vx += imp * nx / mb; b.vy += imp * ny / mb;
-  }
-  function drawPinUp(p) {
-    const g = ctx.createRadialGradient(p.x - 2, p.y - 2, 1, p.x, p.y, PIN_RAD);
-    g.addColorStop(0, "#ffffff"); g.addColorStop(0.55, "#f6f8fb"); g.addColorStop(1, "#a9b3c3");
-    ctx.beginPath(); ctx.arc(p.x, p.y, PIN_RAD, 0, 7); ctx.fillStyle = g; ctx.fill();
-    ctx.strokeStyle = "#dc2626"; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.arc(p.x, p.y, PIN_RAD * 0.58, 0, 7); ctx.stroke();
-    ctx.strokeStyle = "rgba(105,115,135,0.45)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(p.x, p.y, PIN_RAD, 0, 7); ctx.stroke();
-  }
-  function drawPinFlat(p) {
-    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(0.9); ctx.globalAlpha = 0.55;
-    ctx.fillStyle = "#cbd5e1";
-    ctx.beginPath(); ctx.ellipse(0, 0, PIN_RAD * 1.25, PIN_RAD * 0.6, 0, 0, 7); ctx.fill();
-    ctx.restore();
-  }
-  function drawBowl(rect) {
-    const gutterW = W * 0.085;
-    ctx.fillStyle = "rgba(90, 70, 40, 0.16)";
-    ctx.fillRect(0, 0, gutterW, H); ctx.fillRect(W - gutterW, 0, gutterW, H);
-    ctx.strokeStyle = "rgba(90, 70, 40, 0.30)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(gutterW, 0); ctx.lineTo(gutterW, H); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(W - gutterW, 0); ctx.lineTo(W - gutterW, H); ctx.stroke();
-    ctx.strokeStyle = "rgba(150, 110, 50, 0.14)";
-    for (let x = gutterW + 18; x < W - gutterW; x += 22) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-    ctx.fillStyle = "rgba(120, 90, 40, 0.35)";
-    [[0.5, 0.60], [0.42, 0.65], [0.58, 0.65]].forEach(([kx, ky]) => {
-      const ax = W * kx, ay = H * ky;
-      ctx.beginPath(); ctx.moveTo(ax, ay - 6); ctx.lineTo(ax + 5, ay + 4); ctx.lineTo(ax - 5, ay + 4); ctx.closePath(); ctx.fill();
-    });
-
-    if (bowl.rest > 0) {
-      bowl.rest--;
-      if (bowl.rest === 0) {
-        if (bowl.pins.every(pn => pn.down)) rackPins();
-        respawnBall(true);
-      }
-    } else if (!dragging) {
-      ball.x += ball.vx; ball.y += ball.vy;
-      ball.vx *= 0.98; ball.vy *= 0.98;
-      if (Math.abs(ball.vx) < 0.05) ball.vx = 0;
-      if (Math.abs(ball.vy) < 0.05) ball.vy = 0;
-      if (!ball.gutter && ball.y < H * 0.92 && (ball.x < gutterW + ball.r || ball.x > W - gutterW - ball.r)) {
-        ball.gutter = true; ball.vx = 0;
-        ball.x = ball.x < W / 2 ? gutterW / 2 : W - gutterW / 2;
-      }
-      if (ball.y < ball.r) { ball.y = ball.r; ball.vy *= -0.4; }
-      if (ball.y > H - ball.r) { ball.y = H - ball.r; ball.vy *= -0.4; }
-      if (ball.x < ball.r) { ball.x = ball.r; ball.vx = 0; }
-      if (ball.x > W - ball.r) { ball.x = W - ball.r; ball.vx = 0; }
-    }
-
-    for (const pn of bowl.pins) {
-      pn.x += pn.vx; pn.y += pn.vy;
-      pn.vx *= 0.90; pn.vy *= 0.90;
-      if (Math.abs(pn.vx) < 0.05) pn.vx = 0;
-      if (Math.abs(pn.vy) < 0.05) pn.vy = 0;
-      if (pn.x < PIN_RAD) { pn.x = PIN_RAD; pn.vx *= -0.4; }
-      if (pn.x > W - PIN_RAD) { pn.x = W - PIN_RAD; pn.vx *= -0.4; }
-      if (pn.y < PIN_RAD) { pn.y = PIN_RAD; pn.vy *= -0.4; }
-      if (!pn.down && Math.hypot(pn.x - pn.ox, pn.y - pn.oy) > 6) pn.down = true;
-      if (pn.down && !pn.flat && pn.vx === 0 && pn.vy === 0) pn.flat = true;
-    }
-    if (!ball.gutter && !dragging && bowl.rest === 0) {
-      for (const pn of bowl.pins) if (!pn.flat) collide(ball, pn, ball.r, PIN_RAD, 6, 1);
-    }
-    for (let i = 0; i < bowl.pins.length; i++) for (let j = i + 1; j < bowl.pins.length; j++) {
-      const a = bowl.pins[i], b = bowl.pins[j];
-      if (!a.flat || !b.flat) collide(a, b, PIN_RAD, PIN_RAD, 1, 1);
-    }
-
-    if (bowl.rest === 0 && launched && !dragging &&
-        ball.vx === 0 && ball.vy === 0 &&
-        bowl.pins.every(pn => pn.vx === 0 && pn.vy === 0)) {
-      const downs = bowl.pins.filter(pn => pn.down).length;
-      const gained = Math.max(downs - bowl.downAtRollStart, 0);
-      scores.bowl += gained;
-      const strike = gained === 10 && bowl.downAtRollStart === 0;
-      flash = { text: strike ? "STRIKE!" : gained > 0 ? "+" + gained : ball.gutter ? "GUTTER" : "MISS",
-                x: W * 0.5 - (strike ? 42 : 20), y: H * 0.52, life: 1,
-                c: strike ? "#7e22ce" : gained > 0 ? "#0089ab" : "#5a6296" };
-      if (strike) burst(W * 0.5, H * 0.32, "#a855f7");
-      hintEl.textContent = strike ? "\ud83c\udfb3 STRIKE! clean sweep" : gained > 0 ? "\ud83c\udfb3 +" + gained + " pins" : ball.gutter ? "\ud83c\udfb3 gutter! aim it straighter" : "\ud83c\udfb3 pins survived \u2014 go again";
-      updateScore();
-      launched = false; bowl.rest = 65;
-    }
-
-    for (const pn of bowl.pins) if (pn.flat) drawPinFlat(pn);
-    for (const pn of bowl.pins) if (!pn.flat) drawPinUp(pn);
-    drawAim(rect);
-    drawBall("#e9d5ff", "#7e22ce", "rgba(60, 20, 110, 0.45)");
-  }
-
-  /* Axe throw — art and mechanics ported from the app (src/features/fun/AxeThrow.tsx):
-     same ring palette, wood grain, axe sprite + head-center anchor, and the
-     two-phase amber guide sweep (tap locks x, tap locks y). */
-  const axe = { phase: "x", gx: 0, gy: 0, fly: 0, ang: 0, rest: 0 };
-  const AXE_RINGS = [
-    { k: 0.98, pts: 1, fill: "#3f2d1a" },
-    { k: 0.76, pts: 2, fill: "#6b4a24" },
-    { k: 0.55, pts: 3, fill: "#1e3a5f" },
-    { k: 0.35, pts: 4, fill: "#2563eb" },
-    { k: 0.17, pts: 5, fill: "#dc2626" },
-  ];
-  function drawAxeSprite(x, y, angle, scale) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(angle); ctx.scale(scale, scale);
-    const hg = ctx.createLinearGradient(-2.5, 0, 2.5, 0);
-    hg.addColorStop(0, "#4a2f18"); hg.addColorStop(0.45, "#a06a34"); hg.addColorStop(0.6, "#8b5a2b"); hg.addColorStop(1, "#3d2713");
-    ctx.fillStyle = hg; ctx.fillRect(-2.5, -6, 5, 26);
-    const mg = ctx.createLinearGradient(-2, -14, 12, -1);
-    mg.addColorStop(0, "#f1f5f9"); mg.addColorStop(0.5, "#cbd5e1"); mg.addColorStop(1, "#64748b");
-    ctx.beginPath(); ctx.moveTo(-2, -10); ctx.lineTo(12, -14); ctx.lineTo(12, -1); ctx.lineTo(-2, -4); ctx.closePath();
-    ctx.fillStyle = mg; ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(11.4, -13); ctx.lineTo(11.4, -1.6); ctx.stroke();
-    ctx.restore();
-  }
-  const AXE_HEAD = { x: 5.86, y: -7.28 };
-  function drawAxeStuck(hx, hy, angle, scale) {
-    const c = Math.cos(angle), sn = Math.sin(angle);
-    drawAxeSprite(hx - (AXE_HEAD.x * c - AXE_HEAD.y * sn) * scale, hy - (AXE_HEAD.x * sn + AXE_HEAD.y * c) * scale, angle, scale);
-  }
-  function neonLine(x1, y1, x2, y2, alpha) {
-    ctx.save();
-    ctx.globalAlpha = alpha == null ? 1 : alpha;
-    ctx.shadowColor = "#fbbf24"; ctx.shadowBlur = 10;
-    ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    ctx.restore();
-  }
-  function drawAxeGame() {
-    const bx = W * 0.16, by = H * 0.08, bw = W * 0.68, bh = H * 0.64;
-    const cx = bx + bw / 2, cy = by + bh / 2, base = Math.min(bw, bh) / 2;
-    rr(bx, by, bw, bh, 12);
-    const wood = ctx.createRadialGradient(cx, cy - 12, 16, cx, cy, base * 1.6);
-    wood.addColorStop(0, "#5a3f22"); wood.addColorStop(0.6, "#3f2c17"); wood.addColorStop(1, "#241910");
-    ctx.fillStyle = wood; ctx.fill();
-    ctx.save(); rr(bx, by, bw, bh, 12); ctx.clip();
-    ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.lineWidth = 1;
-    for (let gx = bx + 22; gx < bx + bw; gx += 26) { ctx.beginPath(); ctx.moveTo(gx, by); ctx.lineTo(gx, by + bh); ctx.stroke(); }
-    ctx.restore();
-    AXE_RINGS.forEach(rg => {
-      ctx.beginPath(); ctx.arc(cx, cy, base * rg.k, 0, 7);
-      ctx.fillStyle = rg.fill; ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1; ctx.stroke();
-    });
-    const gloss = ctx.createRadialGradient(cx - 3, cy - 4, 1, cx, cy, base * 0.17);
-    gloss.addColorStop(0, "rgba(255,255,255,0.45)"); gloss.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.beginPath(); ctx.arc(cx, cy, base * 0.17, 0, 7); ctx.fillStyle = gloss; ctx.fill();
-
-    const t = performance.now() / 700;
-    if (axe.phase === "x") {
-      axe.gx = bx + (Math.sin(t) * 0.5 + 0.5) * bw;
-      neonLine(axe.gx, by + 4, axe.gx, by + bh - 4);
-    } else if (axe.phase === "y") {
-      neonLine(axe.gx, by + 4, axe.gx, by + bh - 4, 0.35);
-      axe.gy = by + (Math.sin(t * 1.17) * 0.5 + 0.5) * bh;
-      neonLine(bx + 4, axe.gy, bx + bw - 4, axe.gy);
-    } else if (axe.phase === "fly") {
-      axe.fly += 0.07;
-      const k = Math.min(axe.fly, 1);
-      const sx = W * 0.5, sy = H * 0.98;
-      drawAxeSprite(sx + (axe.gx - sx) * k, sy + (axe.gy - sy) * k, axe.fly * 14, 1.9 - 0.5 * k);
-      if (k >= 1) {
-        axe.phase = "stuck"; axe.rest = 70;
-        axe.ang = -0.5 + Math.random() * 0.3;
-        const d = Math.hypot(axe.gx - cx, axe.gy - cy);
-        let pts = 0;
-        for (const rg of AXE_RINGS) if (d <= base * rg.k) pts = rg.pts;
-        scores.axe += pts;
-        flash = { text: pts ? "+" + pts : "MISS", x: axe.gx + 16, y: axe.gy - 12, life: 1, c: pts >= 5 ? "#dc2626" : pts ? "#b45309" : "#5a6296" };
-        if (pts === 5) burst(axe.gx, axe.gy, "#fbbf24");
-        hintEl.textContent = pts === 5 ? "\ud83e\ude93 BULLSEYE!" : pts ? "\ud83e\ude93 +" + pts + " \u2014 stuck it" : "\ud83e\ude93 off the board!";
-        updateScore();
-      }
-    } else if (axe.phase === "stuck") {
-      drawAxeStuck(axe.gx, axe.gy, axe.ang, 1.9);
-      axe.rest--;
-      if (axe.rest <= 0) { axe.phase = "x"; hintEl.textContent = MODES.axe.hint; }
-    }
-  }
-
-  function drawStriker() {
-    striker.phase += 0.045;
-    striker.meter = (Math.sin(striker.phase) + 1) / 2;
-    const baseY = H * 0.86, T = H * 0.60, towerX = W * 0.60;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(16,20,60,0.25)"; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(towerX, baseY); ctx.lineTo(towerX, baseY - T); ctx.stroke();
-    for (let i = 1; i < 5; i++) {
-      ctx.strokeStyle = "rgba(16,20,60,0.15)"; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(towerX - 10, baseY - T * i / 5); ctx.lineTo(towerX + 10, baseY - T * i / 5); ctx.stroke();
-    }
-    const bellY = baseY - T - 18;
-    ctx.beginPath(); ctx.arc(towerX, bellY, 14 + striker.glow * 6, 0, 7);
-    ctx.fillStyle = striker.glow > 0 ? "#ffd24a" : "#f2b62c"; ctx.fill();
-    ctx.strokeStyle = "rgba(120,70,10,0.5)"; ctx.lineWidth = 2; ctx.stroke();
-    if (striker.glow > 0) striker.glow -= 0.03;
-    ctx.fillStyle = "rgba(255,46,115,0.85)";
-    ctx.beginPath(); ctx.arc(towerX, baseY + 8, 12, 0, 7); ctx.fill();
-
-    const mX = W * 0.26, mH = H * 0.5, mY = H * 0.68 + mH * 0.18;
-    ctx.fillStyle = "rgba(255,255,255,0.65)"; rr(mX - 10, mY - mH, 20, mH, 10); ctx.fill();
-    ctx.strokeStyle = "rgba(16,20,60,0.20)"; ctx.lineWidth = 1.5; rr(mX - 10, mY - mH, 20, mH, 10); ctx.stroke();
-    const fh = mH * striker.meter;
-    const grad = ctx.createLinearGradient(0, mY, 0, mY - mH);
-    grad.addColorStop(0, "#0089ab"); grad.addColorStop(0.6, "#6d35ff"); grad.addColorStop(1, "#ff2e73");
-    ctx.fillStyle = grad; rr(mX - 7, mY - fh, 14, fh, 7); ctx.fill();
-
-    if (striker.hp >= 0) {
-      striker.hp += striker.vel; striker.vel -= 0.55;
-      if (striker.hp > T) striker.hp = T;
-      if (striker.vel <= 0 && !striker.scored) {
-        striker.scored = true;
-        if (striker.hp >= T * 0.94) {
-          scores.striker++; striker.glow = 1;
-          burst(towerX, bellY, "#f2b62c");
-          flash = { text: "DING!", x: towerX + 22, y: bellY + 6, life: 1, c: "#d61b5e" };
-          hintEl.textContent = "\ud83d\udd28 DING! rang the bell";
-          updateScore();
-        } else {
-          hintEl.textContent = striker.hp >= T * 0.7 ? "\ud83d\udd28 so close \u2014 tap at the peak" : "\ud83d\udd28 more power \u2014 tap at the peak";
-        }
-      }
-      if (striker.hp <= 0 && striker.vel < 0) { striker.hp = -1; striker.swinging = false; }
-      else if (striker.hp >= 0) {
-        ctx.fillStyle = "#10143c";
-        ctx.beginPath(); ctx.arc(towerX, baseY - striker.hp, 8, 0, 7); ctx.fill();
-      }
-    }
-  }
-
-  function tick() {
-    ctx.clearRect(0, 0, W, H);
-    const rect = stage.getBoundingClientRect();
-    if (mode === "golf") drawGolf(rect);
-    else if (mode === "skee") drawSkee(rect);
-    else if (mode === "bowl") drawBowl(rect);
-    else if (mode === "axe") drawAxeGame();
-    else drawStriker();
-
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const pt = parts[i];
-      pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.12; pt.life -= 0.02;
-      if (pt.life <= 0) { parts.splice(i, 1); continue; }
-      ctx.globalAlpha = pt.life; ctx.fillStyle = pt.color;
-      ctx.fillRect(pt.x, pt.y, 4, 4); ctx.globalAlpha = 1;
-    }
-    if (flash) {
-      flash.y -= 0.6; flash.life -= 0.018;
-      if (flash.life <= 0) flash = null;
-      else {
-        ctx.globalAlpha = Math.max(flash.life, 0);
-        ctx.font = "800 16px 'Unbounded', sans-serif";
-        ctx.fillStyle = flash.c; ctx.fillText(flash.text, flash.x, flash.y);
-        ctx.globalAlpha = 1;
-      }
-    }
-    if (mode !== "striker" && mode !== "axe") {
-      handle.style.left = ball.x + "px";
-      handle.style.top = ball.y + "px";
-      handle.style.display = sinking > 0 ? "none" : "";
-    }
+  let last = performance.now();
+  function tick(now) {
+    const dt = Math.min(now - last, 40);
+    last = now;
+    const game = MODES[mode];
+    game.frame(now, dt);
+    frameTransform();
+    game.draw(now);
     requestAnimationFrame(tick);
   }
-  setMode("golf", false);
+  setMode("skee", false);
   requestAnimationFrame(tick);
 
   /* ---------- leaderboard shuffle ---------- */
