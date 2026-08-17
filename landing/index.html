@@ -131,7 +131,7 @@ img, svg { display: block; }
 
 /* ---------- hero ---------- */
 .hero {
-  position: relative; min-height: 100svh;
+  position: relative;
   display: flex; align-items: center;
   overflow: hidden;
 }
@@ -142,7 +142,8 @@ img, svg { display: block; }
     radial-gradient(46vw 40vh at 84% 62%, rgba(0, 196, 234, 0.09), transparent 62%);
 }
 #putt { position: absolute; inset: 0; z-index: 1; }
-.hero-inner { position: relative; z-index: 2; width: 100%; padding-top: 90px; padding-bottom: 130px; pointer-events: none; }
+.hero-inner { position: relative; z-index: 2; width: 100%; padding-top: 150px; padding-bottom: 64px; pointer-events: none; }
+@media (max-width: 900px) { .hero-inner { padding-bottom: 190px; } }
 .hero-inner a, .hero-inner .hint { pointer-events: auto; }
 .eyebrow {
   display: inline-flex; align-items: center; gap: 10px;
@@ -185,7 +186,7 @@ h1 .dot { color: var(--coral); }
 .btn-line:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 8px 32px rgba(0, 196, 234, 0.22); }
 
 .hint {
-  position: absolute; right: 26px; bottom: 96px; z-index: 3;
+  position: absolute; right: 26px; bottom: 30px; z-index: 3;
   display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
   font-size: 12.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim);
   text-align: right; user-select: none;
@@ -195,20 +196,13 @@ h1 .dot { color: var(--coral); }
   border: 1px solid rgba(255, 46, 115, 0.35); border-radius: 999px; padding: 8px 16px;
   background: rgba(255, 255, 255, 0.75);
 }
-@media (max-width: 640px) { .hint { bottom: 76px; right: 18px; } }
+@media (max-width: 640px) { .hint { bottom: 24px; right: 18px; } }
 
 #ballHandle {
   position: absolute; z-index: 4; width: 60px; height: 60px; margin: -30px 0 0 -30px;
   border-radius: 50%; cursor: grab; touch-action: none;
 }
 #ballHandle:active { cursor: grabbing; }
-
-.scroll-cue {
-  position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 3;
-  color: var(--dim); font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase;
-  animation: bob 2.6s ease-in-out infinite;
-}
-@keyframes bob { 50% { transform: translateX(-50%) translateY(6px); } }
 
 /* ---------- marquee ---------- */
 .marquee {
@@ -230,7 +224,7 @@ h1 .dot { color: var(--coral); }
 @keyframes scroll { to { transform: translateX(-50%); } }
 
 /* ---------- sections ---------- */
-section { padding: 110px 0; position: relative; }
+section { padding: 64px 0; position: relative; }
 #platform {
   background:
     radial-gradient(52vw 40vh at 8% 6%, rgba(0, 196, 234, 0.10), transparent 62%),
@@ -262,7 +256,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--cyan), var(
 
 /* ---------- bento ---------- */
 .bento {
-  margin-top: 54px; display: grid; gap: 16px;
+  margin-top: 40px; display: grid; gap: 16px;
   grid-template-columns: repeat(3, 1fr);
   grid-template-areas:
     "phone board board"
@@ -420,7 +414,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--cyan), var(
 .sw.on i::after { transform: translateX(15px); background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
 
 /* ---------- white-label ---------- */
-.wl { display: grid; grid-template-columns: 1fr 0.9fr; gap: 60px; align-items: center; margin-top: 54px; }
+.wl { display: grid; grid-template-columns: 1fr 0.9fr; gap: 60px; align-items: center; margin-top: 40px; }
 @media (max-width: 860px) { .wl { grid-template-columns: 1fr; } }
 .venue-chips { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .v-chip {
@@ -470,7 +464,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--cyan), var(
 }
 
 /* ---------- CTA ---------- */
-.cta-final { text-align: center; padding: 140px 0 120px; }
+.cta-final { text-align: center; padding: 80px 0 88px; }
 .press-start {
   font-family: var(--display); font-weight: 800; text-transform: uppercase;
   font-size: clamp(38px, 7.4vw, 92px); line-height: 1.02;
@@ -497,7 +491,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .track, .scanline, .eyebrow .pulse, .press-start .blink, .scroll-cue, .phone .sync i, .aurora i { animation: none !important; }
+  .track, .scanline, .eyebrow .pulse, .press-start .blink, .phone .sync i, .aurora i { animation: none !important; }
   .reveal { opacity: 1; transform: none; transition: none; }
   .b-row, .wl-phone, .cell, .btn, .g-icon, .v-chip { transition: none; }
 }
@@ -548,7 +542,6 @@ footer .logo { font-size: 12px; color: var(--ink); }
       <span id="hintText">⛳ grab the ball · drag · release</span>
       <span class="score" id="puttScore">PUTTS SUNK · 00</span>
     </div>
-    <div class="scroll-cue" aria-hidden="true">▼ scroll</div>
   </header>
 
   <div class="marquee" aria-hidden="true">

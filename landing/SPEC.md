@@ -93,7 +93,7 @@ on the fixed layers): hero = violet+cyan; `#platform` = cyan/violet/lime;
 
 ```
 nav (fixed pill)
-hero (100svh, playable putt canvas)
+hero (compact, playable putt canvas)
 marquee ×2 (opposite directions)
 #platform (bento grid)
 #white-label (copy + venue switcher phone)
@@ -105,7 +105,7 @@ footer
 - **Nav:** fixed pill, top 18px, `min(1132px, 100vw − 32px)`; glass
   (`rgba(42,48,96,.68)` + 14px blur); logo tile + links (hidden <680px) +
   lime CTA chip.
-- **Section rhythm:** `padding: 110px 0`; kicker → h2 → intro (max 600px).
+- **Section rhythm:** `padding: 64px 0`; kicker → h2 → intro (max 600px). Deliberately compact — no full-height hero, no oversized gaps.
 - **Reveals:** `.reveal` fades/slides in via IntersectionObserver (threshold
   0.18, stagger 60ms). No-JS and reduced-motion show everything immediately.
 
@@ -188,7 +188,7 @@ hijacked — only grabbing the ball captures the pointer.
 | Ticket count-up | 0 → 1,250, 1.6s cubic ease-out on first view | jumps to final |
 | Rewards toggle flicker | every 3.4s | off |
 | Venue auto-cycle | 4s | off |
-| Scanline / pulses / blink / scroll-cue | 1.4–2.6s loops | off |
+| Scanline / pulses / blink | 1.4–2.6s loops | off |
 | Cursor glow | rAF lerp 0.08 | off |
 | Putt game | rAF, user-initiated | kept (interaction, not ambient); idle hole pulse stilled |
 
