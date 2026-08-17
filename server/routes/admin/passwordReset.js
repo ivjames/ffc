@@ -71,7 +71,10 @@ publicRouter.post("/password/forgot", forgotIpLimit, forgotEmailLimit, async (re
     const user = result.rows[0];
     if (user) {
       // A still-pending account gets its invite again (7-day link), not a
-      // 2-hour reset — "forgot" doubles as "re-send my invite".
+      // 2-hour reset — "forgot" doubles as "re-send my invite". The returned
+      // inviteLink is deliberately DISCARDED: this endpoint is public, and
+      // echoing the link would turn any guessed email into account takeover
+      // whenever mail delivery is unconfigured.
       await sendSetPasswordEmail({
         req,
         email: user.email,

@@ -433,6 +433,12 @@ original single-shared-secret `APP_TOKEN`:
   and the invitee gets a set-password link at
   `https://admin.<fqdn>/set-password?token=…` by email. Passing a password to
   `POST /users` still works for scripted setups.
+  While no real mail provider is configured (`MAIL_PROVIDER` unset/`console`
+  — the pre-Resend window), these two **super_admin-gated** responses also
+  return the link itself as `inviteLink`, so the operator can relay it by
+  hand (in production the console provider withholds mail from the logs, so
+  the response is the only place the link exists). The public forgot endpoint
+  never returns a link. Once a real provider is set, `inviteLink` is `null`.
 - **Self-serve set-password** (`admin_password_token`,
   `lib/adminPasswordTokens.js`; all three endpoints are pre-auth by design):
   - `POST /api/admin/password/forgot { email }` → always `{ok:true}`,

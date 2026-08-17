@@ -155,6 +155,11 @@ test("POST /api/admin/provision creates the whole site atomically", async () => 
   assert.equal(userRow.rows[0].pending, true, "no operator-typed password — hash stays NULL");
   assert.equal(adminUser.email, payload.adminUser.email);
   assert.equal(adminUser.inviteSent, true);
+  // Pre-Resend stopgap: with no real mail provider (this suite runs on the
+  // console provider) the super_admin response carries the link itself, and
+  // it is the SAME capability the mail would have delivered.
+  const mailedToken = lastInviteToken();
+  assert.equal(adminUser.inviteLink, `http://localhost:5174/set-password?token=${mailedToken}`);
   assert.ok(!("password" in adminUser));
   assert.ok(!("passwordHash" in adminUser));
   assert.ok(!("password_hash" in adminUser));
@@ -203,6 +208,28 @@ test("invited org_admin sets their password via the emailed link and can log in,
   const meBody = await me.json();
   assert.equal(meBody.user.role, "org_admin");
   assert.equal(meBody.user.orgId, body.site.org.id, "scoped to the org this provision created");
+});
+
+test("with a real mail provider configured, the response carries no inviteLink", async () => {
+  // resend without RESEND_API_KEY: delivery is "configured" (so the link must
+  // not be echoed) but the send itself fails — the account still provisions,
+  // with inviteSent: false and Forgot password as the recovery.
+  process.env.MAIL_PROVIDER = "resend";
+  try {
+    const payload = track(basePayload());
+    const res = await api("/api/admin/provision", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    orgIds.push(body.site.org.id);
+    locationIds.push(body.site.location.id);
+    assert.equal(body.site.adminUser.inviteSent, false);
+    assert.equal(body.site.adminUser.inviteLink, null);
+  } finally {
+    delete process.env.MAIL_PROVIDER;
+  }
 });
 
 test("adminUser with an invalid email 400s (password is no longer accepted or required)", async () => {

@@ -10,7 +10,7 @@
 import { randomBytes } from "node:crypto";
 import { pool } from "../db.js";
 import { sha256 } from "./authCodes.js";
-import { sendMail } from "./mailer.js";
+import { isMailDeliveryConfigured, sendMail } from "./mailer.js";
 
 // Interpolated into SQL as interval literals (the teams.js INVITE_TTL
 // precedent) — constants, never request input.
@@ -92,7 +92,15 @@ export function adminUrlFor(req) {
  * DB) failure here must not fail the mutation that invited the user — the
  * account exists either way, and "Forgot password" on the sign-in page mints
  * a fresh link. Callers surface `sent` so the operator knows to say so.
- * @returns {Promise<{sent: boolean}>}
+ *
+ * While no real mail provider is configured (the pre-Resend window), the link
+ * is ALSO returned as `inviteLink` so the operator can relay it by hand — in
+ * production the console provider withholds mail from the logs, so the
+ * response is the only place the link exists. SECURITY: only super_admin-gated
+ * call sites (provision, user create) may forward it to the client; the
+ * public forgot endpoint must discard it, or guessing an email becomes
+ * account takeover. Once a real provider is set, inviteLink is always null.
+ * @returns {Promise<{sent: boolean, inviteLink: string | null}>}
  */
 export async function sendSetPasswordEmail({ req, email, adminUserId, kind = "invite" }) {
   try {
@@ -121,9 +129,9 @@ export async function sendSetPasswordEmail({ req, email, adminUserId, kind = "in
       `<p>The link is valid for ${validity} and can be used once. If you weren't expecting it, ignore this email.</p>`,
     ].join("\n");
     const result = await sendMail({ to: email, subject, text, html, kind: "admin_password" });
-    return { sent: result.ok };
+    return { sent: result.ok, inviteLink: isMailDeliveryConfigured() ? null : link };
   } catch (err) {
     console.error("[adminPasswordTokens] send failed:", err);
-    return { sent: false };
+    return { sent: false, inviteLink: null };
   }
 }

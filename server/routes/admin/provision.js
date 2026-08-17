@@ -214,8 +214,13 @@ router.post("/", async (req, res) => {
   // already committed, and "Forgot password" re-mails the link).
   clearTenantCache();
   let inviteSent = false;
+  // Non-null only while no real mail provider is configured (the pre-Resend
+  // window): this route is super_admin-gated, so handing the link back lets
+  // the operator relay it by hand — the console mailer withholds it from
+  // production logs, making this response the only place it exists.
+  let inviteLink = null;
   if (site.adminUser) {
-    ({ sent: inviteSent } = await sendSetPasswordEmail({
+    ({ sent: inviteSent, inviteLink } = await sendSetPasswordEmail({
       req,
       email: site.adminUser.email,
       adminUserId: site.adminUser.id,
@@ -232,7 +237,8 @@ router.post("/", async (req, res) => {
       courseCount: site.courses.length,
       pos: posSummary(site.location.pos),
       adminUserEmail: adminUser?.email ?? null, // never a password — none exists yet
-      ...(adminUser ? { inviteSent } : {}),
+      // Boolean only — the audit log must never hold the capability itself.
+      ...(adminUser ? { inviteSent, inviteLinkReturned: inviteLink !== null } : {}),
     },
     actor: actorLabel(req),
   });
@@ -243,7 +249,7 @@ router.post("/", async (req, res) => {
       org: site.org,
       location: withLabel(site.location),
       courses: site.courses,
-      adminUser: site.adminUser ? { ...site.adminUser, inviteSent } : null,
+      adminUser: site.adminUser ? { ...site.adminUser, inviteSent, inviteLink } : null,
       playerUrl: playerUrlFor(req, site.org.slug),
     },
   });

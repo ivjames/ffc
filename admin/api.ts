@@ -449,7 +449,17 @@ export type ProvisionResult = {
     org: Org;
     location: Location;
     courses: Course[];
-    adminUser: { id: string; email: string; role: string; orgId: string; inviteSent: boolean } | null;
+    adminUser: {
+      id: string;
+      email: string;
+      role: string;
+      orgId: string;
+      inviteSent: boolean;
+      /** The set-password link itself — non-null ONLY while the server has no
+       *  real mail provider (pre-Resend window), so the operator can relay it
+       *  by hand. */
+      inviteLink: string | null;
+    } | null;
     /** null in dev; the SPA falls back to slug + stripped hostname. */
     playerUrl: string | null;
   };

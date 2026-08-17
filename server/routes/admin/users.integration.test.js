@@ -168,6 +168,11 @@ test("POST /api/admin/users without a password creates a pending account and mai
   const mail = mailLog[mailLog.length - 1] ?? "";
   assert.match(mail, /set-password\?token=[0-9a-f]{64}/);
   assert.match(mail, /invited to Master Control/);
+
+  // Pre-Resend stopgap: on the console provider the super_admin response
+  // carries the same link the mail did, for hand relay.
+  const mailedToken = mail.match(/set-password\?token=([0-9a-f]{64})/)?.[1];
+  assert.equal(body.inviteLink, `http://localhost:5174/set-password?token=${mailedToken}`);
 });
 
 test("POST /api/admin/users validates email, password length, role, and org_admin requiring orgId", async () => {

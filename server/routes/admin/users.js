@@ -101,8 +101,12 @@ router.post("/", async (req, res) => {
     // Post-insert: a failed send must not lose the created account — the
     // response says `inviteSent: false`, and "Forgot password" re-mails it.
     let inviteSent;
+    // Non-null only while no real mail provider is configured: this route is
+    // super_admin-gated, so the operator may receive the link to relay by
+    // hand (see sendSetPasswordEmail's note).
+    let inviteLink = null;
     if (!password) {
-      ({ sent: inviteSent } = await sendSetPasswordEmail({
+      ({ sent: inviteSent, inviteLink } = await sendSetPasswordEmail({
         req,
         email,
         adminUserId: user.id,
@@ -113,12 +117,18 @@ router.post("/", async (req, res) => {
       action: "user.create",
       entity: "admin_user",
       entityId: user.id,
-      detail: { email, role, orgId, ...(password ? {} : { invited: true, inviteSent }) },
+      detail: {
+        email,
+        role,
+        orgId,
+        // Boolean only — the audit log must never hold the capability itself.
+        ...(password ? {} : { invited: true, inviteSent, inviteLinkReturned: inviteLink !== null }),
+      },
       actor: actorLabel(req),
     });
     return password
       ? res.json({ ok: true, user })
-      : res.json({ ok: true, user, inviteSent });
+      : res.json({ ok: true, user, inviteSent, inviteLink });
   } catch (err) {
     if (err && err.code === "23505") {
       return res.status(409).json({ ok: false, error: "email already in use" });

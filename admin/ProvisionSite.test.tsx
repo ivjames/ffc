@@ -122,6 +122,7 @@ describe('ProvisionSite', () => {
           role: 'org_admin',
           orgId: 'org-1',
           inviteSent: true,
+          inviteLink: null,
         },
       },
     });
@@ -150,6 +151,7 @@ describe('ProvisionSite', () => {
           role: 'org_admin',
           orgId: 'org-1',
           inviteSent: false,
+          inviteLink: null,
         },
       },
     });
@@ -161,6 +163,34 @@ describe('ProvisionSite', () => {
     expect(
       screen.getByText(/the invite email could not be sent/)
     ).toBeInTheDocument();
+  });
+
+  test('the success panel offers the invite link for hand relay when the server returned one', async () => {
+    const link = 'http://localhost:5174/set-password?token=' + 'a'.repeat(64);
+    vi.mocked(api.provisionSite).mockResolvedValue({
+      ok: true,
+      site: {
+        ...SITE,
+        adminUser: {
+          id: 'admin-1',
+          email: 'owner@puttpalace.example',
+          role: 'org_admin',
+          orgId: 'org-1',
+          inviteSent: true,
+          inviteLink: link,
+        },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await fillAndSubmit(user);
+
+    expect(await screen.findByRole('heading', { name: 'Site is live' })).toBeInTheDocument();
+    expect(screen.getByText(/copy this link and send it to them yourself/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue(link)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
+    // The email-was-sent wording would be a lie here — no mail went out.
+    expect(screen.queryByText(/invite email sent/)).not.toBeInTheDocument();
   });
 
   test('submitting with defaults sends the derived payload, with pos absent', async () => {

@@ -502,6 +502,36 @@ function ProvisionForm({ onDone }: { onDone: (site: ProvisionResult['site']) => 
 
 // --- Success panel ----------------------------------------------------------
 
+// Shown when the server returned the set-password link itself (no real mail
+// provider configured — the pre-Resend window): the operator copies it and
+// sends it to the org admin by hand. The link is a live 7-day capability, so
+// it renders in a read-only input rather than free-flowing prose.
+function InviteLinkRelay({ link }: { link: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-2">
+      <p className="text-sm text-amber-700">
+        Mail delivery isn't configured yet, so no email went out — copy this link and send it to
+        them yourself. It's valid for 7 days and works once.
+      </p>
+      <div className="mt-1 flex gap-2">
+        <Input readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
+        <Button
+          variant="ghost"
+          onClick={() => {
+            navigator.clipboard?.writeText(link).then(
+              () => setCopied(true),
+              () => setCopied(false)
+            );
+          }}
+        >
+          {copied ? 'Copied' : 'Copy link'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SuccessPanel({ site, onReset }: { site: ProvisionResult['site']; onReset: () => void }) {
   const domain = platformDomain();
   return (
@@ -519,18 +549,25 @@ function SuccessPanel({ site, onReset }: { site: ProvisionResult['site']; onRese
         )}
       </p>
       {site.adminUser && (
-        <p className="mt-1 text-sm text-slate-600">
-          {site.adminUser.inviteSent ? (
-            <>
-              Org admin <strong>{site.adminUser.email}</strong> created — invite email sent.
-            </>
-          ) : (
-            <>
-              Org admin <strong>{site.adminUser.email}</strong> created, but the invite email could
-              not be sent. They can use 'Forgot password?' on the admin sign-in page.
-            </>
-          )}
-        </p>
+        <>
+          <p className="mt-1 text-sm text-slate-600">
+            {site.adminUser.inviteLink ? (
+              <>
+                Org admin <strong>{site.adminUser.email}</strong> created.
+              </>
+            ) : site.adminUser.inviteSent ? (
+              <>
+                Org admin <strong>{site.adminUser.email}</strong> created — invite email sent.
+              </>
+            ) : (
+              <>
+                Org admin <strong>{site.adminUser.email}</strong> created, but the invite email
+                could not be sent. They can use 'Forgot password?' on the admin sign-in page.
+              </>
+            )}
+          </p>
+          {site.adminUser.inviteLink && <InviteLinkRelay link={site.adminUser.inviteLink} />}
+        </>
       )}
       <h3 className="mt-4 text-sm font-semibold text-slate-700">What's next</h3>
       <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
