@@ -215,6 +215,33 @@ export default function FunZone() {
           Pass the time between attractions.
         </p>
 
+        {/* Full-width, above the grid rather than a tile inside it: the boards
+            are ABOUT the games, not another one of them, and burying that in
+            slot 27 of a 2-column grid would hide the reason to play twice. */}
+        <button
+          onClick={() => {
+            playClick();
+            navigate('/arcade/scores');
+          }}
+          className="surface-1 mb-3 flex w-full items-center gap-2.5 rounded-xl border border-fairway-800/60 px-3 py-2.5 text-left transition-transform active:translate-y-px"
+        >
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl"
+            style={{ background: '#fbbf2422', border: '1px solid #fbbf2455' }}
+          >
+            🏆
+          </span>
+          <span className="block min-w-0 flex-1">
+            <span className="block text-sm font-bold leading-tight text-fairway-50">
+              High Scores
+            </span>
+            <span className="block text-xs leading-tight text-fairway-100/70">
+              Every game's top ten at this venue.
+            </span>
+          </span>
+          <span className="shrink-0 text-sm font-semibold text-fairway-400">→</span>
+        </button>
+
         <div className="grid grid-cols-2 gap-2">
           {TILES.map((t, i) => (
             <button

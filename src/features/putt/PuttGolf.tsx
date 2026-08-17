@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { useFitCanvas } from '../fun/useFitCanvas';
+import GameHighScore from '../fun/GameHighScore';
 import {
   W,
   H,
@@ -469,6 +470,7 @@ export default function PuttGolf() {
   });
 
   const [mode, setMode] = useState<Mode | null>(null);
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [phase, setPhase] = useState<Phase>('aim');
   const [holeIndex, setHoleIndex] = useState(0);
   const [strokes, setStrokes] = useState(0);
@@ -509,6 +511,10 @@ export default function PuttGolf() {
       setScores([]);
       setHoles(gs.holes);
       setMode(m);
+      // One id per round — the high-score board's idempotency key, so a
+      // re-mounted summary can't stack duplicate rows. Minted here rather than
+      // at mount because "a round" is what gets scored, not "a visit".
+      setSessionId(crypto.randomUUID());
       startHole(0);
     },
     [startHole],
@@ -858,6 +864,19 @@ export default function PuttGolf() {
                   );
                 })}
               </div>
+            )}
+
+            {/* Only the fixed course is ranked. An endless run deals holes for
+                as long as you keep playing, so its stroke total measures
+                stamina, not putting — there is no fair board to put it on. */}
+            {!isEndless && (
+              <GameHighScore
+                game="arcadeputt"
+                variant="course"
+                score={totalStrokes}
+                detail={{ par: totalPar, holes: playedHoles.length }}
+                sessionId={sessionId}
+              />
             )}
 
             <div className="mt-4 space-y-2">

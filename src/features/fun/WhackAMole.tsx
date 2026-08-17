@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playBump, playCup, playBuzz, playStroke, playTick, playFanfare } from '../../lib/sound';
@@ -721,6 +722,7 @@ export default function WhackAMole() {
             tickets={Math.min(100, Math.max(0, Math.round(score * 1.5)))}
             sessionId={sessionId}
           />
+          <GameHighScore game="whackamole" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

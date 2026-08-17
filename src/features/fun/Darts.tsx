@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playPinClack, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
@@ -712,6 +713,7 @@ export default function Darts() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 4 points, capped at 100). */}
           <GameTicketAward game="darts" tickets={Math.min(100, Math.round(total / 4))} sessionId={sessionId} />
+          <GameHighScore game="darts" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

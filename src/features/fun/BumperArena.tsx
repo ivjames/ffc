@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playBump, playWaterBump, playScore, playTick, playFanfare } from '../../lib/sound';
@@ -888,6 +889,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
             tickets={Math.min(score * 2, 100)}
             sessionId={sessionId}
           />
+          <GameHighScore game={theme.kind === 'car' ? 'bumpercars' : 'bumperboats'} score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

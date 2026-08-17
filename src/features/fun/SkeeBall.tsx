@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
@@ -624,6 +625,7 @@ export default function SkeeBall() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 10 points). */}
           <GameTicketAward game="skeeball" tickets={Math.round(total / 10)} sessionId={sessionId} />
+          <GameHighScore game="skeeball" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={restart} sound="none">
               Play again

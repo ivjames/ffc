@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
@@ -983,6 +984,20 @@ export default function GoKarts() {
             tickets={pace <= 1.5 ? 40 : pace <= 2 ? 25 : pace <= 2.75 ? 15 : 8}
             sessionId={sessionId}
           />
+          {/* Ranked on BEST LAP, per track. Two guards: `best` stays Infinity
+              if no lap was ever completed (a retire), which isn't a lap time;
+              and the board is per track, because the circuits differ in length
+              on purpose — Boomerang is the longest lap in the set, so one
+              merged board would rank the track choice, not the driving. */}
+          {best !== Infinity && (
+            <GameHighScore
+              game="gokarts"
+              variant={track.id}
+              score={Math.round(best)}
+              detail={{ totalMs: Math.round(total), laps: LAPS }}
+              sessionId={sessionId}
+            />
+          )}
           <div className="mt-8 flex flex-col gap-3">
             <Button onClick={() => startRace(track)} sound="none">
               Race again

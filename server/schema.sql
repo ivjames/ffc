@@ -1141,3 +1141,51 @@ create table if not exists user_card_link (
   unique (app_user_id, location_id)
 );
 create index if not exists user_card_link_card_idx on user_card_link (location_id, card_player_id);
+
+-- Arcade high scores. The arcade used to persist NOTHING — a round's score
+-- lived in React state and died with the end screen, and game_ticket_award
+-- recorded only what a round PAID, never what it scored. This is the score
+-- record the boards, the "new personal best" celebration, and (later)
+-- head-to-head challenges all read.
+--
+-- Account-bound by design (the account-required model, PR #200): a board that
+-- ranked 3-char tags would be unownable and trivially spoofable, so a score
+-- belongs to an app_user or it isn't recorded at all. Venue-scoped through
+-- location_id, which is also how tenant isolation reaches these rows — a board
+-- query joins location and filters on org_id exactly like /api/leaderboard.
+--
+-- `score` is an INTEGER in the game's base unit (ms for time games), never a
+-- float, so ordering is exact; lib/gameScores.js owns which direction wins and
+-- how the client renders it. `detail` carries per-game extras the board may
+-- show but never ranks on (lap splits, frame-by-frame, correct/total).
+create table if not exists game_score (
+  id          uuid primary key default gen_random_uuid(),
+  location_id uuid not null references location(id) on delete cascade,
+  game        text not null,                      -- lib/gameScores.js key
+  -- Sub-board within a game, '' when the game has only one. Some games are not
+  -- comparable to themselves: a go-kart lap on the Boomerang (deliberately the
+  -- longest circuit in the set) means nothing against one on the Speedway, and
+  -- an endless Arcade Putt run has no fixed hole count to score against a
+  -- course round. Those games declare their variants in lib/gameScores.js and
+  -- rank WITHIN one, so the board compares like with like.
+  variant     text not null default '',
+  app_user_id uuid not null references app_user(id) on delete cascade,
+  score       bigint not null,
+  detail      jsonb  not null default '{}',
+  session_id  text   not null,                    -- one round; idempotency key
+  synthetic   boolean not null default false,     -- arcade-bot rounds (round.synthetic precedent)
+  created_at  timestamptz not null default now()
+);
+-- Idempotency: an end screen that re-mounts (or a retried fetch) must not
+-- stack duplicate scores for one round, exactly like game_ticket_award's
+-- per-session key. Scoped by game so two games can't collide on a shared id.
+create unique index if not exists game_score_session_idx on game_score (game, session_id);
+-- The board read path: one venue, one game+variant, newest-first within a period.
+create index if not exists game_score_board_idx
+  on game_score (location_id, game, variant, created_at desc);
+-- The personal-best read path (a player's own history for one board).
+create index if not exists game_score_user_idx on game_score (app_user_id, game, variant);
+-- Partial index over the bot rows only — cleanup and board exclusion both
+-- filter on `synthetic = true`, and the default (synthetic-included) board
+-- query never touches it. Mirrors round_synthetic_idx.
+create index if not exists game_score_synthetic_idx on game_score (synthetic) where synthetic;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playDing, playUndo, playPinClack, playFanfare } from '../../lib/sound';
@@ -898,6 +899,7 @@ export default function MilkBottle() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (2 tickets per point — a bottle is 1, the clean-sweep bonus 5). */}
           <GameTicketAward game="milkbottle" tickets={score * 2} sessionId={sessionId} />
+          <GameHighScore game="milkbottle" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

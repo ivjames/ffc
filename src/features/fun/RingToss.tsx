@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare, playPinClack } from '../../lib/sound';
@@ -773,6 +774,7 @@ export default function RingToss() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (2 tickets per point — a green ringer pays 4, a red-neck 10). */}
           <GameTicketAward game="ringtoss" tickets={total * 2} sessionId={sessionId} />
+          <GameHighScore game="ringtoss" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

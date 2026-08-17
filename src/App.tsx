@@ -21,6 +21,7 @@ import PhotoBooth from './features/photos/PhotoBooth';
 import PuttGolf from './features/putt/PuttGolf';
 import FunZone from './features/fun/FunZone';
 import FunFacts from './features/fun/FunFacts';
+import HighScores from './features/fun/HighScores';
 import Trivia from './features/fun/Trivia';
 import Spinner from './features/fun/Spinner';
 import SkeeBall from './features/fun/SkeeBall';
@@ -168,6 +169,8 @@ export default function App() {
             deliberately NOT gated (it's below, outside this group). */}
         <Route element={<GeofenceGate />}>
           <Route path="/arcade" element={<FunZone />} />
+          {/* Every mini-game's high score board for this venue, in one screen. */}
+          <Route path="/arcade/scores" element={<HighScores />} />
           {/* §12 "While You Wait" content — fun facts and trivia. */}
           <Route path="/arcade/facts" element={<FunFacts />} />
           <Route path="/arcade/trivia" element={<Trivia />} />

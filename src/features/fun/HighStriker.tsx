@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playSoClose, playUndo, playDing, playLand, playFanfare } from '../../lib/sound';
@@ -726,6 +727,7 @@ export default function HighStriker() {
             tickets={Math.round(best / 2) + (best >= 100 ? 10 : 0)}
             sessionId={sessionId}
           />
+          <GameHighScore game="highstriker" score={best} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

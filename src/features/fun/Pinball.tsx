@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import {
@@ -1214,6 +1215,7 @@ export default function Pinball() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 200 points, capped at 100). */}
           <GameTicketAward game="pinball" tickets={Math.min(100, Math.round(score / 200))} sessionId={sessionId} />
+          <GameHighScore game="pinball" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

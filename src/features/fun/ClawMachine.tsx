@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import {
@@ -1187,6 +1188,7 @@ export default function ClawMachine() {
               claw earns tickets like the other skill games — 1 per prize point
               (a perfect five-grab run tops out at 80, under the server cap). */}
           <GameTicketAward game="clawmachine" tickets={Math.min(100, score)} sessionId={sessionId} />
+          <GameHighScore game="clawmachine" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

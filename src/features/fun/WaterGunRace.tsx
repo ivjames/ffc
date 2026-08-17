@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playWaterBump, playTick, playScore, playBuzz, playFanfare } from '../../lib/sound';
@@ -796,6 +797,7 @@ export default function WaterGunRace() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (25 tickets per heat won). */}
           <GameTicketAward game="watergunrace" tickets={youWins * 25} sessionId={sessionId} />
+          <GameHighScore game="watergunrace" score={youWins} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again

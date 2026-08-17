@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
@@ -671,6 +672,7 @@ export default function AxeThrow() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (2 tickets per point — a perfect 5 clutches pays 70). */}
           <GameTicketAward game="axethrow" tickets={total * 2} sessionId={sessionId} />
+          <GameHighScore game="axethrow" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
