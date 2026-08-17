@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { isValidContent, hydrateContent, locationById, coursesByLocation, LOCATIONS } from './courses';
+import {
+  isValidContent,
+  hydrateContent,
+  isTenantUnavailable,
+  locationById,
+  coursesByLocation,
+  LOCATIONS,
+} from './courses';
 import { getOrg, getBranding, hasExplicitThemeColor } from '../lib/branding';
 import { getCurrentLocationId } from '../lib/location';
 import { detectNearestLocation } from '../lib/geolocate';
@@ -174,6 +181,80 @@ describe('zero-location tenant (un-onboarded org)', () => {
     vi.stubGlobal('isSecureContext', true);
     await expect(detectNearestLocation()).resolves.toEqual({ status: 'unavailable' });
     expect(getCurrentPosition).not.toHaveBeenCalled(); // no wasted permission prompt
+  });
+});
+
+// Finding: the tenant dead-end flag (MULTI-VENUE.md §1/§3). The dark sentinel
+// (unknown platform subdomain, suspended org) answers `unavailable: true` and
+// ONLY it does — the store must set the flag on that payload, persist it in
+// the ffc.content cache (repeat visits dead-end with no flash of the empty
+// app), and CLEAR it on any later flagless hydrate (org unsuspended, org
+// created for the slug). A real org's empty catalog must never trip it.
+describe('tenant dead-end flag (unavailable)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const dark = { unavailable: true, org: null, locations: [], courses: [] };
+
+  it('hydrating the dark payload sets the flag and caches it', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(dark), { status: 200 }),
+    );
+    await hydrateContent();
+    expect(isTenantUnavailable()).toBe(true);
+    expect(LOCATIONS).toEqual([]);
+    expect(JSON.parse(localStorage.getItem('ffc.content')!).unavailable).toBe(true);
+  });
+
+  it('a later flagless hydrate clears it — org unsuspended / created', async () => {
+    const restored = {
+      org: { id: 'org-back', slug: 'backco', name: 'Back Co', branding: {} },
+      locations: [{ id: 'back-1', name: 'Back Park', slug: 'back-park', sortOrder: 0 }],
+      courses: [],
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(restored), { status: 200 }),
+    );
+    await hydrateContent();
+    expect(isTenantUnavailable()).toBe(false);
+    expect(LOCATIONS.map((l) => l.name)).toEqual(['Back Park']);
+    // The cache is flagless again too, so the next boot doesn't dead-end.
+    expect('unavailable' in JSON.parse(localStorage.getItem('ffc.content')!)).toBe(false);
+  });
+
+  it("a real org's EMPTY catalog does not trip it (onboarding, not dead)", async () => {
+    const emptyReal = {
+      org: { id: 'org-new', slug: 'newco', name: 'New Co', branding: {} },
+      locations: [],
+      courses: [],
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(emptyReal), { status: 200 }),
+    );
+    await hydrateContent();
+    expect(isTenantUnavailable()).toBe(false);
+    expect(LOCATIONS).toEqual([]);
+  });
+
+  it('boots true from a cached dark payload, false from a malformed flag', async () => {
+    // Fresh module graphs so the at-import boot path reads each cache shape.
+    vi.resetModules();
+    localStorage.setItem('ffc.content', JSON.stringify(dark));
+    let mod = await import('./courses');
+    expect(mod.isTenantUnavailable()).toBe(true);
+
+    // Only a literal `true` counts — a stale/garbled cache must not dead-end.
+    vi.resetModules();
+    localStorage.setItem(
+      'ffc.content',
+      JSON.stringify({ unavailable: 'yes', org: null, locations: [], courses: [] }),
+    );
+    mod = await import('./courses');
+    expect(mod.isTenantUnavailable()).toBe(false);
+
+    localStorage.clear();
+    vi.resetModules();
   });
 });
 

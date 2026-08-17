@@ -51,6 +51,7 @@ import TeamDetail from './features/teams/TeamDetail';
 import AcceptInvite from './features/teams/AcceptInvite';
 import JoinGame from './features/shared/JoinGame';
 import Lobby from './features/shared/Lobby';
+import TenantUnavailable from './features/shared/TenantUnavailable';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import GeofenceGate from './features/shared/GeofenceGate';
@@ -62,7 +63,7 @@ import SkinPicker from './ui/SkinPicker';
 import RotateNudge from './ui/RotateNudge';
 import NavDrawer from './ui/NavDrawer';
 import { DEV_MODE } from './lib/flags';
-import { hydrateContent, useContentRevision } from './data/courses';
+import { hydrateContent, isTenantUnavailable, useContentRevision } from './data/courses';
 
 // Legacy → canonical redirect. The FEC restructure moved every screen under a
 // section namespace (/golf/*, /arcade/*, /me/*); these forwarders keep old
@@ -116,6 +117,16 @@ export default function App() {
   useEffect(() => {
     void hydrateContent();
   }, []);
+  // Tenant dead-end (MULTI-VENUE.md §1/§3): when /api/content marked this host
+  // `unavailable: true` (unknown platform subdomain, suspended org), render the
+  // dead-end page INSTEAD of the app — no routes, no nav drawer, no dev chrome,
+  // nothing that could prompt (geolocation) or look like a working venue app.
+  // The flag rides the content revisions (subscribed above) and is cached, so a
+  // repeat visit dead-ends before first paint; the hydrate above still runs
+  // every visit, and a flagless payload (org unsuspended / created) clears the
+  // flag and swaps the full app back in. Placed after every hook so the two
+  // branches stay Rules-of-Hooks clean.
+  if (isTenantUnavailable()) return <TenantUnavailable />;
   return (
     <>
       <Routes>

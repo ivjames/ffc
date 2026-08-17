@@ -163,7 +163,18 @@ type RawContent = {
   // Tenant org + branding (MULTI-VENUE.md §3). Optional: caches written before
   // the org rollout lack the key — that must read as "no org", not a crash.
   org?: GeneratedOrg | null;
+  // Dark-sentinel marker (server/routes/content.js): this host serves NO venue
+  // (unknown platform subdomain, suspended/archived org). Optional: live-org
+  // payloads and older caches simply lack it, which must read as "available".
+  unavailable?: boolean;
 };
+
+/** Strict read of the dead-end flag: only a literal `true` counts. Absent,
+ *  malformed, or stale-cache shapes are "available" — the dead-end must never
+ *  fire on a real tenant because of garbage in localStorage. */
+function unavailableOf(c: RawContent): boolean {
+  return c.unavailable === true;
+}
 
 /** The payload's org, or null when absent/malformed (pre-org cache, no-tenant
  *  server response). Branding falls back to BRANDING_DEFAULTS either way. */
@@ -234,6 +245,20 @@ setOrg(cached ? orgOf(cached) : null);
 export let LOCATIONS: LocationSeed[] = cached ? buildLocations(cached.locations) : [];
 export let COURSES: CourseSeed[] = cached ? buildCourses(cached.courses) : [];
 
+// Dead-end state (MULTI-VENUE.md §1/§3): true when this host's /api/content
+// answered with the dark sentinel's `unavailable: true` — the app root renders
+// the TenantUnavailable screen instead of the router. Booted from the cache so
+// a repeat visit dead-ends instantly (no flash of the empty app); a later
+// hydrate WITHOUT the flag (org unsuspended, org created for the slug) clears
+// it, restoring the app on the next revision tick.
+let tenantUnavailable = cached ? unavailableOf(cached) : false;
+
+/** Whether this origin serves no venue (dark sentinel). Read at call time and
+ *  subscribe via useContentRevision() — the flag rides the content revisions. */
+export function isTenantUnavailable(): boolean {
+  return tenantUnavailable;
+}
+
 let revision = 0;
 const listeners = new Set<() => void>();
 
@@ -242,6 +267,8 @@ function applyContent(raw: RawContent): void {
   setOrg(orgOf(raw));
   LOCATIONS = buildLocations(raw.locations);
   COURSES = buildCourses(raw.courses);
+  // Strict-true, so any payload without the flag CLEARS a stale dead-end.
+  tenantUnavailable = unavailableOf(raw);
   revision += 1;
   listeners.forEach((cb) => cb());
 }
@@ -257,9 +284,17 @@ export async function hydrateContent(): Promise<void> {
     const data = (await res.json()) as unknown;
     if (!isValidContent(data)) return;
     try {
+      // The dead-end flag is persisted ONLY when set: a subsequent visit then
+      // boots straight to the dead-end page, and a normal payload's cache
+      // (flagless) clears it for the next boot too.
       localStorage.setItem(
         CONTENT_CACHE_KEY,
-        JSON.stringify({ locations: data.locations, courses: data.courses, org: orgOf(data) }),
+        JSON.stringify({
+          locations: data.locations,
+          courses: data.courses,
+          org: orgOf(data),
+          ...(unavailableOf(data) ? { unavailable: true } : {}),
+        }),
       );
     } catch {
       // Non-fatal: we just won't have an instant/offline copy next launch.
