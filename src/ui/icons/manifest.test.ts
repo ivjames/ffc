@@ -39,9 +39,18 @@ describe('icon manifest', () => {
     expect(unmapped).toEqual([]);
   });
 
-  it('has no mappings for markers that no longer exist', () => {
-    const live = new Set<string>(pairs.map(([key]) => key));
-    expect(Object.keys(ROLE_ICONS).filter((key) => !live.has(key))).toEqual([]);
+  // Deliberately NOT the reverse of the check above. ROLE_ICONS is a migration
+  // ledger, and a mapping outliving its emoji is the SUCCESS case: once a call
+  // site renders <Icon>, its glyph leaves the inventory but the record of what
+  // that glyph used to mean is the thing you need when the art is questioned
+  // later. Asserting "no mapping without a live marker" would have failed on
+  // every screen the moment it was migrated.
+  //
+  // The forward direction above is the one that catches drift — a new emoji
+  // appearing on a screen with nobody deciding what it means.
+  it('maps every ledger entry to a real icon', () => {
+    const bad = Object.entries(ROLE_ICONS).filter(([, icon]) => !(icon in ICONS));
+    expect(bad).toEqual([]);
   });
 
   it('maps every role to an icon that is actually defined', () => {

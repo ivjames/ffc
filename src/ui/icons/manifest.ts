@@ -23,13 +23,13 @@
 //   🎳  game.bowling         a ball and a triangle of pins
 //       game.skee-ball       a ramp and concentric scoring rings
 //   🔨  game.whack-a-mole    a soft mallet, held over a hole
-//       game.high-striker    a strongman hammer, beside a tower and a bell
+//       game.high-striker    a long-handled claw hammer
 //   💦  game.water-gun-race  a jet of water, aimed
-//       score.water-hazard   a splash in a pond, a stroke penalty on a hole
-//   🎯  game.darts           a dartboard with a dart in it
+//       score.water-hazard   falling droplets — a stroke penalty on a hole
+//   🎯  game.darts           a target's concentric rings
 //       award.hole-in-one    a badge/medal for the achievement
-//   🔔  order.ready          a service bell — your food is up
-//       order.notify         a bell with a plus/ring — turn alerts ON
+//   🔔  order.ready          a still bell — your food is up
+//       order.notify         a bell mid-ring — turn alerts ON
 //   🏆  award.trophy         the object you won
 //       action.leaderboard   a ranked list — where standings live
 //
@@ -55,13 +55,13 @@ export type IconSpec = {
 export const ICONS = {
   // ── Section navigation ────────────────────────────────────────────────────
   'nav.home': { means: 'The app home screen.', draw: 'A simple house: gable roof over a square body.', placeholder: '🏠' },
-  'nav.golf': { means: 'The mini-golf section.', draw: 'A pin flag standing in a hole, ball beside it.', not: 'game.arcade-putt — the arcade mini-game, not the real course.', placeholder: '⛳️' },
+  'nav.golf': { means: 'The mini-golf section.', draw: 'A pennant on a tall pole — the pin. No ball, no cup; state.finish takes the plain rectangular flag.', not: 'game.arcade-putt — the arcade mini-game, not the real course.', placeholder: '⛳️' },
   'nav.arcade': { means: 'The arcade section.', draw: 'A gamepad seen head-on: D-pad left, two buttons right.', placeholder: '🎮' },
-  'nav.food': { means: 'Food & drink ordering.', draw: 'A hot dog in a bun, three-quarter view.', placeholder: '🌭' },
+  'nav.food': { means: 'Food & drink ordering.', draw: 'Crossed fork and knife — the section, not any one menu item (the 🌭 was never about hot dogs specifically).', placeholder: '🌭' },
   'nav.photos': { means: 'The photo booth section.', draw: 'A camera body with a lens circle and a flash bump.', not: 'action.take-photo — the shutter action inside the booth.', placeholder: '📸' },
-  'nav.hunt': { means: 'The scavenger hunt.', draw: 'A magnifier over a small map pin.', placeholder: '🔍' },
-  'nav.me': { means: 'The player’s own profile section.', draw: 'A head-and-shoulders bust in outline.', not: 'state.account — outline for the section, filled for the signed-in state.', placeholder: '👤' },
-  'nav.locations': { means: 'Switch venue / pick a location.', draw: 'A map pin with a hollow centre.', not: 'state.located — hollow pin switches venue, filled pin means you are here.', placeholder: '📍' },
+  'nav.hunt': { means: 'The scavenger hunt.', draw: 'A plain magnifier. The hunt is the only magnifier in the set, so it needs no qualifier.', placeholder: '🔍' },
+  'nav.me': { means: 'The player’s own profile section.', draw: 'A head-and-shoulders bust in outline.', not: 'state.account — bare bust for the section, bust-in-a-circle for the signed-in state.', placeholder: '👤' },
+  'nav.locations': { means: 'Switch venue / pick a location.', draw: 'A map pin with a hollow centre.', not: 'state.located — plain pin switches venue, checked pin means you are here.', placeholder: '📍' },
   'nav.install': { means: 'Install the app to the home screen.', draw: 'A downward arrow into an open tray.', placeholder: '⬇️' },
   'nav.rewards': { means: 'The rewards / loyalty card.', draw: 'An arcade ticket: rounded rectangle, perforated edge, notch.', not: 'award.ticket — the card section, not the ticket currency.', placeholder: '🎟️' },
 
@@ -77,19 +77,19 @@ export const ICONS = {
   'game.milk-bottles': { means: 'Milk-bottle toss.', draw: 'Three stacked bottles in a pyramid, ball incoming.', placeholder: '🥛' },
   'game.bowling': { means: 'Ten-pin bowling.', draw: 'A bowling ball with three finger holes, triangle of pins behind.', not: 'game.skee-ball — 🎳 covered both; bowling is BALL + PINS.', placeholder: '🎳' },
   'game.claw-machine': { means: 'The claw / prize crane.', draw: 'A three-prong claw descending over a plush shape.', placeholder: '🧸' },
-  'game.darts': { means: 'Darts.', draw: 'A dartboard’s concentric rings with a dart struck in off-centre.', not: 'award.hole-in-one — 🎯 covered both; that one is a badge.', placeholder: '🎯' },
-  'game.fun-facts': { means: 'Fun Facts — the bite-size fact deck.', draw: 'A lightbulb with a short radiating burst.', not: 'action.hint — the hunt’s hint bulb, drawn without the burst.', placeholder: '💡' },
+  'game.darts': { means: 'Darts.', draw: 'Concentric rings with a centre dot — a target seen head-on. No dart; the rings alone read as darts at 24px.', not: 'award.hole-in-one — 🎯 covered both; that one is a badge.', placeholder: '🎯' },
+  'game.fun-facts': { means: 'Fun Facts — the bite-size fact deck.', draw: 'A plain lightbulb with its filament base — an idea. action.hint takes the question mark instead.', not: 'action.hint — the hunt’s hint is a question mark, not a second bulb.', placeholder: '💡' },
   'game.shooting-gallery': { means: 'The shooting gallery.', draw: 'A carnival duck in profile — round head, beak, plump body — on a post above a rail.', placeholder: '🦆' },
   'game.pop-a-shot': { means: 'Pop-a-Shot basketball.', draw: 'Backboard, rim and net seen head-on, ball below and to the left.', placeholder: '🏀' },
-  'game.go-karts': { means: 'Go-karts.', draw: 'A kart in profile: low chassis, two fat wheels, and the driver’s helmet above — the helmet is what stops it reading as an abstract diagram. NO flag; state.finish owns that.', not: 'state.finish — the chequered flag alone; go-karts is the vehicle.', placeholder: '🏁' },
+  'game.go-karts': { means: 'Go-karts.', draw: 'A kart in profile: low chassis, two fat wheels, and the driver’s helmet above — the helmet is what stops it reading as an abstract diagram. NO flag; state.finish owns that.', not: 'state.finish — the plain flag alone; go-karts is the vehicle.', placeholder: '🏁' },
   'game.whack-a-mole': { means: 'Whack-a-Mole.', draw: 'A soft-headed MALLET raised over a hole with a mole snout.', not: 'game.high-striker — 🔨 covered both; this one is the mallet + hole.', placeholder: '🔨' },
   'game.pinball': { means: 'Pinball.', draw: 'The cabinet in plan: tall rounded rect, a bumper circle, the ball, and two flippers angled up from the bottom corners.', placeholder: '🕹️' },
-  'game.coin-pusher': { means: 'The coin pusher.', draw: 'A stack of coins on a ledge, one tipping over the lip.', placeholder: '🪙' },
+  'game.coin-pusher': { means: 'The coin pusher.', draw: 'Two overlapping coin stacks seen from the side.', placeholder: '🪙' },
   'game.arcade-putt': { means: 'Arcade Putt — the in-app putting mini-game.', draw: 'A putter head addressing a ball, hole behind.', not: 'nav.golf — the real course section, drawn as a pin flag.', placeholder: '⛳️' },
   'game.ring-toss': { means: 'Ring toss.', draw: 'A ring mid-air over an upright peg.', placeholder: '🎪' },
   'game.skee-ball': { means: 'Skee-Ball.', draw: 'The alley in perspective — a trapezoid narrowing upward to the ringed target hole, ball rolling at the near end.', not: 'game.bowling — 🎳 covered both; skee-ball is RAMP + RINGS.', placeholder: '🎳' },
-  'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A long-handled HAMMER beside a tower with a bell on top.', not: 'game.whack-a-mole, order.ready — 🔨 and 🔔 both collided here.', placeholder: '🔔' },
-  'game.trivia': { means: 'Trivia.', draw: 'A brain in profile with a question mark.', placeholder: '🧠' },
+  'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle is what separates it from whack-a-mole’s wide mallet.', not: 'game.whack-a-mole, order.ready — 🔨 and 🔔 both collided here.', placeholder: '🔔' },
+  'game.trivia': { means: 'Trivia.', draw: 'A brain in plan, two lobes.', placeholder: '🧠' },
   'game.water-gun-race': { means: 'The water gun race.', draw: 'A water pistol with a JET aimed at a rising target.', not: 'score.water-hazard — 💦 covered both; that one is a splash.', placeholder: '💦' },
   'game.challenge-spinner': { means: 'The challenge spinner wheel.', draw: 'A segmented wheel with a pointer at the top.', placeholder: '🔻' },
 
@@ -100,9 +100,9 @@ export const ICONS = {
   'score.eagle': { means: 'Two under par.', draw: 'An eagle’s head in profile, or two chevrons down.', placeholder: '🦅' },
   'score.birdie': { means: 'One under par.', draw: 'A small bird in profile, or one chevron down.', placeholder: '🐦' },
   'score.par': { means: 'Level par.', draw: 'A pin flag with a level dash beside it.', not: 'course.default, nav.golf — ⛳️ served all three; this one is a SCORE.', placeholder: '⛳️' },
-  'score.bogey': { means: 'One over par.', draw: 'A flat, wincing face — or one chevron up.', placeholder: '😬' },
+  'score.bogey': { means: 'One over par.', draw: 'A face with a flat mouth and one raised brow — a wince, not a frown; state.lose takes the frown.', placeholder: '😬' },
   'score.over-par': { means: 'Two or more over par.', draw: 'A dazed face — or a stacked double chevron up.', placeholder: '😵' },
-  'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'A SPLASH crown over a pond line.', not: 'game.water-gun-race — 💦 covered both.', placeholder: '💦' },
+  'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'Two falling droplets — water as a hazard, no aim and no jet.', not: 'game.water-gun-race — 💦 covered both.', placeholder: '💦' },
   'score.endless': { means: 'Endless (procedural) mode.', draw: 'A lemniscate — a clean infinity loop.', placeholder: '♾️' },
 
   // ── Awards & achievements ─────────────────────────────────────────────────
@@ -120,22 +120,22 @@ export const ICONS = {
   'order.sent-to-kitchen': { means: 'Sent to the kitchen.', draw: 'A paper plane, nose up.', placeholder: '📨' },
   'order.being-prepared': { means: 'Being prepared.', draw: 'A pan with an egg, one heat curl above.', placeholder: '🍳' },
   'order.ready': { means: 'Ready for pickup.', draw: 'A service bell (dome + plunger), still.', not: 'order.notify — same bell, opposite meaning.', placeholder: '🔔' },
-  'order.picked-up': { means: 'Picked up — enjoy.', draw: 'A burst of confetti / rays.', not: 'state.celebrate — reserve the plain burst for celebration.', placeholder: '🎉' },
+  'order.picked-up': { means: 'Picked up — enjoy.', draw: 'A hand holding out a platter — your order, handed over. Better than a second confetti burst next to state.celebrate.', not: 'state.celebrate — the popper stays with celebration; this is the handover.', placeholder: '🎉' },
   'order.notify': { means: 'Turn on “tell me when it’s ready”.', draw: 'A bell with motion ticks — an ALERT being armed.', not: 'order.ready — 🔔 covered both; this one is the toggle.', placeholder: '🔔' },
   'order.cart': { means: 'The food cart / basket.', draw: 'A shopping basket in outline.', placeholder: '🛒' },
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  'action.take-photo': { means: 'Take a photo.', draw: 'A shutter circle inside a camera body.', not: 'nav.photos — the section, not the shutter.', placeholder: '📸' },
+  'action.take-photo': { means: 'Take a photo.', draw: 'An aperture iris — the shutter itself, so the booth’s ACTION reads differently from nav.photos’ device.', not: 'nav.photos — the section, not the shutter.', placeholder: '📸' },
   'action.share': { means: 'Share this.', draw: 'A box with an arrow leaving through the top.', placeholder: '📤' },
   'action.delete': { means: 'Delete / remove.', draw: 'A waste bin with a lid line.', placeholder: '🗑️' },
   'action.edit': { means: 'Edit.', draw: 'A pencil at 45°, tip lower-left.', placeholder: '✏️' },
-  'action.hint': { means: 'Reveal a hint.', draw: 'A lightbulb, no burst.', not: 'game.fun-facts.', placeholder: '💡' },
+  'action.hint': { means: 'Reveal a hint.', draw: 'A question mark in a circle — asking for help. The bulb belongs to game.fun-facts.', not: 'game.fun-facts.', placeholder: '💡' },
   'action.refresh': { means: 'Reload — a new version is available.', draw: 'Two arrows chasing in a circle.', placeholder: '🔄' },
   'action.feedback': { means: 'Send feedback.', draw: 'A speech bubble with a tail.', placeholder: '💬' },
   'action.play-together': { means: 'Play together — everyone on their own phone.', draw: 'A phone with a small radiating arc.', placeholder: '📲' },
   'action.rules': { means: 'Read the rules.', draw: 'An open book, two pages.', placeholder: '📖' },
   'action.scorecard': { means: 'View the scorecard.', draw: 'A clipboard with three ruled lines.', placeholder: '📋' },
-  'action.leaderboard': { means: 'View the leaderboard.', draw: 'Three ranked bars, tallest centre — a podium.', not: 'award.trophy — 🏆 covered both.', placeholder: '🏆' },
+  'action.leaderboard': { means: 'View the leaderboard.', draw: 'A numbered list — ranked standings. Distinct from award.trophy, which is the object won.', not: 'award.trophy — 🏆 covered both.', placeholder: '🏆' },
 
   // ── Controls ──────────────────────────────────────────────────────────────
   // The bottom-left control cluster. These ship in PAIRS and must read as one
@@ -149,18 +149,18 @@ export const ICONS = {
   // ── States & markers ──────────────────────────────────────────────────────
   'state.done': { means: 'Step complete / confirmed.', draw: 'A check inside a circle.', placeholder: '✅' },
   'state.locked': { means: 'Private or locked.', draw: 'A closed padlock, shackle down.', placeholder: '🔒' },
-  'state.account': { means: 'A signed-in player.', draw: 'A filled bust — the solid counterpart to nav.me.', not: 'nav.me — filled for the state, outline for the section.', placeholder: '👤' },
+  'state.account': { means: 'A signed-in player.', draw: 'A bust enclosed in a circle — an account. nav.me keeps the bare bust for the section.', not: 'nav.me — bust-in-a-circle for the state, bare bust for the section.', placeholder: '👤' },
   'state.guest': { means: 'A guest / not yet signed in.', draw: 'A four-point sparkle.', placeholder: '✨' },
   'state.teams': { means: 'Teams / group play.', draw: 'Two overlapping busts.', placeholder: '👥' },
-  'state.located': { means: 'You are at the venue.', draw: 'A map pin with a solid dot at its centre — the counterpart to nav.locations’ hollow one.', not: 'nav.locations — hollow pin for the switcher.', placeholder: '📍' },
+  'state.located': { means: 'You are at the venue.', draw: 'A map pin with a check inside — presence confirmed. nav.locations keeps the plain pin for switching venue.', not: 'nav.locations — the plain pin is the switcher; this one is checked.', placeholder: '📍' },
   'state.no-venue': { means: 'No venue found / out of range.', draw: 'A compass rose with a tilted needle.', placeholder: '🧭' },
   'state.announcement': { means: 'A venue announcement.', draw: 'A megaphone, mouth right.', placeholder: '📣' },
   'state.cpu': { means: 'The CPU opponent.', draw: 'A blocky robot head with two eyes and an antenna.', placeholder: '🤖' },
   'state.timer': { means: 'Time remaining.', draw: 'A stopwatch with a crown button.', placeholder: '⏱' },
-  'state.finish': { means: 'Finished / start a round.', draw: 'A chequered flag on a short staff.', not: 'game.go-karts — the kart carries the flag as a motif.', placeholder: '🏁' },
+  'state.finish': { means: 'Finished / start a round.', draw: 'A plain rectangular flag on a staff. Not chequered — game.go-karts owns the racing motif, and two flags at 24px were indistinguishable.', not: 'game.go-karts — the kart, which no longer carries a flag at all.', placeholder: '🏁' },
   'state.celebrate': { means: 'Celebration — a win, an accepted invite.', draw: 'A confetti burst, no container.', not: 'order.picked-up — 🎉 served both; that one belongs to the order rail.', placeholder: '🎉' },
   'state.win': { means: 'You won this round.', draw: 'A balloon on a string.', placeholder: '🎈' },
-  'state.lose': { means: 'You lost this round.', draw: 'A clown face: round outline, ball nose, a flat mouth line — deflated, not mocking.', placeholder: '🤡' },
+  'state.lose': { means: 'You lost this round.', draw: 'A frowning face. score.bogey takes the wince, so the two losing states stay apart.', placeholder: '🤡' },
   'brand.mark': { means: 'Venue brand fallback when no logo is uploaded.', draw: 'A ferris wheel: hub, spokes, gondolas.', placeholder: '🎡' },
 
   // ── Course identity ───────────────────────────────────────────────────────
@@ -172,8 +172,8 @@ export const ICONS = {
   'course.blue': { means: 'The Blue course.', draw: 'A plain ring, stroked in the course accent. The colour is the identity, so the shape stays neutral across all three.', placeholder: '🔵' },
   'course.green': { means: 'The Green course.', draw: 'A plain ring, stroked in the course accent — identical to course.blue but for the colour.', placeholder: '🟢' },
   'course.red': { means: 'The Red course.', draw: 'A plain ring, stroked in the course accent — identical to course.blue but for the colour.', placeholder: '🔴' },
-  'course.california': { means: 'The California / tropical course.', draw: 'A palm tree, two fronds and a lean.', not: 'course.jungle — both were 🌴; palm for California, monstera for Jungle.', placeholder: '🌴' },
-  'course.jungle': { means: 'The Jungle Run course.', draw: 'A broad monstera leaf.', not: 'course.california — both were 🌴.', placeholder: '🌴' },
+  'course.california': { means: 'The California / tropical course.', draw: 'A single palm with a leaning trunk. course.jungle takes the grove.', not: 'course.jungle — both were 🌴; a single palm here, a grove there.', placeholder: '🌴' },
+  'course.jungle': { means: 'The Jungle Run course.', draw: 'A grove of round-canopy trees — deliberately not a palm, so the two 🌴 courses read apart.', not: 'course.california — both were 🌴.', placeholder: '🌴' },
   'course.dragon': { means: 'The Dragon course.', draw: 'A dragon head in profile with a horn.', placeholder: '🐉' },
   'course.western': { means: 'The Western course.', draw: 'A cowboy hat, front view.', placeholder: '🤠' },
   'course.pirate': { means: 'The Pirate’s Cove course.', draw: 'A skull-and-crossbones flag on a staff.', placeholder: '🏴‍☠️' },
@@ -373,7 +373,6 @@ export const ROLE_ICONS: Record<string, IconName> = {
 
   // Chrome & controls
   'ui.choose-a-theme 🎨': 'control.skin',
-  'ui.skinpicker ↗': 'control.skin',
   'ui.themetoggle ☀️': 'control.theme-light',
   'ui.themetoggle 🌙': 'control.theme-dark',
   'ui.navdrawer 🌙': 'control.theme-dark',

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import Icon from './Icon';
 import { getMode, subscribeMode, toggleMode } from '../lib/mode';
 import { playClick } from '../lib/sound';
 
@@ -19,7 +20,7 @@ export default function ThemeToggle() {
       aria-pressed={!dark}
       title={dark ? 'Dark mode' : 'Light mode'}
     >
-      {dark ? '☀️' : '🌙'}
+      <Icon name={dark ? 'control.theme-light' : 'control.theme-dark'} />
     </button>
   );
 }

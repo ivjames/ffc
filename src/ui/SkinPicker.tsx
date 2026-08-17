@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import Icon from './Icon';
 import { getSkin, setSkin, subscribeSkin, SKINS } from '../lib/skin';
 import { playClick } from '../lib/sound';
 
@@ -118,7 +119,7 @@ export default function SkinPicker() {
         aria-expanded={open}
         title="Theme"
       >
-        🎨
+        <Icon name="control.skin" />
       </button>
     </div>
   );

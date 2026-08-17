@@ -1,9 +1,21 @@
 import type { ReactNode } from 'react';
 import type { IconName } from './manifest';
+import { VENDORED_ART } from './vendored.generated';
 
-// The art. One entry per icon name in the manifest.
+// The art, in two halves.
 //
-// House style, so 97 drawings read as one set:
+// The GENERIC half — house, camera, bell, lock, trophy, sun/moon, the whole
+// food-order rail — is vendored from Lucide by scripts/vendor-icons.mjs. It is
+// drawn by people who are good at this, on exactly the grid and stroke spec
+// below, so it drops in untouched. See that script for why Lucide beat Phosphor
+// despite Phosphor having far better arcade vocabulary.
+//
+// The ARCADE half is here, hand-drawn, because no general icon set has a
+// skee-ball alley, a claw machine, a milk-bottle pyramid or a high striker.
+// These are the ones that most want a real illustrator; the briefs in
+// manifest.ts are written to hand off.
+//
+// House style, so both halves read as one set:
 //   · 24×24 viewBox, artwork kept inside 2…22 so nothing clips when rounded
 //   · monoline: stroke only, NO fills — fills break `currentColor` inheritance
 //     and would need a per-skin variant, which is exactly what this avoids
@@ -21,26 +33,9 @@ import type { IconName } from './manifest';
 // only names that have art. Referencing a manifest name nobody has drawn yet is
 // a typecheck failure, not a blank square shipped to a player.
 
-export const ICON_ART = {
+/** The hand-drawn half — arcade attractions no general icon set covers. */
+const BESPOKE_ART = {
   // ── The arcade roster ─────────────────────────────────────────────────────
-
-  // Fun Facts — a bulb WITH a radiating burst. action.hint is the same bulb
-  // without the burst, so the two never collapse into one drawing.
-  'game.fun-facts': (
-    <>
-      <path d="M9 17h6M10 21h4" />
-      <path d="M12 3a6 6 0 0 0-3.5 10.9V17h7v-3.1A6 6 0 0 0 12 3z" />
-    </>
-  ),
-
-  // Trivia — a brain in profile with a question mark. Not state.cpu's head.
-  'game.trivia': (
-    <>
-      <path d="M12 5.5a3.5 3.5 0 0 0-6.6-1.6A3 3 0 0 0 4 9.4a3.5 3.5 0 0 0 1.6 5.9A3 3 0 0 0 11 17v-1" />
-      <path d="M14.5 8.5a2.2 2.2 0 1 1 3 2c-.9.5-1.4 1-1.4 2M16 17h.01" />
-      <path d="M12 5.5V12" />
-    </>
-  ),
 
   // Arcade Putt — a PUTTER HEAD addressing a ball. nav.golf is the pin flag;
   // this is the in-app mini-game, and the two were both ⛳️.
@@ -104,15 +99,6 @@ export const ICON_ART = {
     </>
   ),
 
-  // Axe throwing — a hatchet IN FLIGHT toward a target edge.
-  'game.axe-throwing': (
-    <>
-      <path d="M4 20L13 11" />
-      <path d="M12 6.5a4.5 4.5 0 0 1 6.5 6.2c-1.6-2-3-2.6-4-2.6-1 0-1.7.5-2.5-.6-.8-1.1-.5-2.3 0-3z" />
-      <path d="M19 20a5 5 0 0 0 0-8" />
-    </>
-  ),
-
   // Batting cages — a bat crossed behind a ball, with the cage mesh hinted.
   'game.batting-cages': (
     <>
@@ -139,17 +125,6 @@ export const ICON_ART = {
       <path d="M8 9h8" />
       <path d="M8 9v3c0 1 .6 2 1.6 2.6M16 9v3c0 1-.6 2-1.6 2.6M12 9v4" />
       <circle cx="12" cy="18.5" r="2.5" />
-    </>
-  ),
-
-  // Darts — a BOARD with a dart struck off-centre. award.hole-in-one also used
-  // 🎯 but is a badge; this one is unmistakably a dartboard.
-  'game.darts': (
-    <>
-      <circle cx="11" cy="13" r="8" />
-      <circle cx="11" cy="13" r="3.5" />
-      <path d="M11 13l9-9" />
-      <path d="M17.5 3.5L20.5 3l-.5 3" />
     </>
   ),
 
@@ -197,18 +172,6 @@ export const ICON_ART = {
     </>
   ),
 
-  // High striker — a LONG-HANDLED HAMMER beside a tower with a BELL on top.
-  // The other 🔨, and also the other 🔔 (order.ready is a service bell).
-  'game.high-striker': (
-    <>
-      <path d="M13 21V9" />
-      <path d="M10 9h6" />
-      <path d="M13 6.5a2.5 2.5 0 0 1 5 0" />
-      <path d="M4 21l3.5-6" />
-      <rect x="5.5" y="10.5" width="5" height="3" rx="1" transform="rotate(-35 8 12)" />
-    </>
-  ),
-
   // Ring toss — a ring MID-AIR over an upright peg.
   'game.ring-toss': (
     <>
@@ -239,17 +202,6 @@ export const ICON_ART = {
     </>
   ),
 
-  // Coin pusher — a stack of coins with ONE TIPPING over the ledge.
-  'game.coin-pusher': (
-    <>
-      <ellipse cx="9" cy="7" rx="5" ry="2" />
-      <path d="M4 7v3c0 1.1 2.2 2 5 2s5-.9 5-2V7" />
-      <path d="M4 12v3c0 1.1 2.2 2 5 2s5-.9 5-2v-3" />
-      <path d="M3 20h18" />
-      <ellipse cx="18" cy="18" rx="3" ry="1.2" transform="rotate(-25 18 18)" />
-    </>
-  ),
-
   // Challenge spinner — a segmented wheel with a POINTER at the top.
   'game.challenge-spinner': (
     <>
@@ -259,16 +211,14 @@ export const ICON_ART = {
     </>
   ),
 
-  // ── Shared furniture the arcade screens need ─────────────────────────────
-
-  // Redemption ticket — perforated edge and notched ends.
-  'award.ticket': (
-    <>
-      <path d="M3 8V6.5A1.5 1.5 0 0 1 4.5 5h15A1.5 1.5 0 0 1 21 6.5V8a2 2 0 0 0 0 4v1.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 13.5V12a2 2 0 0 0 0-4z" />
-      <path d="M9 5v1.5M9 9v2M9 13.5V15" />
-    </>
-  ),
 } satisfies Partial<Record<IconName, ReactNode>>;
+
+/**
+ * Every icon that has art today. Bespoke last, so a hand-drawn entry
+ * deliberately overrides a vendored one of the same name rather than the merge
+ * order deciding it silently.
+ */
+export const ICON_ART = { ...VENDORED_ART, ...BESPOKE_ART };
 
 /** The icon names that actually have art today. <Icon> accepts only these. */
 export type DrawnIcon = keyof typeof ICON_ART;

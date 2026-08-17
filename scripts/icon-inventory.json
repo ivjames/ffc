@@ -1,15 +1,14 @@
 {
   "generated": "scripts/icon-inventory.mjs",
   "totals": {
-    "marker": 208,
-    "prose": 86,
+    "marker": 180,
+    "prose": 96,
     "sticker": 32,
-    "symbol": 116,
-    "roles": 121
+    "symbol": 117,
+    "roles": 95
   },
   "overloaded": {
     "⛳️": [
-      "arcade.putt",
       "fun.spinner",
       "install.install",
       "nav.golf",
@@ -22,7 +21,6 @@
     ],
     "🎟️": [
       "account.account",
-      "fun.earns-tickets",
       "fun.gameticketaward",
       "me.mehome",
       "me.rewards",
@@ -52,18 +50,6 @@
       "nav.hunt",
       "scorecard.scavenger-hunt"
     ],
-    "🎳": [
-      "arcade.bowling",
-      "arcade.skeeball",
-      "fun.bowling",
-      "fun.skeeball"
-    ],
-    "🎯": [
-      "arcade.darts",
-      "fun.darts",
-      "me.hole-in-one",
-      "scorecard.hole-in-one"
-    ],
     "📸": [
       "nav.photos",
       "photos.photobooth",
@@ -82,11 +68,6 @@
       "scorecard.shareimage",
       "tv.tvleaderboard"
     ],
-    "🔔": [
-      "arcade.striker",
-      "food.orderstatus",
-      "food.ready-for-pickup"
-    ],
     "🎉": [
       "food.picked-up-enjoy",
       "fun.spinner",
@@ -97,20 +78,10 @@
       "install.install",
       "photos.photobooth"
     ],
-    "🏁": [
-      "arcade.karts",
-      "fun.gokarts",
-      "putt.puttgolf"
-    ],
-    "🔨": [
-      "arcade.mole",
-      "fun.highstriker",
-      "fun.whackamole"
-    ],
-    "🕹️": [
-      "arcade.pinball",
-      "fun.pinball",
-      "rewards.rewards"
+    "🎯": [
+      "fun.darts",
+      "me.hole-in-one",
+      "scorecard.hole-in-one"
     ],
     "📲": [
       "golf.golfhome",
@@ -133,65 +104,33 @@
       "food.food",
       "home.home"
     ],
-    "🏒": [
-      "arcade.airhockey",
-      "fun.airhockey"
+    "🔔": [
+      "food.orderstatus",
+      "food.ready-for-pickup"
     ],
-    "🪓": [
-      "arcade.axe",
-      "fun.axethrow"
-    ],
-    "⚾️": [
-      "arcade.batting",
-      "fun.battingcages"
+    "🎳": [
+      "fun.bowling",
+      "fun.skeeball"
     ],
     "⏱": [
       "fun.bumperarena",
       "fun.popashot"
     ],
-    "🚤": [
-      "arcade.boats",
-      "fun.bumper-boats"
-    ],
-    "🚗": [
-      "arcade.bumper",
-      "fun.bumper-cars"
-    ],
-    "🧸": [
-      "arcade.claw",
-      "fun.clawmachine"
-    ],
-    "🪙": [
-      "arcade.pusher",
-      "fun.coinpusher"
-    ],
-    "💡": [
-      "arcade.facts",
-      "hunt.hunt"
-    ],
-    "🧠": [
-      "arcade.trivia",
-      "fun.trivia"
-    ],
-    "🏀": [
-      "arcade.hoops",
-      "fun.popashot"
-    ],
-    "🦆": [
-      "arcade.gallery",
-      "fun.shootinggallery"
-    ],
-    "🎪": [
-      "arcade.rings",
-      "fun.ringtoss"
-    ],
-    "💦": [
-      "arcade.watergun",
+    "🏁": [
+      "fun.gokarts",
       "putt.puttgolf"
+    ],
+    "🔨": [
+      "fun.highstriker",
+      "fun.whackamole"
     ],
     "🎮": [
       "fun.milkbottle",
       "nav.arcade"
+    ],
+    "🕹️": [
+      "fun.pinball",
+      "rewards.rewards"
     ],
     "🌭": [
       "home.home",
@@ -228,14 +167,6 @@
     "🌴": [
       "theme.california",
       "theme.jungle"
-    ],
-    "🔊": [
-      "ui.navdrawer",
-      "ui.soundtoggle"
-    ],
-    "🌙": [
-      "ui.navdrawer",
-      "ui.themetoggle"
     ]
   },
   "inconsistent": {
@@ -358,14 +289,6 @@
     ],
     "ui.navdrawer": [
       "🔊",
-      "🌙"
-    ],
-    "ui.soundtoggle": [
-      "🔇",
-      "🔊"
-    ],
-    "ui.themetoggle": [
-      "☀️",
       "🌙"
     ]
   },
@@ -3405,282 +3328,6 @@
       "file": "src/features/fun/Darts.tsx",
       "line": 764,
       "context": "<span className=\"text-5xl\">🎯</span>"
-    },
-    {
-      "glyph": "💡",
-      "kind": "marker",
-      "role": "arcade.facts",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 29,
-      "context": "emoji: '💡',"
-    },
-    {
-      "glyph": "🧠",
-      "kind": "marker",
-      "role": "arcade.trivia",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 36,
-      "context": "emoji: '🧠',"
-    },
-    {
-      "glyph": "⛳️",
-      "kind": "marker",
-      "role": "arcade.putt",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 44,
-      "context": "emoji: '⛳️',"
-    },
-    {
-      "glyph": "🎳",
-      "kind": "marker",
-      "role": "arcade.skeeball",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 51,
-      "context": "emoji: '🎳',"
-    },
-    {
-      "glyph": "🏒",
-      "kind": "marker",
-      "role": "arcade.airhockey",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 59,
-      "context": "emoji: '🏒',"
-    },
-    {
-      "glyph": "🚗",
-      "kind": "marker",
-      "role": "arcade.bumper",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 67,
-      "context": "emoji: '🚗',"
-    },
-    {
-      "glyph": "🚤",
-      "kind": "marker",
-      "role": "arcade.boats",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 75,
-      "context": "emoji: '🚤',"
-    },
-    {
-      "glyph": "🪓",
-      "kind": "marker",
-      "role": "arcade.axe",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 83,
-      "context": "emoji: '🪓',"
-    },
-    {
-      "glyph": "⚾️",
-      "kind": "marker",
-      "role": "arcade.batting",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 91,
-      "context": "emoji: '⚾️',"
-    },
-    {
-      "glyph": "🎳",
-      "kind": "marker",
-      "role": "arcade.bowling",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 99,
-      "context": "emoji: '🎳',"
-    },
-    {
-      "glyph": "🏁",
-      "kind": "marker",
-      "role": "arcade.karts",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 107,
-      "context": "emoji: '🏁',"
-    },
-    {
-      "glyph": "🔨",
-      "kind": "marker",
-      "role": "arcade.mole",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 115,
-      "context": "emoji: '🔨',"
-    },
-    {
-      "glyph": "🏀",
-      "kind": "marker",
-      "role": "arcade.hoops",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 123,
-      "context": "emoji: '🏀',"
-    },
-    {
-      "glyph": "🎯",
-      "kind": "marker",
-      "role": "arcade.darts",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 131,
-      "context": "emoji: '🎯',"
-    },
-    {
-      "glyph": "🦆",
-      "kind": "marker",
-      "role": "arcade.gallery",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 139,
-      "context": "emoji: '🦆',"
-    },
-    {
-      "glyph": "🧸",
-      "kind": "marker",
-      "role": "arcade.claw",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 147,
-      "context": "emoji: '🧸',"
-    },
-    {
-      "glyph": "🔔",
-      "kind": "marker",
-      "role": "arcade.striker",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 155,
-      "context": "emoji: '🔔',"
-    },
-    {
-      "glyph": "🎪",
-      "kind": "marker",
-      "role": "arcade.rings",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 163,
-      "context": "emoji: '🎪',"
-    },
-    {
-      "glyph": "🥛",
-      "kind": "marker",
-      "role": "arcade.bottles",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 171,
-      "context": "emoji: '🥛',"
-    },
-    {
-      "glyph": "💦",
-      "kind": "marker",
-      "role": "arcade.watergun",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 179,
-      "context": "emoji: '💦',"
-    },
-    {
-      "glyph": "🕹️",
-      "kind": "marker",
-      "role": "arcade.pinball",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 187,
-      "context": "emoji: '🕹️',"
-    },
-    {
-      "glyph": "🪙",
-      "kind": "marker",
-      "role": "arcade.pusher",
-      "roleFrom": "route",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 195,
-      "context": "emoji: '🪙',"
-    },
-    {
-      "glyph": "🎟️",
-      "kind": "marker",
-      "role": "fun.earns-tickets",
-      "roleFrom": "aria-label",
-      "needsReview": false,
-      "area": "fun",
-      "component": "FunZone",
-      "file": "src/features/fun/FunZone.tsx",
-      "line": 245,
-      "context": "🎟️"
     },
     {
       "glyph": "🎟️",
@@ -8124,10 +7771,10 @@
     },
     {
       "glyph": "↗",
-      "kind": "marker",
-      "role": "ui.skinpicker",
-      "roleFrom": "component",
-      "needsReview": true,
+      "kind": "symbol",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
       "area": "ui",
       "component": "SkinPicker",
       "file": "src/ui/SkinPicker.tsx",
@@ -8145,54 +7792,6 @@
       "file": "src/ui/SkinPicker.tsx",
       "line": 121,
       "context": "🎨"
-    },
-    {
-      "glyph": "🔇",
-      "kind": "marker",
-      "role": "ui.soundtoggle",
-      "roleFrom": "component",
-      "needsReview": true,
-      "area": "ui",
-      "component": "SoundToggle",
-      "file": "src/ui/SoundToggle.tsx",
-      "line": 21,
-      "context": "{muted ? '🔇' : '🔊'}"
-    },
-    {
-      "glyph": "🔊",
-      "kind": "marker",
-      "role": "ui.soundtoggle",
-      "roleFrom": "component",
-      "needsReview": true,
-      "area": "ui",
-      "component": "SoundToggle",
-      "file": "src/ui/SoundToggle.tsx",
-      "line": 21,
-      "context": "{muted ? '🔇' : '🔊'}"
-    },
-    {
-      "glyph": "☀️",
-      "kind": "marker",
-      "role": "ui.themetoggle",
-      "roleFrom": "component",
-      "needsReview": true,
-      "area": "ui",
-      "component": "ThemeToggle",
-      "file": "src/ui/ThemeToggle.tsx",
-      "line": 22,
-      "context": "{dark ? '☀️' : '🌙'}"
-    },
-    {
-      "glyph": "🌙",
-      "kind": "marker",
-      "role": "ui.themetoggle",
-      "roleFrom": "component",
-      "needsReview": true,
-      "area": "ui",
-      "component": "ThemeToggle",
-      "file": "src/ui/ThemeToggle.tsx",
-      "line": 22,
-      "context": "{dark ? '☀️' : '🌙'}"
     },
     {
       "glyph": "🔄",
@@ -8288,7 +7887,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 58,
-      "context": "'nav.golf': { means: 'The mini-golf section.', draw: 'A pin flag standing in a hole, ball beside it.', not: 'game.arcade"
+      "context": "'nav.golf': { means: 'The mini-golf section.', draw: 'A pennant on a tall pole — the pin. No ball, no cup; state.finish "
     },
     {
       "glyph": "🎮",
@@ -8312,7 +7911,19 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 60,
-      "context": "'nav.food': { means: 'Food & drink ordering.', draw: 'A hot dog in a bun, three-quarter view.', placeholder: '🌭' },"
+      "context": "'nav.food': { means: 'Food & drink ordering.', draw: 'Crossed fork and knife — the section, not any one menu item (the \ud83c"
+    },
+    {
+      "glyph": "🌭",
+      "kind": "catalog",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "manifest",
+      "file": "src/ui/icons/manifest.ts",
+      "line": 60,
+      "context": "'nav.food': { means: 'Food & drink ordering.', draw: 'Crossed fork and knife — the section, not any one menu item (the \ud83c"
     },
     {
       "glyph": "📸",
@@ -8336,7 +7947,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 62,
-      "context": "'nav.hunt': { means: 'The scavenger hunt.', draw: 'A magnifier over a small map pin.', placeholder: '🔍' },"
+      "context": "'nav.hunt': { means: 'The scavenger hunt.', draw: 'A plain magnifier. The hunt is the only magnifier in the set, so it n"
     },
     {
       "glyph": "👤",
@@ -8348,7 +7959,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 63,
-      "context": "'nav.me': { means: 'The player’s own profile section.', draw: 'A head-and-shoulders bust in outline.', placeholder: '👤'"
+      "context": "'nav.me': { means: 'The player’s own profile section.', draw: 'A head-and-shoulders bust in outline.', not: 'state.accou"
     },
     {
       "glyph": "📍",
@@ -8360,7 +7971,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 64,
-      "context": "'nav.locations': { means: 'Switch venue / pick a location.', draw: 'A map pin with a hollow centre.', placeholder: '📍' "
+      "context": "'nav.locations': { means: 'Switch venue / pick a location.', draw: 'A map pin with a hollow centre.', not: 'state.locate"
     },
     {
       "glyph": "⬇️",
@@ -8444,7 +8055,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 76,
-      "context": "'game.bumper-cars': { means: 'Bumper cars.', draw: 'A tub car with a bumper skirt and a pole to the ceiling grid.', not:"
+      "context": "'game.bumper-cars': { means: 'Bumper cars.', draw: 'A tub car on a wide bumper skirt, pole running up to the ceiling gri"
     },
     {
       "glyph": "🥛",
@@ -8504,7 +8115,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 80,
-      "context": "'game.darts': { means: 'Darts.', draw: 'A dartboard’s concentric rings with a dart struck in off-centre.', not: 'award.h"
+      "context": "'game.darts': { means: 'Darts.', draw: 'Concentric rings with a centre dot — a target seen head-on. No dart; the rings a"
     },
     {
       "glyph": "🎯",
@@ -8516,7 +8127,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 80,
-      "context": "'game.darts': { means: 'Darts.', draw: 'A dartboard’s concentric rings with a dart struck in off-centre.', not: 'award.h"
+      "context": "'game.darts': { means: 'Darts.', draw: 'Concentric rings with a centre dot — a target seen head-on. No dart; the rings a"
     },
     {
       "glyph": "💡",
@@ -8528,7 +8139,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 81,
-      "context": "'game.fun-facts': { means: 'Fun Facts — the bite-size fact deck.', draw: 'A lightbulb with a short radiating burst.', no"
+      "context": "'game.fun-facts': { means: 'Fun Facts — the bite-size fact deck.', draw: 'A plain lightbulb with its filament base — an "
     },
     {
       "glyph": "🦆",
@@ -8540,7 +8151,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 82,
-      "context": "'game.shooting-gallery': { means: 'The shooting gallery.', draw: 'A carnival duck in profile on a moving rail.', placeho"
+      "context": "'game.shooting-gallery': { means: 'The shooting gallery.', draw: 'A carnival duck in profile — round head, beak, plump b"
     },
     {
       "glyph": "🏀",
@@ -8552,7 +8163,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 83,
-      "context": "'game.pop-a-shot': { means: 'Pop-a-Shot basketball.', draw: 'A ball arcing into a hoop with a net.', placeholder: '🏀' }"
+      "context": "'game.pop-a-shot': { means: 'Pop-a-Shot basketball.', draw: 'Backboard, rim and net seen head-on, ball below and to the "
     },
     {
       "glyph": "🏁",
@@ -8564,7 +8175,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 84,
-      "context": "'game.go-karts': { means: 'Go-karts.', draw: 'A kart from the front-three-quarter, chequered flag behind.', not: 'state."
+      "context": "'game.go-karts': { means: 'Go-karts.', draw: 'A kart in profile: low chassis, two fat wheels, and the driver’s helmet ab"
     },
     {
       "glyph": "🔨",
@@ -8600,7 +8211,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 86,
-      "context": "'game.pinball': { means: 'Pinball.', draw: 'Two flippers angled up, ball between them, bumper above.', placeholder: '🕹️"
+      "context": "'game.pinball': { means: 'Pinball.', draw: 'The cabinet in plan: tall rounded rect, a bumper circle, the ball, and two f"
     },
     {
       "glyph": "🪙",
@@ -8612,7 +8223,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 87,
-      "context": "'game.coin-pusher': { means: 'The coin pusher.', draw: 'A stack of coins on a ledge, one tipping over the lip.', placeho"
+      "context": "'game.coin-pusher': { means: 'The coin pusher.', draw: 'Two overlapping coin stacks seen from the side.', placeholder: '"
     },
     {
       "glyph": "⛳️",
@@ -8648,7 +8259,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 90,
-      "context": "'game.skee-ball': { means: 'Skee-Ball.', draw: 'An up-ramp leading to CONCENTRIC SCORING RINGS, ball rolling.', not: 'ga"
+      "context": "'game.skee-ball': { means: 'Skee-Ball.', draw: 'The alley in perspective — a trapezoid narrowing upward to the ringed ta"
     },
     {
       "glyph": "🎳",
@@ -8660,7 +8271,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 90,
-      "context": "'game.skee-ball': { means: 'Skee-Ball.', draw: 'An up-ramp leading to CONCENTRIC SCORING RINGS, ball rolling.', not: 'ga"
+      "context": "'game.skee-ball': { means: 'Skee-Ball.', draw: 'The alley in perspective — a trapezoid narrowing upward to the ringed ta"
     },
     {
       "glyph": "🔨",
@@ -8672,7 +8283,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 91,
-      "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A long-handled HAMMER beside a tower with a b"
+      "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle i"
     },
     {
       "glyph": "🔔",
@@ -8684,7 +8295,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 91,
-      "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A long-handled HAMMER beside a tower with a b"
+      "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle i"
     },
     {
       "glyph": "🔔",
@@ -8696,7 +8307,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 91,
-      "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A long-handled HAMMER beside a tower with a b"
+      "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle i"
     },
     {
       "glyph": "🧠",
@@ -8708,7 +8319,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 92,
-      "context": "'game.trivia': { means: 'Trivia.', draw: 'A brain in profile with a question mark.', placeholder: '🧠' },"
+      "context": "'game.trivia': { means: 'Trivia.', draw: 'A brain in plan, two lobes.', placeholder: '🧠' },"
     },
     {
       "glyph": "💦",
@@ -8792,7 +8403,19 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 102,
-      "context": "'score.par': { means: 'Level par.', draw: 'A pin flag with a level dash beside it.', placeholder: '⛳️' },"
+      "context": "'score.par': { means: 'Level par.', draw: 'A pin flag with a level dash beside it.', not: 'course.default, nav.golf — ⛳️"
+    },
+    {
+      "glyph": "⛳️",
+      "kind": "catalog",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "manifest",
+      "file": "src/ui/icons/manifest.ts",
+      "line": 102,
+      "context": "'score.par': { means: 'Level par.', draw: 'A pin flag with a level dash beside it.', not: 'course.default, nav.golf — ⛳️"
     },
     {
       "glyph": "😬",
@@ -8804,7 +8427,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 103,
-      "context": "'score.bogey': { means: 'One over par.', draw: 'A flat, wincing face — or one chevron up.', placeholder: '😬' },"
+      "context": "'score.bogey': { means: 'One over par.', draw: 'A face with a flat mouth and one raised brow — a wince, not a frown; sta"
     },
     {
       "glyph": "😵",
@@ -8828,7 +8451,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 105,
-      "context": "'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'A SPLASH crown over a pond line.', not:"
+      "context": "'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'Two falling droplets — water as a hazar"
     },
     {
       "glyph": "💦",
@@ -8840,7 +8463,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 105,
-      "context": "'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'A SPLASH crown over a pond line.', not:"
+      "context": "'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'Two falling droplets — water as a hazar"
     },
     {
       "glyph": "♾️",
@@ -8900,7 +8523,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 111,
-      "context": "'award.ticket': { means: 'Redemption tickets.', draw: 'An arcade ticket: perforated edge, notched ends.', placeholder: '"
+      "context": "'award.ticket': { means: 'Redemption tickets.', draw: 'An arcade ticket: perforated edge, notched ends.', not: 'nav.rewa"
     },
     {
       "glyph": "🎯",
@@ -9020,7 +8643,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 123,
-      "context": "'order.picked-up': { means: 'Picked up — enjoy.', draw: 'A burst of confetti / rays.', not: 'state.celebrate — reserve t"
+      "context": "'order.picked-up': { means: 'Picked up — enjoy.', draw: 'A hand holding out a platter — your order, handed over. Better "
     },
     {
       "glyph": "🔔",
@@ -9068,7 +8691,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 128,
-      "context": "'action.take-photo': { means: 'Take a photo.', draw: 'A shutter circle inside a camera body.', not: 'nav.photos — the se"
+      "context": "'action.take-photo': { means: 'Take a photo.', draw: 'An aperture iris — the shutter itself, so the booth’s ACTION reads"
     },
     {
       "glyph": "📤",
@@ -9116,7 +8739,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 132,
-      "context": "'action.hint': { means: 'Reveal a hint.', draw: 'A lightbulb, no burst.', not: 'game.fun-facts.', placeholder: '💡' },"
+      "context": "'action.hint': { means: 'Reveal a hint.', draw: 'A question mark in a circle — asking for help. The bulb belongs to game"
     },
     {
       "glyph": "🔄",
@@ -9188,7 +8811,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 138,
-      "context": "'action.leaderboard': { means: 'View the leaderboard.', draw: 'Three ranked bars, tallest centre — a podium.', not: 'awa"
+      "context": "'action.leaderboard': { means: 'View the leaderboard.', draw: 'A numbered list — ranked standings. Distinct from award.t"
     },
     {
       "glyph": "🏆",
@@ -9200,7 +8823,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 138,
-      "context": "'action.leaderboard': { means: 'View the leaderboard.', draw: 'Three ranked bars, tallest centre — a podium.', not: 'awa"
+      "context": "'action.leaderboard': { means: 'View the leaderboard.', draw: 'A numbered list — ranked standings. Distinct from award.t"
     },
     {
       "glyph": "🎨",
@@ -9296,7 +8919,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 152,
-      "context": "'state.account': { means: 'A signed-in player.', draw: 'A filled bust — the solid counterpart to nav.me.', placeholder: "
+      "context": "'state.account': { means: 'A signed-in player.', draw: 'A bust enclosed in a circle — an account. nav.me keeps the bare "
     },
     {
       "glyph": "✨",
@@ -9332,7 +8955,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 155,
-      "context": "'state.located': { means: 'You are at the venue.', draw: 'A filled map pin.', not: 'nav.locations — hollow pin for the s"
+      "context": "'state.located': { means: 'You are at the venue.', draw: 'A map pin with a check inside — presence confirmed. nav.locati"
     },
     {
       "glyph": "🧭",
@@ -9392,7 +9015,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 160,
-      "context": "'state.finish': { means: 'Finished / start a round.', draw: 'A chequered flag on a short staff.', not: 'game.go-karts — "
+      "context": "'state.finish': { means: 'Finished / start a round.', draw: 'A plain rectangular flag on a staff. Not chequered — game.g"
     },
     {
       "glyph": "🎉",
@@ -9404,7 +9027,19 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 161,
-      "context": "'state.celebrate': { means: 'Celebration — a win, an accepted invite.', draw: 'A confetti burst, no container.', placeho"
+      "context": "'state.celebrate': { means: 'Celebration — a win, an accepted invite.', draw: 'A confetti burst, no container.', not: 'o"
+    },
+    {
+      "glyph": "🎉",
+      "kind": "catalog",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "manifest",
+      "file": "src/ui/icons/manifest.ts",
+      "line": 161,
+      "context": "'state.celebrate': { means: 'Celebration — a win, an accepted invite.', draw: 'A confetti burst, no container.', not: 'o"
     },
     {
       "glyph": "🎈",
@@ -9428,7 +9063,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 163,
-      "context": "'state.lose': { means: 'You lost this round.', draw: 'A clown face, flat.', placeholder: '🤡' },"
+      "context": "'state.lose': { means: 'You lost this round.', draw: 'A frowning face. score.bogey takes the wince, so the two losing st"
     },
     {
       "glyph": "🎡",
@@ -9452,7 +9087,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 170,
-      "context": "'course.default': { means: 'A course with no specific theme.', draw: 'A pin flag in a hole.', placeholder: '⛳️' },"
+      "context": "'course.default': { means: 'A course with no specific theme.', draw: 'A pin flag in a hole.', not: 'course.classic — the"
     },
     {
       "glyph": "⛳️",
@@ -9464,7 +9099,19 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 171,
-      "context": "'course.classic': { means: 'The classic mini-golf course.', draw: 'A pin flag with a windmill sail behind.', placeholder"
+      "context": "'course.classic': { means: 'The classic mini-golf course.', draw: 'A pin flag with a windmill sail behind.', not: 'cours"
+    },
+    {
+      "glyph": "⛳️",
+      "kind": "catalog",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "manifest",
+      "file": "src/ui/icons/manifest.ts",
+      "line": 171,
+      "context": "'course.classic': { means: 'The classic mini-golf course.', draw: 'A pin flag with a windmill sail behind.', not: 'cours"
     },
     {
       "glyph": "🔵",
@@ -9476,7 +9123,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 172,
-      "context": "'course.blue': { means: 'The Blue course.', draw: 'A filled disc — colour carries the identity.', placeholder: '🔵' },"
+      "context": "'course.blue': { means: 'The Blue course.', draw: 'A plain ring, stroked in the course accent. The colour is the identit"
     },
     {
       "glyph": "🟢",
@@ -9488,7 +9135,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 173,
-      "context": "'course.green': { means: 'The Green course.', draw: 'A filled disc.', placeholder: '🟢' },"
+      "context": "'course.green': { means: 'The Green course.', draw: 'A plain ring, stroked in the course accent — identical to course.bl"
     },
     {
       "glyph": "🔴",
@@ -9500,7 +9147,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 174,
-      "context": "'course.red': { means: 'The Red course.', draw: 'A filled disc.', placeholder: '🔴' },"
+      "context": "'course.red': { means: 'The Red course.', draw: 'A plain ring, stroked in the course accent — identical to course.blue b"
     },
     {
       "glyph": "🌴",
@@ -9512,7 +9159,19 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 175,
-      "context": "'course.california': { means: 'The California / tropical course.', draw: 'A palm tree, two fronds and a lean.', placehol"
+      "context": "'course.california': { means: 'The California / tropical course.', draw: 'A single palm with a leaning trunk. course.jun"
+    },
+    {
+      "glyph": "🌴",
+      "kind": "catalog",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "manifest",
+      "file": "src/ui/icons/manifest.ts",
+      "line": 175,
+      "context": "'course.california': { means: 'The California / tropical course.', draw: 'A single palm with a leaning trunk. course.jun"
     },
     {
       "glyph": "🌴",
@@ -9524,7 +9183,7 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 176,
-      "context": "'course.jungle': { means: 'The Jungle Run course.', draw: 'A broad monstera leaf.', not: 'course.california — both were "
+      "context": "'course.jungle': { means: 'The Jungle Run course.', draw: 'A grove of round-canopy trees — deliberately not a palm, so t"
     },
     {
       "glyph": "🌴",
@@ -9536,7 +9195,19 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 176,
-      "context": "'course.jungle': { means: 'The Jungle Run course.', draw: 'A broad monstera leaf.', not: 'course.california — both were "
+      "context": "'course.jungle': { means: 'The Jungle Run course.', draw: 'A grove of round-canopy trees — deliberately not a palm, so t"
+    },
+    {
+      "glyph": "🌴",
+      "kind": "catalog",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "manifest",
+      "file": "src/ui/icons/manifest.ts",
+      "line": 176,
+      "context": "'course.jungle': { means: 'The Jungle Run course.', draw: 'A grove of round-canopy trees — deliberately not a palm, so t"
     },
     {
       "glyph": "🐉",
@@ -11661,6 +11332,126 @@
       "file": "src/ui/icons/manifest.ts",
       "line": 406,
       "context": "'theme.haunted 👻': 'course.haunted',"
+    },
+    {
+      "glyph": "📸",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 52,
+      "context": "{/* the device; action.take-photo takes the aperture, since 📸 served both. */}"
+    },
+    {
+      "glyph": "🎯",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 107,
+      "context": "{/* concentric rings. award.hole-in-one shared 🎯 and stays a badge. */}"
+    },
+    {
+      "glyph": "🔨",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 134,
+      "context": "{/* the long-handled hammer. whack-a-mole shared 🔨 and keeps the bespoke mallet. */}"
+    },
+    {
+      "glyph": "💦",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 183,
+      "context": "{/* water as a hazard. game.water-gun-race shared 💦 and keeps the aimed jet. */}"
+    },
+    {
+      "glyph": "🏆",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 191,
+      "context": "{/* the object won. action.leaderboard shared 🏆 and takes the ranked list. */}"
+    },
+    {
+      "glyph": "🔔",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 247,
+      "context": "{/* the still bell. order.notify shared 🔔 and takes the ringing one. */}"
+    },
+    {
+      "glyph": "🎉",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 265,
+      "context": "{/* a plate handed over. state.celebrate shared 🎉 and keeps the popper. */}"
+    },
+    {
+      "glyph": "💡",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 329,
+      "context": "{/* asking for help. game.fun-facts shared 💡 and keeps the bulb. */}"
+    },
+    {
+      "glyph": "🌴",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 592,
+      "context": "{/* a palm. course.jungle shared 🌴 and takes the broadleaf grove. */}"
+    },
+    {
+      "glyph": "🌴",
+      "kind": "prose",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "vendored.generated",
+      "file": "src/ui/icons/vendored.generated.tsx",
+      "line": 602,
+      "context": "{/* a grove, so the two 🌴 courses stop being the same picture. */}"
     }
   ]
 }

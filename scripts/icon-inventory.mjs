@@ -61,7 +61,11 @@ const OUT = join(REPO, 'scripts', 'icon-inventory.json');
 // Typographic marks the style guide groups with the icons. They are text — a
 // chevron is a character, not a drawing — so they are counted and reported but
 // kept out of the vector set.
-const SYMBOLS = new Set(['‹', '›', '•', '·', '✓', '✗', '↻', '−', '±', '➕', '▶', '⏸', '⏭']);
+// `↗` is the external-link affordance on a link, `↔` appears in prose about
+// collisions — both are typography, not iconography, and both were being
+// mis-attributed to the nearest component (the ↗ in SkinPicker was landing on
+// the palette button's role).
+const SYMBOLS = new Set(['‹', '›', '•', '·', '✓', '✗', '↻', '−', '±', '➕', '▶', '⏸', '⏭', '↗', '↔']);
 
 // Files whose every glyph is excluded from the vector set, with the reason
 // recorded as the occurrence's kind. Both are deliberate, not oversights —
