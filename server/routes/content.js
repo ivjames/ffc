@@ -16,7 +16,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { tenant } from "../lib/tenant.js";
-import { BRANDING_DEFAULTS } from "../lib/branding.js";
+import { BRANDING_KEYS } from "../lib/branding.js";
 
 export const router = Router();
 
@@ -32,7 +32,9 @@ export const router = Router();
 function sparseBranding(raw) {
   const branding = {};
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    for (const key of Object.keys(BRANDING_DEFAULTS)) {
+    // BRANDING_KEYS, not the defaults' keys: the logo trio has no platform
+    // default but must still ride the wire when an org set it.
+    for (const key of BRANDING_KEYS) {
       if (typeof raw[key] === "string" && raw[key].length > 0) branding[key] = raw[key];
     }
   }

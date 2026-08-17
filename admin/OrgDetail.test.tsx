@@ -40,6 +40,11 @@ beforeEach(() => {
   vi.mocked(api.uploadBrandingAsset).mockReset();
 });
 
+// The three logo fields share this placeholder (no platform default), so
+// individual fields are picked by DOM order — Logo URL renders first.
+const NO_DEFAULT_PLACEHOLDER = 'No platform default — upload a file or paste a URL';
+const logoUrlInput = () => screen.getAllByPlaceholderText(NO_DEFAULT_PLACEHOLDER)[0];
+
 function renderOrgDetail(isSuperAdmin: boolean) {
   return render(
     <MemoryRouter initialEntries={['/orgs/org-1']}>
@@ -130,7 +135,7 @@ describe('OrgDetail — suspend lifecycle', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(api.suspendOrg).mockRejectedValue(
       new Error(
-        "refusing to suspend the default org ('bullwinkles'): it serves every unmatched host " +
+        "refusing to suspend the default org ('acme-family-fun'): it serves every unmatched host " +
           '(apex/staging included), so suspending it blanks those hosts. Pass ?force=1 to do it anyway.'
       )
     );
@@ -172,9 +177,13 @@ describe('OrgDetail — branding', () => {
     expect(screen.getByPlaceholderText('MiniGolf')).toHaveValue('');
     expect(screen.getByPlaceholderText('#052e16')).toHaveValue('');
     expect(screen.getByPlaceholderText('#38bdf8')).toHaveValue('');
-    expect(screen.getByPlaceholderText('/brand/logo.png')).toHaveValue('');
     expect(screen.getByPlaceholderText('/icons/icon-512.png')).toHaveValue('');
-    expect(screen.getByPlaceholderText("Bullwinkle's · come beat this score")).toHaveValue('');
+    expect(screen.getByPlaceholderText('Come beat this score')).toHaveValue('');
+    // The logo trio has NO platform default — its placeholder says so instead
+    // of showing a default URL.
+    const logoInputs = screen.getAllByPlaceholderText(NO_DEFAULT_PLACEHOLDER);
+    expect(logoInputs).toHaveLength(3);
+    for (const input of logoInputs) expect(input).toHaveValue('');
   });
 
   test('save submits ONLY the non-empty fields as the full replacement object', async () => {
@@ -236,7 +245,7 @@ describe('OrgDetail — branding asset upload', () => {
     await waitFor(() => expect(api.uploadBrandingAsset).toHaveBeenCalledWith('org-1', 'logo', file));
     // The returned served URL lands in the text field (the img preview keys
     // off the same value)…
-    expect(screen.getByPlaceholderText('/brand/logo.png')).toHaveValue(url);
+    expect(logoUrlInput()).toHaveValue(url);
     // …and rides the normal full-replace save (upload alone saved nothing).
     await user.click(screen.getByRole('button', { name: 'Save branding' }));
     await waitFor(() => expect(api.updateOrgBranding).toHaveBeenCalledWith('org-1', { logoUrl: url }));
@@ -267,7 +276,7 @@ describe('OrgDetail — branding asset upload', () => {
     const file = new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' });
     await user.upload(screen.getByLabelText('Logo URL file'), file);
     expect(await screen.findByText('SVG rejected: contains <script>')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('/brand/logo.png')).toHaveValue('');
+    expect(logoUrlInput()).toHaveValue('');
   });
 
   test('client pre-checks fail fast: non-PNG icon and oversize file never hit the API', async () => {

@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { playClick, playStroke, playUndo, playCup } from '../lib/sound';
+import { getBranding, useBrandingRevision } from '../lib/branding';
 import HeaderControls from './HeaderControls';
 
 // Map a button's declared sound to its player. 'none' skips audio entirely
@@ -89,7 +90,14 @@ export function Content({ children }: { children: ReactNode }) {
  *  color the caller sets and flipping with the theme like any other text.
  *  Size and color via className (give it a height, width, and text color). */
 export function BrandMark({ className = '' }: { className?: string }) {
-  const url = "url('/brand/logo-wordmark.png')";
+  // Explicit-only, like every logo placement: the logo keys have no platform
+  // default, so a tenant that hasn't set a wordmark (or logo) gets no mark —
+  // never another tenant's. Decorative, so absence renders nothing.
+  useBrandingRevision();
+  const branding = getBranding();
+  const mark = branding.logoWordmarkUrl ?? branding.logoUrl;
+  if (!mark) return null;
+  const url = `url('${mark}')`;
   return (
     <span
       aria-hidden

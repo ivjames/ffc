@@ -36,10 +36,10 @@ function OrgForm({ onSaved }: { onSaved: () => void }) {
       <form onSubmit={submit} className="space-y-3">
         {err && <Banner kind="error">{err}</Banner>}
         <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Bullwinkle's" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Family Fun" />
         </Field>
         <Field label="Slug" hint="Lowercase, hyphenated. Auto-filled from the name if left blank.">
-          <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder={autoSlug(name) || 'bullwinkles'} />
+          <Input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder={autoSlug(name) || 'acme-family-fun'} />
         </Field>
         <Button type="submit" disabled={busy || !name.trim()}>
           {busy ? 'Saving…' : 'Create org'}

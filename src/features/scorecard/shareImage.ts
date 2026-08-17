@@ -131,7 +131,11 @@ export async function renderShareImage(
     y += rowH;
   });
 
-  // --- Footer. Tenant-branded tagline (defaults to the Bullwinkle's line).
+  // --- Footer. Tenant-branded tagline — always drawn; the platform default is
+  // the venue-neutral "Come beat this score", so a tenant that set nothing
+  // never ships another club's name. (No logo mark is drawn here; if one is
+  // ever added it must follow the explicit-only rule — getExplicitLogoUrl —
+  // since there is no platform default logo.)
   ctx.font = '600 34px system-ui, sans-serif';
   ctx.fillStyle = '#66817a';
   ctx.fillText(getBranding().shareFooter, W / 2, H - 70);

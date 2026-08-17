@@ -23,11 +23,18 @@ Decisions (2026-08-16, operator-approved):
 
 1. Take `req.hostname` (Express, `trust proxy` is on), lowercase, strip port.
 2. First DNS label → candidate slug. If it matches a live org
-   (`archived_at is null`, `status = 'active'`) → that org.
-3. Otherwise fall back to `DEFAULT_ORG_SLUG` env (default `bullwinkles`).
-4. Otherwise fall back to the first live org by `sort_order, name`.
-5. No live orgs at all → `null` (payloads then use empty branding defaults and
-   an unfiltered catalog, preserving pre-org behavior).
+   (`archived_at is null`, `status = 'active'`) → that org. A slug matching a
+   suspended/archived org → the dark sentinel (empty catalog, platform
+   defaults) — never a fallback to another org.
+3. No slug match: classify the host against `PLATFORM_FQDN` (env; set it in
+   production). The apex (and `www.`) → the `DEFAULT_ORG_SLUG` fallback
+   (default `bullwinkles`; dark if that org exists but isn't live). Any OTHER
+   `*.PLATFORM_FQDN` subdomain → **the dark sentinel**: an unconfigured
+   subdomain never serves another org's catalog or brand.
+4. Non-platform hosts (localhost, future custom domains) and the
+   `PLATFORM_FQDN`-unset case keep the legacy chain: default org → first live
+   org → `null` (unfiltered, preserving pre-org behavior). Dev and tests are
+   unaffected until the env is set.
 
 Lookups go through a small in-process TTL cache (~30 s) — the content endpoint
 is hit on every app boot. Exposed as middleware `tenant()` setting
@@ -46,22 +53,28 @@ infinicade, landing, mail, www).
 
 ## 2. Org branding (`org.branding` jsonb, default `'{}'`)
 
-All keys optional. Missing keys fall back to the current hardcoded Bullwinkle's
-values, so an empty object changes nothing:
+All keys optional. Missing keys fall back to NEUTRAL platform defaults — a
+fresh org never inherits another tenant's identity. Bullwinkle's own footer
+and `/brand/` logo assets live in ITS `org.branding` (one-time guarded seed
+backfill in schema.sql), not in the defaults:
 
-| Key | Default | Constraint |
+| Key | Platform default | Constraint |
 | --- | --- | --- |
 | `appName` | `Mini Golf Scorecard` | 1..80 chars |
 | `shortName` | `MiniGolf` | 1..30 chars |
 | `themeColor` | `#15803d` | `#rrggbb` |
 | `backgroundColor` | `#052e16` | `#rrggbb` |
 | `accentColor` | `#38bdf8` | `#rrggbb` |
-| `logoUrl` | `/brand/logo.png` | path (`/…`) or `https://…`, ≤300 chars |
-| `logoBadgeUrl` | `/brand/logo-badge.png` | same |
-| `logoWordmarkUrl` | `/brand/logo-wordmark.png` | same |
+| `logoUrl` | — none (no logo until set) | path (`/…`) or `https://…`, ≤300 chars |
+| `logoBadgeUrl` | — none | same |
+| `logoWordmarkUrl` | — none | same |
 | `icon192Url` | `/icons/icon-192.png` | same |
 | `icon512Url` | `/icons/icon-512.png` | same |
-| `shareFooter` | `Bullwinkle's · come beat this score` | 1..120 chars |
+| `shareFooter` | `Come beat this score` | 1..120 chars |
+
+Every logo placement in the player app is explicit-only: absent = no mark
+rendered, never a default. The full storable key set is `BRANDING_KEYS`
+(defaults + the defaultless logo trio), shared by both sides.
 
 Canonical defaults live in one place server-side
 (`server/lib/branding.js`, `BRANDING_DEFAULTS` + `normalizeBranding()`), and one
@@ -189,9 +202,11 @@ Once the domain is owned:
    (issues `DOMAIN` + `*.DOMAIN`), `ffc vhost`, `ffc admin-vhost`. The player
    vhost's `server_name DOMAIN *.DOMAIN` makes every org slug resolve
    immediately; `admin.DOMAIN` stays on its exact-match vhost.
-3. **Server env** (`server/.env`): `BRAND_ASSET_DIR=$APP_DIR/shared/brand-assets`
-   (dir is created by `ffc deploy`); `DEFAULT_ORG_SLUG` can stay unset
-   (default `bullwinkles`).
+3. **Server env** (`server/.env`): `PLATFORM_FQDN=DOMAIN` — REQUIRED for
+   tenancy to fail out on unconfigured subdomains (until set, unknown
+   subdomains fall back to the default org and `ffc deploy` warns);
+   `BRAND_ASSET_DIR=$APP_DIR/shared/brand-assets` (dir is created by
+   `ffc deploy`); `DEFAULT_ORG_SLUG` can stay unset (default `bullwinkles`).
 4. **Email (Resend + Zoho)** — add `DOMAIN` (or `mail.DOMAIN`) in Resend,
    publish its DKIM/SPF records in DO DNS, then set `MAIL_PROVIDER=resend`,
    `RESEND_API_KEY`, `MAIL_FROM="FFC <play@mail.DOMAIN>"` in `server/.env`

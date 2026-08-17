@@ -2,8 +2,10 @@
 // (MULTI-VENUE.md §2) that rides in the same GET /api/content payload as the
 // catalog. Every key is optional server-side; this module is the ONE
 // client-side home of the defaults (mirroring server/lib/branding.js), so a
-// missing key — or no org at all — always resolves to the current hardcoded
-// Bullwinkle's look and an empty branding object changes nothing.
+// missing key — or no org at all — always resolves to the neutral platform
+// look. The defaults carry no venue identity: no default logo at all (the
+// trio stays undefined until the org uploads one) and a venue-less share
+// footer, so a brand-new org can never inherit another client's brand.
 //
 // The org is pushed in by the content store (src/data/courses.ts) — at module
 // boot from the baked snapshot / localStorage cache, then again on live
@@ -22,9 +24,11 @@ export type Branding = {
   themeColor: string;
   backgroundColor: string;
   accentColor: string;
-  logoUrl: string;
-  logoBadgeUrl: string;
-  logoWordmarkUrl: string;
+  // The logo trio has NO platform default: undefined means the org uploaded
+  // nothing and every placement shows its neutral fallback (or skips drawing).
+  logoUrl?: string;
+  logoBadgeUrl?: string;
+  logoWordmarkUrl?: string;
   icon192Url: string;
   icon512Url: string;
   shareFooter: string;
@@ -40,30 +44,46 @@ export type OrgInfo = {
 };
 
 // Canonical client-side defaults — MULTI-VENUE.md §2, kept in lockstep with
-// server/lib/branding.js BRANDING_DEFAULTS. These ARE today's hardcoded values
-// (share footer, logo paths, PWA colors), so a tenant with empty branding is
-// pixel-identical to the pre-org app.
+// server/lib/branding.js BRANDING_DEFAULTS. Venue-neutral by design: the logo
+// trio is deliberately ABSENT (no platform default logo), and the share footer
+// names no venue.
 export const BRANDING_DEFAULTS: Branding = {
   appName: 'Mini Golf Scorecard',
   shortName: 'MiniGolf',
   themeColor: '#15803d',
   backgroundColor: '#052e16',
   accentColor: '#38bdf8',
-  logoUrl: '/brand/logo.png',
-  logoBadgeUrl: '/brand/logo-badge.png',
-  logoWordmarkUrl: '/brand/logo-wordmark.png',
   icon192Url: '/icons/icon-192.png',
   icon512Url: '/icons/icon-512.png',
-  shareFooter: "Bullwinkle's · come beat this score",
+  shareFooter: 'Come beat this score',
 };
+
+// Every mergeable branding key — a superset of Object.keys(BRANDING_DEFAULTS)
+// because the logo trio is settable but has no default (mirrors
+// server/lib/branding.js BRANDING_KEYS).
+const BRANDING_KEYS = [
+  'appName',
+  'shortName',
+  'themeColor',
+  'backgroundColor',
+  'accentColor',
+  'logoUrl',
+  'logoBadgeUrl',
+  'logoWordmarkUrl',
+  'icon192Url',
+  'icon512Url',
+  'shareFooter',
+] as const satisfies readonly (keyof Branding)[];
 
 // Merge an org's (partial) branding over the defaults. Only known keys with
 // non-empty string values are taken — the payload is network input, and a
-// stale cache may carry shapes from older builds.
+// stale cache may carry shapes from older builds. Logo keys stay undefined
+// unless the org set one: with no default underneath them, "merged" and
+// "explicit" are the same thing for the trio.
 function merge(overrides: Record<string, unknown> | null | undefined): Branding {
   const out: Branding = { ...BRANDING_DEFAULTS };
   if (overrides && typeof overrides === 'object') {
-    for (const k of Object.keys(BRANDING_DEFAULTS) as (keyof Branding)[]) {
+    for (const k of BRANDING_KEYS) {
       const v = overrides[k];
       if (typeof v === 'string' && v) out[k] = v;
     }
@@ -99,13 +119,14 @@ export function hasExplicitThemeColor(): boolean {
 }
 
 /** The org's EXPLICITLY set logo URL, or null. Same rule as
- *  hasExplicitThemeColor: only a raw non-empty branding key counts. The merged
- *  defaults are the Bullwinkle's assets — painting the default moose on a
- *  tenant that simply hasn't uploaded a logo yet would be worse than no logo,
- *  so UI placements (Home hero, nav drawer) fall back to neutral chrome
- *  instead. `prefer` picks which cut leads for the placement's shape; the
- *  other is the cross-fallback, so a tenant that uploaded only one cut still
- *  brands every placement. */
+ *  hasExplicitThemeColor: only a raw non-empty branding key counts. (Since
+ *  BRANDING_DEFAULTS carries no logo at all, the merged value now agrees —
+ *  this accessor stays raw-based so the explicitness contract is stated in one
+ *  place.) A tenant that hasn't uploaded a logo gets none: UI placements
+ *  (Home hero, nav drawer) fall back to neutral chrome instead. `prefer`
+ *  picks which cut leads for the placement's shape; the other is the
+ *  cross-fallback, so a tenant that uploaded only one cut still brands every
+ *  placement. */
 export function getExplicitLogoUrl(prefer: 'full' | 'badge' = 'full'): string | null {
   const raw = org?.branding;
   if (!raw || typeof raw !== 'object') return null;
