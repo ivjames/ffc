@@ -33,7 +33,11 @@ export default function AdoptionBonusToast({ signedIn }: { signedIn: boolean }) 
   useEffect(() => {
     const locationId = getCurrentLocationId();
     const kinds: BonusKind[] = [];
-    if (installed) kinds.push('install');
+    // Both milestones now need an account: the tickets land on a card, and a
+    // card belongs to one. Claiming while signed out would just 401 — and the
+    // install bonus used to be mintable for any card number a caller could
+    // name, which is exactly what the account binding closes.
+    if (signedIn && installed) kinds.push('install');
     if (signedIn) kinds.push('signin');
 
     let cancelled = false;

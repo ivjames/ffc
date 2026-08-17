@@ -77,10 +77,20 @@ create index if not exists round_completed_at_idx on round (completed_at);
 -- another course-like area with its own list, so the same shape covers it.
 --
 -- The item list is fixed and curated (a rotating/randomized list is a later
--- phase). `slug` is unique per course so themed lists can reuse short keys.
+-- phase). `slug` is unique per owner so themed lists can reuse short keys.
+--
+-- An item hangs off exactly ONE owner, and which one picks the hunt's MODE:
+--   course_id    a COURSE hunt — the original: a themed list played during a
+--                mini-golf round, walked hole to hole.
+--   location_id  a VENUE hunt — the course-free mode for sites with no mini
+--                golf (or a park-wide list alongside one). Same items, same
+--                judging, no round to hang off; see routes/hunt.js.
+-- The check constraint below is what makes "exactly one" a data-model
+-- guarantee rather than a convention every query has to re-assert.
 create table if not exists hunt_item (
   id          uuid not null default gen_random_uuid(),
-  course_id   uuid not null references course(id) on delete cascade,
+  course_id   uuid references course(id) on delete cascade,
+  location_id uuid references location(id) on delete cascade,
   slug        text not null,               -- stable key within a course, e.g. 'ship'
   name        text not null,               -- what to find, e.g. 'A pirate ship'
   hint        text,                        -- optional nudge shown to players
@@ -95,7 +105,35 @@ create table if not exists hunt_item (
 -- For databases created before `countable` existed: add it idempotently.
 alter table hunt_item add column if not exists countable boolean not null default false;
 
+-- For databases created before venue hunts existed: add the owner column and
+-- relax the course NOT NULL, idempotently. Every pre-existing row is a course
+-- item (course_id set, location_id null), so the constraint below is already
+-- satisfied by history and can be added without a backfill.
+alter table hunt_item add column if not exists location_id uuid references location(id) on delete cascade;
+alter table hunt_item alter column course_id drop not null;
+
+-- Exactly one owner. Written as a named constraint added conditionally, since
+-- `add constraint if not exists` doesn't exist for check constraints.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'hunt_item_one_owner'
+  ) then
+    alter table hunt_item add constraint hunt_item_one_owner
+      check ((course_id is not null) <> (location_id is not null));
+  end if;
+end $$;
+
 create index if not exists hunt_item_course_idx on hunt_item (course_id);
+create index if not exists hunt_item_location_idx on hunt_item (location_id);
+
+-- Slug uniqueness for venue items. The table-level `unique (course_id, slug)`
+-- can't cover them: their course_id is null, and SQL treats nulls as distinct,
+-- so it would happily take two venue items sharing a slug. This partial index
+-- is the venue-side equivalent.
+create unique index if not exists hunt_item_location_slug_key
+  on hunt_item (location_id, slug)
+  where location_id is not null;
 
 -- A photo submission and its verification verdict. One row per accepted find.
 -- `round_client_id` is the device round id (§4 LocalRound.clientId), NOT a FK to
@@ -467,15 +505,18 @@ create index if not exists hunt_scan_location_idx on hunt_scan (location_id);
 -- cheap and a stamped row is never rewritten by a later course/org move.
 -- Rows whose course no longer resolves (or whose venue has no org) stay
 -- null — unattributed spend, super_admin-visible only in the rollup.
+-- `course_id is not null` scopes both to the course-era rows they're for:
+-- venue-hunt scans (no course) stamp both columns at insert time and must
+-- never be dragged through a course join that can only produce null.
 update hunt_scan
    set org_id = (select l.org_id
                    from course c
                    join location l on l.id = c.location_id
                   where c.id = hunt_scan.course_id)
- where org_id is null;
+ where org_id is null and course_id is not null;
 update hunt_scan
    set location_id = (select c.location_id from course c where c.id = hunt_scan.course_id)
- where location_id is null;
+ where location_id is null and course_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- Player accounts (passwordless email sign-in), teams, and shared multi-device
@@ -1070,3 +1111,22 @@ create table if not exists launch_signup (
   updated_at timestamptz not null default now()   -- last (re)submit; upsert re-stamps
 );
 create index if not exists launch_signup_created_idx on launch_signup (created_at desc);
+
+-- Account-bound loyalty card links (routes/loyalty.js). The venue's physical
+-- rewards card used to be a device-local value in localStorage, which meant
+-- anyone who typed a card number could read that cardholder's name, balances
+-- and history, and credit tickets to it. The card is now bound to a signed-in
+-- app_user: linking still proves possession by quoting the printed number, but
+-- from then on the card is only readable and creditable through the session
+-- that owns it -- no card-number enumeration, and ticket writes derive the
+-- card from the session instead of trusting the request body.
+-- One card per (user, venue): re-linking at the same venue replaces the row.
+create table if not exists user_card_link (
+  id             uuid primary key default gen_random_uuid(),
+  app_user_id    uuid not null references app_user(id) on delete cascade,
+  location_id    uuid not null references location(id) on delete cascade,
+  card_player_id text not null,          -- vendor player/card id (opaque here)
+  created_at     timestamptz not null default now(),
+  unique (app_user_id, location_id)
+);
+create index if not exists user_card_link_card_idx on user_card_link (location_id, card_player_id);

@@ -73,7 +73,12 @@ router.get("/", async (req, res) => {
         from hunt_scan s
         left join org      o on o.id = s.org_id
         left join course   c on c.id = s.course_id
-        left join location l on l.id = c.location_id
+        -- Venue-hunt scans have no course, so the live chain starts at the
+        -- scan's own location stamp; course scans still resolve through their
+        -- course, which is what keeps the "where does this course live now"
+        -- view live rather than frozen. Preferring the stamp for course rows
+        -- too would freeze it, so course_id leads wherever it resolves.
+        left join location l on l.id = coalesce(c.location_id, s.location_id)
        where s.created_at >= date_trunc('month', now()) - ($2::int - 1) * interval '1 month'
          and ($1::uuid is null or s.org_id = $1)
          and (s.input_tokens is not null or s.output_tokens is not null or s.cost_usd is not null)

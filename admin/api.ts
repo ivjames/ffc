@@ -116,11 +116,13 @@ export type Location = {
   archivedAt: string | null;
 };
 
-/** Per-venue hunt vision-spend config (location.hunt jsonb — mirrors
+/** Per-venue hunt config (location.hunt jsonb — mirrors
  *  server/lib/validateLocation.js normalizeHunt). dailyScanCap bounds the
  *  venue's billed hunt scans over a rolling 24h window; 0 disables the hunt
- *  at that venue entirely; key absent (the column defaults to {}) = unlimited. */
-export type HuntConfig = { dailyScanCap?: number };
+ *  at that venue entirely; key absent (the column defaults to {}) = unlimited.
+ *  venueMode switches on the course-free venue hunt (absent = off, which is
+ *  every venue until one opts in); the cap applies to it just the same. */
+export type HuntConfig = { dailyScanCap?: number; venueMode?: boolean };
 
 // Weekly business hours (mirrors server/lib/venueHours.js normalizeHours).
 // Keys are any subset of the 7 weekday keys; a day missing from the object is
@@ -282,7 +284,13 @@ export type AdminPhoto = {
 // content fields + course/venue context + its vetting image set's size.
 export type HuntItem = {
   id: string;
-  courseId: string;
+  /**
+   * An item belongs to exactly one owner, and which one decides where it's
+   * played: a COURSE (the on-course hunt) or a LOCATION (the course-free venue
+   * hunt). Exactly one of these is set — the other is null.
+   */
+  courseId: string | null;
+  ownerLocationId: string | null;
   slug: string;
   name: string;
   hint: string | null;
@@ -291,7 +299,9 @@ export type HuntItem = {
   sortOrder: number;
   active: boolean;
   countable: boolean;
-  courseName: string;
+  /** Null for a venue item — there's no course, the venue name identifies it. */
+  courseName: string | null;
+  /** The venue the item lives at, whichever owner it hangs off. */
   locationId: string | null;
   locationName: string | null;
   imageCount: number;
@@ -304,6 +314,14 @@ export type HuntCourseRef = {
   name: string;
   locationId: string | null;
   locationName: string | null;
+};
+
+/** A live venue, for its course-free hunt list. */
+export type HuntVenueRef = {
+  id: string;
+  name: string;
+  /** Whether the venue has switched the course-free hunt on for players. */
+  venueMode: boolean;
 };
 
 export type HuntItemImage = {
@@ -765,9 +783,14 @@ export const api = {
   },
 
   // Scavenger-hunt items + vetting image sets (Master Control → Hunt).
-  // `courses` includes item-less courses so the UI can offer "add the first
-  // item" everywhere; `items` arrive in venue → course → item display order.
-  listHuntItems: () => req<{ courses: HuntCourseRef[]; items: HuntItem[] }>('GET', '/hunt-items'),
+  // `courses` and `venues` include item-less targets so the UI can offer "add
+  // the first item" everywhere; `items` arrive in venue → course → item
+  // display order, each venue's own list ahead of its courses'.
+  listHuntItems: () =>
+    req<{ courses: HuntCourseRef[]; venues: HuntVenueRef[]; items: HuntItem[] }>(
+      'GET',
+      '/hunt-items'
+    ),
   getHuntItem: (id: string) =>
     req<{ item: HuntItem; images: HuntItemImage[] }>('GET', `/hunt-items/${id}`),
   createHuntItem: (item: Partial<HuntItem>) =>

@@ -21,7 +21,7 @@ vi.mock('../lib/pwaInstall', () => ({ useInstallPrompt: vi.fn() }));
 vi.mock('../lib/analytics', () => ({ track: vi.fn() }));
 
 function caps(ordering: boolean): PosCapabilities {
-  return { ordering: ordering ? ({} as OrderingApi) : null, loyalty: null, gameRewards: false };
+  return { ordering: ordering ? ({} as OrderingApi) : null, loyalty: false, gameRewards: false };
 }
 
 function renderNudge(props: Partial<Parameters<typeof AdoptionNudge>[0]> = {}) {

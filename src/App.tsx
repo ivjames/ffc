@@ -16,6 +16,7 @@ import Privacy from './features/privacy/Privacy';
 import TvLeaderboard from './features/tv/TvLeaderboard';
 import TvWall from './features/tv/TvWall';
 import Hunt from './features/hunt/Hunt';
+import HuntEntry from './features/hunt/HuntEntry';
 import PhotoBooth from './features/photos/PhotoBooth';
 import PuttGolf from './features/putt/PuttGolf';
 import FunZone from './features/fun/FunZone';
@@ -54,6 +55,7 @@ import TenantUnavailable from './features/shared/TenantUnavailable';
 import Install from './features/install/Install';
 import StyleGuide from './features/style/StyleGuide';
 import GeofenceGate from './features/shared/GeofenceGate';
+import AccountGate from './features/shared/AccountGate';
 import { BuildStamp } from './ui/BuildStamp';
 import FeedbackButton from './ui/FeedbackButton';
 import { CAPTURE_IGNORE_ATTR } from './lib/screenCapture';
@@ -85,7 +87,10 @@ const REDIRECTS: [from: string, to: string][] = [
   ['/play', '/golf/play'],
   ['/courses', '/golf/courses'],
   ['/rules', '/golf/rules'],
-  ['/hunt', '/golf/hunt'],
+  // NOTE: /hunt is deliberately absent — it's a live route (HuntEntry), not a
+  // redirect, because the course-free venue hunt claims it where a venue runs
+  // one. HuntEntry forwards to /golf/hunt everywhere else, preserving exactly
+  // what the redirect used to do.
   ['/fun', '/arcade'],
   ['/putt', '/arcade/putt'],
   // Photo booth and the challenge spinner are not arcade features — the booth
@@ -196,18 +201,31 @@ export default function App() {
             general venue activity, not an arcade game: top-level and not
             geofenced (matches its pre-restructure behavior). */}
         <Route path="/photos" element={<PhotoBooth />} />
+        {/* Course-free scavenger hunt — a standalone venue activity for sites
+            without mini golf (and a park-wide extra at ones with it). Not
+            geofenced, matching the photo booth and the on-course hunt: the
+            venue's own list is the thing that scopes it. HuntEntry decides
+            whether this venue has one, forwarding to /golf/hunt if not. */}
+        <Route path="/hunt" element={<HuntEntry />} />
 
         {/* ── Me section ────────────────────────────────────────────────── */}
+        {/* The hub itself stays open — signed out it is the sign-in pitch, and
+            it hides the rows that need an account (see MeHome). */}
         <Route path="/me" element={<MeHome />} />
-        {/* Player account — passwordless email sign-in + profile. */}
+        {/* Player account — passwordless email sign-in + profile. Necessarily
+            ungated: it is how you get through the gate. */}
         <Route path="/me/account" element={<Account />} />
-        {/* Persistent teams (signed-in). */}
-        <Route path="/me/teams" element={<Teams />} />
-        <Route path="/me/teams/:id" element={<TeamDetail />} />
-        {/* Rewards card — POS loyalty add-on; redirects home when off. */}
-        <Route path="/me/rewards" element={<Rewards />} />
-        {/* Player achievements / badges gallery. */}
-        <Route path="/me/achievements" element={<Achievements />} />
+        {/* Everything that belongs to a person rather than a place needs an
+            account. Walk-up play (golf, arcade, photo booth, food) deliberately
+            stays open above — the gate is about identity, not friction. */}
+        <Route element={<AccountGate />}>
+          <Route path="/me/teams" element={<Teams />} />
+          <Route path="/me/teams/:id" element={<TeamDetail />} />
+          {/* Rewards card — POS loyalty add-on; redirects home when off. */}
+          <Route path="/me/rewards" element={<Rewards />} />
+          {/* Player achievements / badges gallery. */}
+          <Route path="/me/achievements" element={<Achievements />} />
+        </Route>
         {/* Plain-language disclosure of everything the app records. */}
         <Route path="/me/privacy" element={<Privacy />} />
 

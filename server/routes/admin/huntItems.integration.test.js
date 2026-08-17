@@ -154,6 +154,78 @@ test("list carries course/location context, image count, and thumbnail id", asyn
   const course = list.courses.find((c) => c.id === courseId);
   assert.ok(course, "the course itself is listed");
   assert.equal(course.locationName, `Hunt Admin Venue ${stamp}`);
+
+  // ...and so do venues, for their course-free lists. This venue hasn't
+  // switched the venue hunt on, which the UI shows rather than hides.
+  const venue = list.venues.find((v) => v.id === locationId);
+  assert.ok(venue, "the venue is listed as a curatable target");
+  assert.equal(venue.venueMode, false);
+});
+
+test("a venue-owned item is created, listed and edited like a course one", async () => {
+  const res = await call("POST", "", {
+    locationId,
+    slug: "ferris-wheel",
+    name: "The ferris wheel",
+    hint: "look up",
+  });
+  assert.equal(res.status, 200);
+  const { item } = await res.json();
+  assert.equal(item.locationId, locationId);
+  assert.equal(item.courseId, null, "a venue item hangs off no course");
+
+  // Exactly one owner, enforced before the DB constraint can 500.
+  const both = await call("POST", "", {
+    courseId,
+    locationId,
+    slug: "two-owners",
+    name: "Nope",
+  });
+  assert.equal(both.status, 400);
+  assert.match((await both.json()).error, /exactly one/);
+
+  // Slug uniqueness holds on the venue side too — the partial index, since the
+  // table-level unique(course_id, slug) can't see these rows.
+  const dup = await call("POST", "", { locationId, slug: "ferris-wheel", name: "Again" });
+  assert.equal(dup.status, 409);
+
+  // It lists under the venue with no course name, and the UI groups it by
+  // ownerLocationId.
+  const list = await (await call("GET", "")).json();
+  const row = list.items.find((r) => r.id === item.id);
+  assert.ok(row, "the venue item appears in the list");
+  assert.equal(row.courseName, null);
+  assert.equal(row.ownerLocationId, locationId);
+  assert.equal(row.locationName, `Hunt Admin Venue ${stamp}`);
+
+  // Detail resolves (an inner course join here used to 404 venue items).
+  const detail = await (await call("GET", `/${item.id}`)).json();
+  assert.equal(detail.item.locationName, `Hunt Admin Venue ${stamp}`);
+  assert.equal(detail.item.courseName, null);
+
+  // Patch edits content and keeps the item where it is — a body trying to
+  // move it onto a course is ignored, not honored.
+  const patched = await call("PATCH", `/${item.id}`, {
+    name: "The big ferris wheel",
+    courseId,
+    active: false,
+  });
+  assert.equal(patched.status, 200);
+  const after = (await patched.json()).item;
+  assert.equal(after.name, "The big ferris wheel");
+  assert.equal(after.active, false);
+  assert.equal(after.courseId, null, "a PATCH must never re-own an item");
+  assert.equal(after.locationId, locationId);
+});
+
+test("creating against a nonexistent venue is a 400, not a 500", async () => {
+  const res = await call("POST", "", {
+    locationId: "aaaaaaaa-0000-4000-8000-aaaaaaaaaaaa",
+    slug: "ghost",
+    name: "Nowhere",
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /locationId/);
 });
 
 test("patch edits fields (extraPrompt, active) and audits", async () => {

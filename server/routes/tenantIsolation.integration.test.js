@@ -345,26 +345,40 @@ test("booth upload: a foreign locationId attributes like an unknown one (stored 
 // --- Game ticket awards -----------------------------------------------------------
 
 test("game rewards: foreign location = 404 unknown; own location gets past the tenant gate", async () => {
+  // Awards are signed-in only now, so the tenant gate is exercised behind the
+  // file's session. No card is linked: these venues have no POS at all, so the
+  // venue-config gate (403) still fires before any card lookup.
+  const headers = { cookie: user.cookie };
+
   const award = (locationId) => ({
     locationId,
-    playerId: "card-1",
     game: "skeeball",
     tickets: 10,
     sessionId: `tenant-iso-${stamp}-award`,
   });
-  const foreign = await req("post", "/api/game-rewards/award", slugA, { body: award(locBId) });
+  const foreign = await req("post", "/api/game-rewards/award", slugA, {
+    headers,
+    body: award(locBId),
+  });
   assert.equal(foreign.status, 404);
   assert.equal(foreign.body.error, "unknown location");
   // Own venue (no POS configured): 403 "not enabled" proves the tenant gate
   // passed and the venue-config gate is what stopped it — not a 404.
-  const own = await req("post", "/api/game-rewards/award", slugA, { body: award(locAId) });
+  const own = await req("post", "/api/game-rewards/award", slugA, { headers, body: award(locAId) });
   assert.equal(own.status, 403);
 
-  const bonus = (locationId) => ({ locationId, playerId: "card-1", kind: "install" });
-  const foreignBonus = await req("post", "/api/game-rewards/bonus", slugA, { body: bonus(locBId) });
+  const bonus = (locationId) => ({ locationId, kind: "install" });
+  const foreignBonus = await req("post", "/api/game-rewards/bonus", slugA, {
+    headers,
+    body: bonus(locBId),
+  });
   assert.equal(foreignBonus.status, 404);
-  const ownBonus = await req("post", "/api/game-rewards/bonus", slugA, { body: bonus(locAId) });
+  const ownBonus = await req("post", "/api/game-rewards/bonus", slugA, {
+    headers,
+    body: bonus(locAId),
+  });
   assert.equal(ownBonus.status, 403);
+
 });
 
 // --- Funnel + feedback attribution ------------------------------------------------

@@ -91,3 +91,46 @@ test("GET /api/content returns only live locations and courses, with the expecte
     "archived course excluded"
   );
 });
+
+// `venueHunt` gates the Home tile for the course-free hunt, so it has to mean
+// "a player opening this right now gets something playable" — both halves, not
+// just the operator's switch.
+test("venueHunt needs BOTH venueMode on and an active item on the venue's list", async () => {
+  const read = async () =>
+    (await (await fetch(`${baseUrl}/api/content`)).json()).locations.find(
+      (l) => l.id === liveLocationId
+    ).venueHunt;
+
+  // Neither: off.
+  assert.equal(await read(), false);
+
+  // Items but no switch: still off — a staged list must not advertise itself.
+  const item = await testQuery(
+    `insert into hunt_item (location_id, slug, name) values ($1, 'wheel', 'The wheel') returning id`,
+    [liveLocationId]
+  );
+  assert.equal(await read(), false);
+
+  // Switch but the only item is inactive: still off — the tile would open an
+  // empty hunt.
+  await testQuery(`update location set hunt = '{"venueMode": true}'::jsonb where id = $1`, [
+    liveLocationId,
+  ]);
+  await testQuery(`update hunt_item set active = false where id = $1`, [item.rows[0].id]);
+  assert.equal(await read(), false);
+
+  // Both: on.
+  await testQuery(`update hunt_item set active = true where id = $1`, [item.rows[0].id]);
+  assert.equal(await read(), true);
+
+  // A course item at the same venue doesn't count — it isn't the venue's list.
+  await testQuery(`delete from hunt_item where id = $1`, [item.rows[0].id]);
+  await testQuery(
+    `insert into hunt_item (course_id, slug, name) values ($1, 'flag', 'A flag')`,
+    [liveCourseId]
+  );
+  assert.equal(await read(), false);
+
+  await testQuery(`update location set hunt = '{}'::jsonb where id = $1`, [liveLocationId]);
+  await testQuery(`delete from hunt_item where course_id = $1`, [liveCourseId]);
+});

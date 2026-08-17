@@ -3,8 +3,9 @@
 // already is for locations/courses); schema.sql's seeds remain the one-time
 // bootstrap for the original content.
 //
-//   GET    /api/admin/hunt-items                     all items (live courses),
-//          with course/location context + image count + thumbnail id
+//   GET    /api/admin/hunt-items                     all items (live courses
+//          and live venues), with course/location context + image count +
+//          thumbnail id, plus the `courses`/`venues` target lists
 //   POST   /api/admin/hunt-items                     create an item
 //   GET    /api/admin/hunt-items/:id                 one item + its images
 //   PATCH  /api/admin/hunt-items/:id                 edit any field (incl. active)
@@ -24,7 +25,13 @@
 // rows (recordScreenScan below) so the spend shows up in the hunt-usage
 // rollup instead of vanishing once the response is gone.
 //
-// Org-scoping rides item → course → location.org_id (the photos/hunt-usage
+// An item belongs to exactly one owner — a COURSE (the on-course hunt) or a
+// LOCATION (the course-free venue hunt, routes/hunt.js). Every query here
+// reaches the venue through whichever one the item has, so both kinds of list
+// are curated through the same screens; a PATCH never moves an item between
+// owners (ownership is re-pinned from the stored row).
+//
+// Org-scoping rides item → owner → location.org_id (the photos/hunt-usage
 // precedent). Deletes here are HARD deletes, unlike archive-style domain
 // data: an item with recorded finds is protected by the hunt_find FK (409 →
 // deactivate instead), so played history can never be dropped; an unplayed
@@ -100,14 +107,24 @@ async function recordScreenScan({ itemId, courseId, orgId, locationId, scan }) {
   }
 }
 
-/** The org_id a course belongs to (via its location), or null. */
-async function courseOrgId(courseId) {
-  const result = await pool.query(
-    `select l.org_id as "orgId" from course c
-       left join location l on l.id = c.location_id
-      where c.id = $1`,
-    [courseId]
-  );
+/**
+ * The org that owns an item's would-be owner — a course (via its location) or
+ * a location directly, the two shapes of hunt_item ownership. One resolver for
+ * both so the create path's scope check reads the same either way.
+ */
+async function ownerOrgId({ courseId, locationId }) {
+  const result = courseId
+    ? await pool.query(
+        `select l.org_id as "orgId" from course c
+           left join location l on l.id = c.location_id
+          where c.id = $1`,
+        [courseId]
+      )
+    : await pool.query(
+        `select org_id as "orgId" from location
+          where id = $1 and archived_at is null`,
+        [locationId]
+      );
   if (result.rowCount === 0) return { exists: false, orgId: null };
   return { exists: true, orgId: result.rows[0].orgId };
 }
@@ -118,11 +135,19 @@ async function courseOrgId(courseId) {
  */
 async function scopedItem(req, itemId) {
   if (!UUID_RE.test(itemId)) return { status: 400 };
+  // Reach the venue through whichever owner the item has — an inner course
+  // join would 404 every venue-hunt item, locking them out of edit/delete and
+  // image management entirely.
+  // `locationId` is the item's VENUE (wherever it lives); `ownerLocationId` is
+  // the owner column itself — null for a course item. The two differ for
+  // course items, and the patch path needs the owner one to re-pin ownership
+  // without accidentally claiming a course item is venue-owned.
   const result = await pool.query(
-    `select ${ITEM_COLS}, l.org_id as "orgId", c.location_id as "locationId"
+    `select ${ITEM_COLS}, l.org_id as "orgId", l.id as "locationId",
+            i.location_id as "ownerLocationId"
        from hunt_item i
-       join course c on c.id = i.course_id
-       left join location l on l.id = c.location_id
+       left join course c on c.id = i.course_id
+       left join location l on l.id = coalesce(c.location_id, i.location_id)
       where i.id = $1`,
     [itemId]
   );
@@ -133,11 +158,15 @@ async function scopedItem(req, itemId) {
 }
 
 // --- List -------------------------------------------------------------------
-// Every item on a live (un-archived) course, in venue → course → item order —
-// the main grid of the Hunt section. `thumbImageId` is the first vetting
-// image, for the thumbnail; null renders as a placeholder. `courses` lists
-// every live course in the same order — including ones with no items yet, so
-// the UI can offer "add the first item" everywhere.
+// Every item on a live (un-archived) course OR live venue, in venue → course →
+// item order — the main grid of the Hunt section. `thumbImageId` is the first
+// vetting image, for the thumbnail; null renders as a placeholder.
+//
+// Two target lists come back so the UI can offer "add the first item"
+// everywhere, including where nothing exists yet: `courses` (every live
+// course) and `venues` (every live venue, each carrying `venueMode` — the
+// course-free hunt's on/off state, so the UI can show a venue list that's
+// staged but not yet switched on).
 router.get("/", async (req, res) => {
   const scope = orgScope(req);
   try {
@@ -151,8 +180,22 @@ router.get("/", async (req, res) => {
                  c.sort_order asc, c.name asc`,
       [scope]
     );
+    const venues = await pool.query(
+      `select l.id, l.name,
+              coalesce((l.hunt ->> 'venueMode')::boolean, false) as "venueMode"
+         from location l
+        where l.archived_at is null
+          and ($1::uuid is null or l.org_id = $1)
+        order by l.sort_order asc, l.name asc`,
+      [scope]
+    );
+    // Owner-agnostic: `courseName` is null for a venue item and the venue
+    // columns come from whichever owner resolves. Ordering keeps a venue's
+    // course lists and its venue-wide list adjacent, with the venue-wide list
+    // first (nulls first on course sort) — it's the venue's own list.
     const result = await pool.query(
-      `select i.id, i.course_id as "courseId", i.slug, i.name, i.hint,
+      `select i.id, i.course_id as "courseId", i.location_id as "ownerLocationId",
+              i.slug, i.name, i.hint,
               i.extra_prompt as "extraPrompt", i.sort_order as "sortOrder",
               i.active, i.countable,
               c.name as "courseName", l.id as "locationId", l.name as "locationName",
@@ -162,16 +205,17 @@ router.get("/", async (req, res) => {
                 order by im.sort_order asc, im.created_at asc limit 1)
                 as "thumbImageId"
          from hunt_item i
-         join course c on c.id = i.course_id
-         left join location l on l.id = c.location_id
-        where c.archived_at is null
+         left join course c on c.id = i.course_id
+         left join location l on l.id = coalesce(c.location_id, i.location_id)
+        where (c.id is null or c.archived_at is null)
+          and l.archived_at is null
           and ($1::uuid is null or l.org_id = $1)
         order by l.sort_order asc nulls last, l.name asc nulls last,
-                 c.sort_order asc, c.name asc,
+                 c.sort_order asc nulls first, c.name asc nulls first,
                  i.sort_order asc, i.name asc`,
       [scope]
     );
-    return res.json({ courses: courses.rows, items: result.rows });
+    return res.json({ courses: courses.rows, venues: venues.rows, items: result.rows });
   } catch (err) {
     console.error("[admin/hunt-items] list error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
@@ -184,19 +228,24 @@ router.post("/", async (req, res) => {
   if (result.error) return res.status(400).json({ ok: false, error: result.error });
   const row = result.row;
   try {
-    const target = await courseOrgId(row.courseId);
+    const target = await ownerOrgId(row);
     if (!target.exists) {
-      return res.status(400).json({ ok: false, error: "courseId does not reference an existing course" });
+      return res.status(400).json({
+        ok: false,
+        error: row.courseId
+          ? "courseId does not reference an existing course"
+          : "locationId does not reference a live venue",
+      });
     }
     const scope = orgScope(req);
     if (scope && target.orgId !== scope) {
       return res.status(403).json({ ok: false, error: "forbidden: not your org" });
     }
     const db = await pool.query(
-      `insert into hunt_item (course_id, slug, name, hint, extra_prompt, sort_order, active, countable)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)
+      `insert into hunt_item (course_id, location_id, slug, name, hint, extra_prompt, sort_order, active, countable)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        returning ${HUNT_ITEM_RETURN_COLS}`,
-      [row.courseId, row.slug, row.name, row.hint, row.extraPrompt, row.sortOrder, row.active, row.countable]
+      [row.courseId, row.locationId, row.slug, row.name, row.hint, row.extraPrompt, row.sortOrder, row.active, row.countable]
     );
     await audit({
       action: "hunt_item.create",
@@ -208,7 +257,7 @@ router.post("/", async (req, res) => {
     return res.json({ ok: true, item: db.rows[0] });
   } catch (err) {
     if (err && err.code === "23505") {
-      return res.status(409).json({ ok: false, error: "slug is already used on this course" });
+      return res.status(409).json({ ok: false, error: "slug is already used in this hunt" });
     }
     console.error("[admin/hunt-items] create error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
@@ -228,13 +277,21 @@ router.get("/:id", async (req, res) => {
         order by im.sort_order asc, im.created_at asc`,
       [item.id]
     );
-    const ctx = await pool.query(
-      `select c.name as "courseName", l.name as "locationName"
-         from course c left join location l on l.id = c.location_id
-        where c.id = $1`,
-      [item.courseId]
-    );
-    const { orgId, ...rest } = item;
+    // Naming context for the header. A venue item has no course, so courseName
+    // stays null and locationName alone identifies the list.
+    const ctx = item.courseId
+      ? await pool.query(
+          `select c.name as "courseName", l.name as "locationName"
+             from course c left join location l on l.id = c.location_id
+            where c.id = $1`,
+          [item.courseId]
+        )
+      : await pool.query(
+          `select null as "courseName", name as "locationName"
+             from location where id = $1`,
+          [item.ownerLocationId]
+        );
+    const { orgId, ownerLocationId, ...rest } = item;
     return res.json({ item: { ...rest, ...ctx.rows[0] }, images: images.rows });
   } catch (err) {
     console.error("[admin/hunt-items] detail error:", err);
@@ -249,7 +306,15 @@ router.patch("/:id", async (req, res) => {
     if (status !== 200) {
       return res.status(status).json({ ok: false, error: status === 403 ? "forbidden: not your org" : "not found" });
     }
-    const merged = { ...item, ...req.body, courseId: item.courseId };
+    // Ownership is re-pinned from the stored row, never taken from the body:
+    // a PATCH edits an item's content, it never moves it to another course or
+    // venue (which would silently re-scope it across orgs).
+    const merged = {
+      ...item,
+      ...req.body,
+      courseId: item.courseId,
+      locationId: item.ownerLocationId,
+    };
     const result = normalizeHuntItem(merged);
     if (result.error) return res.status(400).json({ ok: false, error: result.error });
     const row = result.row;
@@ -271,7 +336,7 @@ router.patch("/:id", async (req, res) => {
     return res.json({ ok: true, item: db.rows[0] });
   } catch (err) {
     if (err && err.code === "23505") {
-      return res.status(409).json({ ok: false, error: "slug is already used on this course" });
+      return res.status(409).json({ ok: false, error: "slug is already used in this hunt" });
     }
     console.error("[admin/hunt-items] patch error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });

@@ -86,12 +86,15 @@ router.get("/series", async (req, res) => {
         [ADMIN_TZ, days, scope]
       ),
       pool.query(
+        // Item → venue via whichever owner the item has (course hunt or
+        // course-free venue hunt) — an inner course join would undercount
+        // every venue hunt's finds to zero.
         `select timezone(coalesce(l.tz, $1), f.created_at)::date as day,
                 count(*) as finds
            from hunt_find f
            join hunt_item i on i.id = f.item_id
-           join course c on c.id = i.course_id
-           join location l on l.id = c.location_id
+           left join course c on c.id = i.course_id
+           join location l on l.id = coalesce(c.location_id, i.location_id)
           where f.verified and f.created_at >= ${since}
             and ($3::uuid is null or l.org_id = $3)
           group by day`,
@@ -177,8 +180,8 @@ router.get("/", async (req, res) => {
               ${synFilter}) as rounds_30d,
           (select count(*) from hunt_find f
              join hunt_item i on i.id = f.item_id
-             join course c on c.id = i.course_id
-             join location l on l.id = c.location_id
+             left join course c on c.id = i.course_id
+             join location l on l.id = coalesce(c.location_id, i.location_id)
             where f.verified and ($1::uuid is null or l.org_id = $1)) as hunt_finds
       `,
         [scope]

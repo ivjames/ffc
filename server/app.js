@@ -23,6 +23,7 @@ import { BRAND_ASSET_DIR } from "./lib/brandAssets.js";
 import { router as announcementsRouter } from "./routes/announcements.js";
 import { router as rewardsRouter } from "./routes/rewards.js";
 import { router as gameRewardsRouter } from "./routes/gameRewards.js";
+import { router as loyaltyRouter } from "./routes/loyalty.js";
 import { router as eventsRouter } from "./routes/events.js";
 import { router as feedbackRouter } from "./routes/feedback.js";
 import { router as launchSignupRouter } from "./routes/launchSignup.js";
@@ -145,6 +146,10 @@ app.use("/api/rewards", rewardsRouter);
 // Game ticket awards — the trusted proxy between mini-games and the venue's
 // ticket system (validates payouts, enforces caps, then credits the POS).
 app.use("/api/game-rewards", gameRewardsRouter);
+// The player's own rewards card — account-bound. Signed-in only (guarded
+// inside the router): the vendor is reachable only from here, so a card number
+// can no longer be used to read a stranger's balances from the browser.
+app.use("/api/loyalty", loyaltyRouter);
 // Master Control admin surface (token-guarded inside the router).
 app.use("/api/admin", adminRouter);
 // The hunt's /verify endpoint installs its own larger body parser for base64

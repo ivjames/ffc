@@ -148,28 +148,17 @@ export type OrderingApi = {
   pickUpOrder(orderId: string): Promise<{ ok: true; order: Order } | Fail>;
 };
 
-/** Loyalty: player card lookup, balances, and crediting app-earned tickets. */
-export type LoyaltyApi = {
-  fetchPlayer(idOrCard: string): Promise<{ ok: true; player: Player } | Fail>;
-  fetchPlayerTransactions(
-    idOrCard: string,
-  ): Promise<{ ok: true; transactions: PlayerTransaction[] } | Fail>;
-  /** ALWAYS pass a stable idempotencyKey per award event (e.g. the game
-   *  session id) — retries then replay instead of double-crediting. */
-  rewardTickets(opts: {
-    playerId: string;
-    tickets: number;
-    source: string;
-    idempotencyKey: string;
-  }): Promise<RewardResult>;
-};
+// Loyalty has no client-side adapter, deliberately. The vendor is reachable
+// only from the server (server/lib/posLoyalty.js), which holds the credentials
+// and checks the caller owns the card it is asking about; the browser reads
+// cards through /api/loyalty and credits tickets through /api/game-rewards.
+// `Player`, `PlayerTransaction` and `RewardResult` above are the shapes those
+// endpoints answer with.
 
 /** What a vendor adapter provides. A vendor implements whichever capabilities
- *  its system actually has (an ordering-only vendor ships no loyalty);
- *  capability gating — which of these a venue has PAID for, and from which
- *  vendor — happens in index.ts from PosConfig. */
+ *  its system actually has; capability gating — which of these a venue has PAID
+ *  for, and from which vendor — happens in index.ts from PosConfig. */
 export type PosAdapter = {
   vendor: string;
   ordering?: OrderingApi;
-  loyalty?: LoyaltyApi;
 };

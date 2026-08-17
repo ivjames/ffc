@@ -14,7 +14,7 @@ import {
   detectNearestLocation,
 } from '../../lib/geolocate';
 import { playClick, playCup } from '../../lib/sound';
-import { fetchSession, type AppUser } from '../../lib/authApi';
+import { useSession } from '../../lib/session';
 import { usePos } from '../../lib/pos';
 import ActiveOrdersCard from '../food/ActiveOrdersCard';
 import AdoptionNudge from '../../ui/AdoptionNudge';
@@ -91,23 +91,19 @@ type SectionTile = { to: string; emoji: string; title: string; accent: string };
 export default function Home() {
   const navigate = useNavigate();
   const [resume, setResume] = useState<LocalRound | null>(null);
-  const [me, setMe] = useState<AppUser | null>(null);
-  const [meChecked, setMeChecked] = useState(false);
+  const { user: me, known: meChecked } = useSession();
   const locationId = useCurrentLocationId();
   const location = locationById(locationId);
   const courses = coursesByLocation(locationId);
   const hasGolf = courses.length > 0;
+  // The course-free scavenger hunt, when this venue runs one. Derived
+  // server-side (/api/content) from venueMode + a non-empty active list, so
+  // the tile never opens an empty hunt.
+  const hasVenueHunt = location?.venueHunt === true;
   const pos = usePos();
 
   useEffect(() => {
     void getActiveRound().then((r) => setResume(r ?? null));
-    // Session check that distinguishes signed-out from unreachable: only mark
-    // it "checked" on an authoritative answer, so the sign-in nudge never
-    // shows to an already-signed-in player whose /me call just failed offline.
-    void fetchSession().then((s) => {
-      setMe(s.user);
-      if (s.known) setMeChecked(true);
-    });
   }, []);
 
   // Silent GPS auto-detect: only when location is already granted (so we never
@@ -131,13 +127,18 @@ export default function Home() {
 
   const resumeCourse = resume ? courseById(resume.courseId) : undefined;
 
-  // The section grid — top-level destinations only. Golf-specific features
-  // (leaderboard, scavenger hunt) live inside the Mini Golf hub, not here. Mini
-  // Golf leads only when this venue actually has courses; Food gets a native
-  // tile only for POS-integrated venues (others use the deep-link card below).
+  // The section grid — top-level destinations only. The ON-COURSE scavenger
+  // hunt stays inside the Mini Golf hub (it needs a round), but the
+  // course-free VENUE hunt is a standalone activity and belongs here — that's
+  // the whole point of it for sites with no mini golf. Mini Golf leads only
+  // when this venue actually has courses; Food gets a native tile only for
+  // POS-integrated venues (others use the deep-link card below).
   const sections: SectionTile[] = [
     ...(hasGolf
       ? [{ to: '/golf', emoji: '⛳️', title: 'Mini Golf', accent: '#16a34a' } as SectionTile]
+      : []),
+    ...(hasVenueHunt
+      ? [{ to: '/hunt', emoji: '🔍', title: 'Scavenger Hunt', accent: '#0ea5e9' } as SectionTile]
       : []),
     { to: '/arcade', emoji: '🎮', title: 'Arcade', accent: '#a855f7' },
     { to: '/photos', emoji: '📸', title: 'Photo Booth', accent: '#ec4899' },

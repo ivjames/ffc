@@ -2,6 +2,10 @@
 // mini-games and the venue's ticket system. The browser's ticket math is a
 // display convenience; THIS endpoint decides what actually pays:
 //
+//   0. The caller must be signed in, and the card credited is the one bound to
+//      that account at this venue (lib/cardLink.js) — never a card id from the
+//      request body. Before that binding existed, anyone could credit any card
+//      they could name; identity is now the first gate, not the ticket math.
 //   1. The game must be in the server registry (lib/gameRewards.js) and the
 //      requested tickets within its per-round ceiling — a tampered client
 //      can't mint more than a legitimate perfect round.
@@ -28,19 +32,18 @@ import { isBonusKind, effectiveAdoptionBonus } from "../lib/adoptionBonus.js";
 import { rewardTickets } from "../lib/posLoyalty.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
+import { requireUser } from "../lib/userAuth.js";
+import { linkedCardFor } from "../lib/cardLink.js";
 
 export const router = Router();
 
 const VENUE_TZ = process.env.VENUE_TZ || "America/Los_Angeles";
 
-router.post("/award", tenant(), async (req, res) => {
-  const { locationId, playerId, game, tickets, sessionId } = req.body ?? {};
+router.post("/award", tenant(), requireUser, async (req, res) => {
+  const { locationId, game, tickets, sessionId } = req.body ?? {};
 
   if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
     return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
-  }
-  if (typeof playerId !== "string" || playerId.length < 1 || playerId.length > 100) {
-    return res.status(400).json({ ok: false, error: "playerId is required (1..100 chars)" });
   }
   if (typeof game !== "string" || !isKnownGame(game)) {
     return res.status(400).json({ ok: false, error: "unknown game" });
@@ -65,6 +68,12 @@ router.post("/award", tenant(), async (req, res) => {
     if (!loyalty?.gameRewards) {
       return res.status(403).json({ ok: false, error: "game rewards not enabled for this venue" });
     }
+
+    // The card is the session's, never the request's — a caller can only ever
+    // credit the card it linked to its own account (lib/cardLink.js).
+    const link = await linkedCardFor(req.user.id, locationId);
+    if (!link) return res.status(409).json({ ok: false, error: "no rewards card linked" });
+    const playerId = link.cardPlayerId;
 
     const caps = effectiveCaps(loc.pos, game);
     const tz = loc.tz || VENUE_TZ;
@@ -190,24 +199,14 @@ router.post("/award", tenant(), async (req, res) => {
 // milestone perk, not a per-round earning. `unique (location_id, player_id,
 // kind)` makes it one-time; the pending -> awarded flow (mirroring /award)
 // keeps a lost vendor response from double-crediting.
-router.post("/bonus", tenant(), async (req, res) => {
-  const { locationId, playerId, kind } = req.body ?? {};
+router.post("/bonus", tenant(), requireUser, async (req, res) => {
+  const { locationId, kind } = req.body ?? {};
 
   if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
     return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
   }
-  if (typeof playerId !== "string" || playerId.length < 1 || playerId.length > 100) {
-    return res.status(400).json({ ok: false, error: "playerId is required (1..100 chars)" });
-  }
   if (typeof kind !== "string" || !isBonusKind(kind)) {
     return res.status(400).json({ ok: false, error: "kind must be 'install' or 'signin'" });
-  }
-  // The sign-in milestone has a server-verifiable condition — a real player
-  // session — so require it, or an anonymous caller could mint the reward
-  // without signing in. (Install can't be verified server-side; it stays
-  // best-effort, bounded by one-time-per-card + the venue amount.)
-  if (kind === "signin" && !req.user) {
-    return res.status(401).json({ ok: false, error: "sign in to claim the sign-in bonus" });
   }
 
   try {
@@ -218,6 +217,13 @@ router.post("/bonus", tenant(), async (req, res) => {
     if (!loyalty?.gameRewards) {
       return res.status(403).json({ ok: false, error: "ticket rewards not enabled for this venue" });
     }
+
+    // Same rule as /award: the card comes from the session's binding. The
+    // install milestone still isn't server-verifiable, but it can no longer be
+    // minted for cards the caller doesn't own.
+    const link = await linkedCardFor(req.user.id, locationId);
+    if (!link) return res.status(409).json({ ok: false, error: "no rewards card linked" });
+    const playerId = link.cardPlayerId;
 
     const amount = effectiveAdoptionBonus(loc.pos)[kind];
     if (amount <= 0) {

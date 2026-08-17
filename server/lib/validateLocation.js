@@ -205,15 +205,26 @@ export function normalizePos(value) {
 }
 
 /**
- * Validate the per-venue hunt spend config (location.hunt jsonb) — the
+ * Validate the per-venue hunt config (location.hunt jsonb) — the
  * gameRewardCaps idiom applied to vision spend. Canonical stored shape:
- *   { dailyScanCap: int >= 0 }   (key present only when the venue set it)
+ *   { dailyScanCap: int >= 0, venueMode: boolean }
+ * (each key present only when the venue set it)
+ *
  * dailyScanCap bounds the venue's billed hunt vision calls over a rolling 24h
  * window (enforced in routes/hunt.js); 0 disables the hunt at that venue
  * entirely (the per-client kill switch). null/absent key = unlimited — only
  * the env-global HUNT_SCAN_CAP/HUNT_ATTEMPT_CAP bounds apply, exactly the
- * pre-config behavior. `null`/`undefined`/`{}` bodies all normalize to `{}`
- * (the column default), so omitting the field changes nothing.
+ * pre-config behavior.
+ *
+ * venueMode turns on the COURSE-FREE hunt: a park-wide list players can run
+ * without a mini-golf round, for venues with no course (or as a second list
+ * alongside one). It gates availability only — spend at a venue-mode hunt is
+ * bounded by exactly the same caps as the on-course hunt, dailyScanCap
+ * included, so switching it on can't outrun a venue's budget. Absent/false =
+ * off, which is every existing venue: this is opt-in, never a silent launch.
+ *
+ * `null`/`undefined`/`{}` bodies all normalize to `{}` (the column default),
+ * so omitting the field changes nothing.
  * @returns {{ value: object } | { error: string }}
  */
 export function normalizeHunt(value) {
@@ -222,9 +233,9 @@ export function normalizeHunt(value) {
     return { error: "hunt must be an object or null" };
   }
   // Reject unknown keys (the branding rule): a typo'd cap key must not
-  // silently store as "unlimited".
+  // silently store as "unlimited", nor a typo'd mode key as "off".
   for (const key of Object.keys(value)) {
-    if (key !== "dailyScanCap") {
+    if (key !== "dailyScanCap" && key !== "venueMode") {
       return { error: `hunt: unknown key ${JSON.stringify(key)}` };
     }
   }
@@ -236,6 +247,14 @@ export function normalizeHunt(value) {
       };
     }
     normalized.dailyScanCap = value.dailyScanCap;
+  }
+  if (value.venueMode !== undefined && value.venueMode !== null) {
+    if (typeof value.venueMode !== "boolean") {
+      return { error: "hunt.venueMode must be a boolean (the course-free venue hunt)" };
+    }
+    // Store only the meaningful case: `false` is the default, so persisting it
+    // would just be noise in a jsonb blob that reads as "what this venue set".
+    if (value.venueMode) normalized.venueMode = true;
   }
   return { value: normalized };
 }

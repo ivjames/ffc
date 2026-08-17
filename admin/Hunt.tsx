@@ -4,11 +4,17 @@ import { api, ApiError, type HuntItem } from './api';
 import { BlobThumb, Button, Card, Banner, EmptyState, Field, Input, PageHeader, Pill, Spinner, useAsync } from './ui';
 
 // Scavenger-hunt admin (Master Control → Hunt) — the section that owns hunt
-// content: every item across every course with its thumbnail, prompt
-// variables (name / hint / extra judge prompt), and vetting image set. Click
-// through to an item for the detail editor (HuntItemDetail). The vision
-// bench (image vetting bakeoff) lives under this section too, linked below
-// for super_admins.
+// content: every item across every list with its thumbnail, prompt variables
+// (name / hint / extra judge prompt), and vetting image set. Click through to
+// an item for the detail editor (HuntItemDetail). The vision bench (image
+// vetting bakeoff) lives under this section too, linked below for
+// super_admins.
+//
+// There are two kinds of list and they're curated identically here: a COURSE
+// list (played during a mini-golf round) and a VENUE list (the course-free
+// hunt, for sites without mini golf). The only extra a venue list carries is
+// its live/not-live state — the venue's own hunt toggle, shown as a pill so a
+// staged list doesn't quietly sit dark.
 
 // Authed thumbnail for a hunt-item image (shared BlobThumb underneath).
 // Exported for reuse in HuntItemDetail.
@@ -61,9 +67,16 @@ function ItemRow({ item }: { item: HuntItem }) {
   );
 }
 
-// Inline "add item" per course: just slug + name to get the row created, then
-// the operator lands on the detail editor for hint/prompt/images.
-function AddItemForm({ courseId, onCreated }: { courseId: string; onCreated: (id: string) => void }) {
+// Inline "add item" per list: just slug + name to get the row created, then
+// the operator lands on the detail editor for hint/prompt/images. `owner` says
+// which list — a course's or a venue's — and goes to the API verbatim.
+function AddItemForm({
+  owner,
+  onCreated,
+}: {
+  owner: { courseId: string } | { locationId: string };
+  onCreated: (id: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -85,7 +98,11 @@ function AddItemForm({ courseId, onCreated }: { courseId: string; onCreated: (id
         setBusy(true);
         setError('');
         try {
-          const { item } = await api.createHuntItem({ courseId, slug: slug.trim(), name: name.trim() });
+          const { item } = await api.createHuntItem({
+            ...owner,
+            slug: slug.trim(),
+            name: name.trim(),
+          });
           onCreated(item.id);
         } catch (err) {
           setError(err instanceof ApiError ? err.message : 'Create failed');
@@ -129,13 +146,36 @@ export default function Hunt({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const navigate = useNavigate();
   const { data, error, loading } = useAsync(() => api.listHuntItems(), []);
 
-  // One group per live course (venue → course order from the API), so a
-  // course with no items yet still offers "+ Add item".
-  const groups = (data?.courses ?? []).map((course) => ({
-    courseId: course.id,
-    label: `${course.locationName ? `${course.locationName} · ` : ''}${course.name}`,
-    items: (data?.items ?? []).filter((item) => item.courseId === course.id),
+  // One group per curatable list: every live venue's course-free list, plus
+  // every live course's. Item-less lists still appear so "+ Add item" is
+  // available everywhere, including a venue whose hunt hasn't been built yet.
+  //
+  // Venue lists lead — a venue's own list is the one an operator without mini
+  // golf will be looking for, and at a venue with courses it reads as the
+  // park-wide list the courses' lists sit under.
+  type Group = {
+    key: string;
+    label: string;
+    owner: { courseId: string } | { locationId: string };
+    /** Venue lists only: whether players can actually see this hunt yet. */
+    venueMode?: boolean;
+    items: HuntItem[];
+  };
+  const items = data?.items ?? [];
+  const venueGroups: Group[] = (data?.venues ?? []).map((venue) => ({
+    key: `venue:${venue.id}`,
+    label: `${venue.name} · venue-wide`,
+    owner: { locationId: venue.id },
+    venueMode: venue.venueMode,
+    items: items.filter((item) => item.ownerLocationId === venue.id),
   }));
+  const courseGroups: Group[] = (data?.courses ?? []).map((course) => ({
+    key: `course:${course.id}`,
+    label: `${course.locationName ? `${course.locationName} · ` : ''}${course.name}`,
+    owner: { courseId: course.id },
+    items: items.filter((item) => item.courseId === course.id),
+  }));
+  const groups = [...venueGroups, ...courseGroups];
 
   return (
     <div className="space-y-4">
@@ -156,19 +196,32 @@ export default function Hunt({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
       {error && <Banner kind="error">{error.message}</Banner>}
       {loading && <Spinner />}
-      {data && groups.length === 0 && <EmptyState>No live courses yet.</EmptyState>}
+      {data && groups.length === 0 && <EmptyState>No live venues or courses yet.</EmptyState>}
       {groups.map((group) => (
-        <Card key={group.courseId}>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700">{group.label}</h2>
-            <AddItemForm courseId={group.courseId} onCreated={(id) => navigate(`/hunt/items/${id}`)} />
+        <Card key={group.key}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
+              {group.label}
+              {/* A venue list that exists but isn't switched on is invisible to
+                  players, which is easy to forget while curating one. Say so
+                  here rather than let a finished list sit dark. */}
+              {group.venueMode === false && group.items.length > 0 && (
+                <Pill tone="amber">not live — turn on in the venue's settings</Pill>
+              )}
+              {group.venueMode === true && <Pill>live</Pill>}
+            </h2>
+            <AddItemForm owner={group.owner} onCreated={(id) => navigate(`/hunt/items/${id}`)} />
           </div>
           <div className="space-y-2">
             {group.items.map((item) => (
               <ItemRow key={item.id} item={item} />
             ))}
             {group.items.length === 0 && (
-              <EmptyState compact>No items on this course yet.</EmptyState>
+              <EmptyState compact>
+                {'locationId' in group.owner
+                  ? 'No venue-wide items yet.'
+                  : 'No items on this course yet.'}
+              </EmptyState>
             )}
           </div>
         </Card>
