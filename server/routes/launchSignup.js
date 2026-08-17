@@ -36,15 +36,22 @@ export function resetLaunchSignupRateLimit() {
   signupLimit.reset();
 }
 
-router.post("/", signupLimit, async (req, res) => {
-  const { email, consent, company } = req.body ?? {};
-
-  // Honeypot: the form renders `company` invisibly and humans leave it blank.
-  // A filled-in value gets a convincing success so the bot moves on, and we
-  // store nothing.
+// Honeypot: the form renders `company` invisibly and humans leave it blank. A
+// filled-in value gets a convincing success so the bot moves on, and we store
+// nothing. This runs BEFORE the limiter on purpose — a bot hammering the
+// honeypot must not spend the per-IP bucket, or it would (a) start getting 429s
+// that tell it the trap was noticed, and (b) lock out every real visitor
+// sharing that NAT for the rest of the window.
+function honeypotShortCircuit(req, res, next) {
+  const { company } = req.body ?? {};
   if (typeof company === "string" && company.length > 0) {
     return res.json({ ok: true });
   }
+  return next();
+}
+
+router.post("/", honeypotShortCircuit, signupLimit, async (req, res) => {
+  const { email, consent } = req.body ?? {};
 
   const normalized = normalizeEmail(email);
   if (!normalized) {

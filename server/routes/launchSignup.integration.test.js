@@ -157,6 +157,20 @@ test("a filled honeypot gets a convincing success and stores nothing", async () 
   assert.equal((await rowFor(email("bot"))).rowCount, 0);
 });
 
+test("honeypot hits never spend the per-IP quota (checked before the limiter)", async () => {
+  // A bot pounding the trap must not exhaust the bucket: it would start seeing
+  // 429s (telling it the trap was noticed) and would lock out every real
+  // visitor behind the same NAT for the rest of the window.
+  for (let i = 1; i <= 15; i++) {
+    const res = await signup({ email: email(`hp-${i}`), consent: true, company: "Bot Co" });
+    assert.equal(res.status, 200, `honeypot hit ${i} stays indistinguishable`);
+  }
+  // The quota is untouched, so a real signup from the same IP still lands.
+  const human = await signup({ email: email("hp-human"), consent: true });
+  assert.equal(human.status, 200, "a legitimate visitor is not collateral damage");
+  assert.equal((await rowFor(email("hp-human"))).rowCount, 1);
+});
+
 test("the 11th signup from one IP inside the window is a 429", async () => {
   for (let i = 1; i <= 10; i++) {
     const res = await signup({ email: email(`burst-${i}`), consent: true });
