@@ -8,7 +8,7 @@
 <meta property="og:title" content="Infinicade">
 <meta property="og:description" content="The infinite arcade platform. Mini golf, arcade games, AI scavenger hunts, live leaderboards — under your venue's brand.">
 <meta property="og:type" content="website">
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="%2305060d"/><path d="M15 32c0-6 4.5-10 9.5-10 8 0 7 20 15 20 5 0 9.5-4 9.5-10s-4.5-10-9.5-10c-8 0-7 20-15 20-5 0-9.5-4-9.5-10z" fill="none" stroke="%23d8ff3e" stroke-width="5" stroke-linecap="round"/></svg>'>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="%2310142e"/><path d="M15 32c0-6 4.5-10 9.5-10 8 0 7 20 15 20 5 0 9.5-4 9.5-10s-4.5-10-9.5-10c-8 0-7 20-15 20-5 0-9.5-4-9.5-10z" fill="none" stroke="%23d8ff3e" stroke-width="5" stroke-linecap="round"/></svg>'>
 <style>
 /* Unbounded (variable) — © The Unbounded Project Authors, SIL OFL 1.1 — embedded to keep the page dependency-free */
 @font-face {
@@ -28,12 +28,12 @@
 }
 
 :root {
-  --bg: #05060d;
-  --panel: #0b0d19;
+  --bg: #10142e;
+  --panel: #191e40;
   --panel-2: #10132400;
   --ink: #eef0ff;
-  --dim: #8b91b5;
-  --line: rgba(150, 158, 205, 0.14);
+  --dim: #adb5dc;
+  --line: rgba(170, 178, 226, 0.30);
   --lime: #d8ff3e;
   --violet: #8b5cff;
   --coral: #ff5c8a;
@@ -61,15 +61,16 @@ img, svg { display: block; }
 .mesh {
   position: fixed; inset: 0; z-index: -3;
   background:
-    radial-gradient(52vw 42vh at 12% -6%, rgba(139, 92, 255, 0.20), transparent 62%),
-    radial-gradient(46vw 40vh at 96% 8%, rgba(67, 232, 255, 0.12), transparent 60%),
-    radial-gradient(60vw 50vh at 78% 96%, rgba(255, 92, 138, 0.10), transparent 62%),
-    radial-gradient(40vw 36vh at 4% 82%, rgba(216, 255, 62, 0.07), transparent 60%),
+    radial-gradient(62vw 52vh at 12% -6%, rgba(139, 92, 255, 0.45), transparent 66%),
+    radial-gradient(54vw 46vh at 96% 8%, rgba(67, 232, 255, 0.32), transparent 64%),
+    radial-gradient(66vw 56vh at 78% 96%, rgba(255, 92, 138, 0.28), transparent 66%),
+    radial-gradient(48vw 42vh at 4% 82%, rgba(216, 255, 62, 0.20), transparent 64%),
+    radial-gradient(80vw 66vh at 50% 42%, rgba(88, 98, 190, 0.28), transparent 72%),
     var(--bg);
 }
 .dots {
-  position: fixed; inset: 0; z-index: -2; opacity: 0.5;
-  background-image: radial-gradient(rgba(150, 158, 205, 0.14) 1px, transparent 1px);
+  position: fixed; inset: 0; z-index: -2; opacity: 0.85;
+  background-image: radial-gradient(rgba(178, 186, 232, 0.34) 1px, transparent 1px);
   background-size: 26px 26px;
   mask-image: radial-gradient(90vw 90vh at 50% 40%, #000, transparent 78%);
   -webkit-mask-image: radial-gradient(90vw 90vh at 50% 40%, #000, transparent 78%);
@@ -80,7 +81,7 @@ img, svg { display: block; }
 }
 .glow-cursor {
   position: fixed; z-index: -1; width: 520px; height: 520px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(139, 92, 255, 0.10), transparent 65%);
+  background: radial-gradient(circle, rgba(139, 92, 255, 0.26), transparent 65%);
   pointer-events: none; transform: translate(-50%, -50%); left: 50vw; top: 30vh;
 }
 
@@ -93,7 +94,7 @@ img, svg { display: block; }
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px 10px 18px;
   border: 1px solid var(--line); border-radius: 999px;
-  background: rgba(8, 10, 20, 0.62);
+  background: rgba(30, 35, 70, 0.66);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
 .logo { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: 0.14em; }
@@ -120,6 +121,12 @@ img, svg { display: block; }
   display: flex; align-items: center;
   overflow: hidden;
 }
+.hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(58vw 48vh at 28% 38%, rgba(139, 92, 255, 0.20), transparent 66%),
+    radial-gradient(46vw 40vh at 84% 62%, rgba(67, 232, 255, 0.16), transparent 62%);
+}
 #putt { position: absolute; inset: 0; z-index: 1; }
 .hero-inner { position: relative; z-index: 2; width: 100%; padding-top: 90px; padding-bottom: 130px; pointer-events: none; }
 .hero-inner a, .hero-inner .hint { pointer-events: auto; }
@@ -127,7 +134,7 @@ img, svg { display: block; }
   display: inline-flex; align-items: center; gap: 10px;
   font-size: 13px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: var(--dim);
   border: 1px solid var(--line); border-radius: 999px; padding: 9px 18px;
-  background: rgba(8, 10, 20, 0.55);
+  background: rgba(30, 35, 70, 0.60);
 }
 .eyebrow .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 12px var(--lime); animation: pulse 2.2s ease infinite; }
 @keyframes pulse { 50% { opacity: 0.35; } }
@@ -160,7 +167,7 @@ h1 .dot { color: var(--lime); }
 }
 .btn-solid { color: #101400; background: var(--lime); box-shadow: 0 8px 40px rgba(216, 255, 62, 0.28); }
 .btn-solid:hover { transform: translateY(-2px); box-shadow: 0 10px 52px rgba(216, 255, 62, 0.45); }
-.btn-line { color: var(--ink); border: 1px solid rgba(150, 158, 205, 0.35); background: rgba(8, 10, 20, 0.5); }
+.btn-line { color: var(--ink); border: 1px solid rgba(186, 194, 240, 0.55); background: rgba(30, 35, 70, 0.55); }
 .btn-line:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 8px 32px rgba(67, 232, 255, 0.18); }
 
 .hint {
@@ -172,7 +179,7 @@ h1 .dot { color: var(--lime); }
 .hint .score {
   font-family: var(--display); font-size: 12px; color: var(--lime);
   border: 1px solid rgba(216, 255, 62, 0.35); border-radius: 999px; padding: 8px 16px;
-  background: rgba(8, 10, 20, 0.6);
+  background: rgba(30, 35, 70, 0.65);
 }
 @media (max-width: 640px) { .hint { bottom: 76px; right: 18px; } }
 
@@ -190,7 +197,11 @@ h1 .dot { color: var(--lime); }
 @keyframes bob { 50% { transform: translateX(-50%) translateY(6px); } }
 
 /* ---------- marquee ---------- */
-.marquee { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 22px 0; overflow: hidden; background: rgba(8, 10, 20, 0.4); }
+.marquee {
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 22px 0; overflow: hidden;
+  background: linear-gradient(90deg, rgba(216, 255, 62, 0.10), rgba(67, 232, 255, 0.12), rgba(139, 92, 255, 0.12));
+}
+.marquee.reverse { background: linear-gradient(90deg, rgba(139, 92, 255, 0.14), rgba(255, 92, 138, 0.10), rgba(67, 232, 255, 0.10)); }
 .marquee + .marquee { border-top: 0; }
 .track { display: flex; width: max-content; gap: 0; animation: scroll 36s linear infinite; }
 .marquee.reverse .track { animation-direction: reverse; }
@@ -199,13 +210,29 @@ h1 .dot { color: var(--lime); }
   font-size: clamp(20px, 3vw, 32px); letter-spacing: 0.04em;
   padding: 0 28px; white-space: nowrap;
 }
-.track .o { color: rgba(238, 240, 255, 0.30); }
+.track .o { color: rgba(238, 240, 255, 0.55); }
 .track .star { color: var(--lime); -webkit-text-stroke: 0; }
 .marquee.reverse .track .star { color: var(--violet); }
 @keyframes scroll { to { transform: translateX(-50%); } }
 
 /* ---------- sections ---------- */
 section { padding: 110px 0; position: relative; }
+#platform {
+  background:
+    radial-gradient(52vw 40vh at 8% 6%, rgba(67, 232, 255, 0.15), transparent 62%),
+    radial-gradient(56vw 46vh at 96% 60%, rgba(139, 92, 255, 0.18), transparent 64%),
+    radial-gradient(44vw 36vh at 40% 100%, rgba(216, 255, 62, 0.10), transparent 62%);
+}
+#white-label {
+  background:
+    radial-gradient(54vw 44vh at 92% 18%, rgba(255, 92, 138, 0.16), transparent 64%),
+    radial-gradient(48vw 40vh at 6% 78%, rgba(139, 92, 255, 0.16), transparent 62%);
+}
+.cta-final {
+  background:
+    radial-gradient(60vw 52vh at 50% 46%, rgba(216, 255, 62, 0.13), transparent 64%),
+    radial-gradient(70vw 56vh at 50% 60%, rgba(139, 92, 255, 0.20), transparent 70%);
+}
 .kicker {
   display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.28em; text-transform: uppercase;
   color: var(--cyan); margin-bottom: 18px;
@@ -237,13 +264,20 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
 .cell {
   position: relative; overflow: hidden;
   border: 1px solid var(--line); border-radius: var(--r-lg);
-  background: linear-gradient(165deg, rgba(18, 21, 40, 0.85), rgba(9, 11, 22, 0.85));
+  background: linear-gradient(165deg, rgba(48, 54, 102, 0.92), rgba(28, 33, 66, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
   padding: 28px;
   min-height: 250px;
   display: flex; flex-direction: column; justify-content: flex-end;
   transition: border-color 0.2s ease, transform 0.2s ease;
 }
-.cell:hover { border-color: rgba(216, 255, 62, 0.35); transform: translateY(-3px); }
+.cell:hover { border-color: rgba(216, 255, 62, 0.45); transform: translateY(-3px); }
+.cell-phone   { box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 24px 90px -28px rgba(67, 232, 255, 0.45); }
+.cell-board   { box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 24px 90px -28px rgba(216, 255, 62, 0.40); }
+.cell-hunt    { box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 24px 90px -28px rgba(67, 232, 255, 0.40); }
+.cell-tickets { box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 24px 90px -28px rgba(216, 255, 62, 0.45); }
+.cell-games   { box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 24px 90px -28px rgba(255, 92, 138, 0.42); }
+.cell-control { box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 24px 90px -28px rgba(139, 92, 255, 0.45); }
 .cell h3 { font-family: var(--display); font-size: 16px; font-weight: 700; letter-spacing: 0.02em; margin-bottom: 8px; }
 .cell p { font-size: 14.5px; color: var(--dim); max-width: 40ch; }
 .cell .tag {
@@ -257,16 +291,16 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
 .phone {
   width: min(250px, 78%); margin: 52px auto 26px; flex: 1; max-height: 420px;
   border-radius: 34px; border: 1px solid rgba(150, 158, 205, 0.3);
-  background: #070910;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 0 0 6px #0d101e;
+  background: #10142c;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 0 0 6px #1b2044;
   padding: 18px 14px; display: flex; flex-direction: column; gap: 10px;
 }
-.phone .notch { width: 74px; height: 5px; border-radius: 4px; background: #1c2136; margin: 0 auto 6px; }
+.phone .notch { width: 74px; height: 5px; border-radius: 4px; background: #333b6b; margin: 0 auto 6px; }
 .phone .ph-head { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
 .phone .ph-head b { color: var(--lime); font-family: var(--display); font-size: 10px; }
 .phone .hole-banner {
   border-radius: 14px; padding: 10px 12px;
-  background: linear-gradient(120deg, rgba(216, 255, 62, 0.14), rgba(67, 232, 255, 0.1));
+  background: linear-gradient(120deg, rgba(216, 255, 62, 0.22), rgba(67, 232, 255, 0.16));
   border: 1px solid rgba(216, 255, 62, 0.25);
   font-family: var(--display); font-size: 11px; letter-spacing: 0.06em;
 }
@@ -278,7 +312,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
 }
 .p-row .tag3 { font-family: var(--display); font-size: 11px; letter-spacing: 0.12em; }
 .p-row .strokes { display: flex; gap: 4px; }
-.p-row .strokes i { width: 7px; height: 7px; border-radius: 50%; background: #232946; }
+.p-row .strokes i { width: 7px; height: 7px; border-radius: 50%; background: #3a4278; }
 .p-row .strokes i.on { background: var(--cyan); box-shadow: 0 0 8px rgba(67, 232, 255, 0.7); }
 .p-row.lead { border-color: rgba(216, 255, 62, 0.4); }
 .p-row.lead .tag3 { color: var(--lime); }
@@ -292,7 +326,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
   position: absolute; left: 0; right: 0; height: 34px;
   display: flex; align-items: center; gap: 14px; padding: 0 14px;
   border: 1px solid var(--line); border-radius: 10px;
-  background: rgba(7, 9, 16, 0.85);
+  background: rgba(28, 33, 64, 0.92);
   font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em;
   transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -307,8 +341,8 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
   position: absolute; top: 20px; right: 22px; width: 108px; height: 108px;
   border-radius: 16px; overflow: hidden;
   background:
-    radial-gradient(60px 40px at 60% 70%, rgba(216, 255, 62, 0.15), transparent),
-    linear-gradient(160deg, #10142a, #090b16);
+    radial-gradient(60px 40px at 60% 70%, rgba(216, 255, 62, 0.3), transparent),
+    linear-gradient(160deg, #232952, #161a38);
   border: 1px solid rgba(67, 232, 255, 0.3);
 }
 .viewfinder::before, .viewfinder::after {
@@ -349,7 +383,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
 @media (min-width: 721px) { .game-icons { flex-wrap: nowrap; } }
 .g-icon {
   width: 58px; height: 58px; border-radius: 16px; display: grid; place-items: center;
-  border: 1px solid var(--line); background: rgba(7, 9, 16, 0.8);
+  border: 1px solid var(--line); background: rgba(28, 33, 64, 0.85);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 .g-icon:hover { transform: translateY(-6px) rotate(-3deg); border-color: var(--coral); box-shadow: 0 10px 30px rgba(255, 92, 138, 0.2); }
@@ -362,7 +396,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
 .sw { display: flex; align-items: center; gap: 9px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); justify-content: flex-end; }
 .sw i {
   width: 34px; height: 19px; border-radius: 999px; position: relative;
-  background: #1a1f38; border: 1px solid var(--line); transition: background 0.3s ease;
+  background: #2c3260; border: 1px solid var(--line); transition: background 0.3s ease;
 }
 .sw i::after {
   content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%;
@@ -378,7 +412,7 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
 .v-chip {
   font-family: var(--display); font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
   padding: 13px 22px; border-radius: 999px; cursor: pointer;
-  border: 1px solid var(--line); background: rgba(8, 10, 20, 0.6); color: var(--dim);
+  border: 1px solid var(--line); background: rgba(30, 35, 70, 0.65); color: var(--dim);
   transition: all 0.2s ease;
 }
 .v-chip:hover { color: var(--ink); transform: translateY(-2px); }
@@ -390,17 +424,17 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--lime), var(
 .wl-phone {
   width: min(290px, 86%); border-radius: 40px;
   border: 1px solid rgba(150, 158, 205, 0.3);
-  background: #070910;
-  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.65), inset 0 0 0 7px #0d101e;
+  background: #10142c;
   padding: 22px 18px 18px; display: flex; flex-direction: column; gap: 12px;
   transform: rotateY(-8deg) rotateX(2deg);
-  transition: transform 0.4s ease;
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6), 0 0 90px -20px color-mix(in srgb, var(--wl, #d8ff3e) 55%, transparent), inset 0 0 0 7px #1b2044;
 }
 .wl-phone:hover { transform: rotateY(0deg); }
-.wl-phone .notch { width: 84px; height: 6px; border-radius: 4px; background: #1c2136; margin: 0 auto 4px; }
+.wl-phone .notch { width: 84px; height: 6px; border-radius: 4px; background: #333b6b; margin: 0 auto 4px; }
 .wl-brandbar {
   border-radius: 18px; padding: 16px;
-  background: color-mix(in srgb, var(--wl, #d8ff3e) 16%, #0a0c16);
+  background: color-mix(in srgb, var(--wl, #d8ff3e) 24%, #171b3a);
   border: 1px solid color-mix(in srgb, var(--wl, #d8ff3e) 45%, transparent);
   transition: all 0.4s ease;
 }
@@ -465,7 +499,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
 <nav class="nav" aria-label="Main">
   <a class="logo" href="#top">
     <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true">
-      <rect width="64" height="64" rx="16" fill="#0b0d19" stroke="rgba(150,158,205,0.3)"/>
+      <rect width="64" height="64" rx="16" fill="#1b2044" stroke="rgba(178,186,232,0.45)"/>
       <path d="M15 32c0-6 4.5-10 9.5-10 8 0 7 20 15 20 5 0 9.5-4 9.5-10s-4.5-10-9.5-10c-8 0-7 20-15 20-5 0-9.5-4-9.5-10z" fill="none" stroke="#d8ff3e" stroke-width="5" stroke-linecap="round"/>
     </svg>
     INFINICADE
@@ -654,7 +688,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
   <div class="wrap" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; width: 100%;">
     <span class="logo">
       <svg width="20" height="20" viewBox="0 0 64 64" aria-hidden="true">
-        <rect width="64" height="64" rx="16" fill="#0b0d19" stroke="rgba(150,158,205,0.3)"/>
+        <rect width="64" height="64" rx="16" fill="#1b2044" stroke="rgba(178,186,232,0.45)"/>
         <path d="M15 32c0-6 4.5-10 9.5-10 8 0 7 20 15 20 5 0 9.5-4 9.5-10s-4.5-10-9.5-10c-8 0-7 20-15 20-5 0-9.5-4-9.5-10z" fill="none" stroke="#d8ff3e" stroke-width="5" stroke-linecap="round"/>
       </svg>
       INFINICADE
