@@ -9,11 +9,6 @@ import { getRound, putRound } from '../../db';
 import { syncPending, fetchRewards, type RewardRow } from '../../sync';
 import { completeGame } from '../../lib/gamesApi';
 import { applyCompleted } from '../../lib/sharedMerge';
-import { posFor } from '../../lib/pos';
-import { useLinkedPlayerId } from '../../lib/rewardsCard';
-import { useSession } from '../../lib/session';
-import { awardGolfReward, deviceOwnsSlot } from '../../lib/pos/golfRewards';
-import type { GameAwardOutcome } from '../../lib/pos/gameRewards';
 import { shareRound } from './shareImage';
 import { playFanfare } from '../../lib/sound';
 import type { CourseSeed, LocalRound } from '../../types';
@@ -262,21 +257,11 @@ export default function Summary() {
 
         <SyncNote state={round.syncState} failed={syncFailed} />
 
-        {/* Rewards earned this round (punchlist #8 tier 1). Tickets on the
-            linked card are the ONLY payout: where the venue sells the loyalty
-            add-on, achievements credit the card (same lane as the games).
-            Where it doesn't, they don't pay out here at all — there are no
-            counter codes anywhere in the player app. The card renders nothing
-            unless there's a ticket to land. */}
-        {rewards.length > 0 && (
-          <RewardsCard
-            rewards={rewards}
-            clientId={clientId}
-            locationId={course.locationId}
-            deviceSlot={round.shared?.slot ?? 0}
-            isShared={round.shared != null}
-          />
-        )}
+        {/* Achievements earned this round (punchlist #8 tier 1). Badges only —
+            they pay no tickets, so there's nothing to claim here and no venue
+            gating: the app's ticket economy is the mini-games and the one-time
+            adoption bonuses. */}
+        <RewardsCard rewards={rewards} />
 
         <div className="mt-4 space-y-2">
           <Button
@@ -410,137 +395,27 @@ const REWARD_META: Record<string, { emoji: string; label: string }> = {
   hunt_master: { emoji: '🕵️', label: 'Hunt Master' },
 };
 
-// The value shown for one owned achievement. Tickets or nothing — there is NO
-// code fallback. A credit that fails leaves its grant untouched server-side (so
-// staff can still see/settle it in Master Control), but the player never sees a
-// code: we say so honestly instead.
-function RewardValue({ outcome }: { outcome: GameAwardOutcome | undefined }) {
-  if (outcome?.status === 'awarded') {
-    return (
-      <span className="whitespace-nowrap text-sm font-black text-fairway-50">
-        +{outcome.tickets} 🎟️
-      </span>
-    );
-  }
-  if (outcome == null) {
-    return <span className="text-xs text-fairway-100/70">Adding…</span>;
-  }
-  // Hitting the card's daily ticket cap isn't a failure — the player just can't
-  // bank more today. Don't nag about it; show nothing for that achievement.
-  if (outcome.status === 'daily-cap') {
-    return null;
-  }
-  return <span className="text-xs text-fairway-400">Couldn’t add</span>;
-}
-
-function RewardsCard({
-  rewards,
-  clientId,
-  locationId,
-  deviceSlot,
-  isShared,
-}: {
-  rewards: RewardRow[];
-  clientId: string;
-  locationId: string;
-  deviceSlot: number;
-  isShared: boolean;
-}) {
-  const navigate = useNavigate();
-  // Gate on the ROUND'S venue, not the currently-selected one — a completed
-  // round belongs to the course it was played on.
-  const { gameRewards } = posFor(locationId);
-  const playerId = useLinkedPlayerId();
-  const signedIn = useSession().user != null;
-  const owns = (playerIndex: number) => deviceOwnsSlot({ deviceSlot, isShared, playerIndex });
-
-  // Credit the owned achievements once, as tickets on the linked card. The claim
-  // endpoint replays on a stable per-(round, player, achievement) key, so a
-  // re-mounted summary — or a card linked only after the summary is open — can't
-  // double-credit. An already-redeemed grant is skipped so it can't pay twice.
-  const [credited, setCredited] = useState<Record<string, GameAwardOutcome>>({});
-  const attempted = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!gameRewards || !playerId) return;
-    for (const r of rewards) {
-      if (!owns(r.playerIndex)) continue; // credited on another device
-      if (r.redeemedAt != null) continue; // already redeemed
-      const key = `${r.playerIndex}:${r.achievement}`;
-      if (attempted.current.has(key)) continue;
-      attempted.current.add(key);
-      void awardGolfReward({
-        locationId,
-        achievement: r.achievement,
-        clientId,
-        playerIndex: r.playerIndex,
-      }).then((outcome) => setCredited((m) => ({ ...m, [key]: outcome })));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameRewards, playerId, rewards, clientId, locationId, deviceSlot, isShared]);
-
-  // Tickets or nothing. If this venue doesn't sell app-earned tickets, golf
-  // achievements simply don't pay out here — no card, no codes, no rewards
-  // surface at all.
-  if (!gameRewards) return null;
-
-  // Only this device's own rewards land here (others are on their own
-  // phones/cards). Nothing owned → nothing to show.
-  const keyOf = (r: RewardRow) => `${r.playerIndex}:${r.achievement}`;
-  const owned = rewards.filter((r) => owns(r.playerIndex));
-  if (owned.length === 0) return null;
-
-  // A reward we're actively crediting (card linked, not yet redeemed) hasn't
-  // resolved until credited[key] is set. Hold the WHOLE card off screen until
-  // every such award has come back, so it appears once in its final form
-  // instead of flashing in with pending rows and then vanishing the moment the
-  // only reward turns out to be daily-capped.
-  const isPending = (r: RewardRow) =>
-    playerId != null && r.redeemedAt == null && credited[keyOf(r)] === undefined;
-  if (owned.some(isPending)) return null;
-
-  // Everything's resolved now: hide daily-capped rewards (they banked nothing).
-  // If that leaves nothing, stay hidden — the card never appeared, so there's
-  // no empty panel and nothing flashes.
-  const visible = owned.filter((r) => credited[keyOf(r)]?.status !== 'daily-cap');
-  if (visible.length === 0) return null;
-
-  // Banking an achievement credits a card, and a card belongs to an account —
-  // so a signed-out player is asked to sign in first rather than sent at a
-  // rewards screen that would bounce them off the account gate.
-  const subtitle = playerId
-    ? 'Added to your rewards card as tickets.'
-    : signedIn
-      ? 'Link your rewards card to bank these as tickets.'
-      : 'Sign in and link your rewards card to bank these as tickets.';
-
+// Achievements earned this round. A pure badge display: achievements pay no
+// tickets, so there is no card to link, nothing to claim, and no per-device
+// ownership rule — every player's badge shows on every device in the round,
+// exactly like the scorecard above it.
+function RewardsCard({ rewards }: { rewards: RewardRow[] }) {
+  if (rewards.length === 0) return null;
   return (
     <div
       className="surface animate-pop-in mt-4 rounded-3xl border border-fairway-500/40 p-4"
       style={{ '--i': 1 } as CSSProperties}
     >
-      <div className="mb-1 text-center text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
-        🎟️ Rewards earned
+      <div className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
+        🏆 Achievements earned
       </div>
-      <p className="mb-3 text-center text-xs text-fairway-100/70">{subtitle}</p>
-
-      {!playerId && (
-        <div className="mb-3">
-          <Button
-            variant="ghost"
-            onClick={() => navigate(signedIn ? '/me/rewards' : '/me/account?next=/me/rewards')}
-          >
-            {signedIn ? '🎟️ Link rewards card' : '🎟️ Sign in to bank these'}
-          </Button>
-        </div>
-      )}
 
       <div className="space-y-2">
-        {visible.map((r) => {
-          const key = keyOf(r);
+        {rewards.map((r) => {
           const meta = REWARD_META[r.achievement] ?? { emoji: '🏆', label: r.achievement };
           return (
             <div
-              key={key}
+              key={`${r.playerIndex}:${r.achievement}`}
               className="surface-1 flex items-center gap-3 rounded-2xl border border-fairway-800/60 px-4 py-2.5"
             >
               <span className="text-xl" aria-hidden="true">
@@ -550,17 +425,6 @@ function RewardsCard({
                 <div className="text-sm font-bold text-fairway-50">{meta.label}</div>
                 <div className="text-xs text-fairway-100/70">{r.playerTag}</div>
               </div>
-              {r.redeemedAt != null ? (
-                <span className="text-xs font-semibold uppercase tracking-wide text-fairway-400">
-                  Claimed ✓
-                </span>
-              ) : !playerId ? (
-                <span className="text-xs text-fairway-400">
-                  {signedIn ? 'Link card to claim' : 'Sign in to claim'}
-                </span>
-              ) : (
-                <RewardValue outcome={credited[key]} />
-              )}
             </div>
           );
         })}
@@ -568,6 +432,7 @@ function RewardsCard({
     </div>
   );
 }
+
 
 function SyncNote({ state, failed }: { state: LocalRound['syncState']; failed: boolean }) {
   if (state === 'synced') {

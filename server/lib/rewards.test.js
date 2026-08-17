@@ -1,24 +1,25 @@
-// Unit coverage for the reward rules (lib/rewards.js) — the score-based
-// achievement logic and the payout pricing.
+// Unit coverage for the achievement rules (lib/rewards.js) — the score-based
+// grant logic. There is no payout to cover: achievements pay no tickets.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scoreAchievements, achievementTickets, ACHIEVEMENTS } from "./rewards.js";
+import { scoreAchievements, ACHIEVEMENTS } from "./rewards.js";
 
 const PARS = Array(18).fill(3); // course par 54
 
 const fullCard = (strokes, playerIndex = 0) =>
   Array.from({ length: 18 }, (_, i) => ({ playerIndex, hole: i + 1, strokes }));
 
-test("achievementTickets prices every catalog achievement, 0 for unknown", () => {
-  // Every achievement a round can grant must have a payout, or a card claim for
-  // it would silently pay nothing.
-  for (const key of Object.keys(ACHIEVEMENTS)) {
-    assert.ok(achievementTickets(key) > 0, `${key} must have a payout`);
+test("the catalog labels every achievement a round can grant", () => {
+  // The catalog is what Master Control and the player app render a grant as, so
+  // an achievement missing here would surface as a raw key.
+  assert.deepEqual(Object.keys(ACHIEVEMENTS).sort(), [
+    "hole_in_one",
+    "hunt_master",
+    "under_par",
+  ]);
+  for (const label of Object.values(ACHIEVEMENTS)) {
+    assert.ok(label.length > 0);
   }
-  assert.equal(achievementTickets("hole_in_one"), 100);
-  assert.equal(achievementTickets("under_par"), 50);
-  assert.equal(achievementTickets("hunt_master"), 75);
-  assert.equal(achievementTickets("nope"), 0);
 });
 
 test("a full card at par earns nothing", () => {

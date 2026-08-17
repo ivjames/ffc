@@ -17,9 +17,9 @@ type Tile = {
   accent: string;
   // Games that credit tickets on the linked card — mirrors the server's
   // GAME_REWARD_GAMES registry (server/lib/gameRewards.js), i.e. the tiles whose
-  // screen mounts <GameTicketAward>. The coin pusher (pure chance), Arcade Putt,
-  // and Fun Facts don't earn, so they carry no flag. Drives the 🎟️ hint, shown
-  // only where the venue actually sells game rewards.
+  // screen mounts <GameTicketAward>. Arcade Putt and Fun Facts don't earn, so
+  // they carry no flag. Drives the 🎟️ hint, shown only where the venue actually
+  // sells game rewards.
   earns?: boolean;
 };
 
@@ -189,13 +189,6 @@ const TILES: Tile[] = [
     blurb: 'Three balls, two flippers — light the lanes.',
     accent: '#d946ef',
     earns: true,
-  },
-  {
-    to: '/arcade/pusher',
-    emoji: '🪙',
-    title: 'Coin Pusher',
-    blurb: 'Time your drops — push the shelf over the edge.',
-    accent: '#fbbf24',
   },
 ];
 

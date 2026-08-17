@@ -81,10 +81,10 @@ Request:
   (hole-in-one; under par on a full card; hunt master when the player's verified
   finds cover the course's active non-countable hunt list) are written to
   `reward_grant` in the same transaction — one row per (player, achievement),
-  identified by its UUID. They pay out as tickets on the player's loyalty card;
-  no redemption code is minted (since #157 tickets are the only player-facing
-  payout). A duplicate re-sync never re-grants. See `GET /api/rewards` and the
-  admin rewards reporting below.
+  identified by its UUID. Grants are **badges and pay nothing** — no tickets, no
+  loyalty-card credit, no redemption code — so a grant is a pure record of what
+  a round earned. A duplicate re-sync never re-grants. See `GET /api/rewards`
+  and the admin rewards reporting below.
 
 Responses:
 - `200 { "ok": true, "roundId": "<uuid>" }` — created, or the existing round id
@@ -315,9 +315,11 @@ one revealed that cardholder's name, tier, balances and history, and the
 ticket-write paths credited whatever card id the request body carried. Now
 the vendor is reached only from `lib/posLoyalty.js` with server-held
 credentials, and a card number links a card exactly once — after that the
-account is what reads it. `POST /api/rewards/claim` follows the same rule:
-the round's unguessable `clientId` still says which grant is being claimed,
-but a leaked one can no longer redirect the payout to an attacker's card.
+account is what reads it. `POST /api/game-rewards/award` follows the same
+rule: the card credited is the one bound to the caller's account at that
+venue, never an id from the request body. (Golf achievements used to have
+their own claim route under the same rule; it's gone — achievements pay
+nothing now, so there is no payout to misdirect.)
 
 Responses:
 - `200 { "ok": true, "location": { …, "tz": "…", "tzLabel": "Eastern Time (ET)" } }`
@@ -355,20 +357,22 @@ requested venue. Without `locationId` only global rows return.
 
 ### `GET /api/rewards?clientId=<device round id>`
 Open read keyed by the round's client-generated UUID (unguessable, same id the
-sync path dedupes on) — the final scorecard's rewards screen. Returns the
-round's grants (no redemption code — tickets on the loyalty card are the only
-payout):
+sync path dedupes on) — the final scorecard's achievements card. Returns the
+round's grants:
 
 ```json
 [
   { "playerIndex": 0, "playerTag": "ACE",
-    "achievement": "hole_in_one", "redeemedAt": null,
+    "achievement": "hole_in_one",
     "createdAt": "2026-08-07T18:00:00.000Z" }
 ]
 ```
-Achievements: `hole_in_one` · `under_par` · `hunt_master`. A grant is banked to
-the player's loyalty card as tickets exactly once (`POST /api/rewards/claim`);
-`redeemedAt` is the single consume point.
+Achievements: `hole_in_one` · `under_par` · `hunt_master`. **Achievements pay
+nothing** — they are badges, with no tickets, no loyalty-card credit, and no
+redemption code, so this read-only endpoint is the whole player-facing surface
+(there is no claim route). Golf scores are self-reported, which made paying
+tickets against them the weakest trust surface in the ticket economy; tickets
+now come only from the mini-game proxy and the one-time adoption bonuses.
 
 ### `POST /api/feedback`
 Reviewer commentary — the in-app "sound off about this screen" channel. Open
@@ -430,7 +434,7 @@ no domain history hangs off an account.)
 | `GET  /api/admin/export/rounds.csv?from=&to=&locationId=` | CSV download, one row per (completed round, player); `from`/`to` are `YYYY-MM-DD` calendar days in `ADMIN_TZ`, inclusive, defaulting to the last 30 days; org-scoped |
 | `GET  /api/admin/announcements?archived=` · `POST /api/admin/announcements` | list / create-update announcements; global rows (`locationId: null`) are **super_admin only** to write, `org_admin` manages rows pinned to their own org's venues (and sees global ones read-only) |
 | `POST /api/admin/announcements/:id/archive` · `…/unarchive` | soft-delete / restore (same scoping) |
-| `GET  /api/admin/rewards/summary?days=1..90` | achievement issuance rollup: per-achievement totals (earned / banked to a card / unclaimed / tickets paid) + a per venue-local-day drilldown; org-scoped via the round's course → location |
+| `GET  /api/admin/rewards/summary?days=1..90` | achievement issuance rollup: per-achievement earned totals + a per venue-local-day drilldown; org-scoped via the round's course → location. Issuance only — achievements pay nothing, so there is no claimed/unclaimed or ticket state |
 | `GET  /api/admin/photos?people=1\|minors=1&limit=&before=` | stored hunt photos, newest first, with item/course/venue + moderation and people/minors flags; `before` (the previous page's last `createdAt`) keyset-paginates older photos; org-scoped via find → item → course → location |
 | `GET  /api/admin/photos/:id/image` | the image bytes, for the review UI (same scoping) |
 | `POST /api/admin/photos/:id/remove` | delete the photo file from disk and mark the find `moderation='rejected'` (the find keeps its credit); audited — the "please delete that photo" path. Time-based deletion is the retention sweep (`HUNT_PHOTO_RETENTION_DAYS`) |
