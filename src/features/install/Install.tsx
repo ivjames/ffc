@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useInstallPrompt } from '../../lib/pwaInstall';
+import { useCurrentLocationId } from '../../lib/location';
+import { locationById } from '../../data/courses';
 import { track } from '../../lib/analytics';
 import { getBranding, useBrandingRevision } from '../../lib/branding';
 import Icon from '../../ui/Icon';
@@ -14,6 +16,11 @@ import Icon from '../../ui/Icon';
 //   • Already installed → a "you're all set" confirmation.
 export default function Install() {
   const { platform, installed, canPrompt, promptInstall } = useInstallPrompt();
+  // Name the venue, not the platform. This screen used to hardcode "Mini Golf",
+  // which is one of five sections (arcade, food, photos and the hunt are the
+  // others) and wrong outright at a venue with no course. Same source and same
+  // fallback as the Home hero and the nav drawer, so all three agree.
+  const venueName = locationById(useCurrentLocationId())?.name ?? 'Family Fun Center';
   const [result, setResult] = useState<'accepted' | 'dismissed' | null>(null);
 
   // The install page reached a not-yet-installed player — the top of the
@@ -40,9 +47,12 @@ export default function Install() {
       <TopBar title="Install the app" back="/" />
       <Content>
         <div className="mb-6 mt-2 text-center">
-          <Icon name="nav.golf" className="text-5xl" />
+          {/* The app's own icon, at size — an install screen's subject is the
+              thing being installed, and a section icon (this was the golf
+              pennant) claims the app is one section of itself. */}
+          <AppIcon className="mx-auto h-16 w-16 shadow-sm" />
           <h2 className="mt-3 text-2xl font-black tracking-tight text-fairway-50">
-            Add Mini Golf to your phone
+            Add {venueName} to your phone
           </h2>
           <p className="mt-2 text-sm text-fairway-100/70">
             Installs like a normal app — full screen, works offline, no app store.
@@ -90,29 +100,36 @@ export default function Install() {
 }
 
 /**
- * The icon the player will actually find on their home screen, shown inline in
- * the sentence that promises it.
+ * The icon the player will actually find on their home screen — as this
+ * screen's hero, and inline in the two sentences that promise it.
  *
- * Deliberately NOT an <Icon>. This screen's copy points at a real artefact —
- * the installed PWA's launcher icon, which is the tenant's uploaded `icon192`
+ * Deliberately NOT an <Icon>. This screen's subject is a real artefact: the
+ * installed PWA's launcher icon, which is the tenant's uploaded `icon192`
  * (server/lib/brandAssets.js) or the platform default. It has nothing to do
- * with the icon set: pointing at any glyph here, emoji or vector, describes
- * something the player will never see. It used to say "the ⛳️ icon", which was
- * wrong for every venue including the mini-golf ones.
+ * with the icon set — pointing at any glyph here, emoji or vector, describes
+ * something the player will never see. The copy used to say "the ⛳️ icon" and
+ * the hero used to be a golf pennant; both were wrong at every venue, the
+ * mini-golf ones included.
  *
- * Decorative — the surrounding sentence already says "icon" — so it is hidden
- * from assistive tech rather than announced twice.
+ * Decorative in every placement: the heading names the venue and the sentences
+ * already say "icon", so it is hidden from assistive tech rather than announced
+ * twice.
  */
-function AppIcon() {
+function AppIcon({
+  /** Size and layout. The squircle radius is not overridable — it is what makes
+   *  this read as a home-screen icon rather than a picture. */
+  className = 'mx-0.5 inline-block h-5 w-5 align-text-bottom',
+}: {
+  className?: string;
+}) {
   useBrandingRevision();
   return (
     <img
       src={getBranding().icon192Url}
       alt=""
       aria-hidden="true"
-      // ~22% radius is the squircle masking both iOS and Android apply, so this
-      // reads as a home-screen icon rather than a picture in the text.
-      className="mx-0.5 inline-block h-5 w-5 rounded-[22%] align-text-bottom"
+      // ~22% is the squircle masking both iOS and Android apply.
+      className={`rounded-[22%] ${className}`}
     />
   );
 }
