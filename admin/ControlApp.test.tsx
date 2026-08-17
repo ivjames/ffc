@@ -177,6 +177,24 @@ describe('global sign-out event', () => {
   });
 });
 
+describe('nav gating', () => {
+  test('super_admin sees the super-admin-only nav items', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: SUPER_ADMIN_USER });
+    renderApp();
+    await screen.findByText('FFC · Master Control');
+    expect(screen.getByRole('link', { name: 'Provision site' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Synthetic' })).toBeInTheDocument();
+  });
+
+  test('org_admin does not see the super-admin-only nav items', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: ORG_ADMIN_USER });
+    renderApp();
+    await screen.findByText('FFC · Master Control');
+    expect(screen.queryByRole('link', { name: 'Provision site' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Synthetic' })).not.toBeInTheDocument();
+  });
+});
+
 describe('lock', () => {
   test('clicking Lock calls api.logout and returns to the gate', async () => {
     vi.mocked(api.me).mockResolvedValue({ ok: true, user: SUPER_ADMIN_USER });

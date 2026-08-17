@@ -17,6 +17,7 @@ import Feedback from './Feedback';
 import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
 import SyntheticBot from './SyntheticBot';
+import ProvisionSite from './ProvisionSite';
 
 // ---------------------------------------------------------------------------
 // Nav model
@@ -104,6 +105,15 @@ const ICON_PATHS = {
       <path d="M9 13v2M15 13v2" />
     </>
   ),
+  provision: (
+    <>
+      {/* Storefront with a plus — "stand up a new site" */}
+      <path d="M4 9l1.2-4.2A1 1 0 0 1 6.2 4h11.6a1 1 0 0 1 1 .8L20 9" />
+      <path d="M4 9h16" />
+      <path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
+      <path d="M12 12.5v5M9.5 15h5" />
+    </>
+  ),
 } as const;
 
 type IconName = keyof typeof ICON_PATHS;
@@ -183,6 +193,14 @@ const NAV_SECTIONS: NavSection[] = [
 
 // Load/soak bot — a platform tool, so super_admin only.
 const SYNTHETIC_ITEM: NavItem = { to: '/synthetic', label: 'Synthetic', icon: 'synthetic' };
+// One-shot site provisioning — creates orgs, so super_admin only.
+const PROVISION_ITEM: NavItem = { to: '/provision', label: 'Provision site', icon: 'provision' };
+
+// Extra nav items appended per section for super_admins only.
+const SUPER_ADMIN_EXTRAS: Record<string, NavItem[]> = {
+  Venues: [PROVISION_ITEM],
+  Ops: [SYNTHETIC_ITEM],
+};
 
 function itemActive(item: NavItem, pathname: string): boolean {
   if (item.isActive) return item.isActive(pathname);
@@ -341,9 +359,10 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
   useEffect(() => setNavOpen(false), [pathname]);
 
   const sections = isSuperAdmin
-    ? NAV_SECTIONS.map((s) =>
-        s.label === 'Ops' ? { ...s, items: [...s.items, SYNTHETIC_ITEM] } : s
-      )
+    ? NAV_SECTIONS.map((s) => {
+        const extras = s.label ? SUPER_ADMIN_EXTRAS[s.label] : undefined;
+        return extras ? { ...s, items: [...s.items, ...extras] } : s;
+      })
     : NAV_SECTIONS;
 
   return (
@@ -474,6 +493,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/feedback" element={<Feedback />} />
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
+            {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}
             <Route path="*" element={<Overview />} />
           </Routes>
         </main>

@@ -408,6 +408,46 @@ export type SyntheticProjection = {
   effective: VolumePair; // whichever the ignoreHours flag selects
 };
 
+// One-shot site provisioning (Master Control → Provision site, super_admin
+// only). The server creates the org + branding + first venue + courses (+
+// optionally the org admin) atomically — any slug/email conflict fails the
+// whole thing with an ApiError like "org slug already in use".
+export type ProvisionPayload = {
+  org: { name: string; slug: string; sortOrder?: number };
+  branding?: {
+    appName?: string;
+    shortName?: string;
+    themeColor?: string;
+    accentColor?: string;
+    backgroundColor?: string;
+    shareFooter?: string;
+  };
+  location: {
+    name: string;
+    slug: string;
+    lat?: number;
+    lng?: number;
+    geofenceKm?: number;
+    hours?: Record<string, { open: string; close: string } | 'closed'>;
+    pos?: unknown;
+    sortOrder?: number;
+  };
+  courses: Array<{ name: string; theme: string; pars: number[]; sortOrder?: number }>;
+  adminUser?: { email: string; password: string };
+};
+
+export type ProvisionResult = {
+  ok: true;
+  site: {
+    org: Org;
+    location: Location;
+    courses: Course[];
+    adminUser: { id: string; email: string; role: string; orgId: string } | null;
+    /** null in dev; the SPA falls back to slug + stripped hostname. */
+    playerUrl: string | null;
+  };
+};
+
 export type CurrentUser = {
   id: string | null;
   email: string | null;
@@ -453,6 +493,7 @@ export const api = {
   listOrgs: (archived = false) => req<Org[]>('GET', `/orgs${archived ? '?archived=1' : ''}`),
   getOrg: (id: string) => req<{ org: Org; locations: Location[] }>('GET', `/orgs/${id}`),
   saveOrg: (org: Partial<Org>) => req<{ ok: true; org: Org }>('POST', '/orgs', org),
+  provisionSite: (p: ProvisionPayload) => req<ProvisionResult>('POST', '/provision', p),
   archiveOrg: (id: string, archived: boolean) =>
     req<{ ok: true; org: Org }>('POST', `/orgs/${id}/${archived ? 'archive' : 'unarchive'}`),
   // Full-replace semantics: send the complete branding object every time
