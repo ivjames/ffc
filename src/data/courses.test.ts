@@ -328,3 +328,28 @@ describe('boot: no-cache origins never see the baked snapshot', () => {
     expect(branding.getBranding().shareFooter).toBe('Cached!');
   });
 });
+
+// Codex finding on #197: if the flagless (recovered) payload can't be written
+// (quota), the old `unavailable: true` cache entry must not survive to
+// resurrect the dead-end on the next boot — hydrateContent drops it outright.
+describe('dead-end recovery under storage quota', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('a failed recovery cache write still clears the stale dead-end marker', async () => {
+    localStorage.setItem(
+      'ffc.content',
+      JSON.stringify({ locations: [], courses: [], org: null, unavailable: true }),
+    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ org: null, locations: [], courses: [] }), { status: 200 }),
+    );
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('QuotaExceededError');
+    });
+    await hydrateContent();
+    expect(isTenantUnavailable()).toBe(false);
+    expect(localStorage.getItem('ffc.content')).toBeNull();
+  });
+});

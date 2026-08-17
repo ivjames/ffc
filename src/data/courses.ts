@@ -297,7 +297,20 @@ export async function hydrateContent(): Promise<void> {
         }),
       );
     } catch {
-      // Non-fatal: we just won't have an instant/offline copy next launch.
+      // Non-fatal for the catalog: we just won't have an instant/offline copy
+      // next launch. But a FLAGLESS payload is a recovery signal — if the
+      // replacement can't be written (quota), the stale `unavailable: true`
+      // entry would resurrect the dead-end on every boot, so drop it outright
+      // (removeItem still works at quota; losing the offline copy is the
+      // lesser harm).
+      if (!unavailableOf(data)) {
+        try {
+          localStorage.removeItem(CONTENT_CACHE_KEY);
+        } catch {
+          // Storage wholly unusable — module state from applyContent below
+          // still restores this session.
+        }
+      }
     }
     applyContent(data);
   } catch {
