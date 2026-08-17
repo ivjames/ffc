@@ -26,6 +26,7 @@ import {
   drawFloaters,
   decay,
   shakeOffset,
+  drawScreenVeil,
 } from './fx';
 
 // §12 Shooting Gallery — the carnival booth classic. Tin ducks glide across
@@ -494,6 +495,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
+  // (.arcade-screen); this is the half that has to composite onto the
+  // pixels, which CSS cannot do to a <canvas>.
+  drawScreenVeil(ctx, W, H);
 }
 
 export default function ShootingGallery() {
@@ -834,7 +841,7 @@ export default function ShootingGallery() {
         <canvas
           ref={canvasRef}
           onPointerDown={onTap}
-          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl arcade-screen"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">

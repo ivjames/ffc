@@ -1150,3 +1150,73 @@ button {
   border-color: transparent;
   transform: none;
 }
+
+/* ---------------------------------------------------------------------------
+   Arcade cabinet screen
+   ---------------------------------------------------------------------------
+   Every mini-game draws into a fixed-aspect <canvas> that, until now, sat on
+   the page as a plain rounded rectangle with a 1px border. The playfields
+   themselves are drawn well; what was missing was the CABINET around them —
+   the thing that makes a screen in an arcade read as a machine rather than a
+   picture of one.
+
+   Deliberately applied to the canvas ELEMENT, not a wrapper. Several games
+   stack HUD overlays on the canvas through a CSS grid (`col-start-1
+   row-start-1`), and inserting a wrapper would break that positioning in
+   fifteen files at once. Everything here is therefore an outside-the-box
+   effect — layered shadows and a filter — which needs no new DOM and cannot
+   disturb pointer mapping (useFitCanvas's rect math is untouched).
+
+   The layers, outermost first:
+     1. a soft colored bloom, as if the screen lit the surface behind it
+     2. the bezel: two tight rings, light above and dark below, so the frame
+        reads as a moulded plastic edge catching room light rather than a
+        stroke
+     3. a black seat shadow that lifts the whole unit off the page
+   The filter adds the slight saturation/contrast push a real CRT gives, which
+   is what stops flat canvas fills reading as flat.
+
+   `--screen-glow` lets a game tint its own bloom to its playfield (the axe
+   lane's amber, the air-hockey rink's cyan) by setting the variable inline;
+   the default is the app's accent. */
+.arcade-screen {
+  --screen-glow: color-mix(in srgb, var(--accent) 55%, transparent);
+  border: 0;
+  background-color: #05070a;
+  box-shadow:
+    0 0 38px -6px var(--screen-glow),
+    0 0 0 1px rgb(255 255 255 / 0.16),
+    0 0 0 6px #14161c,
+    0 1px 0 6px rgb(255 255 255 / 0.09),
+    0 -1px 0 6px rgb(0 0 0 / 0.5),
+    0 0 0 8px #0a0c10,
+    0 14px 30px -10px rgb(0 0 0 / 0.75);
+  filter: saturate(1.08) contrast(1.04);
+}
+
+/* NOTE on the CRT veil (scanlines + vignette): it is NOT done here. A <canvas>
+   is a replaced element, so ::before/::after are never rendered on it — a
+   pseudo-element veil would be dead CSS that silently does nothing. It lives
+   in the draw loop instead, as drawScreenVeil() in features/fun/fx.ts, which
+   also means it composites under the glow rather than over the bezel.
+
+/* Marquee: the lit strip above a cabinet's screen carrying the game's name.
+   Used by the arcade game HUDs. */
+.arcade-marquee {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 24%, #0a0c10), #0a0c10);
+  border-radius: 0.75rem;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 0 22px -8px var(--accent);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* Motion sensitivity: the glow and the CRT veil are static, so there is
+   nothing to disable — but the saturation push can be uncomfortable alongside
+   reduced-motion preferences on some displays, so soften it. */
+@media (prefers-reduced-motion: reduce) {
+  .arcade-screen {
+    filter: none;
+  }
+}

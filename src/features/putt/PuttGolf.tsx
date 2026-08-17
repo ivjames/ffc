@@ -792,7 +792,7 @@ export default function PuttGolf() {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            className="block touch-none rounded-2xl border border-fairway-800"
+            className="block touch-none rounded-2xl arcade-screen"
           />
         </div>
 

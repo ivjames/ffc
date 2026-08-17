@@ -21,6 +21,7 @@ import {
   pushTrail,
   decay,
   shakeOffset,
+  drawScreenVeil,
 } from './fx';
 
 // §12 Bowling — the sixth attraction mini-game. Swipe up the lane to roll (aim
@@ -696,6 +697,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.fillText(strike ? 'STRIKE!' : 'SPARE!', W / 2, 330);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
+  // (.arcade-screen); this is the half that has to composite onto the
+  // pixels, which CSS cannot do to a <canvas>.
+  drawScreenVeil(ctx, W, H);
 }
 
 /** The classic ten-frame score strip: ball marks up top, cumulative score
@@ -1025,7 +1032,7 @@ export default function Bowling() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="block touch-none rounded-2xl arcade-screen"
         />
       </div>
 

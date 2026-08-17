@@ -18,6 +18,7 @@ import {
   pushTrail,
   decay,
   shakeOffset,
+  drawScreenVeil,
 } from './fx';
 
 // §12 Skee-Ball — the first attraction mini-game. Swipe up the lane to roll a
@@ -394,6 +395,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
     ctx.fillRect(0, 0, W, H);
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
+  // (.arcade-screen); this is the half that has to composite onto the
+  // pixels, which CSS cannot do to a <canvas>.
+  drawScreenVeil(ctx, W, H);
 }
 
 export default function SkeeBall() {
@@ -673,7 +680,7 @@ export default function SkeeBall() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="block touch-none rounded-2xl arcade-screen"
         />
       </div>
 

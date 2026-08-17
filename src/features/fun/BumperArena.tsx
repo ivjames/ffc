@@ -6,7 +6,9 @@ import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playBump, playWaterBump, playScore, playTick, playFanfare } from '../../lib/sound';
 import type { Vec as FxVec, Floater } from './fx';
-import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, spawnFloater, stepFloaters, drawFloaters, decay, shakeOffset } from './fx';
+import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, spawnFloater, stepFloaters, drawFloaters, decay, shakeOffset,
+  drawScreenVeil,
+} from './fx';
 
 // §12 Bumper arena — the shared engine behind Bumper Cars and Bumper Boats.
 // Drag to lead your unit around (it chases your finger like a lure, the same
@@ -720,6 +722,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
     ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
+  // (.arcade-screen); this is the half that has to composite onto the
+  // pixels, which CSS cannot do to a <canvas>.
+  drawScreenVeil(ctx, W, H);
 }
 
 export default function BumperArena({ theme }: { theme: BumperTheme }) {
@@ -915,7 +923,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl arcade-screen"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
