@@ -1,9 +1,22 @@
 # Infinicade landing page — design spec
 
-Spec for the layout and design system of `landing/index.html` as of the
+Spec for the layout and design system of the landing page as of the
 aurora/saturation pass. This is the reference for extending the page, reusing
 the visual language elsewhere (pitch decks, socials, future app theming), or
 rebuilding a section without reverse-engineering the CSS.
+
+> **Variants.** The dark build this spec's token values describe is preserved
+> as `aurora-dark.html`. `index.html` is the light "corporate" re-skin: same
+> structure, sections, mocks, motion, and putt game, with these deltas —
+> ground `#f6f7fd`, ink `#10143c`, dim `#5a6296`, white cards with soft ink
+> shadows; accents recalibrated for white (`--lime #b6f000`, `--cyan #00c4ea`,
+> `--violet #6d35ff` — the new primary for CTAs/kickers — `--coral #ff2e73`);
+> h2s drop Unbounded/uppercase for Space Grotesk 700 sentence case (h1
+> wordmark and PRESS START keep Unbounded); wordmark gradient runs
+> violet→cyan→coral; aurora keeps the same drift with normal (not screen)
+> blending at pastel alphas; device mocks stay dark (scoped light-on-dark
+> text overrides); venue chips carry a per-venue `on` text color in JS.
+> Everything in §4–§6 (structure, game, motion) applies to both.
 
 Ground rules that shaped everything below:
 

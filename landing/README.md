@@ -1,5 +1,12 @@
 # Infinicade landing page
 
+Two builds share the same layout, copy, and interactions:
+
+- **`index.html`** — the live candidate: light-mode corporate look (white
+  cards, violet-led accents, sentence-case headings) with pastel aurora drift.
+- **`aurora-dark.html`** — the dark neon-arcade variant, preserved as built;
+  documented in detail in [`SPEC.md`](./SPEC.md).
+
 Static marketing landing page for the platform apex domain (`infinicade.com`),
 for when the domain is purchased. Fully self-contained — one HTML file, inline
 CSS/JS/SVG with the display fonts (Unbounded + Space Grotesk, both SIL OFL)
