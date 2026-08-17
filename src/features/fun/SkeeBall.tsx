@@ -3,7 +3,7 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
-import { drawLogo } from './logo';
+import { drawLogo, logoReady } from './logo';
 import { playStroke, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
 import {
@@ -19,6 +19,11 @@ import {
   decay,
   shakeOffset,
   drawScreenVeil,
+  drawScreenFlash,
+  drawGlow,
+  makeCachedLayer,
+  brushedStreaks,
+  attractPulse,
 } from './fx';
 
 // §12 Skee-Ball — the first attraction mini-game. Swipe up the lane to roll a
@@ -188,10 +193,18 @@ type FX = {
   shake: number; // screen-shake magnitude (px), decays to 0
   flash: number; // big-score flash 0..1, decays to 0
   flashColor: string;
+  ringGlow: number[]; // per-ring hit lighting 0..1, parallel to HOLES
 };
 
 function freshFX(): FX {
-  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#22c55e' };
+  return {
+    trail: [],
+    particles: [],
+    shake: 0,
+    flash: 0,
+    flashColor: '#22c55e',
+    ringGlow: HOLES.map(() => 0),
+  };
 }
 
 /** Advance the visual-only effects by `dt` ms (framerate-correct). */
@@ -201,12 +214,21 @@ function updateFX(fx: FX, gs: GS, dt: number) {
   fx.particles = stepParticles(fx.particles, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
   fx.flash = decay(fx.flash, dt, 0.0022);
+  // Slower than the flash: a scored cup stays lit for a beat after the frame
+  // flash has gone, the way a real lamp lags the event that fired it.
+  for (let i = 0; i < fx.ringGlow.length; i++) fx.ringGlow[i] = decay(fx.ringGlow[i], dt, 0.0015);
 }
 
 // —— drawing —————————————————————————————————————————————————————————————————
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
-  ctx.clearRect(0, 0, W, H);
+// The cabinet, the lane and the ring bodies are pixel-identical on every frame —
+// only how brightly a ring is LIT changes. Both are painted once into offscreen
+// layers and blitted (fx.makeLayer); that's what buys the budget for the
+// per-ring lighting below, which used to be seven shadowBlur strokes a frame.
+const LANE_X = 24;
+const LANE_W = W - 48;
 
+/** Cabinet, lane and decal — everything behind the rings. */
+function paintBackdrop(ctx: CanvasRenderingContext2D) {
   // —— Backboard: a deep, top-lit green cabinet ——
   const back = ctx.createLinearGradient(0, 0, 0, H);
   back.addColorStop(0, '#071a12');
@@ -222,29 +244,48 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.fillStyle = sheen;
   ctx.fillRect(0, 0, W, H);
 
-  // —— The rolling lane: a felt strip with a lit crown down the middle ——
-  const laneX = 24;
-  const laneW = W - 48;
-  const lane = ctx.createLinearGradient(laneX, 0, laneX + laneW, 0);
-  lane.addColorStop(0, '#0a2318');
-  lane.addColorStop(0.5, '#124a30');
-  lane.addColorStop(1, '#0a2318');
+  // —— The rolling lane: brushed steel, like the real alley bed ——
+  // Cool metal against the warm green cabinet is the contrast a real Skee-Ball
+  // machine has, and it gives the ring lamps something to actually reflect off:
+  // a flat felt strip absorbs the glow and kills the lighting work below.
   ctx.save();
-  roundRectPath(ctx, laneX, -20, laneW, H + 40, 22);
+  roundRectPath(ctx, LANE_X, -20, LANE_W, H + 40, 22);
+  ctx.clip();
+  // Kept distinctly lighter than the cabinet around it. A dark lane swallows the
+  // ring lamps' spill, and the spill landing on the bed is the whole point of
+  // the lighting below — the surface has to have something to reflect.
+  const lane = ctx.createLinearGradient(LANE_X, 0, LANE_X + LANE_W, 0);
+  lane.addColorStop(0, '#1e2a2b');
+  lane.addColorStop(0.18, '#3f4f50');
+  lane.addColorStop(0.5, '#68797a');
+  lane.addColorStop(0.82, '#3f4f50');
+  lane.addColorStop(1, '#1e2a2b');
   ctx.fillStyle = lane;
-  ctx.fill();
-  // Lengthwise sheen so the felt reads as a rolling surface.
-  const laneSheen = ctx.createLinearGradient(0, 0, 0, H);
-  laneSheen.addColorStop(0, 'rgba(120,240,170,0.10)');
-  laneSheen.addColorStop(0.55, 'rgba(120,240,170,0.03)');
-  laneSheen.addColorStop(1, 'rgba(0,0,0,0.18)');
-  ctx.fillStyle = laneSheen;
-  ctx.fill();
+  ctx.fillRect(LANE_X, -20, LANE_W, H + 40);
+  // The grain itself — lengthwise, because that's the direction the bed is
+  // ground in (and the direction the ball travels).
+  brushedStreaks(ctx, LANE_X, -20, LANE_W, H + 40, 170, 0.07);
+  // A tight specular band down the crown: metal has a hot line, not the broad
+  // even wash a matte surface gives.
+  const crown = ctx.createLinearGradient(LANE_X, 0, LANE_X + LANE_W, 0);
+  crown.addColorStop(0.32, 'rgba(255,255,255,0)');
+  crown.addColorStop(0.47, 'rgba(232,255,242,0.20)');
+  crown.addColorStop(0.62, 'rgba(255,255,255,0)');
+  ctx.fillStyle = crown;
+  ctx.fillRect(LANE_X, -20, LANE_W, H + 40);
+  // Green bounce from the cabinet at the top, falling to shadow at the near end
+  // — the bed is steel, but it's steel sitting inside a green machine.
+  const bounce = ctx.createLinearGradient(0, 0, 0, H);
+  bounce.addColorStop(0, 'rgba(74,222,128,0.16)');
+  bounce.addColorStop(0.55, 'rgba(74,222,128,0.05)');
+  bounce.addColorStop(1, 'rgba(0,0,0,0.20)');
+  ctx.fillStyle = bounce;
+  ctx.fillRect(LANE_X, -20, LANE_W, H + 40);
   ctx.restore();
 
   // Rounded rails flanking the lane.
   ctx.save();
-  roundRectPath(ctx, 22, -20, laneW + 4, H + 40, 24);
+  roundRectPath(ctx, 22, -20, LANE_W + 4, H + 40, 24);
   ctx.lineWidth = 5;
   const rail = ctx.createLinearGradient(0, 0, 0, H);
   rail.addColorStop(0, 'rgba(134,239,172,0.55)');
@@ -254,15 +295,15 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   ctx.stroke();
   ctx.restore();
 
-  // Lane decal, on the clear felt between the lowest scoring ring (~380) and
-  // the racked ball (~478). Low alpha and the lane's own green so it reads as
-  // printed INTO the felt — a full-strength white mark here would look like a
-  // sticker floating above the surface the ball rolls across.
+  // Lane decal, on the clear bed between the lowest scoring ring (~380) and the
+  // racked ball (~478). Dark and low-alpha so it reads as etched INTO the steel
+  // — a bright mark here would look like a sticker floating above the surface
+  // the ball rolls across.
   //
   // Wordmark, not the lockup: the gap is under 100px tall, and a lockup narrow
   // enough to fit puts the moose below the ~92px its hairlines need, so it
   // renders as a smudge and crowds the 10-ring on top of that.
-  drawLogo(ctx, W / 2, 432, { variant: 'wordmark', width: 140, tint: '#86efac', alpha: 0.4 });
+  drawLogo(ctx, W / 2, 432, { variant: 'wordmark', width: 140, tint: '#0c1c18', alpha: 0.55 });
 
   // —— Corner vignette for depth ——
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.72);
@@ -270,21 +311,21 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   vig.addColorStop(1, 'rgba(0,0,0,0.5)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, W, H);
+}
 
+/** The seven ring bodies, on transparent — blitted inside the shake transform
+ *  so the cups still move with an impact. */
+function paintRings(ctx: CanvasRenderingContext2D) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-
-  // —— Dynamic layer (shaken on a big score) ——
-  ctx.save();
-  if (fx.shake > 0.05) {
-    const s = shakeOffset(fx.shake);
-    ctx.translate(s.x, s.y);
-  }
-
-  // Target rings + their drop holes. Draw lower (bigger) rings first so the
-  // upper rings layer cleanly on top where they touch.
+  // Lower (bigger) rings first so the upper rings layer cleanly where they touch.
   const ordered = [...HOLES].sort((a, b) => b.cy - a.cy);
   for (const h of ordered) {
+    // The lamp's resting halo spilling onto the steel around the cup. Baked in
+    // rather than drawn per frame: an unlit cup's glow never changes, so it
+    // costs nothing here and gives every ring light that lands on its
+    // surroundings instead of stopping at its own rim.
+    drawGlow(ctx, h.cx, h.cy, h.R * 2.1, h.color, 0.16);
     // Funnel dish: a lit bowl sinking toward its drop hole.
     const dish = ctx.createRadialGradient(h.cx, h.cy - h.R * 0.3, h.R * 0.1, h.cx, h.cy, h.R);
     dish.addColorStop(0, withAlpha(h.color, 0.32));
@@ -294,7 +335,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.arc(h.cx, h.cy, h.R, 0, TWO_PI);
     ctx.fillStyle = dish;
     ctx.fill();
-    // Glowing neon rim.
+    // Glowing neon rim. shadowBlur is affordable here — this runs once, not
+    // per frame — and gives a softer falloff than a plain stroke.
     ctx.save();
     ctx.beginPath();
     ctx.arc(h.cx, h.cy, h.R, 0, TWO_PI);
@@ -324,6 +366,52 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.strokeStyle = withAlpha(h.color, 0.6);
     ctx.lineWidth = 1.5;
     ctx.stroke();
+  }
+}
+
+const backdropLayer = makeCachedLayer(W, H, paintBackdrop);
+const ringsLayer = makeCachedLayer(W, H, paintRings);
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Keyed on the decal so the backdrop is rebuilt once the mark decodes. A null
+  // layer means no DOM / no 2D context — paint straight to the frame instead of
+  // blanking out.
+  const backdrop = backdropLayer(logoReady('wordmark'));
+  const rings = ringsLayer();
+  if (backdrop) ctx.drawImage(backdrop, 0, 0, W, H);
+  else paintBackdrop(ctx);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // —— Dynamic layer (shaken on a big score) ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
+  }
+
+  if (rings) ctx.drawImage(rings, 0, 0, W, H);
+  else paintRings(ctx);
+
+  // Ring lighting, on top of the baked bodies. Two sources, both deliberately
+  // sparse — a glow is a gradient allocation, so only rings with something to
+  // say get one:
+  //   • the two 100 corners breathe while the machine waits for a throw, the
+  //     way a real cabinet advertises its prize target to the room;
+  //   • whichever cup was just scored stays hot for a beat.
+  const idle = gs.phase === 'aim' && !gs.drag.active;
+  for (let i = 0; i < HOLES.length; i++) {
+    const h = HOLES[i];
+    const hit = fx.ringGlow[i];
+    // Stagger the pair by half a cycle so the corners alternate rather than
+    // blinking together — two lamps in lockstep read as a strobe, not attract.
+    const attract = idle && h.pts === 100 ? attractPulse(now, 2600, i * Math.PI) * 0.3 : 0;
+    const lit = Math.max(attract, hit);
+    if (lit < 0.02) continue;
+    drawGlow(ctx, h.cx, h.cy, h.R * (2.2 + hit * 1.4), h.color, 0.2 + lit * 0.5);
   }
 
   // Aim trail while dragging — dots that FADE OUT before reaching the target, so
@@ -390,11 +478,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
 
   ctx.restore();
 
-  // —— Big-score flash overlay ——
-  if (fx.flash > 0) {
-    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
-    ctx.fillRect(0, 0, W, H);
-  }
+  // —— Big-score flash: the frame the machine lights up on a 100 ——
+  drawScreenFlash(ctx, W, H, fx.flash, fx.flashColor);
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
@@ -454,6 +539,12 @@ export default function SkeeBall() {
     // Rendering-only celebration keyed off the score that already happened.
     const fx = fxRef.current;
     const at = shot.hole ? holeDrop(shot.hole) : shot.land;
+    // Light the cup that took the ball — every scoring ring lights the same way,
+    // scaled by what it was worth.
+    if (shot.hole) {
+      const ri = HOLES.indexOf(shot.hole);
+      if (ri >= 0) fx.ringGlow[ri] = shot.score >= 100 ? 1 : 0.7;
+    }
     if (shot.score >= 100) {
       fx.shake = 8;
       fx.flash = 1;
@@ -539,7 +630,7 @@ export default function SkeeBall() {
       }
 
       updateFX(fxRef.current, gs, dt);
-      draw(ctx, gs, fxRef.current);
+      draw(ctx, gs, fxRef.current, now);
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
