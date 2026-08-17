@@ -101,7 +101,7 @@ hero (two-column: copy + putting-green putt stage)
 marquee ×2 (opposite directions)
 #platform (bento grid)
 #white-label (copy + venue switcher phone)
-#contact / .cta-final (PRESS START)
+#contact / .cta-final (PRESS START + signup form)
 footer
 ```
 
@@ -155,9 +155,17 @@ Neon Jungle (violet).
 
 ### CTA finale
 
-Centered `PRESS START` (`clamp(38px, 7.4vw, 92px)`; "START" in lime blinking
-via `steps(2)` 1.4s), short pitch, lime mailto button
-(`hello@infinicade.com`), small-print `no credit card · no app store · just play`.
+Centered `PRESS START` (`clamp(38px, 7.4vw, 92px)`; "START" in coral blinking
+via `steps(2)` 1.4s), short pitch, then the launch-signup form: pill email
+input + coral `GET EARLY ACCESS` submit on one wrapping row, a single consent
+checkbox below ("keep me in the loop about the launch and new features"), and
+an `aria-live` status line (saving… / "you're on the list — see you at
+launch" / coral error pointing at the mailto fallback). POSTs same-origin to
+`/api/launch-signup` (the ONE api path the apex vhost proxies — exact-match
+location in `deploy/nginx.landing.conf.template`) with a hidden `company`
+honeypot field. `<noscript>` hides the form and shows the
+`hello@infinicade.com` mailto instead. Small-print
+`no credit card · no app store · just play` unchanged.
 
 ## 5. Hero arcade stage (the real games, on a phone)
 
@@ -224,4 +232,7 @@ mono-style labels (`insert coin`-energy without the cliché). B2B pitch aimed
 at venue owners; player benefits stated as venue benefits. Key phrases in
 use: "every game, one platform" (footer/h2), "coming soon to a venue near
 you" (eyebrow), "no credit card · no app store · just play" (small print).
-Contact is `hello@infinicade.com` until real mail exists on the domain.
+Contact is the launch-signup form (stored server-side in `launch_signup`,
+viewed in Master Control → Signups; no mail is sent at signup time);
+`hello@infinicade.com` survives only as the noscript/error fallback until
+real mail exists on the domain.

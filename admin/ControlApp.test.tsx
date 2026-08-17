@@ -19,6 +19,8 @@ vi.mock('./api', async () => {
       checkPasswordToken: vi.fn(),
       setPassword: vi.fn(),
       huntUsage: vi.fn(),
+      listLaunchSignups: vi.fn(),
+      exportLaunchSignupsCsv: vi.fn(),
     },
   };
 });
@@ -62,6 +64,8 @@ beforeEach(() => {
     rows: [],
     orgSummary: [],
   });
+  vi.mocked(api.listLaunchSignups).mockReset().mockResolvedValue([]);
+  vi.mocked(api.exportLaunchSignupsCsv).mockReset();
 });
 
 function renderApp(initialEntries?: string[]) {
@@ -313,6 +317,7 @@ describe('nav gating', () => {
     await screen.findByText('FFC · Master Control');
     expect(screen.getByRole('link', { name: 'Provision site' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Synthetic' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Signups' })).toBeInTheDocument();
   });
 
   test('org_admin does not see the super-admin-only nav items', async () => {
@@ -321,6 +326,19 @@ describe('nav gating', () => {
     await screen.findByText('FFC · Master Control');
     expect(screen.queryByRole('link', { name: 'Provision site' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Synthetic' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Signups' })).not.toBeInTheDocument();
+  });
+
+  test('super_admin sees Signups in Ops and /signups renders the page', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: SUPER_ADMIN_USER });
+    const user = userEvent.setup();
+    renderApp();
+    await screen.findByText('FFC · Master Control');
+
+    await user.click(screen.getByRole('link', { name: 'Signups' }));
+
+    expect(await screen.findByRole('heading', { name: 'Launch signups' })).toBeInTheDocument();
+    expect(api.listLaunchSignups).toHaveBeenCalledOnce();
   });
 });
 

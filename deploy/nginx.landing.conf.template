@@ -9,6 +9,7 @@
 #   __APP_DIR__           e.g. /var/www/ffc
 #   __WILDCARD_LINEAGE__  e.g. ffc-wildcard  (certbot lineage dir name)
 #   __DEFAULT_ORG_HOST__  e.g. bullwinkles.ffc.lab980.com
+#   __API_PORT__          e.g. 8068  (local API port, for /api/launch-signup)
 #
 # TLS: the wildcard lineage issued by `ffc wildcard-cert` covers the apex too,
 # so this file references it directly. Certbot NEVER rewrites this file (same
@@ -55,6 +56,19 @@ server {
     # above instead of replaying a dead cached shell.
     location = /sw.js {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
+    # Launch-signup capture — the ONE api path the marketing page calls,
+    # proxied to the same local API as the player vhost. Deliberately an
+    # exact match: the apex is a marketing surface, not the API surface, so
+    # every other /api/* path stays static and falls through to try_files.
+    location = /api/launch-signup {
+        proxy_pass http://127.0.0.1:__API_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location / {

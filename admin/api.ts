@@ -499,6 +499,17 @@ export type HuntUsage = {
   orgSummary: HuntUsageOrgSummary[];
 };
 
+// Landing-page launch signup (POST /api/launch-signup on the public site;
+// these two admin endpoints are the super_admin read side).
+export type LaunchSignup = {
+  id: string;
+  email: string;
+  consent: boolean;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CurrentUser = {
   id: string | null;
   email: string | null;
@@ -632,6 +643,22 @@ export const api = {
     if (opts.locationId) q.set('locationId', opts.locationId);
     const s = q.toString();
     const res = await fetch(`/api/admin/export/rounds.csv${s ? `?${s}` : ''}`, {
+      credentials: 'same-origin',
+      headers: { 'x-app-token': getToken() },
+    });
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
+
+  // Launch signups (super_admin): the landing page's early-access list.
+  listLaunchSignups: () => req<LaunchSignup[]>('GET', '/launch-signups'),
+  // Same auth-header constraint as exportRoundsCsv — fetch and hand back a Blob.
+  exportLaunchSignupsCsv: async () => {
+    const res = await fetch('/api/admin/launch-signups/export.csv', {
       credentials: 'same-origin',
       headers: { 'x-app-token': getToken() },
     });

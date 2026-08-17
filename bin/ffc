@@ -547,6 +547,7 @@ render_landing_vhost(){
       -e "s#__APP_DIR__#$APP_DIR#g" \
       -e "s/__WILDCARD_LINEAGE__/$WILDCARD_CERT_NAME/g" \
       -e "s/__DEFAULT_ORG_HOST__/$DEFAULT_ORG_HOST/g" \
+      -e "s/__API_PORT__/$API_PORT/g" \
       "$APP_DIR/deploy/nginx.landing.conf.template" > "$LANDING_CONF"
   ln -sf "$LANDING_CONF" "/etc/nginx/sites-enabled/$FQDN-landing"
 }

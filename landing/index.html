@@ -495,6 +495,25 @@ h2 em { font-style: normal; background: linear-gradient(95deg, var(--cyan), var(
 .cta-final .cta-row { justify-content: center; }
 .small-print { margin-top: 22px; font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
 
+/* ---------- signup form ---------- */
+.signup-form { justify-content: center; align-items: stretch; }
+.signup-email {
+  font-family: var(--body); font-size: 15px; color: var(--ink);
+  border: 1px solid rgba(16, 20, 60, 0.18); border-radius: 999px; padding: 15px 24px;
+  width: min(320px, 100%); background: rgba(255, 255, 255, 0.75);
+}
+.signup-email:focus { outline: none; border-color: var(--coral); }
+.signup-form .btn { border: 0; cursor: pointer; }
+.signup-consent {
+  display: flex; justify-content: center; align-items: center; gap: 9px;
+  margin: 16px auto 0; max-width: 420px;
+  font-size: 13.5px; color: var(--dim); cursor: pointer;
+}
+.signup-consent input { accent-color: var(--coral); }
+.signup-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.signup-status { margin-top: 14px; font-size: 13.5px; color: var(--dim); min-height: 1.2em; }
+.signup-status.err { color: var(--coral); }
+
 footer {
   border-top: 1px solid var(--line); padding: 30px 0 42px;
   display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
@@ -523,7 +542,7 @@ footer .logo { font-size: 12px; color: var(--ink); }
 <div class="dots" aria-hidden="true"></div>
 <div class="grain" aria-hidden="true"></div>
 <div class="glow-cursor" aria-hidden="true" id="glowCursor"></div>
-<noscript><style>.reveal { opacity: 1; transform: none; } .hint, .stage-tabs, .game-phone { display: none; }</style></noscript>
+<noscript><style>.reveal { opacity: 1; transform: none; } .hint, .stage-tabs, .game-phone { display: none; } .signup-form, .signup-consent, .signup-status { display: none; }</style></noscript>
 
 <nav class="nav" aria-label="Main">
   <a class="logo" href="#top">
@@ -708,9 +727,14 @@ footer .logo { font-size: 12px; color: var(--ink); }
         We're onboarding a small set of early venues. Run a mini golf course,
         family fun center, or arcade? Let's talk.
       </p>
-      <div class="cta-row reveal">
-        <a class="btn btn-solid" href="mailto:hello@infinicade.com?subject=Infinicade%20early%20access">HELLO@INFINICADE.COM</a>
-      </div>
+      <form class="cta-row signup-form reveal" id="signupForm" novalidate>
+        <input class="signup-email" id="signupEmail" type="email" name="email" maxlength="254" placeholder="you@yourvenue.com" autocomplete="email" required aria-label="Email">
+        <input class="signup-hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button class="btn btn-solid" type="submit">GET EARLY ACCESS</button>
+      </form>
+      <label class="signup-consent reveal"><input type="checkbox" id="signupConsent"><span>keep me in the loop about the launch and new features</span></label>
+      <p class="signup-status reveal" id="signupStatus" role="status" aria-live="polite"></p>
+      <noscript><p class="sub">or email <a href="mailto:hello@infinicade.com?subject=Infinicade%20early%20access">hello@infinicade.com</a></p></noscript>
       <p class="small-print reveal">no credit card · no app store · just play</p>
     </div>
   </section>
@@ -2111,6 +2135,45 @@ footer .logo { font-size: 12px; color: var(--ink); }
   }
   pick(0);
   if (!reduced) auto = setInterval(() => pick((vi + 1) % venues.length), 4000);
+
+  /* ---------- launch signup ---------- */
+  const signupForm = document.getElementById("signupForm");
+  const emailEl = document.getElementById("signupEmail");
+  const consentEl = document.getElementById("signupConsent");
+  const statusEl = document.getElementById("signupStatus");
+  const hpEl = signupForm.querySelector(".signup-hp");
+  const submitBtn = signupForm.querySelector("button[type=submit]");
+  const setStatus = (msg, isErr) => {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle("err", !!isErr);
+  };
+  signupForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!emailEl.value.trim() || !emailEl.checkValidity()) {
+      setStatus("enter a real email address", true);
+      return;
+    }
+    if (!consentEl.checked) {
+      setStatus("check the box so we're allowed to write to you", true);
+      return;
+    }
+    submitBtn.disabled = true;
+    setStatus("saving…", false);
+    try {
+      const r = await fetch("/api/launch-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailEl.value.trim(), consent: true, company: hpEl.value }),
+      });
+      if (!r.ok) throw new Error("bad status " + r.status);
+      emailEl.disabled = true;
+      consentEl.disabled = true;
+      setStatus("you're on the list — see you at launch", false);
+    } catch {
+      submitBtn.disabled = false;
+      setStatus("something glitched — try again, or email hello@infinicade.com", true);
+    }
+  });
 })();
 </script>
 </body>

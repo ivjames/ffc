@@ -1062,3 +1062,22 @@ create table if not exists reviewer_feedback (
 );
 create index if not exists reviewer_feedback_status_idx  on reviewer_feedback (status, created_at desc);
 create index if not exists reviewer_feedback_created_idx on reviewer_feedback (created_at desc);
+
+-- Launch signups (routes/launchSignup.js + routes/admin/launchSignups.js):
+-- email addresses captured by the public marketing landing page's "tell me
+-- when it launches" form. Written by an open, unauthenticated endpoint (the
+-- form has no account to attach to); read by Master Control's Signups page
+-- (super_admin only), which lists and CSV-exports them. `consent` records
+-- what the person agreed to — being contacted about the launch and new
+-- features — at (re)submit time; no mail is ever sent by the signup itself.
+-- Re-submitting the same email upserts: consent and updated_at re-stamp,
+-- created_at keeps the first signup.
+create table if not exists launch_signup (
+  id         uuid primary key default gen_random_uuid(),
+  email      text not null unique,          -- normalized (lib/validateUser.js normalizeEmail)
+  consent    boolean not null,              -- always true today; records what was agreed to
+  source     text not null default 'landing',
+  created_at timestamptz not null default now(),  -- first signup; never rewritten by the upsert
+  updated_at timestamptz not null default now()   -- last (re)submit; upsert re-stamps
+);
+create index if not exists launch_signup_created_idx on launch_signup (created_at desc);

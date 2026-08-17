@@ -19,6 +19,7 @@ import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
 import HuntUsage from './HuntUsage';
 import SyntheticBot from './SyntheticBot';
+import Signups from './Signups';
 import ProvisionSite from './ProvisionSite';
 import Account from './Account';
 
@@ -105,6 +106,13 @@ const ICON_PATHS = {
     <>
       <path d="M6 2.5h12V21l-2-1.4-2 1.4-2-1.4L10 21l-2-1.4L6 21V2.5z" />
       <path d="M9 7.5h6M9 11h6M9 14.5h3.5" />
+    </>
+  ),
+  signups: (
+    // Envelope — the launch mailing list.
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" />
     </>
   ),
   synthetic: (
@@ -210,11 +218,13 @@ const NAV_SECTIONS: NavSection[] = [
 const SYNTHETIC_ITEM: NavItem = { to: '/synthetic', label: 'Synthetic', icon: 'synthetic' };
 // One-shot site provisioning — creates orgs, so super_admin only.
 const PROVISION_ITEM: NavItem = { to: '/provision', label: 'Provision site', icon: 'provision' };
+// Landing-page launch signups — a platform-level list, so super_admin only.
+const SIGNUPS_ITEM: NavItem = { to: '/signups', label: 'Signups', icon: 'signups' };
 
 // Extra nav items appended per section for super_admins only.
 const SUPER_ADMIN_EXTRAS: Record<string, NavItem[]> = {
   Venues: [PROVISION_ITEM],
-  Ops: [SYNTHETIC_ITEM],
+  Ops: [SIGNUPS_ITEM, SYNTHETIC_ITEM],
 };
 
 function itemActive(item: NavItem, pathname: string): boolean {
@@ -563,6 +573,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/hunt-usage" element={<HuntUsage />} />
             <Route path="/account" element={<Account user={user} />} />
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
+            {isSuperAdmin && <Route path="/signups" element={<Signups />} />}
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
             {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}
             <Route path="*" element={<Overview />} />

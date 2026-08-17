@@ -21,12 +21,12 @@ const ADMIN_TZ = process.env.ADMIN_TZ || "America/Los_Angeles";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** RFC 4180 field escaping: quote when the value needs it. */
-function csvField(value) {
+export function csvField(value) {
   const s = value === null || value === undefined ? "" : String(value);
   return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
-function csvLine(values) {
+export function csvLine(values) {
   return values.map(csvField).join(",");
 }
 
