@@ -176,3 +176,74 @@ describe('zero-location tenant (un-onboarded org)', () => {
     expect(getCurrentPosition).not.toHaveBeenCalled(); // no wasted permission prompt
   });
 });
+
+// Finding: first-paint isolation. The baked GENERATED_* snapshot is the
+// DEFAULT org's catalog + org; booting it on a never-hydrated origin (fresh
+// client subdomain, first visit) flashed another tenant's venues and branding
+// until /api/content answered. A no-cache boot must start EMPTY — safe because
+// a first visit can't be offline (no service worker yet) and the zero-location
+// guards above cover the brief empty state — while a cached origin boots from
+// its cache exactly as before. Each test re-imports the module graph fresh so
+// the at-import boot path itself is what's exercised.
+describe('boot: no-cache origins never see the baked snapshot', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  async function freshBoot() {
+    vi.resetModules();
+    const courses = await import('./courses');
+    const branding = await import('../lib/branding');
+    return { courses, branding };
+  }
+
+  it('no ffc.content cache → empty catalog and no org, not the snapshot', async () => {
+    localStorage.clear();
+    // The snapshot has real content — proves empty-boot is a choice, not luck.
+    const gen = await import('./content.generated');
+    expect(gen.GENERATED_LOCATIONS.length).toBeGreaterThan(0);
+
+    const { courses, branding } = await freshBoot();
+    expect(courses.LOCATIONS).toEqual([]);
+    expect(courses.COURSES).toEqual([]);
+    expect(branding.getOrg()).toBeNull(); // snapshot org must not leak either
+    expect(branding.getBranding().shareFooter).toBe('Come beat this score');
+  });
+
+  it('the first successful hydrate populates and caches the empty boot', async () => {
+    localStorage.clear();
+    const { courses, branding } = await freshBoot();
+    expect(courses.LOCATIONS).toEqual([]);
+
+    const live = {
+      org: { id: 'org-live', slug: 'liveco', name: 'Live Co', branding: {} },
+      locations: [{ id: 'live-1', name: 'Live Park', slug: 'live-park', sortOrder: 0 }],
+      courses: [],
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(live), { status: 200 }),
+    );
+    await courses.hydrateContent();
+
+    expect(courses.LOCATIONS.map((l) => l.name)).toEqual(['Live Park']);
+    expect(branding.getOrg()?.slug).toBe('liveco');
+    expect(JSON.parse(localStorage.getItem('ffc.content')!)).toEqual(live);
+  });
+
+  it('a cached origin still boots straight from its cache (unchanged path)', async () => {
+    localStorage.setItem(
+      'ffc.content',
+      JSON.stringify({
+        org: { id: 'org-c', slug: 'cachedco', name: 'Cached Co', branding: { shareFooter: 'Cached!' } },
+        locations: [{ id: 'cached-1', name: 'Cached Park', slug: 'cached-park', sortOrder: 0 }],
+        courses: [],
+      }),
+    );
+    const { courses, branding } = await freshBoot();
+    expect(courses.LOCATIONS.map((l) => l.name)).toEqual(['Cached Park']);
+    expect(branding.getOrg()?.slug).toBe('cachedco');
+    expect(branding.getBranding().shareFooter).toBe('Cached!');
+  });
+});

@@ -419,6 +419,18 @@ update location
    set org_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
  where org_id is null;
 
+-- One-time branding backfill: Bullwinkle's identity (share footer + the
+-- /brand/*.png logo trio) used to live in the platform BRANDING_DEFAULTS
+-- (server/lib/branding.js), where every tenant inherited it. The defaults are
+-- now venue-neutral with NO default logo, so the default org keeps its look
+-- via its OWN branding row instead. CREATE-ONLY in spirit: guarded on the
+-- still-empty '{}' so it applies exactly once — Master Control owns branding
+-- after that, and a re-migrate (every `ffc deploy` runs `ffc migrate`) never
+-- clobbers an operator's later edits. (Corollary: clearing this org back to
+-- '{}' re-seeds the Bullwinkle's look on the next migrate; to truly blank it,
+-- store any non-empty branding instead.)
+update org set branding = '{"shareFooter":"Bullwinkle''s · come beat this score","logoUrl":"/brand/logo.png","logoBadgeUrl":"/brand/logo-badge.png","logoWordmarkUrl":"/brand/logo-wordmark.png"}'::jsonb where slug = 'bullwinkles' and branding = '{}'::jsonb;
+
 -- hunt_scan invoice attribution (see the hunt_scan section above): the org
 -- that owned the venue at BILL time, stamped on insert by routes/hunt.js and
 -- routes/admin/huntItems.js. The hunt-usage rollup groups invoices by this

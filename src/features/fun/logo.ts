@@ -35,12 +35,16 @@ import { getBranding } from '../../lib/branding';
 
 export type LogoVariant = 'full' | 'badge' | 'wordmark';
 
-// Asset URLs come from the tenant branding (BRANDING_DEFAULTS carries the
-// original /brand/*.png paths). Resolved per draw, not at import: branding
+// Asset URLs come from the tenant's OWN branding only — there is no platform
+// default logo (BRANDING_DEFAULTS omits the trio), so an org that uploaded
+// nothing resolves to null here and every draw call quietly no-ops, exactly
+// like a still-decoding asset. Resolved per draw, not at import: branding
 // hydrates from /api/content after the first frames.
-function srcFor(variant: LogoVariant): string {
+function srcFor(variant: LogoVariant): string | null {
   const b = getBranding();
-  return variant === 'badge' ? b.logoBadgeUrl : variant === 'wordmark' ? b.logoWordmarkUrl : b.logoUrl;
+  const url =
+    variant === 'badge' ? b.logoBadgeUrl : variant === 'wordmark' ? b.logoWordmarkUrl : b.logoUrl;
+  return url || null;
 }
 
 // Caches are keyed by URL (not variant) so a hydrate that swaps a logo URL
@@ -52,6 +56,7 @@ const failed = new Set<string>();
 /** Kick off the decode once, on first draw. Safe to call every frame. */
 function ensureLoading(variant: LogoVariant): HTMLImageElement | null {
   const url = srcFor(variant);
+  if (!url) return null; // no logo in this tenant's branding — draw nothing
   if (failed.has(url)) return null;
   const hit = imgs.get(variant);
   if (hit && loadedSrc.get(variant) === url) return hit;

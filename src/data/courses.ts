@@ -1,31 +1,30 @@
 import { useSyncExternalStore } from 'react';
 import type { CourseSeed, LocationSeed } from '../types';
-import {
-  GENERATED_LOCATIONS,
-  GENERATED_COURSES,
-  GENERATED_ORG,
-  type GeneratedCourse,
-  type GeneratedLocation,
-  type GeneratedOrg,
+import type {
+  GeneratedCourse,
+  GeneratedLocation,
+  GeneratedOrg,
 } from './content.generated';
 import { getBranding, setOrg } from '../lib/branding';
 
 // §4 White-label content. The DB (managed in Master Control) is the source of
 // truth for the DATA of locations and courses — names, slugs, coords, tz,
-// geofence, pars, themes, sort order, AND per-venue POS config. That data lives
-// in `content.generated.ts`, regenerated at build time from the API. This
-// module merges the FRONTEND-ONLY styling that isn't in the DB — per-location/
+// geofence, pars, themes, sort order, AND per-venue POS config. It reaches the
+// app via GET /api/content (cached per origin in localStorage). This module
+// merges the FRONTEND-ONLY styling that isn't in the DB — per-location/
 // per-course accent colors and the themed Rules copy — on top of it, and
 // re-exports the same `LOCATIONS` / `COURSES` / helper API the rest of the app
 // already consumes.
 //
-// LIVE HYDRATION: the generated file is only the build-time snapshot + offline
-// fallback. On load we re-fetch GET /api/content and swap in the live catalog,
-// so an operator's Master Control change (e.g. enabling a POS capability) reaches
-// players on the next app open — no redeploy. The last good fetch is cached for
-// instant/offline starts. Read POS/venue state through the accessors below (not
-// a captured snapshot) and subscribe with `useContentRevision()` to re-render on
-// update.
+// LIVE HYDRATION: on load we re-fetch GET /api/content and swap in the live
+// catalog, so an operator's Master Control change (e.g. enabling a POS
+// capability) reaches players on the next app open — no redeploy. The last
+// good fetch is cached per origin for instant/offline starts; with no cache
+// yet we boot EMPTY rather than from the baked snapshot (see the boot section
+// below — the snapshot is the default org's data and must not flash on other
+// tenants' subdomains). Read POS/venue state through the accessors below (not
+// a captured snapshot) and subscribe with `useContentRevision()` to re-render
+// on update.
 //
 // The payload also carries the tenant `org` (+ branding, MULTI-VENUE.md §3);
 // this store forwards it to src/lib/branding.ts (`setOrg`) at boot and on
@@ -212,17 +211,28 @@ function readCache(): RawContent | null {
   }
 }
 
-// Start from the freshest available: a cached live fetch, else the baked
-// snapshot. `let` (not `const`) so hydration can swap in live data and importers
-// of LOCATIONS/COURSES that read at call-time see it (ES live bindings).
+// Start from this ORIGIN's cached live fetch — and from nothing at all when
+// there is no cache yet. The baked GENERATED_* snapshot is deliberately NOT a
+// boot fallback anymore: it is the DEFAULT org's catalog + org, and booting it
+// on a never-hydrated origin (a fresh client subdomain, first visit) briefly
+// showed another tenant's venues and branding until /api/content answered.
+// Booting empty is safe (the zero-location guards from the empty-catalog work
+// cover every fallback) and honest: the first successful hydrate populates and
+// caches, typically well under a second — and a FIRST visit can't be offline
+// anyway, since the service worker that would serve the app shell offline
+// isn't installed yet. Every later visit has the cache. The generated module
+// stays for its compile-time types (and as the exporter's target shape).
+//
+// `let` (not `const`) so hydration can swap in live data and importers of
+// LOCATIONS/COURSES that read at call-time see it (ES live bindings).
 const cached = readCache();
 // Branding first (document title/theme-color + the accent fallback the builds
-// below read). The cache and the snapshot travel as a unit: a cached catalog
-// means a cached org decision too — even a missing one (pre-org cache → null →
-// defaults) — never the snapshot's org over the cache's catalog.
-setOrg(cached ? orgOf(cached) : GENERATED_ORG);
-export let LOCATIONS: LocationSeed[] = buildLocations(cached?.locations ?? GENERATED_LOCATIONS);
-export let COURSES: CourseSeed[] = buildCourses(cached?.courses ?? GENERATED_COURSES);
+// below read). The org decision travels with the cache: a cached catalog means
+// a cached org too — even a missing one (pre-org cache → null → defaults) —
+// and no cache means no org (pure defaults) until the hydrate lands.
+setOrg(cached ? orgOf(cached) : null);
+export let LOCATIONS: LocationSeed[] = cached ? buildLocations(cached.locations) : [];
+export let COURSES: CourseSeed[] = cached ? buildCourses(cached.courses) : [];
 
 let revision = 0;
 const listeners = new Set<() => void>();
