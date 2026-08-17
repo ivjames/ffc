@@ -10,6 +10,7 @@
 import { Router } from "express";
 import { requireAdminAuth } from "../../lib/adminAuth.js";
 import { publicRouter as authPublicRouter, sessionRouter as authSessionRouter } from "./auth.js";
+import { publicRouter as passwordPublicRouter } from "./passwordReset.js";
 import { router as usersRouter } from "./users.js";
 import { router as orgsRouter } from "./orgs.js";
 import { router as locationsRouter } from "./locations.js";
@@ -35,6 +36,7 @@ import {
 export const router = Router();
 
 router.use(authPublicRouter); // POST /login — no auth required
+router.use(passwordPublicRouter); // POST /password/{forgot,token-check,set} — pre-auth by design (emailed set-password links)
 router.use(visionBakeoffPublicRouter); // GET /vision-bakeoff/ui — static page, no secrets; its API calls auth themselves
 
 router.use(requireAdminAuth); // everything below needs APP_TOKEN or a session

@@ -433,7 +433,7 @@ export type ProvisionPayload = {
     sortOrder?: number;
   };
   courses: Array<{ name: string; theme: string; pars: number[]; sortOrder?: number }>;
-  adminUser?: { email: string; password: string };
+  adminUser?: { email: string };
 };
 
 export type ProvisionResult = {
@@ -442,7 +442,7 @@ export type ProvisionResult = {
     org: Org;
     location: Location;
     courses: Course[];
-    adminUser: { id: string; email: string; role: string; orgId: string } | null;
+    adminUser: { id: string; email: string; role: string; orgId: string; inviteSent: boolean } | null;
     /** null in dev; the SPA falls back to slug + stripped hostname. */
     playerUrl: string | null;
   };
@@ -489,6 +489,21 @@ export const api = {
   // quiet401: called on every page load to check for an existing session —
   // "not logged in" is the expected common case, not an auth failure to react to.
   me: () => req<{ ok: true; user: CurrentUser }>('GET', '/me', undefined, { quiet401: true }),
+
+  // Self-serve password flow. All three are quiet401: they run on pre-auth
+  // screens (the sign-in gate's forgot mode and the emailed /set-password
+  // link), which must never trip the global unauthorized force-lock.
+  forgotPassword: (email: string) =>
+    req<{ ok: true }>('POST', '/password/forgot', { email }, { quiet401: true }),
+  checkPasswordToken: (token: string) =>
+    req<{ ok: true; email: string }>('POST', '/password/token-check', { token }, { quiet401: true }),
+  setPassword: (token: string, password: string) =>
+    req<{ ok: true; user: Omit<CurrentUser, 'viaToken'> }>(
+      'POST',
+      '/password/set',
+      { token, password },
+      { quiet401: true }
+    ),
 
   listOrgs: (archived = false) => req<Org[]>('GET', `/orgs${archived ? '?archived=1' : ''}`),
   getOrg: (id: string) => req<{ org: Org; locations: Location[] }>('GET', `/orgs/${id}`),

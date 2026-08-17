@@ -128,7 +128,6 @@ function ProvisionForm({ onDone }: { onDone: (site: ProvisionResult['site']) => 
 
   // Org admin (optional).
   const [adminEmail, setAdminEmail] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
 
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -172,10 +171,6 @@ function ProvisionForm({ onDone }: { onDone: (site: ProvisionResult['site']) => 
     if (courses.length === 0) return 'Add at least one course.';
     if (courses.some((c) => !c.name.trim())) return 'Every course needs a name.';
     if (courses.some((c) => c.pars.length !== 18)) return 'Every course needs 18 pars.';
-    const hasEmail = adminEmail.trim() !== '';
-    const hasPassword = adminPassword !== '';
-    if (hasEmail !== hasPassword) return 'Org admin needs both an email and a password (or neither).';
-    if (hasPassword && adminPassword.length < 8) return 'The initial password must be at least 8 characters.';
     return null;
   }
 
@@ -210,9 +205,7 @@ function ProvisionForm({ onDone }: { onDone: (site: ProvisionResult['site']) => 
           ...(pos !== undefined ? { pos } : {}),
         },
         courses: courses.map((c) => ({ name: c.name.trim(), theme: c.theme, pars: c.pars })),
-        ...(adminEmail.trim() !== ''
-          ? { adminUser: { email: adminEmail.trim(), password: adminPassword } }
-          : {}),
+        ...(adminEmail.trim() !== '' ? { adminUser: { email: adminEmail.trim() } } : {}),
       };
       const res = await api.provisionSite(payload);
       toast('Site provisioned.');
@@ -493,18 +486,10 @@ function ProvisionForm({ onDone }: { onDone: (site: ProvisionResult['site']) => 
               placeholder="owner@example.com"
             />
           </Field>
-          <Field label="Initial password">
-            <Input
-              type="password"
-              value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
-              placeholder="At least 8 characters"
-            />
-          </Field>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Optional. Share the initial password out-of-band — password changes are super-admin-only
-          for now.
+          Optional. They'll receive an email with a link to set their own password (link valid 7
+          days).
         </p>
       </Card>
 
@@ -535,7 +520,16 @@ function SuccessPanel({ site, onReset }: { site: ProvisionResult['site']; onRese
       </p>
       {site.adminUser && (
         <p className="mt-1 text-sm text-slate-600">
-          Org admin <strong>{site.adminUser.email}</strong> created.
+          {site.adminUser.inviteSent ? (
+            <>
+              Org admin <strong>{site.adminUser.email}</strong> created — invite email sent.
+            </>
+          ) : (
+            <>
+              Org admin <strong>{site.adminUser.email}</strong> created, but the invite email could
+              not be sent. They can use 'Forgot password?' on the admin sign-in page.
+            </>
+          )}
         </p>
       )}
       <h3 className="mt-4 text-sm font-semibold text-slate-700">What's next</h3>

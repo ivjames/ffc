@@ -15,6 +15,9 @@ vi.mock('./api', async () => {
       logout: vi.fn(),
       overview: vi.fn(),
       overviewSeries: vi.fn(),
+      forgotPassword: vi.fn(),
+      checkPasswordToken: vi.fn(),
+      setPassword: vi.fn(),
     },
   };
 });
@@ -40,6 +43,9 @@ beforeEach(() => {
   vi.mocked(api.me).mockReset();
   vi.mocked(api.login).mockReset();
   vi.mocked(api.logout).mockReset().mockResolvedValue({ ok: true });
+  vi.mocked(api.forgotPassword).mockReset();
+  vi.mocked(api.checkPasswordToken).mockReset();
+  vi.mocked(api.setPassword).mockReset();
   vi.mocked(api.overview)
     .mockReset()
     .mockResolvedValue({
@@ -51,9 +57,9 @@ beforeEach(() => {
     .mockResolvedValue({ days: 30, tz: 'America/Los_Angeles', series: [] });
 });
 
-function renderApp() {
+function renderApp(initialEntries?: string[]) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <ControlApp />
     </MemoryRouter>
   );
@@ -160,6 +166,86 @@ describe('token flow', () => {
 
     expect(await screen.findByText('Enter the admin token to continue.')).toBeInTheDocument();
     expect(getToken()).toBe('');
+  });
+});
+
+describe('set-password link', () => {
+  test('/set-password renders the pre-auth SetPassword screen, not the gate', async () => {
+    vi.mocked(api.me).mockRejectedValue(new Error('unauthorized'));
+    vi.mocked(api.checkPasswordToken).mockResolvedValue({ ok: true, email: 'owner@example.com' });
+    renderApp([`/set-password?token=${'a'.repeat(64)}`]);
+
+    expect(await screen.findByText(/Set a password for/)).toBeInTheDocument();
+    expect(screen.queryByText('Enter the admin token to continue.')).not.toBeInTheDocument();
+  });
+
+  test('completing the form auto-logs in and unlocks the Shell', async () => {
+    vi.mocked(api.me).mockRejectedValue(new Error('unauthorized'));
+    vi.mocked(api.checkPasswordToken).mockResolvedValue({ ok: true, email: 'org@example.com' });
+    vi.mocked(api.setPassword).mockResolvedValue({
+      ok: true,
+      user: { id: 'u-2', email: 'org@example.com', role: 'org_admin', orgId: 'org-1' },
+    });
+    const user = userEvent.setup();
+    renderApp([`/set-password?token=${'a'.repeat(64)}`]);
+
+    await screen.findByText(/Set a password for/);
+    await user.type(screen.getByPlaceholderText('New password'), 'long-enough-1');
+    await user.type(screen.getByPlaceholderText('Confirm password'), 'long-enough-1');
+    await user.click(screen.getByRole('button', { name: 'Set password' }));
+
+    expect(await screen.findByText('FFC · Master Control')).toBeInTheDocument();
+    expect(screen.getByText(/org@example.com/)).toBeInTheDocument();
+  });
+});
+
+describe('forgot password flow', () => {
+  test('locked → login mode → forgot mode: submitting shows the confirmation', async () => {
+    vi.mocked(api.me).mockRejectedValue(new Error('unauthorized'));
+    vi.mocked(api.forgotPassword).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText('Enter the admin token to continue.');
+    await user.click(screen.getByText('Log in with email and password instead'));
+    await user.click(screen.getByText('Forgot password?'));
+    await user.type(screen.getByPlaceholderText('you@example.com'), 'org@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send reset link' }));
+
+    expect(
+      await screen.findByText("If that address has an account, we've emailed a link. Check your inbox.")
+    ).toBeInTheDocument();
+    expect(api.forgotPassword).toHaveBeenCalledWith('org@example.com');
+  });
+
+  test('a thrown rate limit shows in the banner and keeps the form', async () => {
+    vi.mocked(api.me).mockRejectedValue(new Error('unauthorized'));
+    const { ApiError } = await vi.importActual<typeof import('./api')>('./api');
+    vi.mocked(api.forgotPassword).mockRejectedValue(new ApiError('too many requests'));
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText('Enter the admin token to continue.');
+    await user.click(screen.getByText('Log in with email and password instead'));
+    await user.click(screen.getByText('Forgot password?'));
+    await user.type(screen.getByPlaceholderText('you@example.com'), 'org@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send reset link' }));
+
+    expect(await screen.findByText('too many requests')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send reset link' })).toBeInTheDocument();
+  });
+
+  test('"Back to log in" returns to the login mode', async () => {
+    vi.mocked(api.me).mockRejectedValue(new Error('unauthorized'));
+    const user = userEvent.setup();
+    renderApp();
+
+    await screen.findByText('Enter the admin token to continue.');
+    await user.click(screen.getByText('Log in with email and password instead'));
+    await user.click(screen.getByText('Forgot password?'));
+    await user.click(screen.getByText('Back to log in'));
+
+    expect(screen.getByText('Log in to your Master Control account.')).toBeInTheDocument();
   });
 });
 

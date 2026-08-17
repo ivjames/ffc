@@ -12,14 +12,21 @@
 // transaction while the subsequent COMMIT silently no-ops — losing the site
 // while reporting success. Post-commit, a lost audit row costs only the log
 // line audit() already prints.
+//
+// The org_admin is invited by email, never given an operator-typed password:
+// the account lands with a NULL password_hash and the post-commit side effects
+// mail a set-password link (lib/adminPasswordTokens.js). A failed send must
+// not lose the committed site either — the response says `inviteSent: false`
+// and the recovery is "Forgot password" on the sign-in page, which re-mails
+// the invite.
 import { Router } from "express";
 import { pool } from "../../db.js";
 import { audit, isSuperAdmin, actorLabel } from "../../lib/adminAuth.js";
 import { normalizeOrg, ORG_COLS } from "../../lib/validateOrg.js";
 import { normalizeLocation, withLabel, LOCATION_RETURN_COLS } from "../../lib/validateLocation.js";
 import { normalizeCourse, COURSE_RETURN_COLS } from "../../lib/validateCourse.js";
-import { hashPassword } from "../../lib/adminPasswords.js";
 import { EMAIL_RE } from "../../lib/validateUser.js";
+import { sendSetPasswordEmail } from "../../lib/adminPasswordTokens.js";
 import { clearTenantCache } from "../../lib/tenant.js";
 
 export const router = Router();
@@ -93,20 +100,23 @@ router.post("/", async (req, res) => {
     courseRows.push(c.row);
   }
 
-  const adminUser = body.adminUser ?? null;
-  if (adminUser !== null) {
+  // Email-only: the admin sets their own password via the emailed link — an
+  // operator-typed password would be a secret the operator knows and has to
+  // hand over out of band.
+  let adminUser = null;
+  if (body.adminUser != null) {
+    const candidate = body.adminUser;
     if (
-      typeof adminUser !== "object" ||
-      Array.isArray(adminUser) ||
-      typeof adminUser.email !== "string" ||
-      !EMAIL_RE.test(adminUser.email) ||
-      typeof adminUser.password !== "string" ||
-      adminUser.password.length < 8
+      typeof candidate !== "object" ||
+      Array.isArray(candidate) ||
+      typeof candidate.email !== "string" ||
+      !EMAIL_RE.test(candidate.email.trim())
     ) {
-      return res
-        .status(400)
-        .json({ ok: false, error: "adminUser: email and password (min 8 chars) required" });
+      return res.status(400).json({ ok: false, error: "adminUser: email must be a valid address" });
     }
+    // Lowercase once, up front — the pre-flight check, insert, audit row, and
+    // invite mail must all agree on the stored spelling.
+    adminUser = { email: candidate.email.trim().toLowerCase() };
   }
 
   try {
@@ -132,10 +142,6 @@ router.post("/", async (req, res) => {
     console.error("[admin/provision] error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
-
-  // Hash BEFORE the transaction — scrypt is deliberately slow (sync), and the
-  // transaction should hold its locks for as short a time as possible.
-  const passwordHash = adminUser ? hashPassword(adminUser.password) : null;
 
   const client = await pool.connect();
   let site;
@@ -172,11 +178,13 @@ router.post("/", async (req, res) => {
 
     let newAdminUser = null;
     if (adminUser) {
+      // password_hash stays NULL until the invitee follows their emailed
+      // set-password link — a pending account that can't log in yet.
       const userDb = await client.query(
-        `insert into admin_user (email, role, org_id, password_hash)
-           values ($1, 'org_admin', $2, $3)
+        `insert into admin_user (email, role, org_id)
+           values ($1, 'org_admin', $2)
          returning id, email, role, org_id as "orgId"`,
-        [adminUser.email, newOrg.id, passwordHash]
+        [adminUser.email, newOrg.id]
       );
       newAdminUser = userDb.rows[0];
     }
@@ -201,8 +209,19 @@ router.post("/", async (req, res) => {
     client.release();
   }
 
-  // Post-COMMIT side effects (see the header comment for why audit lives here).
+  // Post-COMMIT side effects (see the header comment for why audit lives
+  // here — and why a failed invite send is reported, never fatal: the site is
+  // already committed, and "Forgot password" re-mails the link).
   clearTenantCache();
+  let inviteSent = false;
+  if (site.adminUser) {
+    ({ sent: inviteSent } = await sendSetPasswordEmail({
+      req,
+      email: site.adminUser.email,
+      adminUserId: site.adminUser.id,
+      kind: "invite",
+    }));
+  }
   await audit({
     action: "site.provision",
     entity: "org",
@@ -212,7 +231,8 @@ router.post("/", async (req, res) => {
       locationSlug: site.location.slug,
       courseCount: site.courses.length,
       pos: posSummary(site.location.pos),
-      adminUserEmail: adminUser?.email ?? null, // never the password or hash
+      adminUserEmail: adminUser?.email ?? null, // never a password — none exists yet
+      ...(adminUser ? { inviteSent } : {}),
     },
     actor: actorLabel(req),
   });
@@ -223,7 +243,7 @@ router.post("/", async (req, res) => {
       org: site.org,
       location: withLabel(site.location),
       courses: site.courses,
-      adminUser: site.adminUser,
+      adminUser: site.adminUser ? { ...site.adminUser, inviteSent } : null,
       playerUrl: playerUrlFor(req, site.org.slug),
     },
   });

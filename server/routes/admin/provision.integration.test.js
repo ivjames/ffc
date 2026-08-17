@@ -1,5 +1,5 @@
 // Integration coverage for /api/admin/provision — one-shot site provisioning.
-import { test, before, after } from "node:test";
+import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   TEST_DATABASE_URL,
@@ -10,9 +10,26 @@ import {
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.APP_TOKEN = "provision-test-token";
+delete process.env.MAIL_PROVIDER; // console mailer — invite links land in stdout
 
 const { app } = await import("../../app.js");
 const { hashPassword } = await import("../../lib/adminPasswords.js");
+
+// Capture the console mailer's output to extract set-password invite links.
+let mailLog = [];
+const realLog = console.log;
+function captureMail() {
+  mailLog = [];
+  console.log = (...args) => {
+    const line = args.join(" ");
+    if (line.startsWith("[mailer]")) mailLog.push(line);
+    else realLog(...args);
+  };
+}
+function lastInviteToken() {
+  const last = mailLog[mailLog.length - 1] ?? "";
+  return last.match(/set-password\?token=([0-9a-f]{64})/)?.[1];
+}
 
 let baseUrl;
 let close;
@@ -54,7 +71,7 @@ function basePayload() {
       { name: "Front Nine-teen", theme: "pirates", pars: PARS, sortOrder: 0 },
       { name: "Back Nine-teen", theme: "space", pars: PARS, sortOrder: 1 },
     ],
-    adminUser: { email: `prov-admin-${stamp}@example.com`, password: "hunter2hunter2" },
+    adminUser: { email: `prov-admin-${stamp}@example.com` },
   };
 }
 
@@ -70,7 +87,12 @@ before(async () => {
   ({ baseUrl, close } = await listenEphemeral(app));
 });
 
+beforeEach(() => {
+  captureMail();
+});
+
 after(async () => {
+  console.log = realLog;
   if (close) await close();
   // FK order: audit rows, courses (by location), locations, admin users, orgs.
   await testQuery(`delete from admin_audit where entity = 'org' and entity_id = any($1::uuid[])`, [
@@ -122,14 +144,17 @@ test("POST /api/admin/provision creates the whole site atomically", async () => 
   );
   assert.equal(courseRows.rowCount, 2);
 
-  // org_admin account, scoped to the new org — and no secret material leaks.
+  // org_admin account, scoped to the new org — pending (NULL hash) until the
+  // invitee sets their own password, and no secret material leaks.
   const userRow = await testQuery(
-    `select role, org_id as "orgId" from admin_user where email = $1`,
+    `select role, org_id as "orgId", password_hash is null as "pending" from admin_user where email = $1`,
     [payload.adminUser.email]
   );
   assert.equal(userRow.rows[0].role, "org_admin");
   assert.equal(userRow.rows[0].orgId, org.id);
+  assert.equal(userRow.rows[0].pending, true, "no operator-typed password — hash stays NULL");
   assert.equal(adminUser.email, payload.adminUser.email);
+  assert.equal(adminUser.inviteSent, true);
   assert.ok(!("password" in adminUser));
   assert.ok(!("passwordHash" in adminUser));
   assert.ok(!("password_hash" in adminUser));
@@ -143,6 +168,53 @@ test("POST /api/admin/provision creates the whole site atomically", async () => 
 
   // Test traffic hits 127.0.0.1, not admin.<fqdn> — no player URL derivable.
   assert.equal(playerUrl, null);
+});
+
+test("invited org_admin sets their password via the emailed link and can log in, org-scoped", async () => {
+  const payload = track(basePayload());
+  const res = await api("/api/admin/provision", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  orgIds.push(body.site.org.id);
+  locationIds.push(body.site.location.id);
+  assert.equal(body.site.adminUser.inviteSent, true);
+
+  const token = lastInviteToken();
+  assert.ok(token, "the invite mail should carry a set-password link");
+
+  const setRes = await fetch(`${baseUrl}/api/admin/password/set`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password: "chosen-by-invitee-1" }),
+  });
+  assert.equal(setRes.status, 200);
+
+  const login = await fetch(`${baseUrl}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: payload.adminUser.email, password: "chosen-by-invitee-1" }),
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const me = await fetch(`${baseUrl}/api/admin/me`, { headers: { Cookie: cookie } });
+  const meBody = await me.json();
+  assert.equal(meBody.user.role, "org_admin");
+  assert.equal(meBody.user.orgId, body.site.org.id, "scoped to the org this provision created");
+});
+
+test("adminUser with an invalid email 400s (password is no longer accepted or required)", async () => {
+  const payload = basePayload();
+  payload.adminUser = { email: "bad" };
+  const res = await api("/api/admin/provision", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(body.error, /adminUser: email/);
 });
 
 test("duplicate org slug 409s and rolls the whole site back", async () => {

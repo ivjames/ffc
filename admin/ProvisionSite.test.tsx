@@ -92,6 +92,76 @@ describe('ProvisionSite', () => {
     expect(screen.getByText('putt-palace.<your platform domain>')).toBeInTheDocument();
   });
 
+  test('does not render an initial-password field for the org admin', () => {
+    renderPage();
+    expect(screen.queryByText('Initial password')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/They'll receive an email with a link to set their own password/)
+    ).toBeInTheDocument();
+  });
+
+  test('filling the admin email sends adminUser as {email} with no password key', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getByPlaceholderText('owner@example.com'), 'owner@puttpalace.example');
+    const payload = await fillAndSubmit(user);
+
+    expect(payload.adminUser).toEqual({ email: 'owner@puttpalace.example' });
+    expect(payload.adminUser).not.toHaveProperty('password');
+  });
+
+  test('the success panel reports whether the invite email was sent', async () => {
+    vi.mocked(api.provisionSite).mockResolvedValue({
+      ok: true,
+      site: {
+        ...SITE,
+        adminUser: {
+          id: 'admin-1',
+          email: 'owner@puttpalace.example',
+          role: 'org_admin',
+          orgId: 'org-1',
+          inviteSent: true,
+        },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await fillAndSubmit(user);
+
+    expect(await screen.findByRole('heading', { name: 'Site is live' })).toBeInTheDocument();
+    expect(
+      screen.getByText((_, el) =>
+        el?.tagName === 'P' &&
+        /created — invite email sent\./.test(el.textContent ?? '')
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('owner@puttpalace.example')).toBeInTheDocument();
+  });
+
+  test('the success panel points at "Forgot password?" when the invite email failed', async () => {
+    vi.mocked(api.provisionSite).mockResolvedValue({
+      ok: true,
+      site: {
+        ...SITE,
+        adminUser: {
+          id: 'admin-1',
+          email: 'owner@puttpalace.example',
+          role: 'org_admin',
+          orgId: 'org-1',
+          inviteSent: false,
+        },
+      },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await fillAndSubmit(user);
+
+    expect(await screen.findByRole('heading', { name: 'Site is live' })).toBeInTheDocument();
+    expect(
+      screen.getByText(/the invite email could not be sent/)
+    ).toBeInTheDocument();
+  });
+
   test('submitting with defaults sends the derived payload, with pos absent', async () => {
     const user = userEvent.setup();
     renderPage();

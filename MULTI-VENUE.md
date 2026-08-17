@@ -123,7 +123,9 @@ place client-side (`src/lib/branding.ts`). Validation rejects unknown keys.
 Provisioning is a Master Control tool, not an ops task: **Provision site**
 (super_admin only, `POST /api/admin/provision`) creates the whole site in one
 transaction — org + branding + first venue (hours, POS offering selection) +
-courses, plus optionally the site's org_admin account. The subdomain is live
+courses, plus optionally an emailed invite for the site's org_admin, who sets
+their own password via the link (no password ever typed by the operator). The
+subdomain is live
 immediately (the tenant cache is cleared in-process): no SSH, no DNS, no
 cert, no deploy — the wildcard vhost/cert/record already cover every slug.
 Create-only semantics: an existing org/location slug 409s, never overwrites.
