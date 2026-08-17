@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useInstallPrompt } from '../../lib/pwaInstall';
 import { track } from '../../lib/analytics';
+import { getBranding, useBrandingRevision } from '../../lib/branding';
 import Icon from '../../ui/Icon';
 
 // §install — landing page for the "install to home screen" QR code. Detects the
@@ -54,8 +55,8 @@ export default function Install() {
               <Icon name="state.done" className="text-3xl" />
               <p className="mt-2 font-bold text-fairway-50">You&apos;re all set</p>
               <p className="mt-1 text-sm text-fairway-100/70">
-                This app is already installed on your device. Look for the ⛳️ icon on your
-                home screen.
+                This app is already installed on your device. Look for the <AppIcon /> icon on
+                your home screen.
               </p>
               <div className="mt-4">
                 <Button onClick={() => (window.location.href = '/')}>Open the app</Button>
@@ -85,6 +86,34 @@ export default function Install() {
         </p>
       </Content>
     </Screen>
+  );
+}
+
+/**
+ * The icon the player will actually find on their home screen, shown inline in
+ * the sentence that promises it.
+ *
+ * Deliberately NOT an <Icon>. This screen's copy points at a real artefact —
+ * the installed PWA's launcher icon, which is the tenant's uploaded `icon192`
+ * (server/lib/brandAssets.js) or the platform default. It has nothing to do
+ * with the icon set: pointing at any glyph here, emoji or vector, describes
+ * something the player will never see. It used to say "the ⛳️ icon", which was
+ * wrong for every venue including the mini-golf ones.
+ *
+ * Decorative — the surrounding sentence already says "icon" — so it is hidden
+ * from assistive tech rather than announced twice.
+ */
+function AppIcon() {
+  useBrandingRevision();
+  return (
+    <img
+      src={getBranding().icon192Url}
+      alt=""
+      aria-hidden="true"
+      // ~22% radius is the squircle masking both iOS and Android apply, so this
+      // reads as a home-screen icon rather than a picture in the text.
+      className="mx-0.5 inline-block h-5 w-5 rounded-[22%] align-text-bottom"
+    />
   );
 }
 
@@ -155,7 +184,7 @@ function GenericInstructions({ platform }: { platform: string }) {
           <span className="text-fairway-100/70"> (also shown as “Install”).</span>
         </Step>
         <Step n={3}>
-          Confirm, and the ⛳️ icon lands on your home screen.
+          Confirm, and the <AppIcon /> icon lands on your home screen.
         </Step>
       </ol>
       <p className="mt-4 rounded-lg bg-fairway-950/60 p-3 text-xs text-fairway-100/70">

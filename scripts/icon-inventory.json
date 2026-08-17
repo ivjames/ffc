@@ -2,7 +2,7 @@
   "generated": "scripts/icon-inventory.mjs",
   "totals": {
     "marker": 0,
-    "prose": 102,
+    "prose": 100,
     "sticker": 32,
     "symbol": 114,
     "roles": 0
@@ -3347,18 +3347,6 @@
       "context": "text: `${find.playerTag} found ${itemName} on the mini golf scavenger hunt! ⛳🔍`,"
     },
     {
-      "glyph": "⛳️",
-      "kind": "prose",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "install",
-      "component": "Install",
-      "file": "src/features/install/Install.tsx",
-      "line": 57,
-      "context": "This app is already installed on your device. Look for the ⛳️ icon on your"
-    },
-    {
       "glyph": "➕",
       "kind": "symbol",
       "role": null,
@@ -3367,20 +3355,8 @@
       "area": "install",
       "component": "Install",
       "file": "src/features/install/Install.tsx",
-      "line": 125,
+      "line": 154,
       "context": "<span aria-hidden>➕</span>."
-    },
-    {
-      "glyph": "⛳️",
-      "kind": "prose",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "install",
-      "component": "Install",
-      "file": "src/features/install/Install.tsx",
-      "line": 158,
-      "context": "Confirm, and the ⛳️ icon lands on your home screen."
     },
     {
       "glyph": "›",
@@ -5467,7 +5443,7 @@
       "area": "ui",
       "component": "components",
       "file": "src/ui/components.tsx",
-      "line": 178,
+      "line": 182,
       "context": "{tag || '···'}"
     },
     {
@@ -5479,7 +5455,7 @@
       "area": "ui",
       "component": "components",
       "file": "src/ui/components.tsx",
-      "line": 178,
+      "line": 182,
       "context": "{tag || '···'}"
     },
     {
@@ -5491,7 +5467,7 @@
       "area": "ui",
       "component": "components",
       "file": "src/ui/components.tsx",
-      "line": 178,
+      "line": 182,
       "context": "{tag || '···'}"
     },
     {
@@ -8239,7 +8215,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 327,
+      "line": 332,
       "context": "'scorecard.summary 🏆': 'action.leaderboard',"
     },
     {
@@ -8251,7 +8227,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 328,
+      "line": 333,
       "context": "'scorecard.summary 📋': 'action.scorecard',"
     },
     {
@@ -8263,7 +8239,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 329,
+      "line": 334,
       "context": "'scorecard.summary 📸': 'action.take-photo',"
     },
     {
@@ -8275,7 +8251,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 330,
+      "line": 335,
       "context": "'scorecard.summary 🎟️': 'award.ticket',"
     },
     {
@@ -8287,7 +8263,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 331,
+      "line": 336,
       "context": "'scorecard.coursepicker 📍': 'state.located',"
     },
     {
@@ -8299,7 +8275,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 332,
+      "line": 337,
       "context": "'courses.courselist 📍': 'state.located',"
     },
     {
@@ -8311,7 +8287,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 335,
+      "line": 340,
       "context": "'me.mehome 👤': 'state.account',"
     },
     {
@@ -8323,7 +8299,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 336,
+      "line": 341,
       "context": "'me.mehome ✨': 'state.guest',"
     },
     {
@@ -8335,7 +8311,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 337,
+      "line": 342,
       "context": "'me.mehome 🏅': 'award.medal',"
     },
     {
@@ -8347,7 +8323,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 338,
+      "line": 343,
       "context": "'me.mehome 👥': 'state.teams',"
     },
     {
@@ -8359,7 +8335,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 339,
+      "line": 344,
       "context": "'me.mehome 🎟️': 'nav.rewards',"
     },
     {
@@ -8371,7 +8347,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 340,
+      "line": 345,
       "context": "'me.mehome ⬇️': 'nav.install',"
     },
     {
@@ -8383,7 +8359,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 341,
+      "line": 346,
       "context": "'me.mehome 🔒': 'state.locked',"
     },
     {
@@ -8395,7 +8371,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 342,
+      "line": 347,
       "context": "'shared.accountgate 👤': 'state.account',"
     },
     {
@@ -8407,7 +8383,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 343,
+      "line": 348,
       "context": "'shared.accountgate ✨': 'state.guest',"
     },
     {
@@ -8419,7 +8395,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 344,
+      "line": 349,
       "context": "'account.account 👥': 'state.teams',"
     },
     {
@@ -8431,7 +8407,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 345,
+      "line": 350,
       "context": "'account.account 🏌️': 'score.hole-in-one',"
     },
     {
@@ -8443,20 +8419,8 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 346,
+      "line": 351,
       "context": "'account.account 🎟️': 'award.ticket',"
-    },
-    {
-      "glyph": "🎉",
-      "kind": "catalog",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "ui",
-      "component": "manifest",
-      "file": "src/ui/icons/manifest.ts",
-      "line": 347,
-      "context": "'teams.acceptinvite 🎉': 'state.celebrate',"
     },
     {
       "glyph": "🎟️",
@@ -8467,7 +8431,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 350,
+      "line": 354,
       "context": "'rewards.rewards 🎟️': 'award.ticket',"
     },
     {
@@ -8479,7 +8443,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 351,
+      "line": 355,
       "context": "'rewards.rewards 🕹️': 'nav.arcade',"
     },
     {
@@ -8491,7 +8455,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 352,
+      "line": 356,
       "context": "'ui.adoptionbonustoast 🎟️': 'award.ticket',"
     },
     {
@@ -8503,7 +8467,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 355,
+      "line": 359,
       "context": "'home.home 🌭': 'nav.food',"
     },
     {
@@ -8515,7 +8479,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 356,
+      "line": 360,
       "context": "'home.home 🛒': 'order.cart',"
     },
     {
@@ -8527,7 +8491,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 357,
+      "line": 361,
       "context": "'home.home 👤': 'state.account',"
     },
     {
@@ -8539,7 +8503,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 358,
+      "line": 362,
       "context": "'home.home 🎡': 'brand.mark',"
     },
     {
@@ -8551,7 +8515,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 361,
+      "line": 365,
       "context": "'locations.locationpicker 🧭': 'state.no-venue',"
     },
     {
@@ -8563,7 +8527,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 362,
+      "line": 366,
       "context": "'locations.locationpicker 📍': 'state.located',"
     },
     {
@@ -8575,7 +8539,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 363,
+      "line": 367,
       "context": "'shared.geofencegate 📍': 'state.located',"
     },
     {
@@ -8587,7 +8551,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 364,
+      "line": 368,
       "context": "'shared.tenantunavailable 🧭': 'state.no-venue',"
     },
     {
@@ -8599,7 +8563,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 367,
+      "line": 371,
       "context": "'install.install ⛳️': 'nav.golf',"
     },
     {
@@ -8611,7 +8575,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 368,
+      "line": 372,
       "context": "'install.install ✅': 'state.done',"
     },
     {
@@ -8623,7 +8587,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 369,
+      "line": 373,
       "context": "'ui.adoptionnudge 📲': 'action.play-together',"
     },
     {
@@ -8635,7 +8599,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 370,
+      "line": 374,
       "context": "'ui.adoptionnudge 🏆': 'award.trophy',"
     },
     {
@@ -8647,7 +8611,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 373,
+      "line": 377,
       "context": "'ui.choose-a-theme 🎨': 'control.skin',"
     },
     {
@@ -8659,7 +8623,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 374,
+      "line": 378,
       "context": "'ui.themetoggle ☀️': 'control.theme-light',"
     },
     {
@@ -8671,7 +8635,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 375,
+      "line": 379,
       "context": "'ui.themetoggle 🌙': 'control.theme-dark',"
     },
     {
@@ -8683,7 +8647,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 376,
+      "line": 380,
       "context": "'ui.navdrawer 🌙': 'control.theme-dark',"
     },
     {
@@ -8695,7 +8659,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 377,
+      "line": 381,
       "context": "'ui.soundtoggle 🔊': 'control.sound-on',"
     },
     {
@@ -8707,7 +8671,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 378,
+      "line": 382,
       "context": "'ui.soundtoggle 🔇': 'control.sound-off',"
     },
     {
@@ -8719,7 +8683,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 379,
+      "line": 383,
       "context": "'ui.navdrawer 🔊': 'control.sound-on',"
     },
     {
@@ -8731,7 +8695,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 380,
+      "line": 384,
       "context": "'ui.updatemodal 🔄': 'action.refresh',"
     },
     {
@@ -8743,7 +8707,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 381,
+      "line": 385,
       "context": "'ui.announcementbanner 📣': 'state.announcement',"
     },
     {
@@ -8755,7 +8719,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 382,
+      "line": 386,
       "context": "'ui.feedbackbutton 💬': 'action.feedback',"
     },
     {
@@ -8767,7 +8731,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 383,
+      "line": 387,
       "context": "'ui.feedbackbutton 📸': 'action.take-photo',"
     },
     {
@@ -8779,7 +8743,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 386,
+      "line": 390,
       "context": "'tv.tvwall ⛳️': 'nav.golf',"
     },
     {
@@ -8791,7 +8755,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 387,
+      "line": 391,
       "context": "'tv.tvleaderboard 🏅': 'award.medal',"
     },
     {
@@ -8803,7 +8767,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 392,
+      "line": 396,
       "context": "'theme.default ⛳️': 'course.default',"
     },
     {
@@ -8815,7 +8779,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 393,
+      "line": 397,
       "context": "'theme.classic ⛳️': 'course.classic',"
     },
     {
@@ -8827,7 +8791,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 394,
+      "line": 398,
       "context": "'theme.blue 🔵': 'course.blue',"
     },
     {
@@ -8839,7 +8803,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 395,
+      "line": 399,
       "context": "'theme.green 🟢': 'course.green',"
     },
     {
@@ -8851,7 +8815,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 396,
+      "line": 400,
       "context": "'theme.red 🔴': 'course.red',"
     },
     {
@@ -8863,7 +8827,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 397,
+      "line": 401,
       "context": "'theme.california 🌴': 'course.california',"
     },
     {
@@ -8875,7 +8839,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 398,
+      "line": 402,
       "context": "'theme.jungle 🌴': 'course.jungle',"
     },
     {
@@ -8887,7 +8851,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 399,
+      "line": 403,
       "context": "'theme.dragon 🐉': 'course.dragon',"
     },
     {
@@ -8899,7 +8863,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 400,
+      "line": 404,
       "context": "'theme.western 🤠': 'course.western',"
     },
     {
@@ -8911,7 +8875,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 401,
+      "line": 405,
       "context": "'theme.pirate 🏴‍☠️': 'course.pirate',"
     },
     {
@@ -8923,7 +8887,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 402,
+      "line": 406,
       "context": "'theme.space 🚀': 'course.space',"
     },
     {
@@ -8935,7 +8899,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 403,
+      "line": 407,
       "context": "'theme.haunted 👻': 'course.haunted',"
     },
     {
