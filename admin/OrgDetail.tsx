@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, type Branding, type BrandingAssetKind, type Org } from './api';
 import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
+import { AppPreview, InstallPreview, ContrastNotes } from './OrgBrandingPreview';
 
 // The platform defaults from MULTI-VENUE.md §2 — shown as placeholders so an
 // empty field visibly means "use the platform default". The logo trio has NO
@@ -163,6 +164,20 @@ type AssetField = keyof typeof ASSET_KIND_BY_FIELD;
 const MAX_ASSET_BYTES = 1024 * 1024; // 1 MiB
 const ICON_SIDE: Partial<Record<BrandingAssetKind, number>> = { icon192: 192, icon512: 512 };
 
+/** A titled group of branding fields. The old form was one flat 12-input grid
+ *  where "app name" sat beside "icon 512 URL" — grouping is what makes it
+ *  possible to find the field you came for. */
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <h3 className="mb-2 border-b border-slate-200 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </h3>
+      <div className="grid grid-cols-2 gap-2">{children}</div>
+    </div>
+  );
+}
+
 function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
   const [values, setValues] = useState<Record<BrandingKey, string>>(() => {
     const stored = org.branding ?? {};
@@ -224,87 +239,131 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
         have no platform default: left blank, the player app shows no logo.
       </p>
       {err && <Banner kind="error">{err}</Banner>}
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <Field label="App name" hint="PWA install name and document title (1–80 chars).">
-          <Input
-            value={values.appName}
-            onChange={(e) => set('appName')(e.target.value)}
-            placeholder={BRANDING_DEFAULTS.appName}
-          />
-        </Field>
-        <Field label="Short name" hint="Home-screen label (1–30 chars).">
-          <Input
-            value={values.shortName}
-            onChange={(e) => set('shortName')(e.target.value)}
-            placeholder={BRANDING_DEFAULTS.shortName}
-          />
-        </Field>
-        <ColorField
-          label="Theme color"
-          value={values.themeColor}
-          def={BRANDING_DEFAULTS.themeColor}
-          onChange={set('themeColor')}
-        />
-        <ColorField
-          label="Background color"
-          value={values.backgroundColor}
-          def={BRANDING_DEFAULTS.backgroundColor}
-          onChange={set('backgroundColor')}
-        />
-        <ColorField
-          label="Accent color"
-          value={values.accentColor}
-          def={BRANDING_DEFAULTS.accentColor}
-          onChange={set('accentColor')}
-        />
-        <Field label="Share footer" hint="Tagline on shared score images (1–120 chars).">
-          <Input
-            value={values.shareFooter}
-            onChange={(e) => set('shareFooter')(e.target.value)}
-            placeholder={BRANDING_DEFAULTS.shareFooter}
-          />
-        </Field>
-        <UrlField
-          label="Logo URL"
-          value={values.logoUrl}
-          def={BRANDING_DEFAULTS.logoUrl}
-          onChange={set('logoUrl')}
-          accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
-          onUpload={uploadFor('logoUrl')}
-        />
-        <UrlField
-          label="Logo badge URL"
-          value={values.logoBadgeUrl}
-          def={BRANDING_DEFAULTS.logoBadgeUrl}
-          onChange={set('logoBadgeUrl')}
-          accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
-          onUpload={uploadFor('logoBadgeUrl')}
-        />
-        <UrlField
-          label="Logo wordmark URL"
-          value={values.logoWordmarkUrl}
-          def={BRANDING_DEFAULTS.logoWordmarkUrl}
-          onChange={set('logoWordmarkUrl')}
-          accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
-          onUpload={uploadFor('logoWordmarkUrl')}
-        />
-        <UrlField
-          label="Icon 192 URL"
-          value={values.icon192Url}
-          def={BRANDING_DEFAULTS.icon192Url}
-          onChange={set('icon192Url')}
-          accept=".png,image/png"
-          onUpload={uploadFor('icon192Url')}
-        />
-        <UrlField
-          label="Icon 512 URL"
-          value={values.icon512Url}
-          def={BRANDING_DEFAULTS.icon512Url}
-          onChange={set('icon512Url')}
-          accept=".png,image/png"
-          onUpload={uploadFor('icon512Url')}
-        />
+      {/* Two columns: the fields on the left, what they produce on the right.
+          Twelve text inputs alone are unevaluable — nobody can look at two hex
+          codes and say whether the result is legible, or tell from a URL
+          whether they uploaded the wordmark or the badge. */}
+      <div className="mt-3 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0">
+          <Section title="Identity">
+            <Field label="App name" hint="PWA install name and document title (1–80 chars).">
+              <Input
+                value={values.appName}
+                onChange={(e) => set('appName')(e.target.value)}
+                placeholder={BRANDING_DEFAULTS.appName}
+              />
+            </Field>
+            <Field label="Short name" hint="Home-screen label (1–30 chars). Phones clip around 12.">
+              <Input
+                value={values.shortName}
+                onChange={(e) => set('shortName')(e.target.value)}
+                placeholder={BRANDING_DEFAULTS.shortName}
+              />
+            </Field>
+            <Field label="Share footer" hint="Tagline on shared score images (1–120 chars).">
+              <Input
+                value={values.shareFooter}
+                onChange={(e) => set('shareFooter')(e.target.value)}
+                placeholder={BRANDING_DEFAULTS.shareFooter}
+              />
+            </Field>
+          </Section>
+
+          <Section title="Colors">
+            <ColorField
+              label="Theme color"
+              value={values.themeColor}
+              def={BRANDING_DEFAULTS.themeColor}
+              onChange={set('themeColor')}
+            />
+            <ColorField
+              label="Background color"
+              value={values.backgroundColor}
+              def={BRANDING_DEFAULTS.backgroundColor}
+              onChange={set('backgroundColor')}
+            />
+            <ColorField
+              label="Accent color"
+              value={values.accentColor}
+              def={BRANDING_DEFAULTS.accentColor}
+              onChange={set('accentColor')}
+            />
+            <div className="col-span-2">
+              <ContrastNotes values={values} />
+            </div>
+          </Section>
+
+          <Section title="Logos">
+            <div className="col-span-2 -mt-1 mb-1 text-xs text-slate-500">
+              No platform default: leave these blank and the player app shows no logo at all
+              (never another client's). PNG, JPEG, WebP or SVG, up to 1 MiB.
+            </div>
+            <UrlField
+              label="Logo (full)"
+              value={values.logoUrl}
+              def={BRANDING_DEFAULTS.logoUrl}
+              onChange={set('logoUrl')}
+              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+              onUpload={uploadFor('logoUrl')}
+            />
+            <UrlField
+              label="Logo badge (square)"
+              value={values.logoBadgeUrl}
+              def={BRANDING_DEFAULTS.logoBadgeUrl}
+              onChange={set('logoBadgeUrl')}
+              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+              onUpload={uploadFor('logoBadgeUrl')}
+            />
+            <UrlField
+              label="Logo wordmark (wide)"
+              value={values.logoWordmarkUrl}
+              def={BRANDING_DEFAULTS.logoWordmarkUrl}
+              onChange={set('logoWordmarkUrl')}
+              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+              onUpload={uploadFor('logoWordmarkUrl')}
+            />
+          </Section>
+
+          <Section title="App icons">
+            <div className="col-span-2 -mt-1 mb-1 text-xs text-slate-500">
+              PNG only, at exactly the stated size — the per-tenant PWA manifest declares these
+              dimensions, so a mismatch makes the install lie to the phone.
+            </div>
+            <UrlField
+              label="Icon 192×192"
+              value={values.icon192Url}
+              def={BRANDING_DEFAULTS.icon192Url}
+              onChange={set('icon192Url')}
+              accept=".png,image/png"
+              onUpload={uploadFor('icon192Url')}
+            />
+            <UrlField
+              label="Icon 512×512"
+              value={values.icon512Url}
+              def={BRANDING_DEFAULTS.icon512Url}
+              onChange={set('icon512Url')}
+              accept=".png,image/png"
+              onUpload={uploadFor('icon512Url')}
+            />
+          </Section>
+        </div>
+
+        {/* Sticky so the preview stays in view while the operator works down
+            a long form — the whole value is seeing the change as you make it. */}
+        <div className="lg:sticky lg:top-4 lg:self-start">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Live preview
+          </p>
+          <AppPreview values={values} />
+          <div className="mt-3">
+            <InstallPreview values={values} />
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Updates as you type. Nothing is live until you save.
+          </p>
+        </div>
       </div>
+
       <div className="mt-3">
         <Button onClick={save} disabled={busy}>
           {busy ? 'Saving…' : 'Save branding'}
