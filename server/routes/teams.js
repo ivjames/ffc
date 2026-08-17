@@ -15,6 +15,7 @@ import { requireUser } from "../lib/userAuth.js";
 import { normalizeEmail } from "../lib/validateUser.js";
 import { sha256 } from "../lib/authCodes.js";
 import { sendMail } from "../lib/mailer.js";
+import { tenant } from "../lib/tenant.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 
@@ -168,7 +169,10 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-router.post("/:id/invites", inviteLimit, async (req, res) => {
+// tenant() attributes the invite email to the org whose subdomain sent it, for
+// per-org mail-cap metering (lib/mailer.js). Teams themselves stay global (the
+// accounts decision) — this only labels the send; null when unresolvable.
+router.post("/:id/invites", inviteLimit, tenant(), async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "invalid team id" });
   const email = normalizeEmail(req.body?.email);
@@ -193,6 +197,7 @@ router.post("/:id/invites", inviteLimit, async (req, res) => {
     await sendMail({
       to: email,
       kind: "team_invite",
+      orgSlug: req.tenant?.org?.slug ?? null,
       subject: `${inviter} invited you to team ${teamName}`,
       text: [
         `${inviter} invited you to join "${teamName}" on FFC Mini Golf.`,

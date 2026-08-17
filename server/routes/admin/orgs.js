@@ -6,6 +6,8 @@
 //   POST   /api/admin/orgs/:id/branding/assets  upload a logo/icon file (base64)
 //   POST   /api/admin/orgs/:id/archive   soft-delete (set archived_at)
 //   POST   /api/admin/orgs/:id/unarchive restore
+//   POST   /api/admin/orgs/:id/suspend   status='suspended' (subdomain goes dark)
+//   POST   /api/admin/orgs/:id/unsuspend status='active'
 //
 // Org-scoping: an org is the top-level tenant boundary, so managing orgs
 // themselves (create/rename/archive) is super_admin only. An org_admin can
@@ -224,6 +226,36 @@ router.post("/:id/branding/assets", express.json({ limit: "3mb" }), async (req, 
 });
 
 // --- Archive / unarchive ----------------------------------------------------
+// Guard the DEFAULT org before any lifecycle change that stops it resolving:
+// it backs every host whose first label matches no slug (the apex/staging
+// host included), and lib/tenant.js resolves a non-live default org — archived
+// OR suspended — to the dark sentinel, never to another client's org. So both
+// verbs would take all those hosts dark platform-wide; demand an explicit
+// ?force=1 for either. Reversal (unarchive/unsuspend) restores the fallback;
+// hosts follow within the tenant cache's 30s TTL.
+// Sends the 404/400 itself and returns true when the caller must stop.
+async function refusedDefaultOrgDark(req, res, id, verb) {
+  const force = req.query.force === "1" || req.query.force === "true";
+  const defaultSlug = process.env.DEFAULT_ORG_SLUG || "bullwinkles";
+  const target = await pool.query(`select slug from org where id = $1`, [id]);
+  if (target.rowCount === 0) {
+    res.status(404).json({ ok: false, error: "not found" });
+    return true;
+  }
+  if (target.rows[0].slug === defaultSlug && !force) {
+    res.status(400).json({
+      ok: false,
+      error:
+        `refusing to ${verb} the default org ('${defaultSlug}'): it serves every ` +
+        `unmatched host (apex/staging included), so this takes those hosts ` +
+        `dark (empty catalog, platform-default branding) until it is reversed. ` +
+        `Pass ?force=1 to do it anyway.`,
+    });
+    return true;
+  }
+  return false;
+}
+
 async function setArchived(req, res, archived) {
   if (!isSuperAdmin(req)) {
     return res.status(403).json({ ok: false, error: "super_admin only" });
@@ -231,6 +263,7 @@ async function setArchived(req, res, archived) {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "bad id" });
   try {
+    if (archived && (await refusedDefaultOrgDark(req, res, id, "archive"))) return;
     const db = await pool.query(
       `update org set archived_at = ${archived ? "now()" : "null"} where id = $1 returning ${ORG_COLS}`,
       [id]
@@ -250,3 +283,38 @@ async function setArchived(req, res, archived) {
 }
 router.post("/:id/archive", (req, res) => setArchived(req, res, true));
 router.post("/:id/unarchive", (req, res) => setArchived(req, res, false));
+
+// --- Suspend / unsuspend ------------------------------------------------------
+// Lifecycle verb for offboarding/nonpayment: a suspended org keeps ALL its
+// data (unlike archive it isn't a soft-delete gesture, it's a switch), but its
+// subdomain stops resolving — lib/tenant.js serves an empty catalog and the
+// platform-default manifest instead of falling through to the default org.
+async function setStatus(req, res, status) {
+  if (!isSuperAdmin(req)) {
+    return res.status(403).json({ ok: false, error: "super_admin only" });
+  }
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "bad id" });
+  try {
+    if (status === "suspended" && (await refusedDefaultOrgDark(req, res, id, "suspend"))) {
+      return;
+    }
+    const db = await pool.query(
+      `update org set status = $2 where id = $1 returning ${ORG_COLS}`,
+      [id, status]
+    );
+    if (db.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
+    await audit({
+      action: status === "suspended" ? "org.suspend" : "org.unsuspend",
+      entity: "org",
+      entityId: id,
+      actor: actorLabel(req),
+    });
+    return res.json({ ok: true, org: db.rows[0] });
+  } catch (err) {
+    console.error("[admin/orgs] suspend error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+}
+router.post("/:id/suspend", (req, res) => setStatus(req, res, "suspended"));
+router.post("/:id/unsuspend", (req, res) => setStatus(req, res, "active"));

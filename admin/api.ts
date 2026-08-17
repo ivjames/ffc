@@ -111,9 +111,16 @@ export type Location = {
   orderingUrl: string | null;
   pos: PosConfig | null;
   hours: VenueHours | null;
+  hunt: HuntConfig | null;
   orgId: string | null;
   archivedAt: string | null;
 };
+
+/** Per-venue hunt vision-spend config (location.hunt jsonb — mirrors
+ *  server/lib/validateLocation.js normalizeHunt). dailyScanCap bounds the
+ *  venue's billed hunt scans over a rolling 24h window; 0 disables the hunt
+ *  at that venue entirely; key absent (the column defaults to {}) = unlimited. */
+export type HuntConfig = { dailyScanCap?: number };
 
 // Weekly business hours (mirrors server/lib/venueHours.js normalizeHours).
 // Keys are any subset of the 7 weekday keys; a day missing from the object is
@@ -448,6 +455,40 @@ export type ProvisionResult = {
   };
 };
 
+// Hunt vision-spend rollup (GET /api/admin/hunt-usage — the invoice view).
+// `rows` is per month + venue; `orgSummary` pre-aggregates per month + org.
+// verify/screenCostUsd arrive rounded to 4 decimals (sub-cent screen spend
+// stays visible); apiCostUsd is the invoice line, rounded to the cent.
+export type HuntUsageOrgSummary = {
+  month: string;
+  orgId: string | null;
+  orgName: string | null;
+  huntRounds: number;
+  scans: number;
+  verifyScans: number;
+  screenScans: number;
+  inputTokens: number;
+  outputTokens: number;
+  verifyCostUsd: number;
+  screenCostUsd: number;
+  apiCostUsd: number;
+};
+
+export type HuntUsageRow = HuntUsageOrgSummary & {
+  locationId: string | null;
+  locationName: string | null;
+  locationSlug: string | null;
+};
+
+export type HuntUsage = {
+  /** The verify-side list rates costs were computed at (screen rows carry
+   *  their own per-call stored cost). */
+  pricing: { model: string; inputUsdPerMTok: number; outputUsdPerMTok: number };
+  months: number;
+  rows: HuntUsageRow[];
+  orgSummary: HuntUsageOrgSummary[];
+};
+
 export type CurrentUser = {
   id: string | null;
   email: string | null;
@@ -504,6 +545,11 @@ export const api = {
       { token, password },
       { quiet401: true }
     ),
+  // Self-service password change. quiet401: a wrong CURRENT password comes
+  // back as a 401 that the form shows inline — it must not fire the global
+  // sign-out event (the session is still perfectly valid).
+  changePassword: (currentPassword: string, newPassword: string) =>
+    req<{ ok: true }>('POST', '/me/password', { currentPassword, newPassword }, { quiet401: true }),
 
   listOrgs: (archived = false) => req<Org[]>('GET', `/orgs${archived ? '?archived=1' : ''}`),
   getOrg: (id: string) => req<{ org: Org; locations: Location[] }>('GET', `/orgs/${id}`),
@@ -511,6 +557,12 @@ export const api = {
   provisionSite: (p: ProvisionPayload) => req<ProvisionResult>('POST', '/provision', p),
   archiveOrg: (id: string, archived: boolean) =>
     req<{ ok: true; org: Org }>('POST', `/orgs/${id}/${archived ? 'archive' : 'unarchive'}`),
+  // Lifecycle switch (super_admin only): a suspended org keeps all its data
+  // but its subdomain goes dark for players. Suspending the DEFAULT org 400s
+  // server-side unless ?force=1 — the UI deliberately never sends force; that
+  // error surfaces inline for the operator to read.
+  suspendOrg: (id: string) => req<{ ok: true; org: Org }>('POST', `/orgs/${id}/suspend`),
+  unsuspendOrg: (id: string) => req<{ ok: true; org: Org }>('POST', `/orgs/${id}/unsuspend`),
   // Full-replace semantics: send the complete branding object every time
   // (omitted keys revert to platform defaults; {} = all defaults). Allowed
   // for super_admin or the org's own org_admin.
@@ -742,6 +794,11 @@ export const api = {
       'GET',
       `/game-rewards/usage?days=${days}`
     ),
+
+  // Hunt vision-spend rollup (the invoice view — CLAUDE.md's cost-visibility
+  // rule). months = calendar months back including the current one (server
+  // clamps to 1..24, default 6). org_admins get only their own org's data.
+  huntUsage: (months = 6) => req<HuntUsage>('GET', `/hunt-usage?months=${months}`),
 
   // Synthetic load/soak bot control plane. status + projection are readable by
   // any admin (org-scoped); start + stop are super_admin only (the server

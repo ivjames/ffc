@@ -89,9 +89,9 @@ export default function LocationPicker() {
             );
           })}
         </div>
-        <p className="mt-4 text-center text-xs text-fairway-100/70">
-          Placeholder sites — the client's real locations swap in here.
-        </p>
+        {/* No footer here: the sites listed are the tenant's real Master
+            Control locations, so there's nothing generic left to say. (The old
+            "Placeholder sites…" dev note leaked into every tenant's UI.) */}
       </Content>
     </Screen>
   );

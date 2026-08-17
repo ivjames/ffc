@@ -1,10 +1,31 @@
-// Unit tests for the business-hours editor's serialization
-// (LocationDetail.tsx's buildHoursPayload/hoursValidationError) — tested
-// directly against the pure functions, the same way api.test.ts exercises
-// the fetch wrapper's logic without mounting a component.
-import { describe, test, expect } from 'vitest';
-import { buildHoursPayload, hoursValidationError } from './LocationDetail';
-import { HOURS_DAY_KEYS, type HoursDayKey } from './api';
+// Tests for LocationDetail: the pure serialization helpers (business hours +
+// hunt cap — the same direct-function idiom as api.test.ts), plus mounted
+// round-trip tests that the hunt cap actually rides the save payload.
+import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import LocationDetail, {
+  buildHoursPayload,
+  hoursValidationError,
+  buildHuntPayload,
+  huntCapValidationError,
+} from './LocationDetail';
+import { api, HOURS_DAY_KEYS, type HoursDayKey, type Location } from './api';
+
+vi.mock('./api', async () => {
+  const actual = await vi.importActual<typeof import('./api')>('./api');
+  return {
+    ...actual,
+    api: {
+      getLocation: vi.fn(),
+      listLocationCourses: vi.fn(),
+      gameRewardsMeta: vi.fn(),
+      saveLocation: vi.fn(),
+      archiveLocation: vi.fn(),
+    },
+  };
+});
 
 type DayState = { closed: boolean; open: string; close: string };
 type HoursState = Record<HoursDayKey, DayState>;
@@ -49,6 +70,35 @@ describe('buildHoursPayload', () => {
   });
 });
 
+describe('buildHuntPayload', () => {
+  test('blank = unlimited → {} (the column default; clears any stored cap)', () => {
+    expect(buildHuntPayload('')).toEqual({});
+    expect(buildHuntPayload('   ')).toEqual({});
+  });
+
+  test('0 is distinct from blank: hunt off at this venue', () => {
+    expect(buildHuntPayload('0')).toEqual({ dailyScanCap: 0 });
+  });
+
+  test('a positive cap ships as the integer', () => {
+    expect(buildHuntPayload('250')).toEqual({ dailyScanCap: 250 });
+  });
+});
+
+describe('huntCapValidationError', () => {
+  test('blank and whole numbers ≥ 0 are valid', () => {
+    expect(huntCapValidationError('')).toBeNull();
+    expect(huntCapValidationError('0')).toBeNull();
+    expect(huntCapValidationError('100')).toBeNull();
+  });
+
+  test('negatives, fractions and non-numbers error', () => {
+    expect(huntCapValidationError('-1')).toMatch(/whole number/);
+    expect(huntCapValidationError('2.5')).toMatch(/whole number/);
+    expect(huntCapValidationError('lots')).toMatch(/whole number/);
+  });
+});
+
 describe('hoursValidationError', () => {
   test('disabled never errors', () => {
     const state = allClosed();
@@ -76,5 +126,110 @@ describe('hoursValidationError', () => {
     const state = allClosed();
     state.sun = { closed: false, open: '', close: '18:00' };
     expect(hoursValidationError(true, state)).toMatch(/Sun/);
+  });
+});
+
+// --- Mounted round-trip: the cap field ↔ the save payload ---------------------
+
+const LOCATION: Location = {
+  id: 'loc-1',
+  name: 'Upland',
+  slug: 'upland',
+  lat: null,
+  lng: null,
+  geofenceKm: null,
+  tz: 'America/Los_Angeles',
+  tzLabel: 'Pacific Time (PT)',
+  sortOrder: 0,
+  menuUrl: null,
+  orderingUrl: null,
+  pos: null,
+  hours: null,
+  hunt: {},
+  orgId: 'org-1',
+  archivedAt: null,
+};
+
+beforeEach(() => {
+  vi.mocked(api.getLocation).mockReset().mockResolvedValue({ location: LOCATION, courses: [] });
+  vi.mocked(api.listLocationCourses).mockReset().mockResolvedValue([]);
+  vi.mocked(api.gameRewardsMeta).mockReset().mockRejectedValue(new Error('unavailable'));
+  vi.mocked(api.saveLocation)
+    .mockReset()
+    .mockResolvedValue({ ok: true, location: LOCATION });
+  vi.mocked(api.archiveLocation).mockReset();
+});
+
+function renderLocationDetail() {
+  return render(
+    <MemoryRouter initialEntries={['/locations/loc-1']}>
+      <Routes>
+        <Route path="/locations/:id" element={<LocationDetail />} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
+const capInput = () => screen.getByLabelText(/^Daily scan cap/);
+const lastSavePayload = () =>
+  vi.mocked(api.saveLocation).mock.calls.at(-1)?.[0] as Partial<Location>;
+
+describe('LocationDetail — hunt daily scan cap', () => {
+  test('an unset cap renders blank and saves hunt: {} (unlimited)', async () => {
+    const user = userEvent.setup();
+    renderLocationDetail();
+    await screen.findByRole('heading', { name: 'Upland' });
+    expect(capInput()).toHaveValue('');
+
+    await user.click(screen.getByRole('button', { name: 'Save location' }));
+
+    await waitFor(() => expect(api.saveLocation).toHaveBeenCalled());
+    expect(lastSavePayload().hunt).toEqual({});
+  });
+
+  test('a stored cap prefills, and 0 saves distinctly from blank (hunt off)', async () => {
+    vi.mocked(api.getLocation).mockResolvedValue({
+      location: { ...LOCATION, hunt: { dailyScanCap: 250 } },
+      courses: [],
+    });
+    const user = userEvent.setup();
+    renderLocationDetail();
+    await screen.findByRole('heading', { name: 'Upland' });
+    expect(capInput()).toHaveValue('250');
+
+    await user.clear(capInput());
+    await user.type(capInput(), '0');
+    await user.click(screen.getByRole('button', { name: 'Save location' }));
+
+    await waitFor(() => expect(api.saveLocation).toHaveBeenCalled());
+    expect(lastSavePayload().hunt).toEqual({ dailyScanCap: 0 });
+  });
+
+  test('clearing a stored cap saves hunt: {} — back to unlimited', async () => {
+    vi.mocked(api.getLocation).mockResolvedValue({
+      location: { ...LOCATION, hunt: { dailyScanCap: 250 } },
+      courses: [],
+    });
+    const user = userEvent.setup();
+    renderLocationDetail();
+    await screen.findByRole('heading', { name: 'Upland' });
+
+    await user.clear(capInput());
+    await user.click(screen.getByRole('button', { name: 'Save location' }));
+
+    await waitFor(() => expect(api.saveLocation).toHaveBeenCalled());
+    expect(lastSavePayload().hunt).toEqual({});
+  });
+
+  test('an invalid cap blocks the save with an inline error', async () => {
+    const user = userEvent.setup();
+    renderLocationDetail();
+    await screen.findByRole('heading', { name: 'Upland' });
+
+    await user.type(capInput(), '-5');
+    await user.click(screen.getByRole('button', { name: 'Save location' }));
+
+    expect(await screen.findByText(/whole number/)).toBeInTheDocument();
+    expect(api.saveLocation).not.toHaveBeenCalled();
   });
 });

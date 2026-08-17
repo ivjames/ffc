@@ -30,6 +30,7 @@ const SAVED_LOCATION: Location = {
   orderingUrl: null,
   pos: null,
   hours: null,
+  hunt: {},
   sortOrder: 0,
   orgId: null,
   archivedAt: null,

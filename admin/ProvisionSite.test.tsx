@@ -35,6 +35,7 @@ const SITE: ProvisionResult['site'] = {
     orderingUrl: null,
     pos: null,
     hours: null,
+    hunt: null,
     orgId: 'org-1',
     archivedAt: null,
   },

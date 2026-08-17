@@ -159,4 +159,88 @@ Still deferred (need operator decisions):
 
 - Per-org custom domains (client brings `play.theirdomain.com`) — needs
   per-domain cert issuance; the tenant resolver would match on full host.
-- Per-org email sender identity for OTP mails.
+- Per-org email sender identity for OTP mails. Cheap first step once the
+  platform domain exists: keep the platform address, make the display name
+  per-org ("Bullwinkle's <play@mail.PLATFORM>") — zero client DNS work.
+
+## 7. Domain cutover runbook
+
+For when the platform domain is purchased (candidate as of 2026-08-16:
+`infinicade.com`, pending a GoDaddy closeout purchase — written as `DOMAIN`
+below so it works for any name). Nothing in the codebase hardcodes the domain;
+this is all DNS + droplet env + one-time service setup.
+
+Before the domain lands (can be done now):
+
+1. Trademark clearance for the chosen name: USPTO search
+   (tmsearch.uspto.gov) for the name and close variants; for a name with a
+   prior user in this industry, an hour of trademark-attorney review before
+   putting it on client contracts.
+
+Once the domain is owned:
+
+1. **DNS** — at the registrar, delegate to DigitalOcean
+   (`ns1/ns2/ns3.digitalocean.com`); in DO DNS create apex `A` → droplet IP
+   and wildcard `A` (`*`) → droplet IP. One record covers every current and
+   future client subdomain; onboarding a client thereafter is zero DNS work.
+   (`ffc wildcard-cert` does DNS-01 via `doctl`, which is why DNS lives on DO.)
+2. **TLS + vhosts** — on the droplet: `export FFC_FQDN=DOMAIN` (persist it in
+   the shell profile / wherever `ffc` is invoked), then `ffc wildcard-cert`
+   (issues `DOMAIN` + `*.DOMAIN`), `ffc vhost`, `ffc admin-vhost`. The player
+   vhost's `server_name DOMAIN *.DOMAIN` makes every org slug resolve
+   immediately; `admin.DOMAIN` stays on its exact-match vhost.
+3. **Server env** (`server/.env`): `BRAND_ASSET_DIR=$APP_DIR/shared/brand-assets`
+   (dir is created by `ffc deploy`); `DEFAULT_ORG_SLUG` can stay unset
+   (default `bullwinkles`).
+4. **Email (Resend + Zoho)** — add `DOMAIN` (or `mail.DOMAIN`) in Resend,
+   publish its DKIM/SPF records in DO DNS, then set `MAIL_PROVIDER=resend`,
+   `RESEND_API_KEY`, `MAIL_FROM="FFC <play@mail.DOMAIN>"` in `server/.env`
+   (`server/lib/mailer.js` already speaks Resend). Zoho MX records can coexist
+   for human mailboxes; Resend sends, Zoho receives.
+5. **Bullwinkle's migration** — `bullwinkles.DOMAIN` works the moment DNS+TLS
+   are up (slug match). Keep `ffc.lab980.com` serving during the transition
+   (it resolves to the default org, unchanged). Origin changes reset PWA
+   installs and on-device data: accounts survive (global, email OTP), local
+   anonymous rounds don't — migrate while the installed base is small.
+   Reprint venue QR codes to the new origin; retire the old origin once
+   traffic there goes quiet.
+6. **Smoke test** — `curl -H 'Host: bullwinkles.DOMAIN' https://DOMAIN/api/content`
+   (own catalog + branding), same for a second org, `/api/manifest.webmanifest`
+   per host, admin login at `admin.DOMAIN`, one OTP mail end-to-end.
+
+### Dress rehearsal (no new domain needed)
+
+Every step above except the registrar delegation can be rehearsed today on
+the existing staging FQDN, because the wildcard machinery is domain-agnostic:
+
+1. In DO DNS, add a wildcard record for the staging host if absent
+   (`*.ffc.lab980.com` → droplet, alongside the existing A record).
+2. On the droplet: `ffc wildcard-cert` (now issues `ffc.lab980.com` +
+   `*.ffc.lab980.com`), then `ffc vhost` (installs the wildcard lineage and
+   the `server_name __FQDN__ *.__FQDN__` conf).
+3. Create a throwaway org in Master Control (e.g. slug `rehearsal`) with a
+   location and course, set its branding, and visit
+   `https://rehearsal.ffc.lab980.com` — expect that org's catalog, title,
+   colors, and manifest; expect `https://ffc.lab980.com` unchanged
+   (default-org fallback).
+4. Archive the throwaway org afterwards. What remains for cutover day is
+   then ONLY: registrar delegation, `FFC_FQDN`, re-run cert/vhost, email DNS.
+
+## 8. New-client onboarding checklist
+
+Once the platform is live on its domain, onboarding an operator is Master
+Control work only — target well under an hour:
+
+1. **Org**: Orgs → create (name + slug; the slug IS their subdomain — choose
+   like a permanent identifier, it shouldn't change later).
+2. **Branding**: org page → Branding card — app name, short name, colors,
+   share footer; upload logo marks and the two PWA icons (192/512 PNG).
+3. **Locations**: Location wizard per park — name, slug, coords, geofence
+   radius, timezone, hours; POS config if the venue has CenterEdge.
+4. **Courses**: per location — name, theme, hole count, pars.
+5. **Admin access**: create their `org_admin` account (scoped to the org).
+6. **Verify**: open `https://<slug>.DOMAIN` — their catalog, their branding,
+   their manifest; their admin login sees only their org.
+7. **Hand-off artifacts**: their URL for venue QR codes; their Master Control
+   login; note that geofence enforcement is per-deployment
+   (`VITE_GEOFENCE_ENFORCED`) and venue coords must be set before enabling.

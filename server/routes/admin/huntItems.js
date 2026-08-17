@@ -20,7 +20,9 @@
 // player verifications. Uploads are people-screened (lib/itemImageScreen.js —
 // the CLAUDE.md test-data policy) before anything touches disk, and the
 // screen's exact billed token counts + cost ride back on the response so the
-// operator sees the burn.
+// operator sees the burn — AND are persisted into hunt_scan as kind='screen'
+// rows (recordScreenScan below) so the spend shows up in the hunt-usage
+// rollup instead of vanishing once the response is gone.
 //
 // Org-scoping rides item → course → location.org_id (the photos/hunt-usage
 // precedent). Deletes here are HARD deletes, unlike archive-style domain
@@ -64,6 +66,40 @@ const IMAGE_COLS = `im.id, im.item_id as "itemId", im.media_type as "mediaType",
 const ITEM_COLS = `i.id, i.course_id as "courseId", i.slug, i.name, i.hint,
   i.extra_prompt as "extraPrompt", i.sort_order as "sortOrder", i.active, i.countable`;
 
+// Meter one billed people-screen call into hunt_scan as a kind='screen' row —
+// the CLAUDE.md rule: every model call's exact billed tokens must be
+// persisted, not just echoed on the response. org_id is the write-time
+// INVOICE stamp (the org that owns the item's venue right now, i.e. at bill
+// time — the hunt-usage rollup attributes by this stamp, so a later course/
+// venue move never re-bills the spend to another client); course_id keeps
+// the venue-level view; round/player stay null (an operator upload, not
+// gameplay). cost_usd is stamped here because the screen's provider — and
+// rate — varies per call (lib/itemImageScreen.js picks the cheapest
+// configured descriptor), unlike verify rows, which are priced at read time
+// from the rollup's fixed Haiku constants. Metering must never break the
+// upload flow (routes/hunt.js finalizeScan precedent).
+async function recordScreenScan({ itemId, courseId, orgId, locationId, scan }) {
+  try {
+    await pool.query(
+      `insert into hunt_scan
+         (kind, item_id, course_id, org_id, location_id, model, input_tokens, output_tokens, cost_usd)
+       values ('screen', $1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        itemId,
+        courseId,
+        orgId,
+        locationId,
+        scan?.provider ?? null,
+        scan?.inputTokens ?? null,
+        scan?.outputTokens ?? null,
+        scan?.cost ?? null,
+      ]
+    );
+  } catch (err) {
+    console.error("[admin/hunt-items] screen metering insert failed:", err);
+  }
+}
+
 /** The org_id a course belongs to (via its location), or null. */
 async function courseOrgId(courseId) {
   const result = await pool.query(
@@ -83,7 +119,7 @@ async function courseOrgId(courseId) {
 async function scopedItem(req, itemId) {
   if (!UUID_RE.test(itemId)) return { status: 400 };
   const result = await pool.query(
-    `select ${ITEM_COLS}, l.org_id as "orgId"
+    `select ${ITEM_COLS}, l.org_id as "orgId", c.location_id as "locationId"
        from hunt_item i
        join course c on c.id = i.course_id
        left join location l on l.id = c.location_id
@@ -323,6 +359,15 @@ router.post("/:id/images", express.json({ limit: "16mb" }), async (req, res) => 
       });
     }
     const scan = await screenItemImage({ imageBase64, mediaType });
+    // Meter the call we just paid for before the accept/reject branch — the
+    // tokens are billed whether or not the upload is stored.
+    await recordScreenScan({
+      itemId: item.id,
+      courseId: item.courseId,
+      orgId: item.orgId,
+      locationId: item.locationId,
+      scan,
+    });
     const scanOut = {
       provider: scan.provider,
       inputTokens: scan.inputTokens,

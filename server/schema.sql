@@ -24,6 +24,15 @@ alter table location add column if not exists lng         double precision;
 alter table location add column if not exists geofence_km double precision;
 -- Per-venue timezone (venues can span regions, so this is NOT one global zone).
 alter table location add column if not exists tz          text;
+-- Per-venue hunt spend config (validated in lib/validateLocation.js,
+-- normalizeHunt — the pos.loyalty.gameRewardCaps idiom). Stored shape:
+--   { dailyScanCap: int >= 0 }
+-- dailyScanCap bounds the venue's billed vision calls over a rolling 24h
+-- window (enforced in routes/hunt.js); 0 disables the hunt at that venue
+-- entirely (the per-client kill switch); an absent key = unlimited, i.e.
+-- only the env-global HUNT_SCAN_CAP / HUNT_ATTEMPT_CAP bounds apply —
+-- exactly the pre-config behavior, so the '{}' default changes nothing.
+alter table location add column if not exists hunt jsonb not null default '{}';
 
 create table if not exists course (
   id          uuid primary key default gen_random_uuid(),
@@ -129,26 +138,50 @@ create unique index if not exists hunt_find_verified_unique
   on hunt_find (round_client_id, player_tag, item_id)
   where verified and not countable;
 
--- Vision-spend metering: one row per model call made by POST /api/hunt/verify,
--- successful verdict or not. This is the billing/budget record, separate from
--- hunt_find (the gameplay record): it backs the per-round scan cap (HUNT_SCAN_CAP
--- in routes/hunt.js) and monthly cost rollups per course/venue, reconcilable
--- against the Anthropic invoice via the token counts. `item_id` is SET NULL on
--- item deletion (billing history outlives curation edits); `course_id` is
--- denormalized at write time so rollups survive item deletion too.
+-- Vision-spend metering: one row per BILLED model call, whatever surface made
+-- it. This is the billing/budget record, separate from hunt_find (the gameplay
+-- record): it backs the per-round scan cap (HUNT_SCAN_CAP in routes/hunt.js),
+-- the per-venue daily cap (location.hunt.dailyScanCap), and monthly cost
+-- rollups per course/venue/org, reconcilable against the provider invoice via
+-- the token counts. `kind` discriminates the surfaces:
+--   'verify'  POST /api/hunt/verify — a player's judged shot (the original,
+--             and only, kind before item-image screening was metered)
+--   'screen'  admin item-image people-screen (routes/admin/huntItems.js) —
+--             an operator's vetting upload, not gameplay: no round, no player
+-- `item_id` is SET NULL on item deletion (billing history outlives curation
+-- edits); `course_id` is denormalized at write time so rollups survive item
+-- deletion too. `cost_usd` is stamped at write time for 'screen' rows only —
+-- the screen's provider (and rate) varies per call (lib/itemImageScreen.js),
+-- while 'verify' rows stay priced at read time from the rollup's Haiku
+-- constants (routes/admin/huntUsage.js), preserving repriceability.
+-- `org_id` (added below the org section — org doesn't exist yet at this point
+-- in the file, the location.org_id ordering) is the INVOICE stamp: the org
+-- that owned the venue when the call was billed, written at insert time so
+-- moving a course/venue to another org never re-bills history.
 create table if not exists hunt_scan (
   id              uuid primary key default gen_random_uuid(),
-  round_client_id text not null,           -- device round id (the group)
-  player_tag      text not null,           -- [A-Z0-9]{3}, who scanned
+  kind            text not null default 'verify',  -- 'verify' | 'screen'
+  round_client_id text,                    -- device round id (the group); null for 'screen'
+  player_tag      text,                    -- [A-Z0-9]{3}, who scanned; null for 'screen'
   item_id         uuid references hunt_item(id) on delete set null,
   course_id       uuid,                    -- item's course at scan time (no FK: history)
-  model           text,                    -- model id that served the call
+  model           text,                    -- model/provider id that served the call
   input_tokens    int,                     -- from the API's usage object; null if unknown
   output_tokens   int,
+  cost_usd        double precision,        -- exact billed cost, 'screen' rows only
   verified        boolean,                 -- verdict outcome; null when no verdict (VISION_NO_OUTPUT)
   flagged         boolean,
   created_at      timestamptz not null default now()
 );
+
+-- For databases created before screen metering existed: add the discriminator
+-- and cost idempotently, and relax the two verify-only NOT NULLs that 'screen'
+-- rows (no round, no player) can't satisfy. Every pre-existing row IS a verify
+-- row, so the 'verify' default backfills history correctly.
+alter table hunt_scan add column if not exists kind text not null default 'verify';
+alter table hunt_scan add column if not exists cost_usd double precision;
+alter table hunt_scan alter column round_client_id drop not null;
+alter table hunt_scan alter column player_tag drop not null;
 
 create index if not exists hunt_scan_round_idx   on hunt_scan (round_client_id);
 create index if not exists hunt_scan_created_idx on hunt_scan (created_at);
@@ -401,6 +434,37 @@ update location
    set org_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
  where org_id is null;
 
+-- hunt_scan invoice attribution (see the hunt_scan section above): the org
+-- that owned the venue at BILL time, stamped on insert by routes/hunt.js and
+-- routes/admin/huntItems.js. The hunt-usage rollup groups invoices by this
+-- stamp, not by the live course→location→org chain, so an admin moving a
+-- course to another location (or a location to another org) can't silently
+-- re-bill historical spend to the destination client. Lives here rather than
+-- with the table: org is created just above, after hunt_scan.
+alter table hunt_scan add column if not exists org_id uuid references org(id);
+create index if not exists hunt_scan_org_idx on hunt_scan (org_id);
+-- Venue stamp for the rolling daily cap (routes/hunt.js reserveScan): like
+-- org_id it is fixed at bill time, so moving a course between venues cannot
+-- shift already-billed scans between the venues' 24h budgets.
+alter table hunt_scan add column if not exists location_id uuid references location(id);
+create index if not exists hunt_scan_location_idx on hunt_scan (location_id);
+
+-- Catch-up for scans metered before the stamp existed: attribute them to the
+-- venue's CURRENT org once — the best information available for old rows.
+-- Safe to run every migrate: guarded on `org_id is null`, so re-runs are
+-- cheap and a stamped row is never rewritten by a later course/org move.
+-- Rows whose course no longer resolves (or whose venue has no org) stay
+-- null — unattributed spend, super_admin-visible only in the rollup.
+update hunt_scan
+   set org_id = (select l.org_id
+                   from course c
+                   join location l on l.id = c.location_id
+                  where c.id = hunt_scan.course_id)
+ where org_id is null;
+update hunt_scan
+   set location_id = (select c.location_id from course c where c.id = hunt_scan.course_id)
+ where location_id is null;
+
 -- ---------------------------------------------------------------------------
 -- Player accounts (passwordless email sign-in), teams, and shared multi-device
 -- games. Supersedes the original "no player identity" design: accounts are
@@ -493,9 +557,17 @@ create table if not exists mail_send (
   id         uuid primary key default gen_random_uuid(),
   recipient  text not null,
   kind       text not null,                 -- 'otp' | 'team_invite'
+  org_slug   text,                          -- resolved tenant at send time; null =
+                                            --   no resolvable tenant (shared pool)
   created_at timestamptz not null default now()
 );
+-- Per-org cap attribution (multi-venue): MAIL_DAILY_CAP is counted per org_slug
+-- so one client's busy Saturday can't lock another client's players out of OTP
+-- sign-in. Idempotent add for databases from before attribution existed.
+alter table mail_send add column if not exists org_slug text;
 create index if not exists mail_send_created_idx on mail_send (created_at);
+-- No org_slug index on purpose: the on-send prune keeps this table under one
+-- day of traffic, so the per-org count is a trivial scan.
 -- One-time catch-up for databases from before the on-send prune existed (the
 -- prune keeps it empty of old rows thereafter; harmless to re-run).
 delete from mail_send where created_at < now() - interval '24 hours';

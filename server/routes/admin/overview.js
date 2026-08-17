@@ -14,15 +14,31 @@ import { boardSyntheticFilter } from "../../lib/syntheticConfig.js";
 
 export const router = Router();
 
-// The console reads in one HQ/operator zone (admin/ui.tsx's ADMIN_TZ), so the
-// series' calendar days are bucketed in that zone too — matching what the
-// operator sees everywhere else in Master Control.
+// Fallback zone for venues with no location.tz and for the platform-wide
+// series frame (super_admin with orgs spanning zones has no single "local").
 const ADMIN_TZ = process.env.ADMIN_TZ || "America/Los_Angeles";
+
+/** The calendar frame a request's series is emitted in: an org-scoped request
+ *  uses that org's venue zone (first live location by sort order that has
+ *  one), so an org_admin's "yesterday" is THEIR yesterday; platform-wide
+ *  requests fall back to ADMIN_TZ. */
+async function frameTz(scope) {
+  if (!scope) return ADMIN_TZ;
+  const r = await pool.query(
+    `select tz from location
+      where org_id = $1 and archived_at is null and tz is not null
+      order by sort_order, name limit 1`,
+    [scope]
+  );
+  return r.rows[0]?.tz ?? ADMIN_TZ;
+}
 
 // --- Daily trend series (office reporting, punchlist #2) --------------------
 // GET /api/admin/overview/series?days=30 → oldest-first daily buckets of
 // completed rounds, distinct player tags, and verified hunt finds. Days are
-// calendar days in ADMIN_TZ. Org-scoped like the rollup.
+// calendar days in EACH VENUE'S own zone (location.tz, ADMIN_TZ fallback):
+// every event is bucketed at its venue's midnight before summing, so an
+// East-coast venue's day is never cut at its 3am. Org-scoped like the rollup.
 router.get("/series", async (req, res) => {
   let days = 30;
   if (req.query.days !== undefined) {
@@ -35,14 +51,17 @@ router.get("/series", async (req, res) => {
   try {
     // Three grouped passes (rounds, players, finds) merged in JS — simpler
     // than one correlated query per bucket. The window bound is generous
-    // (days+1 in absolute time) and the per-day filter is exact in ADMIN_TZ.
+    // (days+1 in absolute time) and the per-day filter is exact, per venue:
+    // each event lands on the calendar day of ITS venue (coalesce(l.tz, $1)),
+    // and the per-venue buckets sum into one series keyed by that local date.
     const since = `now() - ($2::int + 1) * interval '1 day'`;
     // Synthetic (bot) rounds count by default; excluded when
     // SYNTHETIC_COUNT_ON_BOARD=false, so admin rollups match the boards.
     const synFilter = boardSyntheticFilter("r", process.env);
-    const [rounds, players, finds] = await Promise.all([
+    const [tz, rounds, players, finds] = await Promise.all([
+      frameTz(scope),
       pool.query(
-        `select timezone($1, r.completed_at)::date as day,
+        `select timezone(coalesce(l.tz, $1), r.completed_at)::date as day,
                 count(*) as rounds
            from round r
            join course c on c.id = r.course_id
@@ -54,7 +73,7 @@ router.get("/series", async (req, res) => {
         [ADMIN_TZ, days, scope]
       ),
       pool.query(
-        `select timezone($1, r.completed_at)::date as day,
+        `select timezone(coalesce(l.tz, $1), r.completed_at)::date as day,
                 count(distinct pt.tag) as players
            from round r
            join course c on c.id = r.course_id
@@ -67,7 +86,7 @@ router.get("/series", async (req, res) => {
         [ADMIN_TZ, days, scope]
       ),
       pool.query(
-        `select timezone($1, f.created_at)::date as day,
+        `select timezone(coalesce(l.tz, $1), f.created_at)::date as day,
                 count(*) as finds
            from hunt_find f
            join hunt_item i on i.id = f.item_id
@@ -95,8 +114,12 @@ router.get("/series", async (req, res) => {
       byDay.set(key(r.day), { ...byDay.get(key(r.day)), huntFinds: Number(r.finds) });
     }
 
-    // Emit exactly `days` buckets ending today (ADMIN_TZ), zero-filled.
-    const todayRes = await pool.query(`select timezone($1, now())::date as today`, [ADMIN_TZ]);
+    // Emit exactly `days` buckets ending today in the request's frame zone
+    // (the org's own zone when org-scoped; ADMIN_TZ platform-wide),
+    // zero-filled. A venue ahead of the frame can briefly hold events dated
+    // past the frame's today; they surface when the frame's calendar catches
+    // up — never lost, the source rows stay inside the `since` window.
+    const todayRes = await pool.query(`select timezone($1, now())::date as today`, [tz]);
     const today = todayRes.rows[0].today;
     const series = [];
     for (let i = days - 1; i >= 0; i--) {
@@ -111,7 +134,7 @@ router.get("/series", async (req, res) => {
         huntFinds: bucket.huntFinds ?? 0,
       });
     }
-    return res.json({ days, tz: ADMIN_TZ, series });
+    return res.json({ days, tz, series });
   } catch (err) {
     console.error("[admin/overview] series error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });

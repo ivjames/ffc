@@ -2,7 +2,9 @@
 // index.html links here instead of shipping a baked-in manifest, so each
 // client subdomain installs under its own name/colors/icons while sharing one
 // static bundle. No tenant (no live orgs) serves the platform defaults —
-// identical to the manifest the app shipped before orgs existed.
+// identical to the manifest the app shipped before orgs existed. A suspended/
+// archived tenant also gets the defaults: its sentinel org carries branding
+// null (lib/tenant.js), so the `?? {}` below lands on BRANDING_DEFAULTS.
 import { Router } from "express";
 import { tenant } from "../lib/tenant.js";
 import { resolveBranding } from "../lib/branding.js";

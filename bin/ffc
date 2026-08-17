@@ -304,18 +304,26 @@ cmd_vhost(){
     # when it exists — a plain `certbot --nginx -d $FQDN` here would mint a
     # single-name lineage that leaves every client subdomain with a bad cert.
     if [ -d "/etc/letsencrypt/live/$WILDCARD_CERT_NAME" ]; then
+      # A single concrete -d only: certbot's nginx installer can't match a
+      # literal "*.$FQDN" -d against a server block non-interactively ("Which
+      # server blocks would you like to modify?" -> hard fail under -n, seen
+      # on the droplet). It's also redundant — the lineage covers both names,
+      # and installing on the block matched by the one concrete name
+      # configures TLS for that block's whole server_name, client subdomains
+      # included.
       if [ -f "$LANDING_CONF" ]; then
         # The apex lives on the landing vhost (which references the lineage
-        # directly and must never be touched by certbot) — install only onto
-        # the wildcard name so certbot targets the player block alone.
+        # directly and must never be touched by certbot), and the player block
+        # is "server_name *.$FQDN" only — so target it via a concrete host the
+        # wildcard matches (the default org's subdomain).
         log "Installing wildcard cert '$WILDCARD_CERT_NAME' for *.$FQDN (apex is the landing vhost)"
         certbot install --nginx --cert-name "$WILDCARD_CERT_NAME" \
-          -d "*.$FQDN" --redirect -n \
+          -d "$DEFAULT_ORG_HOST" --redirect -n \
           || log "certbot install did not complete. Re-run later: ffc vhost"
       else
         log "Installing wildcard cert '$WILDCARD_CERT_NAME' for $FQDN + *.$FQDN"
         certbot install --nginx --cert-name "$WILDCARD_CERT_NAME" \
-          -d "$FQDN" -d "*.$FQDN" --redirect -n \
+          -d "$FQDN" --redirect -n \
           || log "certbot install did not complete. Re-run later: ffc vhost"
       fi
     else

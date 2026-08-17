@@ -24,7 +24,7 @@ function isFiniteNum(n) {
 // list SELECT so both responses have the same shape.
 export const LOCATION_RETURN_COLS = `id, name, slug, lat, lng,
   geofence_km as "geofenceKm", tz, sort_order as "sortOrder",
-  menu_url as "menuUrl", ordering_url as "orderingUrl", pos, hours,
+  menu_url as "menuUrl", ordering_url as "orderingUrl", pos, hours, hunt,
   org_id as "orgId", archived_at as "archivedAt"`;
 
 // POS vendors the platform has an adapter for. Onboarding a new vendor means
@@ -204,6 +204,42 @@ export function normalizePos(value) {
   };
 }
 
+/**
+ * Validate the per-venue hunt spend config (location.hunt jsonb) — the
+ * gameRewardCaps idiom applied to vision spend. Canonical stored shape:
+ *   { dailyScanCap: int >= 0 }   (key present only when the venue set it)
+ * dailyScanCap bounds the venue's billed hunt vision calls over a rolling 24h
+ * window (enforced in routes/hunt.js); 0 disables the hunt at that venue
+ * entirely (the per-client kill switch). null/absent key = unlimited — only
+ * the env-global HUNT_SCAN_CAP/HUNT_ATTEMPT_CAP bounds apply, exactly the
+ * pre-config behavior. `null`/`undefined`/`{}` bodies all normalize to `{}`
+ * (the column default), so omitting the field changes nothing.
+ * @returns {{ value: object } | { error: string }}
+ */
+export function normalizeHunt(value) {
+  if (value === undefined || value === null) return { value: {} };
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return { error: "hunt must be an object or null" };
+  }
+  // Reject unknown keys (the branding rule): a typo'd cap key must not
+  // silently store as "unlimited".
+  for (const key of Object.keys(value)) {
+    if (key !== "dailyScanCap") {
+      return { error: `hunt: unknown key ${JSON.stringify(key)}` };
+    }
+  }
+  const normalized = {};
+  if (value.dailyScanCap !== undefined && value.dailyScanCap !== null) {
+    if (!Number.isInteger(value.dailyScanCap) || value.dailyScanCap < 0) {
+      return {
+        error: "hunt.dailyScanCap must be an integer >= 0 (0 disables the hunt; null/absent for unlimited)",
+      };
+    }
+    normalized.dailyScanCap = value.dailyScanCap;
+  }
+  return { value: normalized };
+}
+
 /** Add the derived friendly tz label so admin/consumers don't recompute it. */
 export function withLabel(loc) {
   return { ...loc, tzLabel: loc.tz ? friendlyTzLabel(loc.tz) : null };
@@ -288,6 +324,11 @@ export function normalizeLocation(body) {
   const hours = normalizeHours(body.hours);
   if (hours.error) return { error: hours.error, status: 400 };
 
+  // Per-venue hunt spend config (see normalizeHunt above). Omitted/null
+  // clears it back to `{}` (unlimited) — the pos/hours replace-not-merge rule.
+  const hunt = normalizeHunt(body.hunt);
+  if (hunt.error) return { error: hunt.error, status: 400 };
+
   // Resolve the timezone. Explicit `tz` wins (validated); otherwise derive from
   // coordinates; otherwise leave null and let the leaderboard fall back to
   // VENUE_TZ. Onboarding normally sends just lat/lng and lets it derive.
@@ -323,6 +364,7 @@ export function normalizeLocation(body) {
       orderingUrl: orderingUrl.value,
       pos: pos.value,
       hours: hours.value,
+      hunt: hunt.value,
       orgId: orgId ?? null,
     },
   };
