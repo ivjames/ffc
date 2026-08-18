@@ -14,13 +14,14 @@ import { createGunzip, createGzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
-import { applyPackRepairs, loadPackRepairs } from "./lib/trivia-pack.mjs";
+import { applyPackRepairs, applyPackTypos, loadPackRepairs, loadPackTypos } from "./lib/trivia-pack.mjs";
 import { PACK_PATH } from "./build-trivia-pack.mjs";
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
   const entries = loadPackRepairs();
-  if (!entries.length) {
+  const typoEntries = loadPackTypos();
+  if (!entries.length && !typoEntries.length) {
     console.log("[repair-trivia-pack] no repairs file — nothing to do");
     return;
   }
@@ -34,11 +35,16 @@ async function main() {
     else rows.push(JSON.parse(line));
   }
 
-  const { applied, skipped } = applyPackRepairs(rows, entries);
+  const apostrophes = applyPackRepairs(rows, entries);
+  const typos = applyPackTypos(rows, typoEntries);
+  const applied = apostrophes.applied + typos.applied;
+  const skipped = [...apostrophes.skipped, ...typos.skipped];
   const byReason = new Map();
   for (const s of skipped) byReason.set(s.reason, (byReason.get(s.reason) ?? 0) + 1);
 
-  console.log(`[repair-trivia-pack] ${entries.length} entries: ${applied} applied, ${skipped.length} skipped`);
+  console.log(`[repair-trivia-pack] apostrophes: ${entries.length} entries, ${apostrophes.applied} applied`);
+  console.log(`[repair-trivia-pack] typos: ${typoEntries.length} entries, ${typos.applied} applied`);
+  console.log(`[repair-trivia-pack] ${entries.length + typoEntries.length} entries: ${applied} applied, ${skipped.length} skipped`);
   for (const [reason, n] of byReason) {
     console.log(`[repair-trivia-pack]   skipped ${String(n).padStart(5)}  ${reason}`);
   }

@@ -445,15 +445,16 @@ export function isApostropheInsertion(before, after) {
 }
 
 /**
- * Apply the committed judgment repairs to built rows, mutating in place.
+ * Shared applier for both overlays.
  *
- * Every entry is re-checked here rather than trusted: the replacement must be
- * a pure apostrophe insertion, must occur exactly once in its field, must not
- * collide with another row's dedupe key, and the repaired row must still pass
- * the admin validator. Anything that fails is skipped with a reason — a
- * repair pass must never be the thing that corrupts the pack.
+ * Nothing here trusts the entry file: `allow` decides whether the edit is the
+ * kind this overlay is permitted to make, the match must be unique and
+ * whole-word, a prompt edit must not collide with another row's dedupe key,
+ * and the repaired row must still pass the admin validator. Anything that
+ * fails is skipped with a reason — a repair pass must never be the thing that
+ * corrupts the pack.
  */
-export function applyPackRepairs(rows, entries) {
+function applyEdits(rows, entries, { allow, allowReason, guard }) {
   const byPrompt = new Map(rows.map((r) => [r.prompt, r]));
   const byKey = new Map(rows.map((r) => [dedupeKey(r.prompt), r]));
   const skipped = [];
@@ -463,7 +464,8 @@ export function applyPackRepairs(rows, entries) {
     const skip = (reason) => skipped.push({ entry: e, reason });
     const row = byPrompt.get(e.q);
     if (!row) { skip("no-such-prompt"); continue; }
-    if (!isApostropheInsertion(e.b, e.a)) { skip("not-insertion-only"); continue; }
+    if (!allow(e.b, e.a)) { skip(allowReason); continue; }
+    if (guard && guard(row)) { skip("guarded-row"); continue; }
 
     const isPrompt = e.f === "p";
     const field = isPrompt ? row.prompt : row.choices[e.f];
@@ -498,4 +500,98 @@ export function applyPackRepairs(rows, entries) {
     applied++;
   }
   return { applied, skipped };
+}
+
+/**
+ * Apply the committed apostrophe repairs to built rows, mutating in place.
+ *
+ * The replacement must be a pure apostrophe insertion — the property that
+ * makes this overlay safe to apply without re-reading every question.
+ */
+export function applyPackRepairs(rows, entries) {
+  return applyEdits(rows, entries, {
+    allow: isApostropheInsertion,
+    allowReason: "not-insertion-only",
+  });
+}
+
+/**
+ * Typo and grammar repairs: the corpus is hand-maintained and full of
+ * ordinary mistakes — "milllion", "Micheal", "thery" for "they're", doubled
+ * words, subject-verb disagreement.
+ *
+ * These cannot be insertion-only, so the safety story is different. Each
+ * entry was proposed by a model sweep, independently verified in sentence
+ * context, and is re-checked at apply time against `isMinorTextEdit`: an
+ * entry may correct wording, never rewrite it. Same file format as the
+ * apostrophe overlay.
+ */
+export const TYPOS_PATH = join(dirname(fileURLToPath(import.meta.url)), "trivia-pack-typos.ndjson");
+
+export function loadPackTypos(path = TYPOS_PATH) {
+  return loadPackRepairs(path);
+}
+
+/** Levenshtein distance, bounded by `cap` so a long pair exits early. */
+function editDistance(a, b, cap) {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = a[i - 1] === b[j - 1]
+        ? prev[j - 1]
+        : 1 + Math.min(prev[j - 1], prev[j], cur[j - 1]);
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > cap) return cap + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * True when `after` corrects `before` rather than rewriting it.
+ *
+ * This bounds blast radius, NOT meaning. "was" -> "were" and "cat" -> "dog"
+ * are the same shape to any string metric, so whether an edit is *right* is
+ * the verifier's job and this function's job is only to guarantee that an
+ * entry cannot quietly swap out the content of a question. Three bounds, all
+ * of which must hold: the word count may move by at most one (so "alot" ->
+ * "a lot" and a doubled-word deletion stay expressible, a reworded sentence
+ * does not), the character distance stays inside a quarter of the original
+ * with a floor of four so short corrections still fit, and no edit may exceed
+ * 20 characters however long the span is.
+ */
+export function isMinorTextEdit(before, after) {
+  if (!before || !after || before === after) return false;
+  const words = (s) => s.trim().split(/\s+/).length;
+  if (Math.abs(words(before) - words(after)) > 1) return false;
+  const cap = Math.min(20, Math.max(4, Math.ceil(before.length * 0.25)));
+  return editDistance(before, after, cap) <= cap;
+}
+
+/**
+ * Questions whose subject IS the spelling, where a typo fix destroys the
+ * question.
+ *
+ * The corpus asks "Can you find the correct spelling of this group/singer?"
+ * over four manglings of Lynyrd Skynyrd; correcting the distractors leaves
+ * four identical options and no question. Whole rows are held back rather
+ * than individual fields, because the trap is the row, not the string.
+ */
+const SPELLING_QUESTION_RE = /\b(?:spell|spells|spelled|spelling|spellings|misspell\w*|spelt)\b/i;
+
+export function looksLikeSpellingQuestion(row) {
+  return SPELLING_QUESTION_RE.test([row.prompt, ...row.choices].join(" | "));
+}
+
+/** Apply the committed typo repairs to built rows, mutating in place. */
+export function applyPackTypos(rows, entries) {
+  return applyEdits(rows, entries, {
+    allow: isMinorTextEdit,
+    allowReason: "not-a-minor-edit",
+    guard: looksLikeSpellingQuestion,
+  });
 }

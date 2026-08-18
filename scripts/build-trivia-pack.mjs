@@ -26,8 +26,10 @@ import {
   CATEGORY_LABELS,
   REJECT_REASONS,
   applyPackRepairs,
+  applyPackTypos,
   decodeMixedUtf8,
   loadPackRepairs,
+  loadPackTypos,
   parseCategoryFile,
   toPackRow,
 } from "./lib/trivia-pack.mjs";
@@ -116,8 +118,11 @@ async function main() {
   // place (scripts/repair-trivia-pack.mjs) and rebuilding from upstream land
   // on the identical artifact.
   const repairs = applyPackRepairs(rows, loadPackRepairs());
+  const typos = applyPackTypos(rows, loadPackTypos());
   const skippedByReason = new Map();
-  for (const s of repairs.skipped) skippedByReason.set(s.reason, (skippedByReason.get(s.reason) ?? 0) + 1);
+  for (const s of [...repairs.skipped, ...typos.skipped]) {
+    skippedByReason.set(s.reason, (skippedByReason.get(s.reason) ?? 0) + 1);
+  }
 
   const header = {
     pack: "opentriviaqa",
@@ -137,7 +142,8 @@ async function main() {
   for (const reason of REJECT_REASONS) {
     console.log(`[build-trivia-pack]   dropped ${String(rejects[reason]).padStart(5)}  ${reason}`);
   }
-  console.log(`[build-trivia-pack] judgment repairs: ${repairs.applied} applied, ${repairs.skipped.length} skipped`);
+  console.log(`[build-trivia-pack] apostrophe repairs: ${repairs.applied} applied, ${repairs.skipped.length} skipped`);
+  console.log(`[build-trivia-pack] typo repairs: ${typos.applied} applied, ${typos.skipped.length} skipped`);
   for (const [reason, n] of skippedByReason) {
     console.log(`[build-trivia-pack]   skipped ${String(n).padStart(5)}  ${reason}`);
   }

@@ -17,11 +17,15 @@ import { normalizeQuestion } from '../server/lib/triviaLive.js';
 import {
   CATEGORY_LABELS,
   applyPackRepairs,
+  applyPackTypos,
   decodeMixedUtf8,
   dedupeKey,
   isApostropheInsertion,
   isFamilySafe,
+  isMinorTextEdit,
   loadPackRepairs,
+  loadPackTypos,
+  looksLikeSpellingQuestion,
   parseCategoryFile,
   repairApostrophes,
   shuffleChoices,
@@ -188,6 +192,124 @@ describe('applyPackRepairs', () => {
     expect(applied).toBe(1);
     expect(rows[1].choices[1]).toBe("Gob'i");
     expect(rows[1].answer).toBe(0);
+  });
+});
+
+describe('isMinorTextEdit', () => {
+  test('accepts corrections', () => {
+    expect(isMinorTextEdit('two milllion years', 'two million years')).toBe(true);
+    expect(isMinorTextEdit('Micheal Jackson', 'Michael Jackson')).toBe(true);
+    expect(isMinorTextEdit('the results was', 'the results were')).toBe(true);
+    // A doubled word costs its whole length, so the bound has a floor.
+    expect(isMinorTextEdit('the the same', 'the same')).toBe(true);
+  });
+
+  test('refuses a rewrite', () => {
+    expect(
+      isMinorTextEdit(
+        'In what year was the worlds first pizza parlor built?',
+        'In what year did pizza restaurants first appear?'
+      )
+    ).toBe(false);
+    expect(isMinorTextEdit('Which planet is closest to the sun?', 'Which planet orbits nearest our star?')).toBe(false);
+  });
+
+  test('refuses a no-op and rejects wholesale word-count changes', () => {
+    expect(isMinorTextEdit('million', 'million')).toBe(false);
+    expect(isMinorTextEdit('a cat', 'a large orange cat')).toBe(false);
+  });
+
+  test('bounds blast radius, not meaning — a short swap is the verifier\'s problem', () => {
+    // Documented deliberately: no string metric separates "was"->"were" from
+    // "cat"->"dog", so this gate cannot be the thing that decides correctness.
+    expect(isMinorTextEdit('cat', 'dog')).toBe(true);
+  });
+});
+
+describe('looksLikeSpellingQuestion', () => {
+  test('flags a question whose subject is the spelling', () => {
+    expect(
+      looksLikeSpellingQuestion({
+        prompt: 'Can you find the correct spelling of this group/singer?',
+        choices: ['Lenyd Skynard', 'Lynyrd Skynyrd', 'Lenird Skynerd', 'Linard Skinard'],
+      })
+    ).toBe(true);
+  });
+
+  test('flags it from an option too, not just the prompt', () => {
+    expect(
+      looksLikeSpellingQuestion({ prompt: 'Where did Sid get his stage name?', choices: ['His mother\'s maiden name spelled backwards'] })
+    ).toBe(true);
+  });
+
+  test('leaves ordinary questions alone', () => {
+    expect(looksLikeSpellingQuestion({ prompt: 'Which planet is closest to the sun?', choices: ['Mercury'] })).toBe(false);
+  });
+});
+
+describe('applyPackTypos', () => {
+  const mkRows = () => [
+    {
+      prompt: 'A Clydesdale horse can weight up to 1,000 pounds.',
+      choices: ['True', 'False'],
+      answer: 1,
+      category: 'Animals',
+      difficulty: 2,
+      active: true,
+    },
+    {
+      prompt: 'Can you find the correct spelling of this group/singer?',
+      choices: ['Lenyd Skynard', 'Lynyrd Skynyrd', 'Lenird Skynerd', 'Linard Skinard'],
+      answer: 1,
+      category: 'Music',
+      difficulty: 2,
+      active: true,
+    },
+  ];
+
+  test('applies a correction', () => {
+    const rows = mkRows();
+    const { applied, skipped } = applyPackTypos(rows, [
+      { q: 'A Clydesdale horse can weight up to 1,000 pounds.', f: 'p', b: 'can weight up', a: 'can weigh up' },
+    ]);
+    expect(applied).toBe(1);
+    expect(skipped).toEqual([]);
+    expect(rows[0].prompt).toBe('A Clydesdale horse can weigh up to 1,000 pounds.');
+  });
+
+  test('refuses to touch a spelling question, however plausible the fix', () => {
+    // Correcting the distractors here leaves four identical options and no
+    // question. The guard is on the row, because the trap is the row.
+    const rows = mkRows();
+    const { applied, skipped } = applyPackTypos(rows, [
+      { q: 'Can you find the correct spelling of this group/singer?', f: 0, b: 'Lenyd Skynard', a: 'Lynyrd Skynyrd' },
+    ]);
+    expect(applied).toBe(0);
+    expect(skipped[0].reason).toBe('guarded-row');
+    expect(rows[1].choices[0]).toBe('Lenyd Skynard');
+  });
+
+  test('refuses an entry that rewrites rather than corrects', () => {
+    const rows = mkRows();
+    const { applied, skipped } = applyPackTypos(rows, [
+      {
+        q: 'A Clydesdale horse can weight up to 1,000 pounds.',
+        f: 'p',
+        b: 'A Clydesdale horse can weight up to 1,000 pounds.',
+        a: 'A Shire horse is among the heaviest breeds in the world.',
+      },
+    ]);
+    expect(applied).toBe(0);
+    expect(skipped[0].reason).toBe('not-a-minor-edit');
+  });
+
+  test('a second pass over the repaired rows is a no-op', () => {
+    const rows = mkRows();
+    const entries = [
+      { q: 'A Clydesdale horse can weight up to 1,000 pounds.', f: 'p', b: 'can weight up', a: 'can weigh up' },
+    ];
+    applyPackTypos(rows, entries);
+    expect(applyPackTypos(rows, entries).applied).toBe(0);
   });
 });
 
@@ -463,6 +585,27 @@ describe('the committed pack', () => {
     const { rows } = await pack;
     const broken = rows.filter((r) => /\b(dont|cant|didnt|wasnt|youre|thats|arent)\b/i.test(r.prompt));
     expect(broken.map((r) => r.prompt)).toEqual([]);
+  });
+
+  test('every committed typo repair is a bounded correction, not a rewrite', () => {
+    for (const e of loadPackTypos()) {
+      expect(isMinorTextEdit(e.b, e.a), JSON.stringify(e)).toBe(true);
+    }
+  });
+
+  test('the committed typo repairs are already applied — re-applying is a no-op', async () => {
+    const { rows } = await pack;
+    const cloned = rows.map((r) => ({ ...r, choices: [...r.choices] }));
+    expect(applyPackTypos(cloned, loadPackTypos()).applied).toBe(0);
+  });
+
+  test('no typo repair targets a question about spelling', async () => {
+    const { rows } = await pack;
+    const byPrompt = new Map(rows.map((r) => [r.prompt, r]));
+    const offenders = loadPackTypos()
+      .map((e) => byPrompt.get(e.q))
+      .filter((row) => row && looksLikeSpellingQuestion(row));
+    expect(offenders).toEqual([]);
   });
 
   test('every committed judgment repair is a pure apostrophe insertion', () => {
