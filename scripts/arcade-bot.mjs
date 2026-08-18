@@ -47,7 +47,7 @@
 //   profile, so a bigger capture can be sized before it is started.
 import { chromium } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
-import { GAMES, UNSUPPORTED, resolve } from './lib/arcade/registry.mjs';
+import { BY_KEY, GAMES, UNSUPPORTED, resolve } from './lib/arcade/registry.mjs';
 import { playRound } from './lib/arcade/round.mjs';
 import { makeRng, sampleSkill } from './lib/arcade/skill.mjs';
 
@@ -100,6 +100,10 @@ const SKILL_FLOOR = {
   milkbottle: 12,
   airhockey: 4,
   pinball: 1200,
+  bumpercars: 5,
+  bumperboats: 4,
+  // Go-Karts scores a TIME, so its floor is a CEILING — see lowerIsBetter.
+  gokarts: 120,
 };
 
 const pct = (xs, p) => {
@@ -180,6 +184,7 @@ async function main() {
         p50: pct(scores, 50),
         p90: pct(scores, 90),
         max: scores.length ? Math.max(...scores) : 0,
+        min: scores.length ? Math.min(...scores) : 0,
         meanRoundMs: Math.round(mean(rows.map((r) => r.ms))),
       },
     };
@@ -214,8 +219,15 @@ async function main() {
     for (const [key, g] of Object.entries(profile.games)) {
       const floor = SKILL_FLOOR[key];
       if (floor === undefined) continue;
-      if (g.stats.max < floor) {
-        console.error(`FAIL ${key}: best score ${g.stats.max} < floor ${floor}`);
+      // A time-scored game's BEST round is its lowest, and the bound is an
+      // upper one — comparing it the usual way would pass any result at all.
+      const lower = BY_KEY.get(key)?.lowerIsBetter;
+      const best = lower ? g.stats.min : g.stats.max;
+      const failed = lower ? best > floor : best < floor;
+      if (failed) {
+        console.error(
+          `FAIL ${key}: best ${best} ${lower ? '>' : '<'} ${lower ? 'ceiling' : 'floor'} ${floor}`,
+        );
         bad++;
       }
     }

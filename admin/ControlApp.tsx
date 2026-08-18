@@ -4,12 +4,14 @@ import { setToken, clearToken, api, AuthError, ApiError, type CurrentUser } from
 import { BrandMark, Button, Card, Field, Input, Banner, ToastProvider, ADMIN_TZ_LABEL } from './ui';
 import SetPassword from './SetPassword';
 import Overview from './Overview';
+import VoiceBench from './VoiceBench';
 import Orgs from './Orgs';
 import OrgDetail from './OrgDetail';
 import LocationWizard from './LocationWizard';
 import LocationDetail from './LocationDetail';
 import Archived from './Archived';
 import Announcements from './Announcements';
+import Trivia from './Trivia';
 import Rewards from './Rewards';
 import Photos from './Photos';
 import BoothPhotos from './BoothPhotos';
@@ -48,6 +50,13 @@ const ICON_PATHS = {
     <>
       <path d="m3 11 18-5v12L3 13v-2z" />
       <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+    </>
+  ),
+  trivia: (
+    <>
+      <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-2.8-.4L3 21l1.9-5.1A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" />
+      <path d="M10.1 9.3a2 2 0 1 1 2.7 1.9c-.5.2-.8.7-.8 1.2v.4" />
+      <path d="M12 16h.01" />
     </>
   ),
   rewards: (
@@ -155,14 +164,21 @@ type NavItem = {
   isActive?: (pathname: string) => boolean;
   /** Hidden from an org_admin. Declared inline rather than appended per
    *  section, so a super-admin-only item can sit in its right position
-   *  ("New site" next to Orgs) instead of always landing last. */
+   *  ("Provision site" next to Orgs) instead of always landing last. */
   superAdminOnly?: boolean;
+  /** Set for a destination outside the SPA — today the vision bench, which is
+   *  still a server-rendered page. Rendered as a plain <a> (same tab, so the
+   *  admin session goes with it) rather than a router Link, which would only
+   *  push a path the router has no route for. */
+  external?: boolean;
 };
 
 type NavSection = { label?: string; items: NavItem[] };
 
-// The Hunt section also contains the vision bench (image vetting) link, so
-// the bench has no nav entry of its own.
+// Benches live in Ops alongside the other tools. The voice bench is a real
+// route; the vision bench is still a server-rendered page and is marked
+// `external` until it gets the same treatment — either way, both are in the
+// menu, because a tool nobody can find is a tool nobody uses.
 const NAV_SECTIONS: NavSection[] = [
   {
     items: [{ to: '/', label: 'Overview', icon: 'overview', isActive: (p) => p === '/' }],
@@ -189,6 +205,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Engagement',
     items: [
       { to: '/announcements', label: 'Announcements', icon: 'announcements' },
+      { to: '/trivia', label: 'Trivia', icon: 'trivia' },
       { to: '/rewards', label: 'Rewards', icon: 'rewards' },
       { to: '/hunt', label: 'Hunt', icon: 'hunt' },
     ],
@@ -212,6 +229,16 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/signups', label: 'Signups', icon: 'signups', superAdminOnly: true },
       // Load/soak bot — a platform tool.
       { to: '/synthetic', label: 'Synthetic', icon: 'synthetic', superAdminOnly: true },
+      // The benches. The voice bench is a real route; the vision bench is
+      // still a server-rendered page, hence `external`.
+      { to: '/voice-bench', label: 'Voice bench', icon: 'usage', superAdminOnly: true },
+      {
+        to: '/api/admin/vision-bakeoff/ui',
+        label: 'Vision bench',
+        icon: 'photos',
+        superAdminOnly: true,
+        external: true,
+      },
     ],
   },
 ];
@@ -456,16 +483,25 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const active = itemActive(item, pathname);
+                  const className = `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
+                    active
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`;
+                  if (item.external) {
+                    return (
+                      <a key={item.to} href={item.to} className={className}>
+                        <NavIcon name={item.icon} />
+                        {item.label}
+                      </a>
+                    );
+                  }
                   return (
                     <Link
                       key={item.to}
                       to={item.to}
                       aria-current={active ? 'page' : undefined}
-                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
-                        active
-                          ? 'bg-slate-900 text-white'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      }`}
+                      className={className}
                     >
                       <NavIcon name={item.icon} />
                       {item.label}
@@ -540,7 +576,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             Times shown in {ADMIN_TZ_LABEL}
           </div>
           <Routes>
-            <Route path="/" element={<Overview isSuperAdmin={isSuperAdmin} />} />
+            <Route path="/" element={<Overview />} />
             <Route path="/orgs" element={<Orgs isSuperAdmin={isSuperAdmin} />} />
             {/* Splat, not a bare :id — the org page's tabs (venues/branding/
                 team) are real routes, so each one is linkable and reloadable. */}
@@ -551,6 +587,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             />
             <Route path="/locations/:id" element={<LocationDetail />} />
             <Route path="/announcements" element={<Announcements isSuperAdmin={isSuperAdmin} />} />
+            <Route path="/trivia" element={<Trivia isSuperAdmin={isSuperAdmin} />} />
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/hunt" element={<Hunt isSuperAdmin={isSuperAdmin} />} />
             <Route path="/hunt/items/:id" element={<HuntItemDetail />} />
@@ -563,8 +600,9 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
             {isSuperAdmin && <Route path="/signups" element={<Signups />} />}
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
+            {isSuperAdmin && <Route path="/voice-bench" element={<VoiceBench />} />}
             {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}
-            <Route path="*" element={<Overview isSuperAdmin={isSuperAdmin} />} />
+            <Route path="*" element={<Overview />} />
           </Routes>
         </main>
       </div>

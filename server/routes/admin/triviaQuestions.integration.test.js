@@ -168,6 +168,98 @@ test("the list can be narrowed to one category", async () => {
   assert.ok(!questions.some((q) => q.orgId === orgA), "and Org A's own questions are not House Pack");
 });
 
+test("the list can be searched by prompt substring", async () => {
+  const needle = `findme-${stamp}`;
+  await testQuery(
+    `insert into trivia_question (org_id, category, prompt, choices, answer)
+     values ($1, 'Searchable', $2, '["a","b"]'::jsonb, 0)`,
+    [orgA, `A question about ${needle} and nothing else`]
+  );
+  const hit = await (
+    await call("GET", `/trivia/questions?q=${encodeURIComponent(needle)}`, null, { cookie: adminACookie })
+  ).json();
+  assert.equal(hit.total, 1);
+  assert.match(hit.questions[0].prompt, new RegExp(needle));
+
+  // Case-insensitive, and a partial word still matches — that's the point of
+  // substring search over full-text for a bank you're eyeballing.
+  const upper = await (
+    await call("GET", `/trivia/questions?q=${encodeURIComponent(needle.toUpperCase())}`, null, { cookie: adminACookie })
+  ).json();
+  assert.equal(upper.total, 1);
+
+  const miss = await (
+    await call("GET", `/trivia/questions?q=${encodeURIComponent(`nothing-${stamp}`)}`, null, { cookie: adminACookie })
+  ).json();
+  assert.equal(miss.total, 0);
+  assert.deepEqual(miss.questions, []);
+});
+
+test("LIKE wildcards in a search term are matched literally", async () => {
+  // "%" typed into a search box means a percent sign, not "match anything".
+  // Unescaped, `q=%` would return the entire 48k bank.
+  const everything = await (
+    await call("GET", "/trivia/questions?q=%25", null, { cookie: adminACookie })
+  ).json();
+  const all = await (await call("GET", "/trivia/questions", null, { cookie: adminACookie })).json();
+  assert.ok(all.total > 0);
+  assert.notEqual(everything.total, all.total, "a bare % must not match every row");
+
+  await testQuery(
+    `insert into trivia_question (org_id, category, prompt, choices, answer)
+     values ($1, 'Searchable', $2, '["a","b"]'::jsonb, 0)`,
+    [orgA, `Only ${stamp} 50% of the time`]
+  );
+  const literal = await (
+    await call("GET", `/trivia/questions?q=${encodeURIComponent("50%")}`, null, { cookie: adminACookie })
+  ).json();
+  assert.ok(literal.total >= 1);
+  assert.ok(literal.questions.every((q) => q.prompt.includes("50%")));
+});
+
+test("the categories endpoint lists what the filter can offer, with counts", async () => {
+  const res = await call("GET", "/trivia/categories", null, { cookie: adminACookie });
+  assert.equal(res.status, 200);
+  const { categories } = await res.json();
+  const house = categories.find((c) => c.category === "House Pack");
+  assert.ok(house, "the seeded House Pack is a category");
+  assert.ok(house.n > 0);
+  // Every offered category must actually return rows, or the dropdown lies.
+  for (const c of categories) assert.ok(c.n > 0, `${c.category} has no rows`);
+});
+
+// POST /trivia/questions REPLACES the row — it is not a PATCH. That is a real
+// trap for any caller: a save that omits locationId clears the venue scope, and
+// one that omits `active` switches it back on. Pinned here so the contract is
+// explicit, because admin/Trivia.tsx has to round-trip both fields to be safe.
+test("an update replaces the whole row, including fields the caller omits", async () => {
+  const created = await testQuery(
+    `insert into trivia_question (org_id, location_id, category, prompt, choices, answer, active)
+     values ($1, null, 'House', $2, '["a","b"]'::jsonb, 0, false) returning id`,
+    [orgA, `replace-me-${stamp}`]
+  );
+  const id = created.rows[0].id;
+
+  const res = await call(
+    "POST",
+    "/trivia/questions",
+    { id, prompt: `replace-me-${stamp}`, choices: ["a", "b"], answer: 0, category: "House" },
+    { cookie: adminACookie }
+  );
+  assert.equal(res.status, 200);
+  const { question } = await res.json();
+  assert.equal(question.active, true, "omitting `active` switches it back on");
+
+  // And the other direction: passing them through keeps them.
+  const kept = await call(
+    "POST",
+    "/trivia/questions",
+    { id, prompt: `replace-me-${stamp}`, choices: ["a", "b"], answer: 0, category: "House", active: false },
+    { cookie: adminACookie }
+  );
+  assert.equal((await kept.json()).question.active, false);
+});
+
 test("a nonsense limit is refused rather than silently ignored", async () => {
   for (const qs of ["limit=-1", "limit=abc", "offset=-5"]) {
     const res = await call("GET", `/trivia/questions?${qs}`, null, { cookie: adminACookie });

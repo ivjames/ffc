@@ -1,16 +1,13 @@
-// Admin: Polly voice bake-off, mounted at /api/admin/tts-bakeoff so it rides
-// Master Control's HTTPS + login — log in, then open
-// /api/admin/tts-bakeoff/ui.
+// Admin: Polly voice bake-off API, mounted at /api/admin/tts-bakeoff.
+// super_admin only — /run spends on the AWS key in the server's environment.
 //
-// Same shape as the vision bake-off next door: a static page reachable
-// pre-auth (it holds no secrets), with every data and spend endpoint behind
-// super_admin. The engine is lib/ttsBakeoff.js, shared with
-// scripts/tts-bakeoff.mjs so the CLI and this page audition identically.
+// The UI is a normal Master Control screen (admin/VoiceBench.tsx, Ops → Voice
+// bench). This router used to serve its own standalone HTML page too, copied
+// from the vision bench's shape; that made the bench unfindable and unlike
+// every other screen, so the page is gone and the SPA owns the rendering.
 //
-// The point of it existing here rather than only as a script: the clips have
-// to be listened to on the tablet that will host the game, through the speaker
-// the room hears. Files written into a directory on the droplet are not
-// listenable; a page behind the admin login is.
+// The engine is lib/ttsBakeoff.js, shared with scripts/tts-bakeoff.mjs so the
+// CLI and the screen audition identically.
 import { Router } from "express";
 import { pool } from "../../db.js";
 import { isSuperAdmin } from "../../lib/adminAuth.js";
@@ -27,26 +24,14 @@ import {
   readRun,
   synthesizeAll,
 } from "../../lib/ttsBakeoff.js";
-import { renderPage } from "./ttsBakeoffPage.js";
 import { createReadStream, existsSync } from "node:fs";
 import { join } from "node:path";
 
 export const router = Router();
-export const publicRouter = Router();
 
 // A button that spends money should never be able to spend a lot of it by
 // accident: three questions is what the audition needs, five is the ceiling.
 const MAX_QUESTIONS = 5;
-
-const PAGE = renderPage("/api/admin/tts-bakeoff");
-
-// Pre-auth like the vision bench: a static shell with no secrets in it. Every
-// endpoint below still requires super_admin.
-publicRouter.get("/tts-bakeoff/ui", (req, res) => {
-  // no-store for the same reason as the vision page: Safari otherwise caches
-  // this URL, including a pre-deploy 401 body, and serves it after the fix.
-  res.set("Cache-Control", "no-store").type("html").send(PAGE);
-});
 
 router.use((req, res, next) => {
   if (!isSuperAdmin(req)) {
