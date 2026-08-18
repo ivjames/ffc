@@ -228,6 +228,38 @@ test("the categories endpoint lists what the filter can offer, with counts", asy
   for (const c of categories) assert.ok(c.n > 0, `${c.category} has no rows`);
 });
 
+// POST /trivia/questions REPLACES the row — it is not a PATCH. That is a real
+// trap for any caller: a save that omits locationId clears the venue scope, and
+// one that omits `active` switches it back on. Pinned here so the contract is
+// explicit, because admin/Trivia.tsx has to round-trip both fields to be safe.
+test("an update replaces the whole row, including fields the caller omits", async () => {
+  const created = await testQuery(
+    `insert into trivia_question (org_id, location_id, category, prompt, choices, answer, active)
+     values ($1, null, 'House', $2, '["a","b"]'::jsonb, 0, false) returning id`,
+    [orgA, `replace-me-${stamp}`]
+  );
+  const id = created.rows[0].id;
+
+  const res = await call(
+    "POST",
+    "/trivia/questions",
+    { id, prompt: `replace-me-${stamp}`, choices: ["a", "b"], answer: 0, category: "House" },
+    { cookie: adminACookie }
+  );
+  assert.equal(res.status, 200);
+  const { question } = await res.json();
+  assert.equal(question.active, true, "omitting `active` switches it back on");
+
+  // And the other direction: passing them through keeps them.
+  const kept = await call(
+    "POST",
+    "/trivia/questions",
+    { id, prompt: `replace-me-${stamp}`, choices: ["a", "b"], answer: 0, category: "House", active: false },
+    { cookie: adminACookie }
+  );
+  assert.equal((await kept.json()).question.active, false);
+});
+
 test("a nonsense limit is refused rather than silently ignored", async () => {
   for (const qs of ["limit=-1", "limit=abc", "offset=-5"]) {
     const res = await call("GET", `/trivia/questions?${qs}`, null, { cookie: adminACookie });

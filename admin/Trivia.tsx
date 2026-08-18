@@ -86,6 +86,14 @@ function QuestionForm({
         answer: answerIndex,
         category: category.trim(),
         difficulty,
+        // POST /trivia/questions replaces the whole row: an absent locationId
+        // is written as null and an absent `active` as true. This form does not
+        // edit either, so it has to hand them back unchanged — otherwise saving
+        // a typo fix on a house question would quietly promote it to every
+        // venue in the org, and saving a deactivated one would put it back in
+        // the deal pool.
+        locationId: initial?.locationId ?? null,
+        active: initial?.active ?? true,
       });
       toast(initial ? 'Question updated.' : 'Question added.');
       onDone();

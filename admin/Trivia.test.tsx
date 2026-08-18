@@ -241,6 +241,50 @@ describe('the question form', () => {
     );
   });
 
+  test('editing preserves the fields the form does not show', async () => {
+    // The save endpoint replaces the whole row, so anything this form omits is
+    // reset: a house question would lose its venue scope and become org-wide,
+    // and a deactivated one would go back into the deal pool. Fixing a typo
+    // must not do either.
+    const houseRow: TriviaQuestion = {
+      ...mine,
+      locationId: 'loc-7',
+      active: false,
+    };
+    vi.mocked(api.listTriviaQuestions).mockResolvedValue(page([houseRow]));
+    vi.mocked(api.saveTriviaQuestion).mockResolvedValue({ ok: true, question: houseRow });
+    const user = userEvent.setup();
+    render(<Trivia isSuperAdmin={true} />);
+    const row = (await screen.findByText('What year did this venue open?')).closest('div')!
+      .parentElement!.parentElement!;
+
+    await user.click(within(row).getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() =>
+      expect(api.saveTriviaQuestion).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'q-mine', locationId: 'loc-7', active: false })
+      )
+    );
+  });
+
+  test('a new question is org-wide and live by default', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.saveTriviaQuestion).mockResolvedValue({ ok: true, question: mine });
+    await openForm(user);
+    await user.type(screen.getByPlaceholderText('Which planet is closest to the sun?'), 'Capital of France?');
+    await user.type(screen.getByPlaceholderText('Option 1 (required)'), 'Paris');
+    await user.type(screen.getByPlaceholderText('Option 2 (required)'), 'Lyon');
+    await user.type(screen.getByPlaceholderText('General Knowledge'), 'Geography');
+    await user.click(screen.getByRole('button', { name: 'Add question' }));
+
+    await waitFor(() =>
+      expect(api.saveTriviaQuestion).toHaveBeenCalledWith(
+        expect.objectContaining({ locationId: null, active: true })
+      )
+    );
+  });
+
   test('editing an existing question sends its id', async () => {
     const user = userEvent.setup();
     vi.mocked(api.saveTriviaQuestion).mockResolvedValue({ ok: true, question: platform });
