@@ -65,14 +65,21 @@ the guide isn't drawn at all.
 ## Coverage
 
 Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`, `axethrow`,
-`darts`. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
+`darts`, `whackamole`, `bowling`, `shootinggallery`, `clawmachine`,
+`battingcages`, `watergunrace` — 12 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
 usefully, for *why* each unsupported game isn't in it.
 
-The gap is deliberate. Reactive games (whack-a-mole, shooting gallery, air
-hockey, pinball, go-karts, …) need to track moving entities frame by frame,
-which the canvas-probe approach can be extended to but doesn't do yet. Bowling
-and milk-bottle are physics sims — the aim inverts, the pin/bottle scatter
-doesn't, so they'd need empirical calibration instead of a closed form.
+The gap is narrowing rather than fixed. Whack-a-Mole was the first REACTIVE
+game — targets that are live state, not fixed geometry — and it works by
+sampling all nine holes in one round trip and acting on what is there. Its holes
+are a known 3×3 grid, so nothing has to be tracked frame to frame; games with
+genuinely moving entities (a duck on a rail, a puck, a pinball) need the
+position recovered from pixels and predicted forward, which is the next step up.
+
+Still out: air hockey, pinball and the driving games; milk
+bottle, whose aim inverts but whose scatter is a sim (bowling is now in, by
+CALIBRATING the line rather than solving it — see its policy); trivia, which is knowledge rather than a
+gesture.
 
 Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
@@ -84,6 +91,12 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | High Striker | 100 | 100 | 100 |
 | Axe Throw | 27–31 | 17–20 | 35 |
 | Darts | 286–370 | 154–175 | 540 |
+| Whack-a-Mole | 48–53 | — | (30s clock) |
+| Bowling | 300 | 126 | 300 |
+| Shooting Gallery | 1085–1105 | — | (45s clock) |
+| Claw Machine | 40–50 | 20–55 | 80 |
+| Batting Cages | 40 | 14–22 | 40 |
+| Water Gun Race | 2 (sweeps) | 0 | 3 heats |
 
 Two honest caveats:
 
@@ -111,6 +124,13 @@ node scripts/arcade-traffic.mjs --profile arcade-profile.json \
 
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
 run replayable; `--headed` lets you watch it play.
+
+To watch it on a machine with no display — CI, a remote dev container — record
+the session instead, since `--headed` has nothing to display to there:
+
+```bash
+node scripts/arcade-bot.mjs --game skeeball --skill 1 --video ./vid   # → ./vid/*.webm
+```
 
 ## Player ids are real loyalty cards
 

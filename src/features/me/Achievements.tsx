@@ -27,6 +27,11 @@ import { detectEarned, reachableAchievements } from '../../lib/achievements/dete
 //   · unreachable badges are omitted entirely — a single-venue deployment never
 //     shows "play at three venues", because a permanently grey badge reads as
 //     broken rather than aspirational
+//   · an EARNED badge is gold — rim, wash, disc and label together (see
+//     .badge-earned in index.css). A hundred rows deep, the difference between
+//     earned and locked has to survive a glance from arm's length; the first
+//     cut distinguished them with a slightly different green border and a small
+//     chip, which in practice meant you counted the chips to find your five
 //   · secret badges show as "???" until earned; the discovery is the point
 //   · a badge the server owns (the hunt) can't be auto-detected here, so it
 //     stays visibly earnable rather than pretending to be locked
@@ -90,7 +95,14 @@ export default function Achievements() {
       <TopBar title="Achievements" back="/me" />
       <Content>
         <p className="mb-4 text-center text-sm text-fairway-100/70">
-          {earned == null ? 'Checking your rounds…' : `${earnedCount} of ${shown.length} unlocked`}
+          {earned == null ? (
+            'Checking your rounds…'
+          ) : (
+            <>
+              <span className="badge-tally font-bold tabular-nums">{earnedCount}</span> of{' '}
+              {shown.length} unlocked
+            </>
+          )}
         </p>
 
         {sections.map(({ category, items }) => (
@@ -100,7 +112,10 @@ export default function Achievements() {
                 {CATEGORY_LABELS[category]}
               </span>
               <span className="text-[11px] tabular-nums text-fairway-100/60">
-                {items.filter((a) => earned?.has(a.key)).length}/{items.length}
+                <span className="badge-tally">
+                  {items.filter((a) => earned?.has(a.key)).length}
+                </span>
+                /{items.length}
               </span>
             </h2>
             <ul className="space-y-2">
@@ -167,30 +182,22 @@ function BadgeRow({ badge, isEarned }: { badge: Achievement; isEarned: boolean }
   return (
     <li
       className={`surface-1 flex items-center gap-3 rounded-2xl border px-4 py-3 ${
-        isEarned ? 'border-fairway-500/50' : 'border-fairway-800/60'
+        isEarned ? 'badge-earned' : 'border-fairway-800/60'
       }`}
     >
       <span
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-2xl ${
-          isEarned ? '' : 'grayscale'
-        }`}
-        style={{
-          background: isEarned ? '#16653433' : 'transparent',
-          border: '1px solid',
-          borderColor: isEarned ? '#16653488' : 'var(--color-fairway-800)',
-          opacity: isEarned ? 1 : 0.6,
-        }}
+        className="badge-disc flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-2xl"
         aria-hidden="true"
       >
         <Icon name={hidden ? 'state.locked' : badge.icon} />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-base font-bold text-fairway-50">
+          <span className={`text-base font-bold ${isEarned ? 'badge-label' : 'text-fairway-50'}`}>
             {hidden ? SECRET_LABEL : badge.label}
           </span>
           {isEarned && (
-            <span className="rounded-full bg-fairway-500/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fairway-300">
+            <span className="badge-pill rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
               Earned
             </span>
           )}

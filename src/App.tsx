@@ -249,13 +249,20 @@ export default function App() {
         {/* Everything that belongs to a person rather than a place needs an
             account. Walk-up play (golf, arcade, photo booth, food) deliberately
             stays open above — the gate is about identity, not friction. */}
+        {/* Player achievements / badges gallery. UNGATED on purpose: 89 of the
+            badges are detected on this device from locally-stored rounds, so a
+            walk-up group with no account has genuinely earned them and the wall
+            can show them with no network. Gating it contradicted the screen's
+            own footer ("sign in to KEEP them across visits") and hid a working
+            feature behind a sign-up. The server-granted hunt badges still need
+            an account — they arrive when there is one, and the wall already
+            marks them "At the venue" until then. */}
+        <Route path="/me/achievements" element={<Achievements />} />
         <Route element={<AccountGate />}>
           <Route path="/me/teams" element={<Teams />} />
           <Route path="/me/teams/:id" element={<TeamDetail />} />
           {/* Rewards card — POS loyalty add-on; redirects home when off. */}
           <Route path="/me/rewards" element={<Rewards />} />
-          {/* Player achievements / badges gallery. */}
-          <Route path="/me/achievements" element={<Achievements />} />
         </Route>
         {/* Plain-language disclosure of everything the app records. */}
         <Route path="/me/privacy" element={<Privacy />} />
