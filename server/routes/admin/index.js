@@ -35,12 +35,17 @@ import {
   router as visionBakeoffRouter,
   publicRouter as visionBakeoffPublicRouter,
 } from "./visionBakeoff.js";
+import {
+  router as ttsBakeoffRouter,
+  publicRouter as ttsBakeoffPublicRouter,
+} from "./ttsBakeoff.js";
 
 export const router = Router();
 
 router.use(authPublicRouter); // POST /login — no auth required
 router.use(passwordPublicRouter); // POST /password/{forgot,token-check,set} — pre-auth by design (emailed set-password links)
 router.use(visionBakeoffPublicRouter); // GET /vision-bakeoff/ui — static page, no secrets; its API calls auth themselves
+router.use(ttsBakeoffPublicRouter); // GET /tts-bakeoff/ui — same deal for the voice bench
 
 router.use(requireAdminAuth); // everything below needs APP_TOKEN or a session
 
@@ -81,3 +86,6 @@ router.use("/synthetic-bot", syntheticBotRouter);
 // images against the production judge and the selected describe model.
 // UI: log in to Master Control, then open /api/admin/vision-bakeoff/ui.
 router.use("/vision-bakeoff", visionBakeoffRouter);
+// Polly voice bench for live trivia — super_admin only, since /run spends on
+// the AWS key in the server's environment.
+router.use("/tts-bakeoff", ttsBakeoffRouter);

@@ -96,7 +96,15 @@ before designing around them.
 
 ## Auditioning
 
-`server/scripts/tts-bakeoff.mjs` reads real questions from one venue's bank —
+**Master Control → Overview → "Voice bench"**, or `/api/admin/tts-bakeoff/ui`
+directly: pick a venue, price the run, synthesize, and play the clips in the
+page. That is the one that matters — the clips have to be judged on the tablet
+you host from, through the speaker the room hears, and files written to a
+directory on the droplet are not listenable.
+
+The same engine runs from the command line when you'd rather:
+
+`scripts/tts-bakeoff.mjs` reads real questions from one venue's bank —
 scoped exactly as `dealSession` scopes it, since this box is multi-tenant and an
 unscoped read would pick up another client's material — and
 synthesizes them through each voice and style, then writes a page that plays
@@ -108,9 +116,11 @@ npm run tts:bakeoff -- --location upland          # pre-flight — prices it, sp
 npm run tts:bakeoff -- --location upland --yes    # synthesize
 ```
 
-Needs Node 22 on the box (it imports the app's TypeScript script builders so the
-words have one definition); the API itself still runs on 18. Run it with no
-`--location` to list the venues.
+Either way the clips land under `data/tts-bakeoff/<run>/` (override with
+`TTS_BAKEOFF_DIR`; point it at `$APP_DIR/shared/...` to survive deploys) and
+show up in the page's "replay a past run" picker.
+
+Run it with no `--location` to list the venues.
 
 Play it on the tablet you host from, through the speaker the room hears. A
 voice that reads well on a laptop can vanish over a PA, which is the whole

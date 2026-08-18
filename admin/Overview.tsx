@@ -150,7 +150,7 @@ function CsvExport() {
   );
 }
 
-export default function Overview() {
+export default function Overview({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const { data, error, loading } = useAsync(() => api.overview(), []);
   if (loading) return <Spinner />;
   if (error) return <Banner kind="error">{error.message}</Banner>;
@@ -158,7 +158,31 @@ export default function Overview() {
   const t = data.totals;
   return (
     <div className="space-y-6">
-      <PageHeader title="Overview" description="Platform totals and the last 30 days of activity." />
+      <PageHeader
+        title="Overview"
+        description="Platform totals and the last 30 days of activity."
+        actions={
+          isSuperAdmin && (
+            // Server-rendered benches, not SPA routes (see
+            // server/routes/admin/{visionBakeoff,ttsBakeoff}.js). Same-tab
+            // navigation keeps the admin session, so they auth seamlessly.
+            <span className="flex gap-4">
+              <a
+                href="/api/admin/tts-bakeoff/ui"
+                className="text-sm font-medium text-slate-600 underline hover:text-slate-900"
+              >
+                Voice bench (trivia read-aloud) →
+              </a>
+              <a
+                href="/api/admin/vision-bakeoff/ui"
+                className="text-sm font-medium text-slate-600 underline hover:text-slate-900"
+              >
+                Vision bench →
+              </a>
+            </span>
+          )
+        }
+      />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Orgs" value={t.orgs} />
         <Stat label="Locations" value={t.locations} />
