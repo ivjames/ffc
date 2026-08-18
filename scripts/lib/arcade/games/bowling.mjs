@@ -58,7 +58,7 @@ export default {
     // 10 frames can need up to 21 deliveries; the round ends on its own, so
     // just keep bowling until the end card shows up.
     for (let ball = 0; ball < 24; ball++) {
-      if (await d.page.getByRole('button', { name: 'Play again' }).isVisible().catch(() => false)) {
+      if (await d.page.getByRole('button', { name: /^(Play|Race) again$/ }).isVisible().catch(() => false)) {
         break;
       }
       const offset = AIM_DX + gauss(rng) * sigma;

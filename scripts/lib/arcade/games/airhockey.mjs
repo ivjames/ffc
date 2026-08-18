@@ -62,7 +62,7 @@ export default {
     while (Date.now() < deadline) {
       if (++sinceCheck >= 40) {
         sinceCheck = 0;
-        if (await d.page.getByRole('button', { name: 'Play again' }).isVisible().catch(() => false)) {
+        if (await d.page.getByRole('button', { name: /^(Play|Race) again$/ }).isVisible().catch(() => false)) {
           break;
         }
       }
