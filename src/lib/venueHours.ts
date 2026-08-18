@@ -117,23 +117,54 @@ export function todaysHours(
 }
 
 /**
- * Where an instant falls inside the venue's own opening day: minutes past
- * midnight, plus that day's configured hours as minutes. Null when the venue
- * has no hours/zone set, or is closed that day — callers can't reason about
- * "just after opening" without them. Used by the achievement rules that care
- * about WHEN a round started (lib/achievements).
+ * Where an instant falls inside the venue's own opening SESSION: minutes past
+ * the day's open, and how long that session runs. Returns null when the venue
+ * has no hours/zone set, or is closed at that moment.
+ *
+ * Returned in "minutes since open" terms rather than clock minutes, because an
+ * overnight session (Fri 20:00–02:00) straddles midnight: 01:30 on Saturday
+ * belongs to FRIDAY's session, and comparing raw clock times there would put it
+ * eighteen hours before opening instead of five and a half hours after. Mirrors
+ * the carryover isVenueOpen already does. Used by the achievement rules that
+ * care about when a round started (lib/achievements).
  */
 export function venueDayWindow(
   hours: VenueHours | null | undefined,
   tz: string | null | undefined,
   at: Date,
-): { minutes: number; open: number; close: number } | null {
-  const day = todaysHours(hours, tz, at);
-  if (!day || day === 'closed') return null;
-  const open = toMinutes(day.open);
-  const close = toMinutes(day.close);
-  if (!Number.isFinite(open) || !Number.isFinite(close)) return null;
-  return { minutes: tzParts(tz, at).minutes, open, close };
+): { sinceOpen: number; length: number } | null {
+  if (!hours || typeof hours !== 'object' || !tz) return null;
+  const { index, minutes } = tzParts(tz, at);
+  if (index < 0) return null;
+  const DAY = 24 * 60;
+
+  // Today's session: a same-day window, or the pre-midnight part of an
+  // overnight one.
+  const today = hours[WEEKDAY_KEYS[index]];
+  if (today && today !== 'closed') {
+    const open = toMinutes(today.open);
+    const close = toMinutes(today.close);
+    if (Number.isFinite(open) && Number.isFinite(close)) {
+      if (close > open) {
+        if (minutes >= open && minutes < close) {
+          return { sinceOpen: minutes - open, length: close - open };
+        }
+      } else if (minutes >= open) {
+        return { sinceOpen: minutes - open, length: DAY - open + close };
+      }
+    }
+  }
+
+  // Yesterday's overnight session, spilling past midnight into today.
+  const prev = hours[WEEKDAY_KEYS[(index + 6) % 7]];
+  if (prev && prev !== 'closed') {
+    const open = toMinutes(prev.open);
+    const close = toMinutes(prev.close);
+    if (Number.isFinite(open) && Number.isFinite(close) && close <= open && minutes < close) {
+      return { sinceOpen: DAY - open + minutes, length: DAY - open + close };
+    }
+  }
+  return null;
 }
 
 export function weekdayLabel(day: WeekdayKey): string {

@@ -520,6 +520,31 @@ describe('the venue clock', () => {
     expect(detectEarned([roundAt(at('10:30'))], { catalog: CATALOG, venues: [] }).has('early_bird')).toBe(false);
   });
 
+  test('an overnight session carries past midnight', () => {
+    // Fri 20:00–02:00, Saturday closed. A round begun 01:30 Saturday belongs to
+    // FRIDAY's session and is in its final hour — comparing raw clock times
+    // would place it eighteen hours before opening instead of five after.
+    const overnight: VenueInfo[] = [
+      { id: 'v1', tz: 'UTC', hours: { fri: { open: '20:00', close: '02:00' }, sat: 'closed' } },
+    ];
+    const startedAt = (iso: string) => {
+      const t = new Date(iso).getTime();
+      return detectEarned([round([card(3)], { createdAt: t, completedAt: t, courseId: 'c1' })], {
+        catalog: CATALOG,
+        venues: overnight,
+      });
+    };
+    // 2026-08-07 is a Friday.
+    expect(startedAt('2026-08-07T20:30:00Z').has('early_bird')).toBe(true);
+    expect(startedAt('2026-08-08T01:30:00Z').has('night_owl')).toBe(true);
+    expect(startedAt('2026-08-08T01:30:00Z').has('early_bird')).toBe(false);
+    // Midnight is mid-session, neither end of it.
+    expect(startedAt('2026-08-08T00:15:00Z').has('night_owl')).toBe(false);
+    expect(startedAt('2026-08-08T00:15:00Z').has('early_bird')).toBe(false);
+    // Saturday proper is closed — nothing at all.
+    expect(startedAt('2026-08-08T14:00:00Z').has('night_owl')).toBe(false);
+  });
+
   test('they judge when the round STARTED, not when it ended', () => {
     // A round begun just after opening and played for three hours is still an
     // early one; judging it on completedAt would lose the badge and — worse —

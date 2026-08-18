@@ -261,6 +261,86 @@ test("multitasker and grand hunter — the two composed in the grant path", asyn
 });
 
 
+test("grand hunter needs a seat whose owner is unambiguous", async () => {
+  // A signed-in host with three guests owns the round, but only their own seat
+  // is theirs. Crediting every finisher would let a rotating cast of companions
+  // collectively earn one person's badge — and would count a guest's hunt as
+  // the owner's history.
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Seat Venue ${stamp}`, `seat-${stamp}`]
+  );
+  const venue = loc.rows[0].id;
+  const mkCourse = async (n) =>
+    (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [`${n} ${stamp}`, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+  const courseA = await mkCourse("SA");
+  const courseB = await mkCourse("SB");
+  const mkItem = async (courseId, slug) =>
+    (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $3) returning id`,
+        [courseId, slug, slug]
+      )
+    ).rows[0].id;
+  const itemA = await mkItem(courseA, `sa-${stamp}`);
+  const itemB = await mkItem(courseB, `sb-${stamp}`);
+  const cookie = await signedIn();
+
+  // Round 1: solo — unambiguous, so it counts toward the account's history.
+  const solo = `seat-solo-${stamp}`;
+  await testQuery(
+    `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'OWN', $2, true)`,
+    [solo, itemA]
+  );
+  await postRound(
+    {
+      clientId: solo,
+      courseId: courseA,
+      playerTags: ["OWN"],
+      createdAt: Date.now(),
+      completedAt: Date.now(),
+      scores: { 0: Array(18).fill(3) },
+    },
+    cookie
+  );
+
+  // Round 2: the same account hosts a foursome, and a GUEST finishes course B's
+  // hunt. Nobody may earn Grand Hunter off that — the guest's seat has no
+  // identity, and the host did not do it.
+  const party = `seat-party-${stamp}`;
+  await testQuery(
+    `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'GST', $2, true)`,
+    [party, itemB]
+  );
+  await postRound(
+    {
+      clientId: party,
+      courseId: courseB,
+      playerTags: ["OWN", "GST", "TWO", "TRE"],
+      createdAt: Date.now(),
+      completedAt: Date.now(),
+      scores: Object.fromEntries([0, 1, 2, 3].map((i) => [i, Array(18).fill(3)])),
+    },
+    cookie
+  );
+  const partyGrants = await (
+    await fetch(`${baseUrl}/api/rewards?clientId=${party}`)
+  ).json();
+  assert.ok(
+    !partyGrants.some((g) => g.achievement === "grand_hunter"),
+    "a guest's hunt in a pass-and-play round is nobody's Grand Hunter"
+  );
+  // The guest did finish that course's hunt, so Hunt Master still lands.
+  assert.ok(partyGrants.some((g) => g.achievement === "hunt_master"));
+});
+
+
 test("grand hunter is scoped to the account, not a reusable 3-char tag", async () => {
   // Two venues' worth of setup, but the point is identity: a second guest who
   // happens to pick the same tag must not inherit the first one's progress.

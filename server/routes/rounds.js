@@ -125,44 +125,80 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
     }
   }
 
-  // Grand Hunter — Hunt Master on every course at this venue. Career-scoped, so
-  // it reads the grant history, and that makes IDENTITY the hard part: a 3-char
-  // tag is a display label, not a person. Tags repeat by design, so matching on
-  // one would merge unrelated guests who happened to pick the same letters at
-  // the same venue — handing someone a badge off a stranger's history — and
-  // would equally lose a player's progress the moment they picked new letters.
+  // Grand Hunter — Hunt Master on every course at this venue. The only hunt
+  // badge judged ACROSS rounds, which makes identity the whole problem.
   //
-  // So this is scoped to the ACCOUNT that owns the rounds, and is granted only
-  // to signed-in players. Anonymous walk-up play has no identity that survives
-  // a round, and inventing one from a tag would be worse than not granting it.
-  // (Every other hunt badge is judged within a single round, where the tag IS
-  // unambiguous, so none of them need this.)
-  if (completedTags.size > 0 && appUserId) {
-    const venueCourses = await client.query(
-      `select c.id from course c
-        where c.location_id = (select location_id from course where id = $1)`,
-      [courseId]
-    );
-    const allCourseIds = venueCourses.rows.map((r) => r.id);
-    // A one-course venue would grant this for the same work as Hunt Master, so
-    // it isn't an achievement there. Mirrors the client's `reach` predicate,
-    // which hides the badge at such a venue rather than showing it unearnable.
-    if (allCourseIds.length >= 2) {
-      const prior = await client.query(
-        `select distinct r.course_id as id
-           from reward_grant g
-           join round r on r.id = g.round_id
-          where r.app_user_id = $1 and g.achievement = 'hunt_master'
-            and r.course_id = any($2::uuid[])`,
-        [appUserId, allCourseIds]
+  // A 3-char tag is a display label, not a person: tags repeat by design, so
+  // matching on one would hand a player a badge off a stranger's history and
+  // lose their own the moment they picked different letters. But owning the
+  // ROUND isn't enough either — a signed-in player hosting a pass-and-play
+  // foursome owns a round whose other three seats are guests, so crediting
+  // every finisher would let a rotating cast of companions collectively earn
+  // one person's badge, and would count a guest's hunt as the owner's history.
+  //
+  // So this needs a seat whose owner is unambiguous, in both directions:
+  //   · a solo round attributed to an account — one seat, one owner
+  //   · a shared game — every seat carries its own app_user_id
+  // Multi-player pass-and-play has no per-seat identity at all, so it neither
+  // earns this nor counts toward it. Every other hunt badge is judged inside a
+  // single round, where the tag IS unambiguous, so none of them need this.
+  if (completedTags.size > 0) {
+    // slot -> the account that unambiguously holds it.
+    const seatOwners = new Map();
+    if (clientId.startsWith("shared:")) {
+      const roster = await client.query(
+        `select slot, app_user_id from shared_game_player
+          where game_id = $1::uuid and app_user_id is not null`,
+        [clientId.slice("shared:".length)]
       );
-      const done = new Set([...prior.rows.map((r) => r.id), courseId]);
-      if (allCourseIds.every((id) => done.has(id))) {
-        // The account owns the round, so credit the seat(s) that finished the
-        // hunt on it — for a single-owner round that is the player themselves.
-        for (const tag of completedTags) {
-          const playerIndex = slotOf(tag);
-          if (playerIndex !== -1) grants.push({ playerIndex, achievement: "grand_hunter" });
+      for (const r of roster.rows) seatOwners.set(r.slot, r.app_user_id);
+    } else if (appUserId && playerTags.length === 1) {
+      seatOwners.set(0, appUserId);
+    }
+
+    const finishers = [...completedTags]
+      .map((tag) => ({ tag, slot: slotOf(tag) }))
+      .filter(({ slot }) => slot !== -1 && seatOwners.has(slot));
+
+    if (finishers.length > 0) {
+      const venueCourses = await client.query(
+        `select c.id from course c
+          where c.location_id = (select location_id from course where id = $1)`,
+        [courseId]
+      );
+      const allCourseIds = venueCourses.rows.map((r) => r.id);
+      // A one-course venue would grant this for the same work as Hunt Master,
+      // so it isn't an achievement there. Mirrors the client's `reach`
+      // predicate, which hides the badge rather than showing it unearnable.
+      if (allCourseIds.length >= 2) {
+        for (const { slot } of finishers) {
+          const owner = seatOwners.get(slot);
+          // Courses this ACCOUNT has hunted, counting only rounds where its
+          // seat was equally unambiguous — solo owned rounds, and shared games
+          // where the roster names the seat.
+          const prior = await client.query(
+            `select distinct r.course_id as id
+               from reward_grant g
+               join round r on r.id = g.round_id
+              where g.achievement = 'hunt_master'
+                and r.course_id = any($2::uuid[])
+                and (
+                  (r.app_user_id = $1 and array_length(r.player_tags, 1) = 1)
+                  or exists (
+                    select 1
+                      from shared_game sg
+                      join shared_game_player sp
+                        on sp.game_id = sg.id and sp.slot = g.player_index
+                     where r.client_id = 'shared:' || sg.id::text
+                       and sp.app_user_id = $1
+                  )
+                )`,
+            [owner, allCourseIds]
+          );
+          const done = new Set([...prior.rows.map((r) => r.id), courseId]);
+          if (allCourseIds.every((id) => done.has(id))) {
+            grants.push({ playerIndex: slot, achievement: "grand_hunter" });
+          }
         }
       }
     }

@@ -335,10 +335,12 @@ const ROUND_RULES: Record<string, (r: PlayerRound) => boolean> = {
   },
 };
 
-// Round rules that additionally need the venue's clock.
-const CLOCK_RULES: Record<string, (r: PlayerRound, w: { minutes: number; open: number; close: number }) => boolean> = {
-  early_bird: (_r, w) => w.minutes >= w.open && w.minutes < w.open + 60,
-  night_owl: (_r, w) => w.minutes >= w.close - 60 && w.minutes < w.close,
+// Round rules that additionally need the venue's clock. The window arrives as
+// minutes-since-open plus the session's length, so an overnight session that
+// straddles midnight is just a longer session (see venueHours.venueDayWindow).
+const CLOCK_RULES: Record<string, (r: PlayerRound, w: { sinceOpen: number; length: number }) => boolean> = {
+  early_bird: (_r, w) => w.sinceOpen < 60,
+  night_owl: (_r, w) => w.sinceOpen >= w.length - 60,
 };
 
 /** Strokes-and-par for one nine, or null if it isn't fully carded. */
