@@ -77,14 +77,20 @@ export default function TriviaStart() {
       setError(joined.error);
       return;
     }
-    savePlayer({
+    const player = {
       sessionId: created.session.id,
       participantToken: joined.participantToken,
       entrantId: joined.entrant.id,
       name: joined.entrant.name,
-    });
-    saveOwner({ sessionId: created.session.id, hostToken: created.hostToken });
-    navigate('/arcade/trivia/live');
+    };
+    const owner = { sessionId: created.session.id, hostToken: created.hostToken };
+    savePlayer(player);
+    saveOwner(owner);
+    // The tokens ride the navigation as well as sessionStorage: with storage
+    // disabled (private mode) the saves above silently do nothing, and
+    // landing on /live without them would strand a game that was created a
+    // heartbeat ago — running, joinable, and controllable by no one.
+    navigate('/arcade/trivia/live', { state: { player, owner } });
   }, [locationId, questionCount, category, seconds, speedBonus, open, name, isTeam, navigate]);
 
   if (!signedIn) {

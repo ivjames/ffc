@@ -377,6 +377,10 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
     }
 
     let entrant;
+    // Whether this join put a NEW name on the board, as opposed to a device
+    // sitting down at a seat that already existed — the deadline restore
+    // below turns on it.
+    let newEntrant = false;
     if (typeof entrantId === "string" && UUID_RE.test(entrantId)) {
       // TEAMS ONLY, and that clause is a security boundary rather than a
       // nicety. Every phone in the room is sent the full board, entrant ids
@@ -458,6 +462,7 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
           [session.id, candidate, wantsTeam]
         );
         entrant = created.rows[0];
+        newEntrant = true;
       }
     }
 
@@ -467,12 +472,35 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
       [session.id, entrant.id, req.user?.id ?? null]
     );
 
+    // A NEW entrant arriving mid-question un-fulfills "everyone has answered":
+    // if the fast-forward pulled the deadline in on that basis, put it back to
+    // the question's natural close (asked_at + length + grace) — which is the
+    // countdown the newcomer's screen is already showing, and never an
+    // extension, because only the fast-forward ever moves auto_at earlier.
+    // Recomputing unconditionally is idempotent when nothing was shortened. A
+    // device sitting down at an EXISTING seat changes nothing: that seat has
+    // answered or it hasn't, and the count the fast-forward compared holds.
+    let fresh = session;
+    if (newEntrant && session.status === "question" && session.askedAt) {
+      const restored = await client.query(
+        `update trivia_session
+            set auto_at = asked_at + make_interval(secs => $2)
+          where id = $1 and status = 'question' and current_index = $3
+          returning ${SESSION_FIELDS}`,
+        [
+          session.id,
+          (session.config?.questionSeconds ?? DEFAULT_SECONDS) + ANSWER_GRACE_MS / 1000,
+          session.currentIndex,
+        ]
+      );
+      if (restored.rows[0]) fresh = restored.rows[0];
+    }
+
     // The lobby's clock starts when the FIRST person walks in, not when the
     // room was made: a code read out ten minutes before anyone arrives should
     // not burn the whole wait, and a room nobody joins should never start.
     // Only ever set once — later arrivals don't push the start back, or a busy
     // room would never get going.
-    let fresh = session;
     if (session.status === "lobby" && !session.autoAt) {
       const started = await client.query(
         `update trivia_session

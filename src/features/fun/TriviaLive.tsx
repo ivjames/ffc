@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { QuestionCredit } from '../shared/Credits';
 import QrScanner from '../shared/QrScanner';
@@ -38,6 +38,7 @@ import {
   loadOwner,
   saveOwner,
   type StoredPlayer,
+  type StoredOwner,
 } from './triviaLiveStorage';
 
 // /arcade/trivia/live — the player's seat at a live trivia game.
@@ -99,11 +100,23 @@ export default function TriviaLive() {
   // The venue's chalkboard: live games whose creators marked them open. Only
   // polled while this phone is on the join form — a seated player has a game.
   const [openGames, setOpenGames] = useState<OpenTriviaGame[]>([]);
-  const [stored, setStored] = useState<StoredPlayer | null>(loadPlayer);
+  // TriviaStart hands its freshly minted capabilities through router state as
+  // well as sessionStorage: with storage disabled (private mode), the writes
+  // silently do nothing, and arriving here without the tokens would orphan a
+  // game that was created a moment ago. Storage wins when it worked — the
+  // start screen just overwrote it, so the two agree anyway.
+  const routeState = useLocation().state as
+    | { player?: StoredPlayer; owner?: StoredOwner }
+    | null;
+  const [stored, setStored] = useState<StoredPlayer | null>(
+    () => loadPlayer() ?? routeState?.player ?? null,
+  );
   // The owner capability, present only on the device that started the game
   // from /arcade/trivia/start. Pacing only — "start now", "end the game" —
   // never information; the owner answers questions like anyone else.
-  const [owner, setOwner] = useState(loadOwner);
+  const [owner, setOwner] = useState<StoredOwner | null>(
+    () => loadOwner() ?? routeState?.owner ?? null,
+  );
   const [snapshot, setSnapshot] = useState<TriviaSnapshot | null>(null);
   const [joinCode, setJoinCode] = useState(params.get('code') ?? '');
   const [name, setName] = useState('');
@@ -113,6 +126,8 @@ export default function TriviaLive() {
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // In-flight guard for the owner's "start now" — see startNow below.
+  const [startBusy, setStartBusy] = useState(false);
   // Optimistic lock so the tapped button reads as chosen before the round trip
   // lands — at a table, the wait between tap and confirmation is where people
   // tap a second choice.
@@ -364,12 +379,19 @@ export default function TriviaLive() {
   // The owner's two pacing moves, both shortcuts the clock would make anyway.
   const iOwnThis = owner != null && owner.sessionId === sessionId;
   const startNow = useCallback(async () => {
-    if (!owner || !sessionId) return;
+    if (!owner || !sessionId || startBusy) return;
     playClick();
-    await advance(sessionId, owner.hostToken);
-    // No local state to set: the transition comes back over SSE for everyone,
-    // this phone included.
-  }, [owner, sessionId]);
+    // Held busy through success, not just the round trip: /advance moves
+    // whatever phase it finds, so a second tap landing after the first
+    // response but before the SSE frame would push question 1 straight to its
+    // reveal. The transition unmounts this button; only a failed tap, which
+    // moved nothing, hands it back.
+    setStartBusy(true);
+    const res = await advance(sessionId, owner.hostToken);
+    if (!res.ok) setStartBusy(false);
+    // No local state to set on success: the transition comes back over SSE
+    // for everyone, this phone included.
+  }, [owner, sessionId, startBusy]);
 
   const endForEveryone = useCallback(async () => {
     if (!owner || !sessionId) return;
@@ -574,6 +596,7 @@ export default function TriviaLive() {
           myRank={me?.rank ?? null}
           onAnswer={answer}
           onStartNow={iOwnThis && session.status === 'lobby' ? startNow : null}
+          startNowBusy={startBusy}
         />
         {error && (
           <p className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
@@ -625,6 +648,7 @@ function LiveBody({
   myRank,
   onAnswer,
   onStartNow,
+  startNowBusy,
 }: {
   session: TriviaSnapshot['session'];
   question: TriviaSnapshot['question'];
@@ -643,6 +667,9 @@ function LiveBody({
   /** Present only on the phone that started this game, and only in the lobby:
    *  the owner's shortcut past the lobby clock once everyone's in. */
   onStartNow?: (() => void) | null;
+  /** True from the start-now tap until it definitively failed — the game
+   *  moving on is what removes the button, so success never re-enables it. */
+  startNowBusy?: boolean;
 }) {
   const left = useCountdown(
     session.askedAt,
@@ -690,7 +717,9 @@ function LiveBody({
         </div>
         {onStartNow && (
           <div className="mt-4">
-            <Button onClick={onStartNow}>Everyone's in — start now</Button>
+            <Button onClick={onStartNow} disabled={startNowBusy}>
+              {startNowBusy ? 'Starting…' : "Everyone's in — start now"}
+            </Button>
           </div>
         )}
         <Board board={board} myEntrantId={myEntrantId} showScores={false} />

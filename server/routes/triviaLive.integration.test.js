@@ -1014,3 +1014,50 @@ test("when every entrant has answered, the question closes early instead of runn
   ).rows[0];
   assert.equal(now.status, "reveal");
 });
+
+test("a new entrant mid-question restores a fast-forwarded deadline; a device at an existing seat does not", async () => {
+  // The fast-forward's premise is "everyone has answered". A NEW name on the
+  // board un-fulfills it, so the deadline goes back to the question's natural
+  // close — the countdown the newcomer's screen shows. A second device
+  // sitting down at a seat that already answered changes no count, so it
+  // must not hand a dead question its air back.
+  const { id, hostToken, joinCode } = await createSession({
+    config: { questionSeconds: 45, revealSeconds: 5, lobbySeconds: 10, speedBonus: false },
+  });
+  const table = await join(joinCode, "The Regulars", { isTeam: true });
+  await advance(id, hostToken); // -> question
+
+  await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: table.participantToken,
+    choice: 0,
+  });
+  const shortened = (
+    await testQuery(`select auto_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.ok(
+    new Date(shortened.auto_at).getTime() - Date.now() < 5000,
+    "the only entrant answered, so the deadline was pulled in"
+  );
+
+  // A teammate's phone joins the answered table: same seat, same counts —
+  // the shortened deadline stands.
+  await join(joinCode, "The Regulars", { isTeam: true });
+  const stillShort = (
+    await testQuery(`select auto_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.deepEqual(stillShort.auto_at, shortened.auto_at);
+
+  // A brand-new solo player joins: they haven't answered, so the question is
+  // open again for the time everyone's countdown promised.
+  await join(joinCode, "Walk-in");
+  const restored = (
+    await testQuery(`select auto_at, asked_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  const msLeft = new Date(restored.auto_at).getTime() - Date.now();
+  assert.ok(msLeft > 30_000, `expected the natural deadline back, got ${msLeft}ms`);
+  const fullMs = new Date(restored.auto_at).getTime() - new Date(restored.asked_at).getTime();
+  assert.ok(
+    fullMs <= 46_500 + 100,
+    `a restore is never an extension past length + grace, got ${fullMs}ms`
+  );
+});
