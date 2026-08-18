@@ -620,6 +620,53 @@ export function looksLikeSpellingQuestion(row) {
   return SPELLING_QUESTION_RE.test([row.prompt, ...row.choices].join(" | "));
 }
 
+/**
+ * Ampersand restorations: the character upstream lost entirely.
+ *
+ * The corpus contains no `&` at all — 47,710 questions, zero — while every
+ * other symbol appears in the hundreds. Each one was dropped before the data
+ * ever reached us (the gap is present in a fresh upstream clone too), leaving
+ * a double space behind: "Gateman, Goodbury  Graves Funeral Home",
+ * "Peter, Paul  Mary", "Laverne  Shirley".
+ *
+ * Because only `&` went missing, a gap either held one or was always a stray
+ * double space — and which it is cannot be decided by shape. "Sonny  Cher" is
+ * two people; "John  Lithgow" is one. So each gap was judged individually and
+ * the survivors committed here; the ones that were merely stray spaces live in
+ * the typo overlay instead, as ordinary whitespace fixes.
+ */
+export const AMPERSANDS_PATH = join(dirname(fileURLToPath(import.meta.url)), "trivia-pack-ampersands.ndjson");
+
+export function loadPackAmpersands(path = AMPERSANDS_PATH) {
+  return loadPackRepairs(path);
+}
+
+/**
+ * True when `after` is `before` with one run of blanks replaced by " & ".
+ *
+ * As tight as `isApostropheInsertion`, and for the same reason: an overlay
+ * that can only do one mechanically-checkable thing does not need every row
+ * re-read to be trusted. An entry cannot move text, change a word, or put an
+ * ampersand anywhere except into a gap that upstream left behind.
+ */
+export function isAmpersandRestoration(before, after) {
+  if (!before || !after || before === after) return false;
+  const gap = /  +/g;
+  for (let m = gap.exec(before); m; m = gap.exec(before)) {
+    if (before.slice(0, m.index) + " & " + before.slice(m.index + m[0].length) === after) return true;
+  }
+  return false;
+}
+
+/** Apply the committed ampersand restorations to built rows, mutating in place. */
+export function applyPackAmpersands(rows, entries) {
+  return applyEdits(rows, entries, {
+    allow: isAmpersandRestoration,
+    allowReason: "not-an-ampersand-restoration",
+    guard: looksLikeSpellingQuestion,
+  });
+}
+
 /** Apply the committed typo repairs to built rows, mutating in place. */
 export function applyPackTypos(rows, entries) {
   return applyEdits(rows, entries, {

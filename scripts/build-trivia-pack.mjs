@@ -25,9 +25,11 @@ import { fileURLToPath } from "node:url";
 import {
   CATEGORY_LABELS,
   REJECT_REASONS,
+  applyPackAmpersands,
   applyPackRepairs,
   applyPackTypos,
   decodeMixedUtf8,
+  loadPackAmpersands,
   loadPackRepairs,
   loadPackTypos,
   parseCategoryFile,
@@ -119,8 +121,9 @@ async function main() {
   // on the identical artifact.
   const repairs = applyPackRepairs(rows, loadPackRepairs());
   const typos = applyPackTypos(rows, loadPackTypos());
+  const ampersands = applyPackAmpersands(rows, loadPackAmpersands());
   const skippedByReason = new Map();
-  for (const s of [...repairs.skipped, ...typos.skipped]) {
+  for (const s of [...repairs.skipped, ...typos.skipped, ...ampersands.skipped]) {
     skippedByReason.set(s.reason, (skippedByReason.get(s.reason) ?? 0) + 1);
   }
 
@@ -144,6 +147,7 @@ async function main() {
   }
   console.log(`[build-trivia-pack] apostrophe repairs: ${repairs.applied} applied, ${repairs.skipped.length} skipped`);
   console.log(`[build-trivia-pack] typo repairs: ${typos.applied} applied, ${typos.skipped.length} skipped`);
+  console.log(`[build-trivia-pack] ampersands: ${ampersands.applied} applied, ${ampersands.skipped.length} skipped`);
   for (const [reason, n] of skippedByReason) {
     console.log(`[build-trivia-pack]   skipped ${String(n).padStart(5)}  ${reason}`);
   }

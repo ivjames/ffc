@@ -16,14 +16,17 @@ import { describe, expect, test } from 'vitest';
 import { normalizeQuestion } from '../server/lib/triviaLive.js';
 import {
   CATEGORY_LABELS,
+  applyPackAmpersands,
   applyPackRepairs,
   applyPackTypos,
   decodeMixedUtf8,
   dedupeKey,
+  isAmpersandRestoration,
   isApostropheInsertion,
-  isFamilySafe,
   isDoubledWordRemoval,
+  isFamilySafe,
   isMinorTextEdit,
+  loadPackAmpersands,
   loadPackRepairs,
   loadPackTypos,
   looksLikeSpellingQuestion,
@@ -357,6 +360,66 @@ describe('applyPackTypos', () => {
   });
 });
 
+describe('isAmpersandRestoration', () => {
+  test('accepts an ampersand dropped into a gap upstream left', () => {
+    expect(isAmpersandRestoration('Peter, Paul  Mary', 'Peter, Paul & Mary')).toBe(true);
+    expect(isAmpersandRestoration('Gateman, Goodbury  Graves', 'Gateman, Goodbury & Graves')).toBe(true);
+    expect(isAmpersandRestoration('Mr.  Mrs.', 'Mr. & Mrs.')).toBe(true);
+  });
+
+  test('refuses anything that is not exactly that', () => {
+    // Collapsing rather than filling: that is the typo overlay's job.
+    expect(isAmpersandRestoration('John  Lithgow', 'John Lithgow')).toBe(false);
+    // A word, not the character that went missing.
+    expect(isAmpersandRestoration('Sonny  Cher', 'Sonny and Cher')).toBe(false);
+    // No gap to fill — an entry cannot invent one.
+    expect(isAmpersandRestoration('Sonny Cher', 'Sonny & Cher')).toBe(false);
+    // Any other edit riding along is refused with it.
+    expect(isAmpersandRestoration('Peter, Paul  Mary', 'Peter, Paul & Mary!')).toBe(false);
+    expect(isAmpersandRestoration('Peter, Paul  Mary', 'Peter, Paul  Mary')).toBe(false);
+  });
+});
+
+describe('applyPackAmpersands', () => {
+  const mkRows = () => [
+    {
+      prompt: 'Which duo sang I Got You Babe?',
+      choices: ['Sonny  Cher', 'John  Lithgow', 'Brooks  Dunn', 'Hall  Oates'],
+      answer: 0,
+      category: 'Music',
+      difficulty: 2,
+      active: true,
+    },
+  ];
+
+  test('fills the gap and leaves everything else alone', () => {
+    const rows = mkRows();
+    const { applied, skipped } = applyPackAmpersands(rows, [
+      { q: 'Which duo sang I Got You Babe?', f: 0, b: 'Sonny  Cher', a: 'Sonny & Cher' },
+    ]);
+    expect(applied).toBe(1);
+    expect(skipped).toEqual([]);
+    expect(rows[0].choices).toEqual(['Sonny & Cher', 'John  Lithgow', 'Brooks  Dunn', 'Hall  Oates']);
+    expect(rows[0].answer).toBe(0);
+  });
+
+  test('refuses to collapse a gap instead of filling it', () => {
+    const rows = mkRows();
+    const { applied, skipped } = applyPackAmpersands(rows, [
+      { q: 'Which duo sang I Got You Babe?', f: 1, b: 'John  Lithgow', a: 'John Lithgow' },
+    ]);
+    expect(applied).toBe(0);
+    expect(skipped[0].reason).toBe('not-an-ampersand-restoration');
+  });
+
+  test('a second pass over the restored rows is a no-op', () => {
+    const rows = mkRows();
+    const entries = [{ q: 'Which duo sang I Got You Babe?', f: 0, b: 'Sonny  Cher', a: 'Sonny & Cher' }];
+    applyPackAmpersands(rows, entries);
+    expect(applyPackAmpersands(rows, entries).applied).toBe(0);
+  });
+});
+
 describe('isFamilySafe', () => {
   test('blocks the words that must never reach the big screen', () => {
     expect(isFamilySafe('Who said this line?', 'Fuck, Im dead')).toBe(false);
@@ -629,6 +692,18 @@ describe('the committed pack', () => {
     const { rows } = await pack;
     const broken = rows.filter((r) => /\b(dont|cant|didnt|wasnt|youre|thats|arent)\b/i.test(r.prompt));
     expect(broken.map((r) => r.prompt)).toEqual([]);
+  });
+
+  test('every committed ampersand entry only fills a gap', () => {
+    for (const e of loadPackAmpersands()) {
+      expect(isAmpersandRestoration(e.b, e.a), JSON.stringify(e)).toBe(true);
+    }
+  });
+
+  test('the committed ampersands are already applied — re-applying is a no-op', async () => {
+    const { rows } = await pack;
+    const cloned = rows.map((r) => ({ ...r, choices: [...r.choices] }));
+    expect(applyPackAmpersands(cloned, loadPackAmpersands()).applied).toBe(0);
   });
 
   test('every committed typo repair is a bounded correction, not a rewrite', () => {
