@@ -16,30 +16,31 @@ export function renderPage(base) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Voice bake-off — live trivia</title>
 <style>
-  :root { color-scheme: light dark; }
+  /* Light only, like Master Control. There was a dark-mode block here; it sat
+     above the element rules, so at equal specificity the plain white select
+     background beat it while body kept its light text — near-white text in a
+     white box. The controls read as disabled and the bench looked broken. */
+  :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin: 0 auto; padding: 20px; max-width: 880px; background: #f8fafc; color: #0f172a;
+  body { margin: 0; padding: 0; background: #f8fafc; color: #0f172a;
          font: 15px/1.55 system-ui, -apple-system, sans-serif; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #0b1220; color: #e2e8f0; }
-    .card, section { background: #111c2e !important; border-color: #1e293b !important; }
-    select, button { background: #16233a; color: #e2e8f0; border-color: #334155; }
-    th { color: #94a3b8 !important; }
-    .said { background: #0e1830 !important; }
-  }
+  .bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+         background: #0f172a; color: #e2e8f0; font-size: .9rem; }
+  .bar a { color: #cbd5e1; text-decoration: none; font-weight: 600; }
+  .bar span { color: #94a3b8; }
+  main { margin: 0 auto; padding: 20px; max-width: 880px; }
   h1 { font-size: 1.35rem; margin: 0 0 2px; }
   p.lede { margin: 0 0 18px; color: #64748b; }
   .card { border: 1px solid #e2e8f0; background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
   label { display: block; font-size: .8rem; font-weight: 600; text-transform: uppercase;
           letter-spacing: .04em; color: #64748b; margin-bottom: 4px; }
-  select, input { width: 100%; padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 8px;
-                  font: inherit; background: #fff; }
+  select { width: 100%; padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 8px;
+           font: inherit; background: #fff; color: #0f172a; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; }
   .row > div { flex: 1 1 220px; }
-  button { margin-top: 10px; padding: 10px 16px; border: 1px solid #cbd5e1; border-radius: 8px;
-           background: #fff; font: inherit; font-weight: 600; cursor: pointer; }
-  button.go { background: #0f766e; border-color: #0f766e; color: #fff; }
-  button:disabled { opacity: .5; cursor: default; }
+  button { margin-top: 12px; padding: 11px 18px; border: 1px solid #0f766e; border-radius: 8px;
+           background: #0f766e; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
   .burn { font-variant-numeric: tabular-nums; }
   .burn strong { font-size: 1.15rem; }
   section { border: 1px solid #e2e8f0; background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
@@ -54,6 +55,8 @@ export function renderPage(base) {
   .err { color: #b91c1c; }
   .note { color: #64748b; font-size: .85rem; }
 </style></head><body>
+<div class="bar"><a href="/">&larr; Master Control</a><span>Voice bench</span></div>
+<main>
 <h1>Voice bake-off</h1>
 <p class="lede">Amazon Polly neural voices reading this venue's real questions. Play it on the
 tablet you host from, through the speaker the room hears — a voice that reads well on a laptop can
@@ -78,13 +81,18 @@ vanish over a PA.</p>
       <select id="runs"><option value="">—</option></select>
     </div>
   </div>
-  <button id="plan">Price it</button>
-  <button id="run" class="go" disabled>Synthesize</button>
+  <!-- ONE button. There used to be a "Price it" step that had to happen
+       before Synthesize would enable, which meant the prominent button did
+       nothing and explained nothing until you found the other one. The
+       estimate now arrives on its own whenever the selection changes, so the
+       cost is still on screen before anything is spent. -->
+  <button id="run">Synthesize</button>
   <div id="status" class="note" style="margin-top:10px"></div>
 </div>
 
 <div class="card burn" id="burn" hidden></div>
 <div id="out"></div>
+</main>
 
 <script>
 const BASE = ${JSON.stringify(base)};
@@ -114,6 +122,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const say = (msg, bad) => { $("status").innerHTML = bad ? '<span class="err">' + esc(msg) + "</span>" : esc(msg); };
 
 let planned = null;
+// Which pricing request is the current one. Changing the venue twice quickly
+// leaves two /plan calls in flight, and the slower one must not land: it would
+// redraw ITS estimate and arm Synthesize against a configuration the selects
+// no longer show, so the next click would spend on the wrong venue.
+let planSeq = 0;
 
 async function loadVenues() {
   try {
@@ -138,7 +151,9 @@ async function loadRuns() {
   } catch (e) { /* no runs yet, or not authorised — the venue error already said so */ }
 }
 
-$("plan").onclick = async () => {
+async function price() {
+  if (!$("venue").value) return;
+  const seq = ++planSeq;
   say("Pricing…");
   $("run").disabled = true;
   try {
@@ -146,7 +161,9 @@ $("plan").onclick = async () => {
     // these rather than re-reading the selects, so the operator can only ever
     // spend on the configuration they saw a number for.
     const asked = { locationId: $("venue").value, questions: Number($("count").value) };
-    planned = Object.assign(await api("/plan", { method: "POST", body: JSON.stringify(asked) }), { asked });
+    const priced = await api("/plan", { method: "POST", body: JSON.stringify(asked) });
+    if (seq !== planSeq) return; // superseded by a newer selection
+    planned = Object.assign(priced, { asked });
     $("burn").hidden = false;
     $("burn").innerHTML =
       "<div>Would synthesize <strong>" + planned.clips + " clips</strong> — " +
@@ -158,14 +175,22 @@ $("plan").onclick = async () => {
       .map((l) => '<section><h2>' + esc(l.label) + '</h2><p class="said">' + esc(l.text) + "</p></section>")
       .join("");
     $("run").disabled = false;
-    say("Priced. Nothing spent.");
-  } catch (e) { say(e.message, true); }
-};
+    say("Nothing spent yet — Synthesize bills the amount above.");
+  } catch (e) {
+    if (seq !== planSeq) return;
+    // The button is the retry now that there is only one. Leaving it disabled
+    // on a failed price — a venue with an empty bank, a blip — would strand
+    // the page until a reload, which is the dead end this page just lost.
+    planned = null;
+    $("burn").hidden = true;
+    $("run").disabled = false;
+    say(e.message + " — Synthesize retries.", true);
+  }
+}
 
 $("run").onclick = async () => {
-  if (!planned) return say("Price it first.", true);
+  if (!planned) return price();
   $("run").disabled = true;
-  $("plan").disabled = true;
   say("Synthesizing… (a few seconds)");
   try {
     const { run } = await api("/run", { method: "POST", body: JSON.stringify(planned.asked) });
@@ -178,20 +203,16 @@ $("run").onclick = async () => {
     else if (run.errors) say(run.errors + " of " + run.clips.length + " clips failed.", true);
     else say("Done.");
   } catch (e) { say(e.message, true); }
-  $("plan").disabled = false;
   $("run").disabled = false;
 };
 
-function invalidatePlan() {
-  if (!planned) return;
+function reprice() {
   planned = null;
-  $("run").disabled = true;
-  $("burn").hidden = true;
   $("out").innerHTML = "";
-  say("Selection changed — price it again.");
+  price();
 }
-$("venue").onchange = invalidatePlan;
-$("count").onchange = invalidatePlan;
+$("venue").onchange = reprice;
+$("count").onchange = reprice;
 
 $("runs").onchange = async () => {
   const id = $("runs").value;
@@ -243,7 +264,9 @@ async function showRun(run) {
   }
 }
 
-loadVenues();
+// Price the default selection as soon as the venue list lands, so the cost is
+// on screen before the operator touches anything.
+loadVenues().then(price);
 loadRuns();
 </script>
 </body></html>`;
