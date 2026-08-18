@@ -25,15 +25,15 @@ import trivia from './games/trivia.mjs';
 import milkbottle from './games/milkbottle.mjs';
 import airhockey from './games/airhockey.mjs';
 import pinball from './games/pinball.mjs';
+import bumpercars from './games/bumpercars.mjs';
+import bumperboats from './games/bumperboats.mjs';
 
-export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine, battingcages, watergunrace, trivia, milkbottle, airhockey, pinball];
+export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine, battingcages, watergunrace, trivia, milkbottle, airhockey, pinball, bumpercars, bumperboats];
 
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
 /** Server-registry games with no policy yet, and why. */
 export const UNSUPPORTED = [
-  ['bumperboats', 'reactive — continuous steering'],
-  ['bumpercars', 'reactive — continuous steering'],
   ['gokarts', 'reactive — continuous steering'],
 ];
 

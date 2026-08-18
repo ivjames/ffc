@@ -100,6 +100,8 @@ const SKILL_FLOOR = {
   milkbottle: 12,
   airhockey: 4,
   pinball: 1200,
+  bumpercars: 5,
+  bumperboats: 4,
 };
 
 const pct = (xs, p) => {
