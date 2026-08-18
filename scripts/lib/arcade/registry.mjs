@@ -22,8 +22,9 @@ import clawmachine from './games/clawmachine.mjs';
 import battingcages from './games/battingcages.mjs';
 import watergunrace from './games/watergunrace.mjs';
 import trivia from './games/trivia.mjs';
+import milkbottle from './games/milkbottle.mjs';
 
-export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine, battingcages, watergunrace, trivia];
+export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine, battingcages, watergunrace, trivia, milkbottle];
 
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
@@ -33,7 +34,6 @@ export const UNSUPPORTED = [
   ['bumperboats', 'reactive — continuous steering'],
   ['bumpercars', 'reactive — continuous steering'],
   ['gokarts', 'reactive — continuous steering'],
-  ['milkbottle', 'physics — topple cascade is a sim, so no closed-form aim'],
   ['pinball', 'reactive — flipper timing on a live ball'],
 ];
 

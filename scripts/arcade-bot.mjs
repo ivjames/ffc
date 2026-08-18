@@ -97,6 +97,7 @@ const SKILL_FLOOR = {
   battingcages: 24,
   watergunrace: 2,
   trivia: 8,
+  milkbottle: 12,
 };
 
 const pct = (xs, p) => {
