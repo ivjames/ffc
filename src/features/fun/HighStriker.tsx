@@ -3,7 +3,7 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
-import { drawLogo } from './logo';
+import { drawLogo, logoReady } from './logo';
 import { playStroke, playSoClose, playUndo, playDing, playLand, playFanfare } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
 import {
@@ -21,7 +21,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
-  drawScreenVeil,
+  drawGlow,
+  makeCachedLayer,
 } from './fx';
 
 // §12 High Striker — the carnival strength-tower mini-game. A power meter
@@ -230,7 +231,13 @@ function drawTower(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.fillRect(W / 2 - POST_DX + 8, top, (POST_DX - 8) * 2, bot - top);
 
-  // Painted zone bands, bottom → top, each with its label.
+  // Painted zone bands, bottom → top, each with its label. Each band is a
+  // separate steel plate bolted to the tower, not a flat colour block: a
+  // cross-band gradient gives it a rolled surface, a bright top edge and a dark
+  // bottom edge give it thickness, and the seam between plates is the shadow
+  // where one overlaps the next.
+  const bandX = W / 2 - POST_DX + 8;
+  const bandW = (POST_DX - 8) * 2;
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -239,10 +246,18 @@ function drawTower(ctx: CanvasRenderingContext2D) {
     const hi = i + 1 < ZONES.length ? ZONES[i + 1].min : 100;
     const yTop = scoreToY(hi);
     const yBot = scoreToY(z.min);
-    ctx.fillStyle = withAlpha(z.color, 0.14);
-    ctx.fillRect(W / 2 - POST_DX + 8, yTop, (POST_DX - 8) * 2, yBot - yTop);
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(W / 2 - POST_DX + 8, yBot - 1, (POST_DX - 8) * 2, 1.5);
+    // Painted steel: lit from the left, falling to shade at the right edge.
+    const plate = ctx.createLinearGradient(bandX, 0, bandX + bandW, 0);
+    plate.addColorStop(0, withAlpha(z.color, 0.1));
+    plate.addColorStop(0.35, withAlpha(z.color, 0.24));
+    plate.addColorStop(1, withAlpha(z.color, 0.08));
+    ctx.fillStyle = plate;
+    ctx.fillRect(bandX, yTop, bandW, yBot - yTop);
+    // Plate edges — the highlight on the rolled top lip, shadow under the base.
+    ctx.fillStyle = withAlpha(z.color, 0.5);
+    ctx.fillRect(bandX, yTop, bandW, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(bandX, yBot - 1.5, bandW, 1.5);
     const big = z.min >= 90;
     ctx.font = `bold ${big ? 9 : 10}px system-ui, sans-serif`;
     ctx.fillStyle = withAlpha(z.color, 0.85);
@@ -276,8 +291,15 @@ function drawTower(ctx: CanvasRenderingContext2D) {
   ctx.fillRect(W / 2 - 1.5, top, 3, bot - top);
 }
 
-/** The bell at the tower crown, wobbling after a clang. */
-function drawBell(ctx: CanvasRenderingContext2D, fx: FX, now: number) {
+/** The bell at the tower crown, wobbling after a clang.
+ *
+ *  `lit` 0..1 is how hard it's glowing — an idle breath while the player lines
+ *  up (this is the thing the whole game is asking you to hit, and the tower is
+ *  otherwise dead still), blazing white the moment it's struck. */
+function drawBell(ctx: CanvasRenderingContext2D, fx: FX, now: number, lit: number) {
+  // Thrown BEFORE the wobble transform so the halo stays put on the mount while
+  // the dome swings inside it — light doesn't rock with the object emitting it.
+  if (lit > 0.02) drawGlow(ctx, BELL.x, BELL.y, BELL.r * (2.4 + lit * 2.2), '#fde68a', 0.2 + lit * 0.55);
   ctx.save();
   // Wobble pivots around the mount, driven by the decaying bellSwing scalar.
   ctx.translate(BELL.x, BELL.y - BELL.r - 6);
@@ -395,14 +417,38 @@ function drawMeter(ctx: CanvasRenderingContext2D, value: number) {
   ctx.restore();
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterVal: number) {
-  ctx.clearRect(0, 0, W, H);
+// —— Cached static layers ——
+// The night sky and the tower never change, and the backdrop alone was ~14
+// shadowBlur'd bulbs plus 26 stars every frame. Two layers because the sky sits
+// outside the shake transform and the tower inside it, so a hit still rattles
+// the machine but not the midway behind it.
+function paintSky(ctx: CanvasRenderingContext2D) {
   drawBackdrop(ctx);
   // Midway banner in the night sky, right of the tower (posts at W/2 ± 46, so
   // the right flank is clear from ~220 across; the power meter only occupies
   // the bottom corner). The badge, since the flank is a tall narrow strip a
   // wordmark would waste, at banner-glow amber over the stars.
   drawLogo(ctx, 272, 168, { variant: 'badge', width: 100, tint: '#fbbf24', alpha: 0.3 });
+}
+
+/** Tower + striker pad, on transparent so they rattle with the shake. */
+function paintMachine(ctx: CanvasRenderingContext2D) {
+  drawTower(ctx);
+  drawPad(ctx);
+}
+
+const skyLayer = makeCachedLayer(W, H, paintSky);
+const machineLayer = makeCachedLayer(W, H, paintMachine);
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterVal: number) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Keyed on the banner so the sky rebuilds once the mark decodes; a null layer
+  // means no DOM / no 2D context, so paint the frame directly.
+  const sky = skyLayer(logoReady('badge'));
+  const machine = machineLayer();
+  if (sky) ctx.drawImage(sky, 0, 0, W, H);
+  else paintSky(ctx);
 
   // —— Dynamic layer (shaken on impacts) ——
   ctx.save();
@@ -411,9 +457,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterV
     ctx.translate(s.x, s.y);
   }
 
-  drawTower(ctx);
-  drawBell(ctx, fx, now);
-  drawPad(ctx);
+  if (machine) ctx.drawImage(machine, 0, 0, W, H);
+  else paintMachine(ctx);
+
+  // The bell lights on the clang and nowhere else.
+  const bellLit = fx.flash;
+  drawBell(ctx, fx, now, bellLit);
 
   // Mallet swing: quick accelerating strike, then an eased return to rest.
   const REST_ANG = -2.45;
@@ -453,12 +502,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterV
 
   drawFloaters(ctx, fx.floaters);
 
-  // —— Bell flash overlay ——
-  if (fx.flash > 0) {
-    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.26);
-    ctx.fillRect(0, 0, W, H);
-  }
-
   // "3, 2, 1, GO!" countdown before the meter starts sweeping.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
@@ -478,9 +521,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number, meterV
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function HighStriker() {

@@ -7,7 +7,6 @@ import { drawLogo } from './logo';
 import { playBump, playWaterBump, playScore, playTick, playFanfare } from '../../lib/sound';
 import type { Vec as FxVec, Floater } from './fx';
 import { TWO_PI, withAlpha, roundRectPath, drawShadow, drawSphere, pushTrail, spawnFloater, stepFloaters, drawFloaters, decay, shakeOffset,
-  drawScreenVeil,
 } from './fx';
 
 // §12 Bumper arena — the shared engine behind Bumper Cars and Bumper Boats.
@@ -725,9 +724,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function BumperArena({ theme }: { theme: BumperTheme }) {

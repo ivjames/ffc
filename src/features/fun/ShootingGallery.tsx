@@ -4,7 +4,7 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
-import { drawLogo } from './logo';
+import { drawLogo, logoReady } from './logo';
 import {
   playStroke,
   playPinClack,
@@ -26,7 +26,8 @@ import {
   drawFloaters,
   decay,
   shakeOffset,
-  drawScreenVeil,
+  drawGlow,
+  makeCachedLayer,
 } from './fx';
 
 // §12 Shooting Gallery — the carnival booth classic. Tin ducks glide across
@@ -190,10 +191,11 @@ function drawDuck(
   ctx.fillStyle = '#3b2a15';
   ctx.fillRect(-2, -16, 4, 18);
 
-  if (gold) {
-    ctx.shadowColor = '#fbbf24';
-    ctx.shadowBlur = 10;
-  }
+  // The gold duck is the prize target, so it lights the booth around it rather
+  // than just being a brighter cutout — the same thing a Skee-Ball 100 cup or a
+  // pop bumper does. A gradient, not shadowBlur: this duck is on screen every
+  // frame it exists, and the sparkles below would double the cost again.
+  if (gold) drawGlow(ctx, 0, -38, 62, '#fbbf24', 0.34);
 
   // Body — a flat painted ellipse with a tail kick.
   ctx.beginPath();
@@ -210,7 +212,6 @@ function drawDuck(
   ctx.beginPath();
   ctx.arc(13, -47, 10.5, 0, TWO_PI);
   ctx.fill();
-  ctx.shadowBlur = 0;
   ctx.beginPath();
   ctx.moveTo(22, -50);
   ctx.lineTo(31, -46.5);
@@ -252,8 +253,6 @@ function drawDuck(
   if (gold) {
     const a = now * 0.004;
     ctx.fillStyle = '#fef9c3';
-    ctx.shadowColor = '#fbbf24';
-    ctx.shadowBlur = 8;
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('✦', Math.cos(a) * 16, -40 + Math.sin(a * 1.3) * 10);
@@ -352,10 +351,22 @@ function drawBooth(ctx: CanvasRenderingContext2D) {
   ctx.fillRect(0, 498, W, H - 498);
   ctx.fillStyle = 'rgba(255,220,160,0.3)';
   ctx.fillRect(0, 498, W, 2);
+
+  // Shelf strip lights. A real gallery lights each rank from its own shelf, and
+  // baking that warm wash above the boards is what puts the ducks IN the booth
+  // instead of floating on a painted backdrop. Free — this layer is built once.
+  for (const sh of SHELVES) {
+    const strip = ctx.createLinearGradient(0, sh.y - 62, 0, sh.y + 2);
+    strip.addColorStop(0, 'rgba(255,205,130,0)');
+    strip.addColorStop(0.72, 'rgba(255,205,130,0.07)');
+    strip.addColorStop(1, 'rgba(255,224,170,0.16)');
+    ctx.fillStyle = strip;
+    ctx.fillRect(0, sh.y - 62, W, 64);
+  }
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
-  ctx.clearRect(0, 0, W, H);
+/** Booth + painted signage — fixed scenery, so it's built once and blitted. */
+function paintBooth(ctx: CanvasRenderingContext2D) {
   drawBooth(ctx);
 
   // Painted on the backboard, in the band between the clock bar (ends 86) and
@@ -363,6 +374,18 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   // than the lockup, at the same amber the booth's painted stars use so it
   // reads as part of the scenery.
   drawLogo(ctx, W / 2, 108, { variant: 'wordmark', width: 130, tint: '#facc15', alpha: 0.45 });
+}
+
+const boothLayer = makeCachedLayer(W, H, paintBooth);
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Keyed on the signage so the booth rebuilds once the mark decodes; a null
+  // layer means no DOM / no 2D context, so paint the frame directly.
+  const booth = boothLayer(logoReady('wordmark'));
+  if (booth) ctx.drawImage(booth, 0, 0, W, H);
+  else paintBooth(ctx);
 
   // —— Clock bar across the top of the backboard ——
   if (gs.phase === 'playing' || gs.phase === 'done') {
@@ -473,12 +496,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.restore();
   }
 
-  // —— Gold-hit flash overlay ——
-  if (fx.flash > 0) {
-    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
-    ctx.fillRect(0, 0, W, H);
-  }
-
   // "3, 2, 1, GO!" countdown before the round starts.
   if (gs.phase === 'countdown') {
     const left = COUNTDOWN_MS - (now - gs.countStart);
@@ -498,9 +515,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function ShootingGallery() {
