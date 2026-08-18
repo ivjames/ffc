@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   BALL_R,
   DRAIN_Y,
+  FLIP_LEN,
+  FLIP_PIVOT_Y,
+  INLANE_X,
+  INLANE_Y,
+  L_REST,
+  OUT_BOT_Y,
   OUT_MOUTH_X,
   OUT_X,
   PF_L,
@@ -26,6 +32,37 @@ import {
 
 const BALL_W = 2 * (BALL_R + FLIP_R); // clearance the ball needs between blades
 const LANE_W = 2 * (BALL_R + WALL_PAD); // ...and between two walls
+
+/** Where the ball's centre travels as it rolls down an inlane ramp: the guide
+ *  segment offset by the ball's radius plus the wall's half-thickness. */
+function rampPath(side: 'L' | 'R'): Array<{ x: number; y: number }> {
+  const a = { x: side === 'L' ? OUT_X : mirrorX(OUT_X), y: OUT_BOT_Y };
+  const b = { x: side === 'L' ? INLANE_X : mirrorX(INLANE_X), y: INLANE_Y };
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const d = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+  const n = { x: d.y * (side === 'L' ? 1 : -1), y: -d.x * (side === 'L' ? 1 : -1) };
+  const pts = [];
+  for (let t = 0; t <= len; t += 0.25) {
+    pts.push({
+      x: a.x + d.x * t + n.x * (BALL_R + WALL_PAD),
+      y: a.y + d.y * t + n.y * (BALL_R + WALL_PAD),
+    });
+  }
+  return pts;
+}
+
+/** Distance from a point to a flipper's resting capsule centerline. */
+function distToBlade(p: { x: number; y: number }, side: 'L' | 'R'): number {
+  const px = side === 'L' ? INLANE_X : mirrorX(INLANE_X);
+  const dir = side === 'L' ? L_REST : Math.PI - L_REST;
+  const bx = px + Math.cos(dir) * FLIP_LEN;
+  const by = FLIP_PIVOT_Y + Math.sin(dir) * FLIP_LEN;
+  const abx = bx - px;
+  const aby = by - FLIP_PIVOT_Y;
+  let t = ((p.x - px) * abx + (p.y - FLIP_PIVOT_Y) * aby) / (abx * abx + aby * aby);
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (px + abx * t), p.y - (FLIP_PIVOT_Y + aby * t));
+}
 
 describe('pinball table geometry', () => {
   it('leaves the center drain passable but tight', () => {
@@ -56,6 +93,49 @@ describe('pinball table geometry', () => {
     // The right outlane is the mirror, measured against the shooter-lane wall.
     expect(PF_R - mirrorX(OUT_MOUTH_X)).toBe(mouth);
     expect(PF_R - mirrorX(OUT_X)).toBe(channel);
+  });
+
+  it('hangs each flipper below the inlane ramp that feeds it', () => {
+    // The pivot end of the blade is a 7px knuckle. Level with the ramp's end it
+    // pokes up through the ramp's ball path and the ball jams in the V between
+    // them; it has to hang below, so the ball is handed off with a drop rather
+    // than a ledge. Negative clearance here IS the stall.
+    for (const side of ['L', 'R'] as const) {
+      const clearance = Math.min(...rampPath(side).map((p) => distToBlade(p, side))) - (BALL_R + FLIP_R);
+      expect(clearance).toBeGreaterThan(0);
+      expect(clearance).toBeLessThan(6); // ...but still a ramp onto the blade, not a cliff
+    }
+  });
+
+  it('rolls a ball down the inlane onto the flipper without it sticking', () => {
+    // A grid over the bottom half of each ramp at dribble speeds — the ball
+    // arriving slowly at the very end is the case that used to wedge. With the
+    // pivot level with the ramp's end, 14 of these 48 stick fast.
+    for (const side of ['L', 'R'] as const) {
+      const path = rampPath(side);
+      for (let frac = 0.5; frac < 1.001; frac += 0.1) {
+        for (const speed of [0, 20, 40, 80]) {
+          const p = path[Math.min(path.length - 1, Math.round(frac * (path.length - 1)))];
+          const dir = side === 'L' ? 1 : -1;
+          const gs = freshGS();
+          gs.phase = 'play';
+          gs.live = true;
+          // Rolling down the ramp: the guide falls 22px over 68px of run.
+          gs.ball = { x: p.x, y: p.y, vx: dir * speed * 0.951, vy: speed * 0.308 };
+          let nudged = false;
+          let t = 0;
+          while (t < 6 && gs.ball.y <= DRAIN_Y) {
+            step(gs);
+            nudged ||= gs.events.some((e) => e.kind === 'nudge');
+            gs.events.length = 0;
+            t += DT;
+          }
+          const where = `${side} ramp ${(frac * 100) | 0}% at ${speed}u/s`;
+          expect(nudged, `stuck-ball watchdog fired: ${where}`).toBe(false);
+          expect(gs.ball.y, `ball never left the flippers: ${where}`).toBeGreaterThan(DRAIN_Y);
+        }
+      }
+    }
   });
 
   it('spends the ball saver instead of re-arming it on every launch', () => {

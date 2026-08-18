@@ -97,6 +97,22 @@ export const OUT_BOT_Y = 468;
 export const OUT_MOUTH_X = 30; // left divider, top — mouth is this minus PF_L
 export const OUT_X = 36; // left divider, bottom
 
+// Where the left inlane guide ends, and where the left flipper is pivoted
+// under it. These two are a pair: the guide is a ramp the ball rolls down and
+// the pivot end of the flipper is a 7px knuckle, so the ball rides 9px above
+// the ramp (BALL_R + WALL_PAD) but 14px above the blade (BALL_R + FLIP_R). Sit
+// the pivot level with the ramp's end and that extra 5px of knuckle pokes up
+// THROUGH the ramp's ball path: the ball rolls down, jams in the V between
+// ramp and knuckle, and dead-rests there — held by two contacts that between
+// them cancel gravity, and unflippable besides, since surface velocity at the
+// pivot is ~zero. Only the stuck-ball watchdog got it out. So the flipper hangs
+// below the ramp it is fed by: FLIP_DROP is chosen to clear the ramp's ball
+// path by ~1.8px, and the ball is handed off with a hair of a drop rather than
+// a ledge. pinballTable.test.ts pins the clearance at ≥ 0.
+export const INLANE_X = 104; // left inlane guide end / left flipper pivot x
+export const INLANE_Y = 490; // ...and the height the ramp ends at
+export const FLIP_DROP = 7; // pivot hangs this far below the ramp's end
+
 export const SEGS: Seg[] = (() => {
   const segs: Seg[] = [];
   for (let i = 0; i < ARCH_PTS.length - 1; i++) {
@@ -112,12 +128,13 @@ export const SEGS: Seg[] = (() => {
     { ax: PF_R, ay: 119, bx: PF_R, by: 168, gNx: -1, gNy: 0 }, // one-way gate
     // Outlane dividers + inlane guides.
     { ax: OUT_MOUTH_X, ay: OUT_TOP_Y, bx: OUT_X, by: OUT_BOT_Y }, // left outlane divider
-    // The inlane guides run all the way to the flipper pivots: ending short
-    // left a notch at the guide-end/pivot junction where the ball could rest
-    // dead — unflippable too, since surface velocity at the pivot is ~zero.
-    { ax: OUT_X, ay: OUT_BOT_Y, bx: 104, by: 490 }, // left inlane guide → flipper pivot
+    // The inlane guides run all the way over the flipper pivots — ending them
+    // short leaves a notch at the junction for the ball to rest dead in. The
+    // flipper itself hangs FLIP_DROP below, so the guide is a ramp the ball
+    // rolls off onto the blade, never a ledge it can jam against.
+    { ax: OUT_X, ay: OUT_BOT_Y, bx: INLANE_X, by: INLANE_Y }, // left inlane guide
     { ax: mirrorX(OUT_MOUTH_X), ay: OUT_TOP_Y, bx: mirrorX(OUT_X), by: OUT_BOT_Y }, // right outlane divider
-    { ax: mirrorX(OUT_X), ay: OUT_BOT_Y, bx: 210, by: 490 }, // right inlane guide → flipper pivot
+    { ax: mirrorX(OUT_X), ay: OUT_BOT_Y, bx: mirrorX(INLANE_X), by: INLANE_Y }, // right inlane guide
     // Rollover lane fins — short guides bracketing the lamps, detached from
     // the arch so the dome stays open playfield instead of walled columns.
     { ax: 94, ay: 136, bx: 94, by: 192 },
@@ -262,8 +279,9 @@ export const L_REST = 0.52;
 export const R_REST = Math.PI - 0.52;
 // Resting blade tips — the two posts of the center drain. Exported so the
 // ball-saver lamp is drawn across the actual gap rather than a hard-coded one.
-export const TIP_L = 104 + Math.cos(L_REST) * FLIP_LEN;
-export const TIP_R = 210 - Math.cos(L_REST) * FLIP_LEN;
+export const FLIP_PIVOT_Y = INLANE_Y + FLIP_DROP;
+export const TIP_L = INLANE_X + Math.cos(L_REST) * FLIP_LEN;
+export const TIP_R = mirrorX(INLANE_X) - Math.cos(L_REST) * FLIP_LEN;
 
 export function freshGS(): GS {
   return {
@@ -275,8 +293,24 @@ export function freshGS(): GS {
     live: false,
     saveLeft: SAVE_S,
     plunger: { pointerId: null, t: 0 },
-    fL: { px: 104, py: 490, rest: L_REST, raised: -0.55, angle: L_REST, omega: 0, pressed: false },
-    fR: { px: 210, py: 490, rest: R_REST, raised: Math.PI + 0.55, angle: R_REST, omega: 0, pressed: false },
+    fL: {
+      px: INLANE_X,
+      py: FLIP_PIVOT_Y,
+      rest: L_REST,
+      raised: -0.55,
+      angle: L_REST,
+      omega: 0,
+      pressed: false,
+    },
+    fR: {
+      px: mirrorX(INLANE_X),
+      py: FLIP_PIVOT_Y,
+      rest: R_REST,
+      raised: Math.PI + 0.55,
+      angle: R_REST,
+      omega: 0,
+      pressed: false,
+    },
     bumperCd: [0, 0, 0, 0, 0],
     slingCd: [0, 0],
     lamps: [false, false, false],

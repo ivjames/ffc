@@ -45,6 +45,8 @@ import {
   FIXED,
   FLIP_LEN,
   FLIP_R,
+  INLANE_X,
+  INLANE_Y,
   PLUNGE_X,
   RACK_Y,
   SAVE_S,
@@ -161,10 +163,10 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   // uses — the dividers lean in at the top, pinching the outlane mouths.
   c.moveTo(OUT_MOUTH_X, OUT_TOP_Y);
   c.lineTo(OUT_X, OUT_BOT_Y);
-  c.lineTo(104, 490);
+  c.lineTo(INLANE_X, INLANE_Y);
   c.moveTo(mirrorX(OUT_MOUTH_X), OUT_TOP_Y);
   c.lineTo(mirrorX(OUT_X), OUT_BOT_Y);
-  c.lineTo(210, 490);
+  c.lineTo(mirrorX(INLANE_X), INLANE_Y);
   // Rollover lane fins — short guides around the lamps (matching SEGS).
   c.moveTo(94, 136);
   c.lineTo(94, 192);
