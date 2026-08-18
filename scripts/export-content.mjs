@@ -35,6 +35,12 @@ async function resolvePort() {
 const lit = (v) => JSON.stringify(v ?? null);
 
 function renderLocation(l) {
+  // `modules` is emitted ONLY when the payload actually carries it. Absent has
+  // a meaning of its own — "derive from pos", the pre-modules behavior
+  // (src/lib/modules.ts) — so baking `null` in its place would both break the
+  // optional type and say something the server didn't.
+  const modules =
+    l.modules && typeof l.modules === "object" ? `\n    modules: ${lit(l.modules)},` : "";
   return `  {
     id: ${lit(l.id)},
     name: ${lit(l.name)},
@@ -48,7 +54,7 @@ function renderLocation(l) {
     orderingUrl: ${lit(l.orderingUrl)},
     hours: ${lit(l.hours)},
     venueHunt: ${lit(l.venueHunt ?? false)},
-    pos: ${lit(l.pos)},
+    pos: ${lit(l.pos)},${modules}
     orgId: ${lit(l.orgId)},
   },`;
 }
@@ -128,6 +134,13 @@ export type GeneratedLocation = {
       gameRewardCaps?: { dailyPerCard: number | null; perGame: Record<string, number> };
     } | null;
   } | null;
+  // Resolved a la carte module entitlements (server/lib/modules.js) — the
+  // FINAL on/off per module, with vendor wiring and dependencies already
+  // folded in, so the client never re-derives them. Optional: the baked
+  // snapshot predates it, and a cached payload from an older server won't
+  // carry it — absent must read as "derive from pos", the pre-modules
+  // behavior (src/lib/modules.ts).
+  modules?: Record<string, boolean>;
   orgId: string | null;
 };
 
