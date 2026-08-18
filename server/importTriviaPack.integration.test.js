@@ -9,7 +9,7 @@
 //
 // The rows here are synthetic and carry their own `source` stamp: this suite
 // shares a database with every other integration file, and dumping the real
-// 48,264-question pack into it would make every other trivia test slow and
+// 47,710-question pack into it would make every other trivia test slow and
 // this one's cleanup unreliable. The committed pack's own contents are
 // asserted, without a database, in scripts/trivia-pack.test.mjs.
 import { test, before, after } from "node:test";
@@ -19,7 +19,7 @@ import { TEST_DATABASE_URL, ensureSchema, testQuery } from "./test-support/testD
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 
 const { pool } = await import("./db.js");
-const { importPack, setPackArchived, readPack, PACK_SOURCE } = await import("./importTriviaPack.js");
+const { importPack, setPackArchived, prunePack, readPack, PACK_SOURCE } = await import("./importTriviaPack.js");
 
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const SOURCE = `test-pack-${stamp}`;
@@ -129,6 +129,49 @@ test("archive retires the pack, and unarchive brings it back", async () => {
     [SOURCE]
   );
   assert.equal(live.rows[0].n, 3);
+});
+
+test("prune retires rows a rebuilt pack has dropped, and nothing else", async () => {
+  // This is how a tightened content filter actually reaches a live bank.
+  // Inserting is idempotent but never takes anything back, so without prune a
+  // question dropped for safety would keep being dealt forever.
+  const shrunk = [ROWS[0], ROWS[1]]; // ROWS[2] is gone from the rebuilt pack
+
+  const dry = await prunePack(client, shrunk, { source: SOURCE, dryRun: true });
+  assert.equal(dry.pruned, 1);
+  const stillLive = await testQuery(
+    `select count(*)::int as n from trivia_question where source = $1 and archived_at is null`,
+    [SOURCE]
+  );
+  assert.equal(stillLive.rows[0].n, 3, "--dry-run rolled back");
+
+  const { pruned } = await prunePack(client, shrunk, { source: SOURCE });
+  assert.equal(pruned, 1);
+  const gone = await testQuery(
+    `select prompt from trivia_question where source = $1 and archived_at is not null`,
+    [SOURCE]
+  );
+  assert.deepEqual(gone.rows.map((r) => r.prompt), [ROWS[2].prompt]);
+
+  // Running it again is a no-op rather than an error.
+  assert.equal((await prunePack(client, shrunk, { source: SOURCE })).pruned, 0);
+
+  // The operator's own question shares nothing with the pack's prompt list,
+  // and must not be swept up by "not in the pack".
+  const theirs = await testQuery(
+    `select archived_at from trivia_question where org_id = $1`,
+    [orgId]
+  );
+  assert.equal(theirs.rows[0].archived_at, null, "a client's own row is never pruned");
+
+  // And the hand-written House Pack (source null) is out of scope entirely.
+  const house = await testQuery(
+    `select count(*)::int as n from trivia_question
+      where org_id is null and source is null and archived_at is not null`
+  );
+  assert.equal(house.rows[0].n, 0);
+
+  await setPackArchived(client, { archived: false, source: SOURCE });
 });
 
 test("archiving the pack leaves the hand-written House Pack dealing", async () => {

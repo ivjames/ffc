@@ -131,6 +131,11 @@ export function repairApostrophes(text) {
  * `\w*` suffixes it is tempting to write — keep "Peniston", "Sluter" and
  * "Orgasmo" from being read as the roots they happen to contain, but where a
  * suffix really is open-ended the wildcard stays.
+ *
+ * Not shared with server/lib/sanitize.js. That BLOCKLIST is sixteen three-letter
+ * combinations for player initials, matched whole; it holds "GOD", "GAY" and
+ * "JEW" because those are what people type into a scoreboard, and applying it
+ * to prose would drop a Renaissance question for the word "god".
  */
 const BLOCKED_WORDS = [
   "fuck\\w*", "shit(?:s|ty|ting|head)?", "cunts?", "bitch(?:es|y)?",
@@ -138,17 +143,67 @@ const BLOCKED_WORDS = [
   "pornograph\\w*", "masturbat\\w*", "orgasms?", "penis(?:es)?", "vaginas?",
   "nipples?", "erotic(?:a|ally)?", "blowjobs?", "dildos?",
   "prostitut(?:e|es|ion)", "brothels?", "strip(?:per|pers|club|clubs)",
-  "nudity", "nude", "naked", "incest(?:uous)?", "raped?", "rapes", "rapists?",
-  "raping", "molest(?:ed|er|ers|ation)?", "pedophil\\w*", "paedophil\\w*",
-  "bestiality", "heroin", "cocaine", "marijuana", "cannabis", "hashish",
-  "bongs?", "lsd", "methamphetamine",
+  "striptease", "nudity", "nude", "naked", "incest(?:uous)?", "raped?",
+  "rapes", "rapists?", "raping", "molest(?:ed|er|ers|ation)?", "pedophil\\w*",
+  "paedophil\\w*", "bestiality", "heroin", "cocaine", "marijuana", "cannabis",
+  "hashish", "bongs?", "lsd", "methamphetamine",
+  // Sexual anatomy and acts named outright. "genitals" is bounded so
+  // "Mycoplasma genitalium" survives as the microbiology question it is.
+  "genitals?", "testicles?", "virginity", "condoms?", "intercourse",
+  "copulator(?:y|ies)", "fornicat\\w*", "erections?", "promiscuous",
+  "promiscuity",
 ];
-const BLOCKED_RE = new RegExp(`\\b(?:${BLOCKED_WORDS.join("|")})\\b`, "i");
 
-/** True when a question is safe to put on the big screen. */
+/**
+ * Slurs. Written out because a blocklist that obscures its own entries cannot
+ * be reviewed or maintained, and this is the one list where a miss is
+ * unrecoverable — the host reads the options aloud before anyone can react.
+ *
+ * This is what caught the one row in the corpus that needed it: a John Lennon
+ * song whose title carries a racial slur, sitting in Music as a legitimate
+ * music-history question and completely unsayable at a children's party.
+ */
+const SLURS = [
+  "nigg(?:er|ers|a|as)", "faggots?", "kikes?", "spics?", "chinks?",
+  "wetbacks?", "gooks?", "coons?", "wops?", "dagos?", "retard(?:s|ed)?",
+  "tranny", "trannies", "cripples?", "midgets?",
+];
+
+/**
+ * Sexual activity described in a phrase rather than a word.
+ *
+ * These have to be phrases, because the single words they are built from are
+ * everywhere in legitimate trivia. "Sex" alone appears 179 times in the corpus
+ * and is almost always biology or grammar — the sex of a crocodile is set by
+ * nest temperature, parthenogenesis is asexual reproduction. So the pattern
+ * matches the act, not the noun.
+ */
+const BLOCKED_PHRASES = [
+  /\b(?:have|having|had|has)\s+sex\b/i,
+  /\bsex\s+acts?\b/i,
+  /\bsex(?:ual)?\s+(?:activity|relations|relationship|relationships|encounters?|partners?|positions?|abuse|assault|harassment)\b/i,
+  /\bsexually\s+(?:active|explicit|abused|assaulted|transmitted|suggestive)\b/i,
+  /\bone[- ]night\s+stands?\b/i,
+  /\blose|lost|losing\s+(?:his|her|their|your|my)\s+virgin\w*/i,
+];
+
+const BLOCKED_RE = new RegExp(`\\b(?:${[...BLOCKED_WORDS, ...SLURS].join("|")})\\b`, "i");
+
+/**
+ * True when a question is safe to put on the big screen.
+ *
+ * Deliberately NOT blocked, because over-blocking has a cost too and these are
+ * ordinary trivia subjects a venue would be poorer without: "breast" (cancer
+ * awareness, the breaststroke, "the moon on the breast of the new-fallen
+ * snow"), "affair" and "mistress" (Guinevere, Madame de Pompadour), "swinger"
+ * (Louis Prima, the King of Swingers), sexual orientation as a biographical
+ * fact, and the grim end of history — suicide, the Holocaust, slavery. A
+ * filter that swallowed those would be its own kind of wrong.
+ */
 export function isFamilySafe(...parts) {
   // Joined with a separator that cannot bridge two words into a false match.
-  return !BLOCKED_RE.test(parts.join(" | "));
+  const text = parts.join(" | ");
+  return !BLOCKED_RE.test(text) && !BLOCKED_PHRASES.some((re) => re.test(text));
 }
 
 /**

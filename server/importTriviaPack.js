@@ -4,6 +4,7 @@
 //   npm run import:trivia -- --dry-run    say what it would do, write nothing
 //   npm run import:trivia -- --archive    retire every row this import created
 //   npm run import:trivia -- --unarchive  put them back
+//   npm run import:trivia -- --prune      also retire rows the pack has dropped
 //
 // Deliberately NOT wired into `npm run migrate`. The schema seed plants the
 // 57-question House Pack because a venue that switches trivia on needs
@@ -157,10 +158,45 @@ export async function setPackArchived(client, { archived, dryRun = false, source
   }
 }
 
+/**
+ * Retire imported rows that the current pack no longer contains.
+ *
+ * The reason this exists is safety, not tidiness. The pack's content filter
+ * gets tightened from time to time, and a tightened filter is worthless to a
+ * venue that already ran the import: inserting is idempotent, but it never
+ * takes anything back, so a question dropped upstream would keep being dealt
+ * forever. `--prune` is how a filter fix actually reaches a live bank.
+ *
+ * Archives rather than deletes, like everything else in Master Control, and
+ * only ever touches rows this import created — a question an operator wrote by
+ * hand has `source` null and is never in scope.
+ *
+ * @returns {Promise<{ pruned: number }>}
+ */
+export async function prunePack(client, rows, { dryRun = false, source = PACK_SOURCE } = {}) {
+  await client.query("begin");
+  try {
+    const result = await client.query(
+      `update trivia_question t set archived_at = now()
+        where t.source = $2 and t.archived_at is null
+          and not exists (
+            select 1 from unnest($1::text[]) as p(prompt) where p.prompt = t.prompt
+          )`,
+      [rows.map((r) => r.prompt), source]
+    );
+    await client.query(dryRun ? "rollback" : "commit");
+    return { pruned: result.rowCount };
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  }
+}
+
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
   const archive = process.argv.includes("--archive");
   const unarchive = process.argv.includes("--unarchive");
+  const prune = process.argv.includes("--prune");
   const started = Date.now();
   const client = await pool.connect();
   try {
@@ -188,6 +224,30 @@ async function main() {
       `[import-trivia] ${dryRun ? "would insert" : "inserted"} ${inserted}, ` +
         `${alreadyPresent} already in the bank`
     );
+
+    if (prune) {
+      const { pruned } = await prunePack(client, rows, { dryRun });
+      console.log(
+        `[import-trivia] ${dryRun ? "would retire" : "retired"} ${pruned} rows no longer in the pack`
+      );
+    } else {
+      // Say it out loud. An operator tightening the content filter needs to
+      // know that re-importing alone does not remove anything.
+      const stale = await client.query(
+        `select count(*)::int as n from trivia_question t
+          where t.source = $2 and t.archived_at is null
+            and not exists (
+              select 1 from unnest($1::text[]) as p(prompt) where p.prompt = t.prompt
+            )`,
+        [rows.map((r) => r.prompt), PACK_SOURCE]
+      );
+      if (stale.rows[0].n > 0) {
+        console.log(
+          `[import-trivia] ${stale.rows[0].n} imported rows are no longer in the pack — ` +
+            `re-run with --prune to retire them`
+        );
+      }
+    }
 
     const byCategory = await client.query(
       `select category, count(*)::int as n from trivia_question

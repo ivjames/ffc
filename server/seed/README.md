@@ -2,7 +2,7 @@
 
 ## open-trivia-pack.ndjson.gz
 
-48,264 multiple-choice trivia questions for the live-trivia question bank,
+47,710 multiple-choice trivia questions for the live-trivia question bank,
 built from the **OpenTriviaQA** corpus.
 
 | | |
@@ -44,7 +44,7 @@ own work — the `source` column is what keeps the two apart.
 Gzipped NDJSON. The first line is a header:
 
 ```json
-{"pack":"opentriviaqa","source":"…","license":"CC BY-SA 4.0","upstreamCommit":"…","count":48264}
+{"pack":"opentriviaqa","source":"…","license":"CC BY-SA 4.0","upstreamCommit":"…","count":47710}
 ```
 
 Every line after it is one question, in exactly the shape the admin API
@@ -67,14 +67,32 @@ file and an empty diff.
 
 ### What the build drops, and why
 
-Of 49,716 source questions, 48,264 survive. The build prints the tally; the
+Of 49,716 source questions, 47,710 survive. The build prints the tally; the
 reasons are:
 
 | Dropped | Reason |
 |---:|---|
-| 653 | Rejected by `normalizeQuestion` — the same validator the admin write path uses. Mostly prompts over 300 characters, plus 89 over-long options and 24 with duplicate choices. |
-| 460 | Duplicate prompts. The corpus repeats questions across category files. |
-| 339 | Not family-safe. This is a family fun center; the filter is tuned to over-block. |
+| 934 | Not family-safe. This is a family fun center; the filter is tuned to over-block. |
+| 627 | Rejected by `normalizeQuestion` — the same validator the admin write path uses. Mostly prompts over 300 characters, plus over-long options and duplicate choices. |
+| 445 | Duplicate prompts. The corpus repeats questions across category files. |
+
+The safety filter is in three parts, because one blunt word list cannot do this
+job. Single words (`BLOCKED_WORDS`) catch the obvious. Slurs get their own list
+— the corpus contains one, a John Lennon song title, which is real music
+history and still unsayable at a children's party. And sexual activity is
+matched as *phrases* (`BLOCKED_PHRASES`), because the words it is built from
+are ordinary: "sex" alone appears 179 times in the corpus and is nearly always
+biology or grammar.
+
+Equally deliberate is what is **not** blocked: breast cancer and the
+breaststroke, Louis Prima the King of Swingers, *Mycoplasma genitalium*, sexual
+orientation as a biographical fact, and the grim end of history — suicide, the
+Holocaust, slavery. A filter that swallowed those would be wrong in the other
+direction. `scripts/trivia-pack.test.mjs` asserts both halves.
+
+When this filter is tightened, rebuilding the pack is only half the job — a
+bank that already imported keeps the old rows until someone runs
+`npm run import:trivia -- --prune`.
 
 The build also repairs the corpus rather than passing it through: mixed
 UTF-8/CP1252 bytes are decoded per-sequence (so "Café" is not "Caf?"),

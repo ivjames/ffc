@@ -100,6 +100,44 @@ describe('isFamilySafe', () => {
   test('checks every option, not just the prompt', () => {
     expect(isFamilySafe('Pick one', 'A horse', 'A dildo', 'A cat')).toBe(false);
   });
+
+  test('blocks slurs', () => {
+    // The corpus contains exactly one: a John Lennon song title, filed in
+    // Music as a legitimate music-history question and completely unsayable
+    // at a children's party. A host reads the options aloud before anyone in
+    // the room can react, so this is the one list where a miss cannot be
+    // walked back.
+    expect(isFamilySafe('Which song was banned?', 'Woman Is the N-word of the World')).toBe(true);
+    expect(isFamilySafe('Which song was banned?', 'Woman Is the Nigger of the World')).toBe(false);
+    expect(isFamilySafe('What did the character shout?', 'A homophobic faggot slur')).toBe(false);
+  });
+
+  test('blocks sexual activity described as a phrase', () => {
+    // Built from words that are individually everywhere in the corpus, so the
+    // pattern has to match the act rather than the noun.
+    expect(isFamilySafe('What does GAMBOL mean?', 'to have sex', 'to skip about')).toBe(false);
+    expect(isFamilySafe('She had a sexual relationship with her co-star.')).toBe(false);
+    expect(isFamilySafe('Sex acts like a natural antihistamine.')).toBe(false);
+    expect(isFamilySafe('He was sexually abused by four of the guards.')).toBe(false);
+    expect(isFamilySafe('What appeared on TV as AIDS spread?', 'Condoms')).toBe(false);
+  });
+
+  test('does not swallow ordinary trivia that merely sounds close', () => {
+    // Over-blocking has a cost too. Each of these was a real false positive
+    // while the filter was being tuned, and each would be a question the venue
+    // is poorer for losing.
+    expect(isFamilySafe('The pink ribbon raises awareness of what?', 'Breast cancer')).toBe(true);
+    expect(isFamilySafe('In which stroke can a flip turn be used?', 'Breaststroke')).toBe(true);
+    expect(isFamilySafe("What was Louis Prima's nickname?", 'The King of Swingers')).toBe(true);
+    expect(isFamilySafe('What is the smallest self-reproducing organism?', 'Mycoplasma genitalium')).toBe(true);
+    expect(isFamilySafe("A crocodile's sex is determined by nest temperature.", 'True')).toBe(true);
+    expect(isFamilySafe('Parthenogenesis is an asexual form of reproduction.', 'True')).toBe(true);
+    // Grim history is still history, and a filter that hid it would be wrong
+    // in a different direction.
+    expect(isFamilySafe('Which film is about the Holocaust?', "Schindler's List")).toBe(true);
+    expect(isFamilySafe('How did Broderick Crawford die?', 'He committed suicide.')).toBe(true);
+    expect(isFamilySafe('Which knight did Guinevere have an affair with?', 'Lancelot')).toBe(true);
+  });
 });
 
 describe('shuffleChoices', () => {
@@ -266,6 +304,28 @@ describe('the committed pack', () => {
     const { rows } = await pack;
     const unsafe = rows.filter((r) => !isFamilySafe(r.prompt, ...r.choices)).map((r) => r.prompt);
     expect(unsafe).toEqual([]);
+  });
+
+  test('holds none of the explicit material an earlier filter let through', async () => {
+    // Independent of isFamilySafe on purpose. The assertion above only proves
+    // the pack agrees with whatever the filter currently says; this one names
+    // the actual strings that reached the committed artifact once, so
+    // loosening the filter cannot quietly bring them back.
+    const { rows } = await pack;
+    const banned = [
+      /\bto have sex\b/i,
+      /\bsex acts?\b/i,
+      /\bsexual relationship\b/i,
+      /\bsexually abused\b/i,
+      /\bcondoms?\b/i,
+      /\bvirginity\b/i,
+      /\berections?\b/i,
+      /\bnigg(?:er|a)\b/i,
+    ];
+    const offenders = rows
+      .filter((r) => banned.some((re) => re.test([r.prompt, ...r.choices].join(' | '))))
+      .map((r) => r.prompt);
+    expect(offenders).toEqual([]);
   });
 
   test('no prompt appears twice', async () => {

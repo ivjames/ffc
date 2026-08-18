@@ -755,15 +755,21 @@ what keeps the licence attribution attached to the rows it covers.
 
 `npm run migrate` seeds a 57-question House Pack so a venue that switches
 trivia on has something to deal the same night. For a real bank there is a
-committed pack of **48,264** questions built from
+committed pack of **47,710** questions built from
 [OpenTriviaQA](https://github.com/uberspot/OpenTriviaQA) (CC BY-SA 4.0):
 
 ```sh
 npm run import:trivia -- --dry-run   # report only, rolls the transaction back
-npm run import:trivia                # ~2s for 48k rows
+npm run import:trivia                # ~2s for 47.7k rows
 npm run import:trivia -- --archive   # retire every row the import created
 npm run import:trivia -- --unarchive # put them back
+npm run import:trivia -- --prune     # also retire rows a rebuilt pack dropped
 ```
+
+`--prune` matters whenever the pack's content filter is tightened: inserting is
+idempotent but never takes anything back, so without it a question dropped for
+safety would keep being dealt to a bank that already imported. A plain run says
+how many such rows it found and tells you to re-run with the flag.
 
 Deliberately **not** wired into `npm run migrate` — forty-eight thousand
 donated questions are an editorial decision an operator makes once, on purpose,
@@ -895,7 +901,7 @@ nothing assumes one global zone.
   `seed/open-trivia-pack.ndjson.gz` into the platform question bank, with
   `--dry-run`, `--archive` and `--unarchive`. See "The live-trivia question
   bank" above.
-- `seed/open-trivia-pack.ndjson.gz` — 48,264 OpenTriviaQA questions (CC BY-SA
+- `seed/open-trivia-pack.ndjson.gz` — 47,710 OpenTriviaQA questions (CC BY-SA
   4.0), built by `scripts/build-trivia-pack.mjs`. `seed/README.md` carries the
   attribution terms and the tally of what the build drops and why.
 - `lib/sanitize.js` — tag validation + offensive-word blocklist (`isValidTag`,
