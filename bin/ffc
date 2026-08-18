@@ -111,16 +111,20 @@ die(){ printf '%serror:%s %s\n' "$c_r" "$c_o" "$*" >&2; exit 1; }
 #
 # `npm ci` wipes node_modules and reinstalls from scratch every run — the bulk
 # of a deploy's wall-clock when deps haven't changed. Since npm ci is
-# deterministic from the lockfile, skip it when the lockfile hash matches the
+# deterministic from the lockfile, skip it when the manifest hash matches the
 # stamp recorded after the last SUCCESSFUL install (stamp lives inside
 # node_modules, so npm ci itself erases it: stamp present ⇒ that install
-# completed). FFC_FRESH_DEPS=1 forces a full reinstall.
+# completed). The stamp hashes package.json TOO, not just the lockfile: npm ci
+# hard-fails when the two disagree (a dep edited in package.json without
+# regenerating the lock), and a lockfile-only stamp would skip that check and
+# quietly deploy the stale node_modules tree. FFC_FRESH_DEPS=1 forces a full
+# reinstall.
 NPM_QUIET=(--loglevel=error --no-fund --no-audit)
 npm_install(){
   local dir="$1"; shift
   if [ -f "$dir/package-lock.json" ]; then
     local stamp="$dir/node_modules/.ffc-lock-hash" want
-    want="$(sha256sum "$dir/package-lock.json" | cut -d' ' -f1)"
+    want="$(cat "$dir/package-lock.json" "$dir/package.json" | sha256sum | cut -d' ' -f1)"
     if [ -z "${FFC_FRESH_DEPS:-}" ] && [ "$want" = "$(cat "$stamp" 2>/dev/null || true)" ]; then
       log "deps in $dir current (lockfile unchanged) — skipping npm ci"
       return 0
