@@ -4,6 +4,7 @@ import { coursesByLocation, locationById } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
 import { coursePar } from '../../lib/scoring';
 import { themeLabel } from '../../lib/theme';
+import Icon from '../../ui/Icon';
 
 // §5.2 Course maps — courses at the current location; tap to view map + pars.
 export default function CourseList() {
@@ -20,7 +21,7 @@ export default function CourseList() {
           className="mb-3 flex items-center justify-between rounded-xl border border-fairway-800 bg-fairway-900/40 px-3 py-2 text-sm active:bg-fairway-800/60"
         >
           <span className="text-fairway-100/70">
-            📍 <span className="font-semibold text-fairway-100">{location?.name}</span>
+            <Icon name="state.located" /> <span className="font-semibold text-fairway-100">{location?.name}</span>
           </span>
           <span className="font-semibold text-fairway-400">Change</span>
         </Link>

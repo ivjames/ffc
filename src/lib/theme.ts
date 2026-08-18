@@ -1,3 +1,4 @@
+import type { DrawnIcon } from '../ui/icons/registry';
 // Per-course visual theming.
 //
 // The environment (backgrounds, cards, borders) is a neutral ramp shared by
@@ -44,34 +45,41 @@ export function themeLabel(theme: string): string {
   }
 }
 
-/** Emoji marker for a course theme (shared by every course tile/placeholder). */
-export function themeEmoji(theme: string): string {
+/**
+ * Icon for a course theme (shared by every course tile/placeholder).
+ *
+ * Returns a NAME, not a picture — 'classic' and the default arm both used to
+ * return ⛳️ and 'california'/'jungle' both returned 🌴, which quietly collapsed
+ * four courses into two markers. Each arm now names its own icon, so the
+ * courses stay distinguishable however the art is later redrawn.
+ */
+export function themeIcon(theme: string): DrawnIcon {
   switch (theme) {
     case 'blue':
-      return '🔵';
+      return 'course.blue';
     case 'green':
-      return '🟢';
+      return 'course.green';
     // Upland's individually themed Blue/Green courses.
     case 'california':
-      return '🌴';
+      return 'course.california';
     case 'classic':
-      return '⛳️';
+      return 'course.classic';
     case 'red':
-      return '🔴';
+      return 'course.red';
     case 'dragon':
-      return '🐉';
+      return 'course.dragon';
     case 'western':
-      return '🤠';
+      return 'course.western';
     // Retained for any legacy themed courses.
     case 'jungle':
-      return '🌴';
+      return 'course.jungle';
     case 'pirate':
-      return '🏴‍☠️';
+      return 'course.pirate';
     case 'space':
-      return '🚀';
+      return 'course.space';
     case 'haunted':
-      return '👻';
+      return 'course.haunted';
     default:
-      return '⛳️';
+      return 'course.default';
   }
 }

@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import type { CSSProperties } from 'react';
 import { Screen, TopBar, Content } from '../../ui/components';
+import Icon from '../../ui/Icon';
+import type { DrawnIcon } from '../../ui/icons/registry';
 import { playClick } from '../../lib/sound';
 import { usePos } from '../../lib/pos';
 
@@ -11,7 +13,14 @@ import { usePos } from '../../lib/pos';
 
 type Tile = {
   to: string;
-  emoji: string;
+  /**
+   * Semantic icon name, NOT a picture. Skee-Ball and Bowling both showed 🎳
+   * and Whack-a-Mole and High Striker both showed 🔨 — the emoji font has no
+   * separate glyph for them, so the tiles were lying about being different
+   * games. Naming the meaning lets each one have its own drawing; see
+   * src/ui/icons/manifest.ts.
+   */
+  icon: DrawnIcon;
   title: string;
   blurb: string;
   accent: string;
@@ -26,14 +35,14 @@ type Tile = {
 const TILES: Tile[] = [
   {
     to: '/arcade/facts',
-    emoji: '💡',
+    icon: 'game.fun-facts',
     title: 'Fun Facts',
     blurb: 'Bite-size facts about the games you love.',
     accent: '#f59e0b',
   },
   {
     to: '/arcade/trivia',
-    emoji: '🧠',
+    icon: 'game.trivia',
     title: 'Trivia',
     blurb: 'Ten quick questions — how many can you get?',
     accent: '#3b82f6',
@@ -41,14 +50,14 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/putt',
-    emoji: '⛳️',
+    icon: 'game.arcade-putt',
     title: 'Arcade Putt',
     blurb: 'Mini-golf — sink it in as few strokes as you can.',
     accent: '#16a34a',
   },
   {
     to: '/arcade/skeeball',
-    emoji: '🎳',
+    icon: 'game.skee-ball',
     title: 'Skee-Ball',
     blurb: 'Roll the lane — nail the corners for 100.',
     accent: '#22c55e',
@@ -56,7 +65,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/airhockey',
-    emoji: '🏒',
+    icon: 'game.air-hockey',
     title: 'Air Hockey',
     blurb: 'Face the CPU — first to seven goals wins.',
     accent: '#38bdf8',
@@ -64,7 +73,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/bumper',
-    emoji: '🚗',
+    icon: 'game.bumper-cars',
     title: 'Bumper Cars',
     blurb: 'Ram the pack — most bumps in 30 seconds.',
     accent: '#f97316',
@@ -72,7 +81,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/boats',
-    emoji: '🚤',
+    icon: 'game.bumper-boats',
     title: 'Bumper Boats',
     blurb: 'Bumper cars on water — floatier, driftier bumps.',
     accent: '#0ea5e9',
@@ -80,7 +89,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/axe',
-    emoji: '🪓',
+    icon: 'game.axe-throwing',
     title: 'Axe Throwing',
     blurb: 'Time your throw — stick the bullseye or a clutch.',
     accent: '#eab308',
@@ -88,7 +97,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/batting',
-    emoji: '⚾️',
+    icon: 'game.batting-cages',
     title: 'Batting Cages',
     blurb: 'Time your swing — crush it for a home run.',
     accent: '#ef4444',
@@ -96,7 +105,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/bowling',
-    emoji: '🎳',
+    icon: 'game.bowling',
     title: 'Bowling',
     blurb: 'Roll a full 10-frame game — go for the strike.',
     accent: '#a855f7',
@@ -104,7 +113,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/karts',
-    emoji: '🏁',
+    icon: 'game.go-karts',
     title: 'Go-Karts',
     blurb: 'Three-lap time trial — set your best lap.',
     accent: '#06b6d4',
@@ -112,7 +121,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/mole',
-    emoji: '🔨',
+    icon: 'game.whack-a-mole',
     title: 'Whack-a-Mole',
     blurb: 'Bop the gophers — gold pays triple, bombs bite.',
     accent: '#84cc16',
@@ -120,7 +129,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/hoops',
-    emoji: '🏀',
+    icon: 'game.pop-a-shot',
     title: 'Pop-a-Shot',
     blurb: '45 seconds of buckets — hit the bonus round.',
     accent: '#fb923c',
@@ -128,7 +137,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/darts',
-    emoji: '🎯',
+    icon: 'game.darts',
     title: 'Darts',
     blurb: 'Nine darts — trebles, doubles, and the bull.',
     accent: '#dc2626',
@@ -136,7 +145,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/gallery',
-    emoji: '🦆',
+    icon: 'game.shooting-gallery',
     title: 'Shooting Gallery',
     blurb: 'Six shots, three shelves — drop the tin ducks.',
     accent: '#facc15',
@@ -144,7 +153,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/claw',
-    emoji: '🧸',
+    icon: 'game.claw-machine',
     title: 'Claw Machine',
     blurb: 'Five credits — center the grip, carry it home.',
     accent: '#ec4899',
@@ -152,7 +161,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/striker',
-    emoji: '🔔',
+    icon: 'game.high-striker',
     title: 'High Striker',
     blurb: 'One perfect swing — ring the bell.',
     accent: '#f43f5e',
@@ -160,7 +169,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/rings',
-    emoji: '🎪',
+    icon: 'game.ring-toss',
     title: 'Ring Toss',
     blurb: 'Flick rings onto the bottles — red pays five.',
     accent: '#8b5cf6',
@@ -168,7 +177,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/bottles',
-    emoji: '🥛',
+    icon: 'game.milk-bottles',
     title: 'Milk Bottles',
     blurb: 'Three racks — smash the pyramid clean.',
     accent: '#e5e7eb',
@@ -176,7 +185,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/watergun',
-    emoji: '💦',
+    icon: 'game.water-gun-race',
     title: 'Water Gun Race',
     blurb: 'Soak the bullseye — first balloon to pop wins.',
     accent: '#2dd4bf',
@@ -184,7 +193,7 @@ const TILES: Tile[] = [
   },
   {
     to: '/arcade/pinball',
-    emoji: '🕹️',
+    icon: 'game.pinball',
     title: 'Pinball',
     blurb: 'Three balls, two flippers — light the lanes.',
     accent: '#d946ef',
@@ -223,20 +232,13 @@ export default function FunZone() {
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl"
                 style={{ background: `${t.accent}22`, border: `1px solid ${t.accent}55` }}
               >
-                {t.emoji}
+                <Icon name={t.icon} />
               </span>
               <span className="block min-w-0 flex-1 text-sm font-bold leading-tight text-fairway-50">
                 {t.title}
               </span>
               {gameRewards && t.earns && (
-                <span
-                  className="shrink-0 text-base leading-none"
-                  role="img"
-                  aria-label="Earns tickets"
-                  title="Earns tickets"
-                >
-                  🎟️
-                </span>
+                <Icon name="award.ticket" label="Earns tickets" className="shrink-0 text-base" />
               )}
             </button>
           ))}

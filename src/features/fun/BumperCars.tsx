@@ -3,7 +3,7 @@ import BumperArena, { type BumperTheme } from './BumperArena';
 // §12 Bumper Cars — grippy rink handling on the shared bumper arena.
 const CARS: BumperTheme = {
   title: 'Bumper Cars',
-  emoji: '🚗',
+  icon: 'game.bumper-cars',
   kind: 'car',
   playerColor: '#22c55e',
   aiColors: ['#f97316', '#eab308', '#a855f7', '#38bdf8'],

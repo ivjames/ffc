@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Button } from './components';
 import { playClick } from '../lib/sound';
 import { captureScreen, isScreenCaptureSupported } from '../lib/screenCapture';
+import Icon from './Icon';
 import {
   submitFeedback,
   getReviewerName,
@@ -299,7 +300,15 @@ export default function FeedbackButton() {
         disabled={grabbing}
         className="surface-1 pointer-events-auto rounded-full border border-fairway-700/70 px-3 py-1.5 text-xs font-bold text-fairway-50 active:translate-y-px disabled:opacity-60"
       >
-        {grabbing ? '📸 Grabbing…' : '💬 Feedback'}
+        {grabbing ? (
+          <>
+            <Icon name="action.take-photo" /> Grabbing…
+          </>
+        ) : (
+          <>
+            <Icon name="action.feedback" /> Feedback
+          </>
+        )}
       </button>
       {open && (
         <NoteSheet initialScreenshot={grabbedShot} onClose={() => setOpen(false)} />

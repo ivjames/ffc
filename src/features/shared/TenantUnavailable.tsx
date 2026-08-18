@@ -1,4 +1,5 @@
 import { Screen, Content } from '../../ui/components';
+import Icon from '../../ui/Icon';
 
 // Tenant dead-end (MULTI-VENUE.md §1/§3). Rendered by the app root INSTEAD of
 // the router when /api/content answered `unavailable: true` — an unknown/typo
@@ -16,9 +17,7 @@ export default function TenantUnavailable() {
     <Screen>
       <Content>
         <div className="mx-auto flex min-h-[70vh] max-w-sm flex-col items-center justify-center space-y-5 text-center">
-          <div className="text-5xl" aria-hidden="true">
-            🧭
-          </div>
+          <Icon name="state.no-venue" className="text-5xl" />
           <h1 className="text-xl font-black text-fairway-50">
             There&rsquo;s no venue at this address.
           </h1>

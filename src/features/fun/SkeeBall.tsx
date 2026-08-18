@@ -5,6 +5,7 @@ import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -616,7 +617,7 @@ export default function SkeeBall() {
         <TopBar title="Skee-Ball" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🎳</span>
+            <Icon name="game.skee-ball" className="text-6xl" />
             <div className="text-5xl font-black text-fairway-50">{total}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {BALLS} balls</p>

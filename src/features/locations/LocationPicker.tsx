@@ -5,6 +5,7 @@ import { useCurrentLocationId, setCurrentLocationId } from '../../lib/location';
 import { geolocationSupported } from '../../lib/geolocate';
 import { useDetectLocation } from './useDetectLocation';
 import { VenueOpenLine, VenueHoursCard } from '../../ui/VenueHoursInfo';
+import Icon from '../../ui/Icon';
 
 // §5 Location picker — the client runs several sites; choose which one you're
 // playing at (by hand, or via GPS "Use my location"). The choice is remembered
@@ -37,7 +38,7 @@ export default function LocationPicker() {
             disabled={detecting}
             className="surface-1 mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-fairway-800/60 px-4 py-3 text-sm font-semibold text-fairway-100 transition-transform active:translate-y-px disabled:opacity-50"
           >
-            <span>🧭</span>
+            <span><Icon name="state.no-venue" /></span>
             {detecting ? 'Locating…' : 'Use my location'}
           </button>
         )}
@@ -59,7 +60,7 @@ export default function LocationPicker() {
                     className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl"
                     style={{ background: `${loc.accent}22`, border: `1px solid ${loc.accent}55` }}
                   >
-                    📍
+                    <Icon name="state.located" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-lg font-bold text-fairway-50">

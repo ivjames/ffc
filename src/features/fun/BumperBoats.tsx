@@ -4,7 +4,7 @@ import BumperArena, { type BumperTheme } from './BumperArena';
 // damping, gentler thrust) so the boats glide and drift more than the cars.
 const BOATS: BumperTheme = {
   title: 'Bumper Boats',
-  emoji: '🚤',
+  icon: 'game.bumper-boats',
   kind: 'boat',
   playerColor: '#22c55e',
   aiColors: ['#f97316', '#facc15', '#e879f9', '#f43f5e'],

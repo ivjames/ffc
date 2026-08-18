@@ -5,6 +5,7 @@ import Confetti from '../../ui/Confetti';
 import AnnouncementBanner from '../../ui/AnnouncementBanner';
 import { useCurrentLocationId } from '../../lib/location';
 import { fetchLeaderboard, type LeaderboardRow } from '../../sync';
+import Icon from '../../ui/Icon';
 
 type Period = 'day' | 'week' | 'month' | 'all';
 const PERIODS: Period[] = ['day', 'week', 'month', 'all'];
@@ -140,7 +141,13 @@ export default function TvLeaderboard() {
                   : 'surface-1 border border-fairway-800/60 text-fairway-200'
               }`}
             >
-              {b === 'player' ? 'Players' : '🏅 Teams'}
+              {b === 'player' ? (
+                  'Players'
+                ) : (
+                  <>
+                    <Icon name="award.medal" /> Teams
+                  </>
+                )}
             </button>
           ))}
         </div>
