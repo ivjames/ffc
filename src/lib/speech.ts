@@ -17,9 +17,12 @@
 //     the host device opts in and players opt in individually if they want it.
 //
 // The shared mute (`ffc.muted`, owned by lib/sound) still wins: someone who
-// hits mute wants the room quiet, and "quiet" obviously includes the voice.
+// hits mute wants the room quiet, and "quiet" obviously includes the voice —
+// including the sentence already in the air. Muting drops the AudioContext's
+// gain, which silences the effects instantly but does nothing to a voice
+// mid-question, so this listens for the flip and cuts the queue itself.
 
-import { isMuted } from './sound';
+import { isMuted, subscribeMuted } from './sound';
 
 const SPEECH_KEY = 'ffc.speech';
 
@@ -54,6 +57,13 @@ export function setSpeechEnabled(next: boolean): void {
   if (!next) stopSpeaking();
   listeners.forEach((fn) => fn());
 }
+
+// Mute is a global the voice does not own, so it is watched rather than
+// polled: `speak()` checks it before starting, and this catches the case where
+// it flips while a question is already being read out.
+subscribeMuted(() => {
+  if (isMuted()) stopSpeaking();
+});
 
 /** True when this browser can speak at all. */
 export function speechSupported(): boolean {
@@ -91,13 +101,23 @@ export function pickVoice<T extends { name: string; lang: string; localService?:
   const english = voices.filter((v) => v.lang?.toLowerCase().startsWith('en'));
   const pool = english.length > 0 ? english : voices;
   if (pool.length === 0) return null;
-  for (const name of PREFERRED) {
-    const hit = pool.find((v) => v.name.startsWith(name));
-    if (hit) return hit;
-  }
-  // Local voices don't need the network and start instantly — over a PA in a
-  // venue with flaky wifi that matters more than timbre.
-  return pool.find((v) => v.localService) ?? pool[0];
+
+  const byName = (list: T[]): T | null => {
+    for (const name of PREFERRED) {
+      const hit = list.find((v) => v.name.startsWith(name));
+      if (hit) return hit;
+    }
+    return null;
+  };
+
+  // Local voices come FIRST, before the nicest-sounding name — several of the
+  // preferred voices (Google's especially) synthesize on a server, and a
+  // question that needs the network to be read is exactly what this module
+  // exists to avoid in a venue with bad wifi. Timbre loses to "it will speak".
+  // Where the platform doesn't report localService at all, this list is empty
+  // and the ranking falls through to name order over everything.
+  const local = pool.filter((v) => v.localService);
+  return byName(local) ?? local[0] ?? byName(pool) ?? pool[0];
 }
 
 function currentVoice(): SpeechSynthesisVoice | null {
@@ -290,18 +310,52 @@ export function standingsScript(board: { name: string; score: number }[]): strin
   return [lead];
 }
 
-/** The final scoreboard, read out as a podium. */
+/** "A", "A and B", "A, B and C" — how a person reads a list out loud. */
+function andList(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** Places below the winner, spoken. Standard competition ranking, so a
+ *  two-way tie at the top is followed by THIRD, not second. */
+const PLACES = ['', '', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth'];
+
+/** The board grouped into score tiers, each with the place it actually
+ *  occupies — everyone on the same score shares one place. */
+function podium(board: { name: string; score: number }[]) {
+  const tiers: { place: number; score: number; names: string[] }[] = [];
+  for (const [i, e] of board.entries()) {
+    const last = tiers[tiers.length - 1];
+    // The place is the entrant's own position, so a tier that starts at index 2
+    // is third — the two above it took first and second between them.
+    if (last && last.score === e.score) last.names.push(speakable(e.name));
+    else tiers.push({ place: i + 1, score: e.score, names: [speakable(e.name)] });
+  }
+  return tiers;
+}
+
+/** The final scoreboard, read out as a podium.
+ *
+ *  Ties are read as ties. The board arrives sorted by score but broken by
+ *  join order, so reading it positionally would hand the trophy to whoever
+ *  happened to sign up first and call an equal score "second" — in front of
+ *  the room, out loud, which is the worst place to get that wrong. */
 export function finalScript(board: { name: string; score: number }[]): string[] {
   if (board.length === 0) return ["That's the end of the game."];
-  const [first, ...rest] = board;
+  const tiers = podium(board);
+  const [top, ...rest] = tiers;
+
   const lines = [
-    `That's the game. The winner is ${speakable(first.name)}, with ${first.score} points.`,
+    top.names.length === 1
+      ? `That's the game. The winner is ${top.names[0]}, with ${top.score} points.`
+      : `That's the game. It's a tie at the top: ${andList(top.names)}, with ${top.score} points each.`,
   ];
+
   const runnersUp = rest.slice(0, 2);
   if (runnersUp.length > 0) {
     lines.push(
       runnersUp
-        .map((e, i) => `${i === 0 ? 'Second' : 'Third'}, ${speakable(e.name)}, ${e.score}.`)
+        .map((t) => `${PLACES[t.place] ?? `Number ${t.place}`}, ${andList(t.names)}, ${t.score}.`)
         .join(' '),
     );
   }

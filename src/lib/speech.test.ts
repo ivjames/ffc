@@ -1,6 +1,9 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { setMuted } from './sound';
 import {
   chunkForSpeech,
+  setSpeechEnabled,
+  speak,
   choiceLetter,
   estimateSeconds,
   finalScript,
@@ -112,6 +115,32 @@ describe('the script', () => {
     ]);
   });
 
+  test('a tie at the top is announced as a tie, not an arbitrary trophy', () => {
+    // The board is sorted by score and broken by join order, so reading it
+    // positionally would hand the win to whoever signed up first — out loud,
+    // in front of the room.
+    expect(
+      finalScript([
+        { name: 'Alex', score: 900 },
+        { name: 'Table 4', score: 900 },
+        { name: 'Sam', score: 100 },
+      ]),
+    ).toEqual([
+      "That's the game. It's a tie at the top: Alex and Table 4, with 900 points each.",
+      'Third, Sam, 100.',
+    ]);
+  });
+
+  test('places below a tie follow it — two firsts are followed by third', () => {
+    const lines = finalScript([
+      { name: 'Alex', score: 900 },
+      { name: 'Table 4', score: 900 },
+      { name: 'Sam', score: 400 },
+      { name: 'Jo', score: 400 },
+    ]);
+    expect(lines[1]).toBe('Third, Sam and Jo, 400.');
+  });
+
   test('a personal result is only spoken once it is known', () => {
     expect(myResultScript(null)).toEqual([]);
     expect(myResultScript({ choice: 1 } as { correct?: boolean })).toEqual([]);
@@ -144,6 +173,33 @@ describe('voice choice', () => {
     expect(picked?.name).toBe('Albert');
   });
 
+  test('a local voice beats a better-sounding remote one', () => {
+    // Several preferred voices (Google's especially) synthesize on a server.
+    // In a venue with bad wifi, "it will speak" beats timbre.
+    const picked = pickVoice([
+      { name: 'Google US English', lang: 'en-US', localService: false },
+      { name: 'Albert', lang: 'en-US', localService: true },
+    ]);
+    expect(picked?.name).toBe('Albert');
+  });
+
+  test('the preferred order still decides among local voices', () => {
+    const picked = pickVoice([
+      { name: 'Albert', lang: 'en-US', localService: true },
+      { name: 'Samantha', lang: 'en-US', localService: true },
+      { name: 'Google US English', lang: 'en-US', localService: false },
+    ]);
+    expect(picked?.name).toBe('Samantha');
+  });
+
+  test('platforms that never report localService still get the preferred name', () => {
+    const picked = pickVoice([
+      { name: 'Albert', lang: 'en-US' },
+      { name: 'Samantha', lang: 'en-US' },
+    ]);
+    expect(picked?.name).toBe('Samantha');
+  });
+
   test('no voices at all is not an error — the platform default is used', () => {
     expect(pickVoice([])).toBeNull();
   });
@@ -154,5 +210,65 @@ describe('read-aloud timing', () => {
     const seconds = estimateSeconds(questionScript(QUESTION));
     expect(seconds).toBeGreaterThan(6);
     expect(seconds).toBeLessThan(20);
+  });
+});
+
+describe('the mute button', () => {
+  // A stand-in for the browser's speech engine, so the node-side test can
+  // watch what the module actually asks it to do.
+  function stubSpeech() {
+    const cancel = vi.fn();
+    const spoken: string[] = [];
+    class Utterance {
+      text: string;
+      voice: unknown = null;
+      lang = '';
+      rate = 1;
+      pitch = 1;
+      volume = 1;
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+    vi.stubGlobal('window', {
+      speechSynthesis: {
+        cancel,
+        speak: (u: { text: string }) => spoken.push(u.text),
+        getVoices: () => [],
+      },
+      SpeechSynthesisUtterance: Utterance,
+    });
+    // `speak()` constructs the bare global, the same object a browser exposes
+    // on window — node needs both halves stubbed to stand in for that.
+    vi.stubGlobal('SpeechSynthesisUtterance', Utterance);
+    return { cancel, spoken };
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setMuted(false);
+    setSpeechEnabled(false);
+  });
+
+  test('muting mid-question cuts the sentence already in the air', () => {
+    // Mute drops the AudioContext gain, which silences the effects instantly
+    // but does nothing to a voice that is already reading — the queue has to
+    // be cancelled explicitly.
+    const { cancel, spoken } = stubSpeech();
+    setSpeechEnabled(true);
+    speak(['Question 1.', 'Who painted the Mona Lisa?']);
+    expect(spoken).toHaveLength(2);
+
+    cancel.mockClear();
+    setMuted(true);
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  test('nothing new is spoken while muted', () => {
+    const { spoken } = stubSpeech();
+    setSpeechEnabled(true);
+    setMuted(true);
+    speak('Question 2.');
+    expect(spoken).toEqual([]);
   });
 });
