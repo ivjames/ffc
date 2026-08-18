@@ -24,6 +24,7 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { syntheticKeyOk } from "../lib/syntheticConfig.js";
+import { LIVE_CATALOG_SCOPE } from "../lib/syntheticCatalog.js";
 
 export const router = Router();
 
@@ -44,8 +45,7 @@ router.get("/catalog", requireSyntheticKey, async (_req, res) => {
                 l.org_id as "orgId", o.slug as "orgSlug", o.name as "orgName"
            from location l
            left join org o on o.id = l.org_id
-          where l.archived_at is null
-            and (l.org_id is null or (o.archived_at is null and o.status = 'active'))
+          where ${LIVE_CATALOG_SCOPE}
           order by o.name nulls first, l.sort_order, l.name`
       ),
       pool.query(
@@ -53,8 +53,7 @@ router.get("/catalog", requireSyntheticKey, async (_req, res) => {
            from course c
            join location l on l.id = c.location_id
            left join org o on o.id = l.org_id
-          where c.archived_at is null and l.archived_at is null
-            and (l.org_id is null or (o.archived_at is null and o.status = 'active'))
+          where c.archived_at is null and ${LIVE_CATALOG_SCOPE}
           order by c.sort_order, c.name`
       ),
     ]);

@@ -10,14 +10,35 @@ import { validateTags, isValidTag } from "../lib/sanitize.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import { scoreAchievements } from "../lib/rewards.js";
 import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
-import { resolveSynthetic, syntheticMintsRewards } from "../lib/syntheticConfig.js";
+import { resolveSynthetic, syntheticKeyOk, syntheticMintsRewards } from "../lib/syntheticConfig.js";
 import { tenant, findTenantCourse } from "../lib/tenant.js";
+import { findSyntheticCourse } from "../lib/syntheticCatalog.js";
 
 export const router = Router();
 
 // Writes are anonymous, so cap how often a single IP can POST (in-memory
 // fixed-window — see lib/rateLimit.js for the multi-process caveat).
-const rateLimit = makeRateLimit({ windowMs: 60_000, max: 30, name: "rate limit" });
+//
+// The load bot is the deliberate exception: it posts every round from ONE ip
+// (the runner points it at loopback), so a sweep wider than 30 rounds/min —
+// easily reached now that it plays every org's courses, and reachable before
+// that with a high --plays-per-course — would start collecting 429s. The bot
+// counts those as failures and never retries, so the anonymous-writer cap
+// would silently truncate a soak run and corrupt its own numbers. A request
+// carrying the verified operator key is not an anonymous writer, so it skips
+// the bucket entirely (keyFn → falsy, see lib/rateLimit.js); the bot's own
+// --concurrency / --interval-min are the throttle that matters for it. The
+// key is checked here exactly as the route checks it below, so an unverified
+// `synthetic: true` (which the route 403s anyway) stays rate-limited.
+const rateLimit = makeRateLimit({
+  windowMs: 60_000,
+  max: 30,
+  name: "rate limit",
+  keyFn: (req) =>
+    req.body?.synthetic === true && syntheticKeyOk(req.get("x-synthetic-key"), process.env).ok
+      ? null
+      : req.ip || req.socket?.remoteAddress || "unknown",
+});
 
 // --- Helpers ---------------------------------------------------------------
 const UUID_RE =
@@ -172,10 +193,17 @@ router.post("/", rateLimit, tenant(), async (req, res) => {
     // leaving every other org's courses unplayable ("courseId does not exist")
     // even though the operator picked them in Master Control. The
     // x-synthetic-key has already been verified above and is an operator-level
-    // secret, so a synthetic round resolves its course across every org,
-    // exactly like the catalog it was discovered from (routes/synthetic.js).
-    // Real rounds are unaffected.
-    const course = await findTenantCourse(courseId, synthetic ? null : req.tenant, client);
+    // secret, so a synthetic round looks its course up across every org.
+    //
+    // Cross-org, NOT unscoped: findSyntheticCourse applies the same live
+    // course / live venue / live org predicate the catalog it was discovered
+    // from applies (lib/syntheticCatalog.js). The bot holds its last-known
+    // course set when a refresh fails, so a venue archived — or an org
+    // suspended — mid-run would otherwise keep taking rounds for a client
+    // that has gone dark. Real rounds are unaffected.
+    const course = synthetic
+      ? await findSyntheticCourse(courseId, client)
+      : await findTenantCourse(courseId, req.tenant, client);
     if (!course) {
       await client.query("ROLLBACK");
       return res.status(400).json({ ok: false, error: "courseId does not exist" });

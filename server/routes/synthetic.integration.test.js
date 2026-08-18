@@ -193,6 +193,47 @@ test("a REAL round on that same course is still tenant-scoped away", async () =>
   assert.match(res.body.error, /courseId does not exist/);
 });
 
+test("a synthetic round is refused once the course's org goes dark mid-run", async () => {
+  // The bot keeps its last-known course set when a refresh fails, so a course
+  // it discovered while the org was live can outlive the org's suspension.
+  // The write path must apply the catalog's own scope, not just "any org".
+  await testQuery(`update org set status = 'suspended' where id = $1`, [orgOtherId]);
+  try {
+    const res = await request({
+      method: "POST",
+      path: "/api/rounds",
+      headers: { "x-synthetic-key": KEY },
+      body: roundBody(courseOtherId),
+    });
+    assert.equal(res.status, 400);
+    assert.match(res.body.error, /courseId does not exist/);
+  } finally {
+    await testQuery(`update org set status = 'active' where id = $1`, [orgOtherId]);
+  }
+});
+
+test("a synthetic round is refused for an archived venue or archived course", async () => {
+  await testQuery(`update location set archived_at = now() where id = $1`, [locOtherId]);
+  let res = await request({
+    method: "POST",
+    path: "/api/rounds",
+    headers: { "x-synthetic-key": KEY },
+    body: roundBody(courseOtherId),
+  });
+  assert.equal(res.status, 400, "archived venue");
+  await testQuery(`update location set archived_at = null where id = $1`, [locOtherId]);
+
+  await testQuery(`update course set archived_at = now() where id = $1`, [courseOtherId]);
+  res = await request({
+    method: "POST",
+    path: "/api/rounds",
+    headers: { "x-synthetic-key": KEY },
+    body: roundBody(courseOtherId),
+  });
+  assert.equal(res.status, 400, "archived course");
+  await testQuery(`update course set archived_at = null where id = $1`, [courseOtherId]);
+});
+
 test("an UNAUTHORISED synthetic round on that course is still a 403", async () => {
   const res = await request({
     method: "POST",
@@ -202,4 +243,43 @@ test("an UNAUTHORISED synthetic round on that course is still a 403", async () =
   });
   assert.equal(res.status, 403);
   assert.match(res.body.error, /x-synthetic-key/);
+});
+
+// Last in the file ON PURPOSE: the anonymous burst below exhausts the write
+// limiter's 60s window for this IP, and every case above posts from the same
+// one — a 429 would mask the status each of them asserts.
+test("a sweep wider than the anonymous write cap is not throttled for the bot", async () => {
+  // 30 POSTs/60s per IP is the anonymous-writer cap, and the bot posts every
+  // round from ONE ip (the runner points it at loopback). A sweep wider than
+  // that — every org's courses now, or a high --plays-per-course before —
+  // would collect 429s that the bot counts as failures and never retries,
+  // silently truncating a soak run. A verified synthetic round skips the
+  // bucket; everyone else still gets it.
+  const results = [];
+  for (let i = 0; i < 40; i++) {
+    results.push(
+      await request({
+        method: "POST",
+        path: "/api/rounds",
+        headers: { "x-synthetic-key": KEY },
+        body: roundBody(courseOtherId),
+      })
+    );
+  }
+  assert.equal(results.filter((r) => r.status === 429).length, 0, "no synthetic round is limited");
+  assert.equal(results.filter((r) => r.status === 200).length, 40);
+
+  // Those 40 consumed none of the anonymous window — an ordinary writer from
+  // the same IP is still capped.
+  const anon = [];
+  for (let i = 0; i < 35; i++) {
+    anon.push(
+      await request({
+        method: "POST",
+        path: "/api/rounds",
+        body: roundBody(courseOtherId, { synthetic: false }),
+      })
+    );
+  }
+  assert.ok(anon.some((r) => r.status === 429), "an anonymous writer is still capped");
 });

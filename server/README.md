@@ -135,7 +135,16 @@ and any round it did aim there came back `courseId does not exist`. So:
   venues are dark to players, so the bot must not manufacture traffic on them.
 - An **authorised** synthetic `POST /api/rounds` resolves its course across
   every org too (`routes/rounds.js`), since the operator key already proves
-  platform-level intent. Real rounds stay strictly tenant-scoped.
+  platform-level intent. Cross-org but not unscoped: it applies the catalog's
+  own live course / live venue / live org predicate
+  (`lib/syntheticCatalog.js`), so a venue archived — or an org suspended —
+  mid-run stops taking rounds even though the bot still holds it in its
+  last-known set. Real rounds stay strictly tenant-scoped.
+- A verified synthetic round also **skips the per-IP write cap** (30/min, for
+  anonymous writers). The bot posts every round from one IP, so a sweep wider
+  than the cap would collect 429s it counts as failures and never retries —
+  silently truncating a soak run. Its own `--concurrency` / `--interval-min`
+  are the throttle that applies to it.
 - With no key (`--dry-run`) the bot falls back to `/api/content` and says which
   scope it discovered under, so an empty result explains itself.
 
