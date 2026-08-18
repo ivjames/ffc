@@ -1,8 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useDeadline, formatCountdown } from './useDeadline';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
+import {
+  isSpeechEnabled,
+  myResultScript,
+  primeSpeech,
+  questionScript,
+  revealScript,
+  setSpeechEnabled,
+  speak,
+  speechSupported,
+  stopSpeaking,
+  subscribeSpeech,
+} from '../../lib/speech';
 import {
   joinSession,
   fetchSnapshot,
@@ -25,6 +37,12 @@ import {
 // resolving to a dead session is worse than asking for the code again. Session
 // storage also means a passed-around phone doesn't carry a table's identity
 // into someone else's tab.
+//
+// Read-aloud exists here but is OFF unless this phone asked for it: the room's
+// voice is the host's device, and a table where three phones read the same
+// question a half-second apart can't hear either. It's for the player who
+// wants their own phone to read to them — the back of the room, or a screen
+// that's hard to see — so it's a quiet per-device switch, not a game setting.
 
 const TOKEN_KEY = 'ffc.trivia.live';
 
@@ -101,6 +119,14 @@ export default function TriviaLive() {
   const lastStatus = useRef<string | null>(null);
   // Which question index has already played its reveal sound.
   const soundedIndex = useRef<number | null>(null);
+  // Read-aloud on THIS phone, persisted per device (lib/speech).
+  const speechOn = useSyncExternalStore(subscribeSpeech, isSpeechEnabled, () => false);
+  const canSpeak = speechSupported();
+  // Same "status:index" guard the host uses: every answer in the room
+  // re-broadcasts the current phase, and a phone that re-read the question on
+  // each one would never finish a sentence.
+  const spokenPhase = useRef<string | null>(null);
+  const spokenResult = useRef<number | null>(null);
 
   const sessionId = stored?.sessionId ?? routeSession ?? null;
 
@@ -162,6 +188,42 @@ export default function TriviaLive() {
     if (mine.correct) playFanfare();
     else playBuzz();
   }, [snapshot?.session.status, snapshot?.session.currentIndex, snapshot?.myAnswer]);
+
+  // The question and the answer, read on this phone. The player payload holds
+  // no `answer` until the question closes, so the reveal read can only ever
+  // say something the server has already released (revealScript checks).
+  useEffect(() => {
+    if (!snapshot) return;
+    const { session, question } = snapshot;
+    const phase = `${session.status}:${session.currentIndex}`;
+    if (spokenPhase.current === phase) return;
+    spokenPhase.current = phase;
+    if (!speechOn || !question) return;
+    if (session.status === 'question') speak(questionScript(question));
+    else if (session.status === 'reveal') speak(revealScript(question));
+  }, [snapshot, speechOn]);
+
+  // "Correct, plus 130" waits for the personalized result the same way the
+  // fanfare does — at the instant of the reveal this phone genuinely doesn't
+  // know yet. Queued rather than interrupting, so it lands after the answer.
+  useEffect(() => {
+    const index = snapshot?.session.currentIndex ?? null;
+    const mine = snapshot?.myAnswer;
+    if (snapshot?.session.status !== 'reveal' || index === null) return;
+    if (mine?.correct === undefined) return;
+    if (spokenResult.current === index) return;
+    spokenResult.current = index;
+    if (speechOn) speak(myResultScript(mine), { interrupt: false });
+  }, [snapshot?.session.status, snapshot?.session.currentIndex, snapshot?.myAnswer, speechOn]);
+
+  // Leaving the game shouldn't leave a voice talking to a pocket.
+  useEffect(() => stopSpeaking, []);
+
+  const toggleSpeech = useCallback((next: boolean) => {
+    // iOS only unlocks speech from inside a gesture — this tap is it.
+    if (next) primeSpeech();
+    setSpeechEnabled(next);
+  }, []);
 
   // Clear the optimistic lock on every new QUESTION — and only that.
   //
@@ -258,6 +320,7 @@ export default function TriviaLive() {
   );
 
   function leave() {
+    stopSpeaking();
     saveStored(null);
     setStored(null);
     setSnapshot(null);
@@ -309,6 +372,16 @@ export default function TriviaLive() {
             Playing as a table? Everyone enters the same team name — one answer counts for the
             table, so decide together before you tap.
           </p>
+          {canSpeak && (
+            <label className="mb-4 flex items-center gap-2 text-sm text-fairway-100/80">
+              <input
+                type="checkbox"
+                checked={speechOn}
+                onChange={(e) => toggleSpeech(e.target.checked)}
+              />
+              Read the questions aloud on this phone
+            </label>
+          )}
           <Button onClick={doJoin} disabled={busy || joinCode.length < 4 || name.trim() === ''}>
             {busy ? 'Joining…' : 'Join the game'}
           </Button>
@@ -364,7 +437,19 @@ export default function TriviaLive() {
             {error}
           </p>
         )}
-        <button onClick={leave} className="mt-6 w-full text-center text-xs text-fairway-400">
+        {canSpeak && (
+          <button
+            onClick={() => {
+              playClick();
+              toggleSpeech(!speechOn);
+            }}
+            aria-pressed={speechOn}
+            className="mt-5 w-full text-center text-xs text-fairway-400"
+          >
+            {speechOn ? '🔊 Reading aloud on this phone — turn off' : '🔇 Read the questions aloud'}
+          </button>
+        )}
+        <button onClick={leave} className="mt-3 w-full text-center text-xs text-fairway-400">
           Leave the game
         </button>
       </Content>

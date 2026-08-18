@@ -1,9 +1,24 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useCurrentLocationId } from '../../lib/location';
 import { useSession } from '../../lib/session';
 import { useDeadline, formatCountdown } from './useDeadline';
 import { playClick } from '../../lib/sound';
+import {
+  estimateSeconds,
+  finalScript,
+  isSpeechEnabled,
+  lobbyScript,
+  primeSpeech,
+  questionScript,
+  revealScript,
+  setSpeechEnabled,
+  speak,
+  speechSupported,
+  standingsScript,
+  stopSpeaking,
+  subscribeSpeech,
+} from '../../lib/speech';
 import {
   createSession,
   fetchCategories,
@@ -34,6 +49,11 @@ import {
 // The host token is minted at create and kept in sessionStorage. It paces the
 // room and grants nothing else — worth keeping to this device, but no longer
 // something a player could learn anything from.
+//
+// This is also the device that TALKS. Read-aloud belongs here and not on the
+// players' phones: one voice on the host's speaker (or plugged into the PA) is
+// an MC, and forty phones a half-second out of sync with each other is noise.
+// Players can still switch it on individually, but they have to ask for it.
 
 const HOST_KEY = 'ffc.trivia.host';
 
@@ -86,6 +106,50 @@ export default function TriviaHost() {
   const startsIn = useDeadline(
     snapshot?.session.status === 'lobby' ? snapshot.session.autoAt : null,
   );
+  // Read-aloud is a per-device setting (lib/speech), shared with the player
+  // screen and persisted, so a tablet that hosts trivia every Thursday keeps
+  // its voice without anyone re-arming it.
+  const speechOn = useSyncExternalStore(subscribeSpeech, isSpeechEnabled, () => false);
+  const canSpeak = speechSupported();
+  // The phase this device has already read out, as "status:index". Every
+  // answer that lands re-broadcasts the same phase with a new answered count,
+  // and re-reading the question on each one would talk over the room.
+  const spokenPhase = useRef<string | null>(null);
+
+  const scriptFor = useCallback((snap: TriviaSnapshot | null): string[] => {
+    if (!snap) return [];
+    const { session: s, question: q, board: b } = snap;
+    if (s.status === 'lobby') return lobbyScript(s.joinCode);
+    if (s.status === 'question' && q) return questionScript(q);
+    // The standings ride along with the answer because the reveal is the only
+    // moment in the game with room for them — a question is about to open.
+    if (s.status === 'reveal' && q) return [...revealScript(q), ...standingsScript(b)];
+    if (s.status === 'final') return finalScript(b);
+    return [];
+  }, []);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const phase = `${snapshot.session.status}:${snapshot.session.currentIndex}`;
+    if (spokenPhase.current === phase) return;
+    // Marked whether or not it actually speaks: switching the voice on
+    // mid-question should not make it start reading a question the room has
+    // been staring at for fifteen seconds. "Read it again" covers that case.
+    spokenPhase.current = phase;
+    if (!speechOn) return;
+    speak(scriptFor(snapshot));
+  }, [snapshot, speechOn, scriptFor]);
+
+  // Walking off this screen must not leave a voice finishing a sentence into
+  // an empty room.
+  useEffect(() => stopSpeaking, []);
+
+  const toggleSpeech = useCallback((next: boolean) => {
+    // Priming has to happen inside the tap: iOS only starts speaking if the
+    // first utterance came from a user gesture.
+    if (next) primeSpeech();
+    setSpeechEnabled(next);
+  }, []);
 
   useEffect(() => {
     if (!locationId) return;
@@ -179,6 +243,8 @@ export default function TriviaHost() {
       );
       return;
     }
+    stopSpeaking();
+    spokenPhase.current = null;
     saveHost(null);
     setHost(null);
     setSnapshot(null);
@@ -249,7 +315,9 @@ export default function TriviaHost() {
             </div>
           </Setting>
 
-          <label className="mb-5 flex items-center gap-2 text-sm text-fairway-100/80">
+          <label
+            className={`${canSpeak ? 'mb-2' : 'mb-5'} flex items-center gap-2 text-sm text-fairway-100/80`}
+          >
             <input
               type="checkbox"
               checked={speedBonus}
@@ -258,6 +326,23 @@ export default function TriviaHost() {
             Speed bonus (faster correct answers score more)
           </label>
 
+          {canSpeak && (
+            <>
+              <label className="mb-1 flex items-center gap-2 text-sm text-fairway-100/80">
+                <input
+                  type="checkbox"
+                  checked={speechOn}
+                  onChange={(e) => toggleSpeech(e.target.checked)}
+                />
+                Read the game aloud (this device is the voice)
+              </label>
+              <p className="mb-5 text-xs text-fairway-400">
+                {speechOn
+                  ? readAloudHint(seconds)
+                  : 'Turn this on and the phone reads each question, its choices and the answer — hand it a speaker and it hosts itself.'}
+              </p>
+            </>
+          )}
           <Button onClick={start} disabled={busy || !locationId}>
             {busy ? 'Setting up…' : 'Create the game'}
           </Button>
@@ -382,6 +467,36 @@ export default function TriviaHost() {
           </p>
         )}
 
+        {canSpeak && (
+          <div className="mb-3 flex items-center gap-2">
+            <button
+              onClick={() => {
+                playClick();
+                toggleSpeech(!speechOn);
+              }}
+              aria-pressed={speechOn}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                speechOn
+                  ? 'bg-fairway-400 text-fairway-950'
+                  : 'border border-fairway-800 text-fairway-100/70'
+              }`}
+            >
+              {speechOn ? '🔊 Reading aloud' : '🔇 Voice off'}
+            </button>
+            {/* The one control a room actually asks for out loud. Deliberately
+                available at every phase: "what was the answer?" is as common a
+                shout as "read that again". */}
+            {speechOn && (
+              <button
+                onClick={() => speak(scriptFor(snapshot))}
+                className="rounded-full border border-fairway-800 px-3 py-1.5 text-xs font-semibold text-fairway-100/70"
+              >
+                Read it again
+              </button>
+            )}
+          </div>
+        )}
+
         {!done ? (
           <Button onClick={step} disabled={busy}>
             {nextAction(session.status, session.currentIndex, session.total)}
@@ -440,4 +555,21 @@ function Chip({
       {children}
     </button>
   );
+}
+
+// A representative four-choice question, used only to tell a host how much of
+// their timer the voice will spend before anyone can start thinking. The
+// answer clock starts when the question opens, so this comes out of it.
+const SAMPLE_QUESTION = {
+  index: 0,
+  category: 'General knowledge',
+  prompt: 'Which planet in our solar system has the most moons orbiting it?',
+  choices: ['Jupiter', 'Saturn', 'Neptune', 'Uranus'],
+};
+
+function readAloudHint(seconds: number): string {
+  const read = Math.ceil(estimateSeconds(questionScript(SAMPLE_QUESTION)));
+  return seconds - read < 10
+    ? `Reading a question aloud takes about ${read}s and the clock is already running, so ${seconds}s leaves almost no thinking time — 30s or 45s plays better.`
+    : `Reading a question aloud takes about ${read}s of the ${seconds}s on the clock.`;
 }
