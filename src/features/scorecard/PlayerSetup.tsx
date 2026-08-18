@@ -15,6 +15,7 @@ import { fetchMe, type AppUser } from '../../lib/authApi';
 import { createGame, fetchSnapshot } from '../../lib/gamesApi';
 import { createSharedLocalRound } from '../../lib/sharedMerge';
 import { DEV_MODE } from '../../lib/flags';
+import Icon from '../../ui/Icon';
 
 // Testing aid — a random valid arcade tag (three A–Z/0–9 chars), retrying the
 // rare blocklisted combo. Feeds the auto-play button so a whole round can be
@@ -195,9 +196,7 @@ export default function PlayerSetup() {
           <span className="font-normal text-fairway-100/70">(optional — play as a team)</span>
         </label>
         <div className="flex items-center gap-3">
-          <span className="w-6 text-right text-sm" aria-hidden="true">
-            🏅
-          </span>
+          <Icon name="award.medal" className="w-6 text-right text-sm" />
           <input
             value={teamTag}
             onChange={(e) => {
@@ -229,7 +228,7 @@ export default function PlayerSetup() {
             Uses player 1's tag as the host's; the rest join by code. */}
         <div className="mt-3">
           <Button variant="ghost" onClick={() => void startShared()} disabled={submitting}>
-            📲 Play together (everyone on their own phone)
+            <Icon name="action.play-together" /> Play together (everyone on their own phone)
           </Button>
           {!me && me !== 'loading' && (
             <p className="mt-1.5 text-center text-xs text-fairway-100/80">

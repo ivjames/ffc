@@ -5,6 +5,7 @@ import type { Challenge } from '../../data/funContent';
 import { challengesForTheme } from '../../data/funContent';
 import { courseById } from '../../data/courses';
 import { playClick, playTick, playLand } from '../../lib/sound';
+import Icon from '../../ui/Icon';
 
 // §12 Challenge Spinner — a wheel that mixes silly next-shot gameplay handicaps
 // (use the wrong end of your club, putt one-footed…) with quick group dares.
@@ -166,9 +167,7 @@ export default function Spinner() {
 
         <div className="relative mx-auto mb-6 w-full max-w-xs">
           {/* Fixed pointer at the top, dipping into the wheel. */}
-          <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1 text-3xl drop-shadow">
-            🔻
-          </div>
+          <Icon name="game.challenge-spinner" className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1 text-3xl drop-shadow" />
 
           <svg viewBox="0 0 200 200" className="w-full drop-shadow-xl" role="img" aria-label="Challenge wheel">
             <g
@@ -226,7 +225,15 @@ export default function Spinner() {
                   : { background: '#f59e0b33', color: '#fcd34d' }
               }
             >
-              {chosen.kind === 'gameplay' ? '⛳️ Next-shot twist' : '🎉 Just for fun'}
+              {chosen.kind === 'gameplay' ? (
+              <>
+                <Icon name="nav.golf" /> Next-shot twist
+              </>
+            ) : (
+              <>
+                <Icon name="state.celebrate" /> Just for fun
+              </>
+            )}
             </span>
             <div className="mt-3 text-4xl">{chosen.emoji}</div>
             <p className="mt-2 text-lg font-semibold leading-snug text-fairway-50">{chosen.text}</p>

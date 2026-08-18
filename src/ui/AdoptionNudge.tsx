@@ -4,6 +4,8 @@ import { useInstallPrompt } from '../lib/pwaInstall';
 import { nudgeVisible, dismissNudge } from '../lib/nudgeMemory';
 import { usePos } from '../lib/pos';
 import { track } from '../lib/analytics';
+import type { DrawnIcon } from './icons/registry';
+import Icon from './Icon';
 
 // Proactive adoption nudge for the Home screen: a single dismissible banner
 // that encourages installing the app or signing in — the two funnels we're
@@ -15,15 +17,15 @@ import { track } from '../lib/analytics';
 
 type Kind = 'install' | 'signin';
 
-const COPY: Record<Kind, { icon: string; title: string; cta: string; to: string }> = {
+const COPY: Record<Kind, { icon: DrawnIcon; title: string; cta: string; to: string }> = {
   install: {
-    icon: '📲',
+    icon: 'action.play-together',
     title: 'Add the app to your phone',
     cta: 'Install',
     to: '/install',
   },
   signin: {
-    icon: '🏆',
+    icon: 'award.trophy',
     title: 'Save your scores & rewards',
     cta: 'Sign in',
     to: '/me/account',
@@ -92,7 +94,7 @@ export default function AdoptionNudge({
     >
       <div className="flex items-start gap-3">
         <span className="text-xl" aria-hidden="true">
-          {c.icon}
+          <Icon name={c.icon} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-fairway-50">{c.title}</div>

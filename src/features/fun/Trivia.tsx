@@ -4,6 +4,7 @@ import { TRIVIA, type TriviaQuestion } from '../../data/funContent';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
 import GameTicketAward from './GameTicketAward';
 import GameHighScore from './GameHighScore';
+import Icon from '../../ui/Icon';
 
 // Tickets per correct answer, for venues with the gameRewards POS add-on.
 const TICKETS_PER_CORRECT = 5;
@@ -94,7 +95,7 @@ export default function Trivia() {
         <TopBar title="Trivia" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🧠</span>
+            <Icon name="game.trivia" className="text-6xl" />
             <div className="text-5xl font-black text-fairway-50">
               {score}
               <span className="text-2xl text-fairway-400"> / {round.length}</span>

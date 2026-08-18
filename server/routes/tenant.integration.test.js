@@ -404,6 +404,38 @@ test("manifest carries the tenant's branding with the spec MIME type", async () 
   assert.equal(manifest.icons[2].purpose, "maskable");
 });
 
+// The per-org app icon is the whole point of uploading one: Master Control
+// stores icon192Url/icon512Url on the org, and this is the only place they
+// become visible to an installer. The case above pins the DEFAULT icons, which
+// would keep passing if the manifest stopped reading the org's values at all.
+test("manifest serves the org's own icons, including the maskable one", async () => {
+  const icons = {
+    icon192Url: "/api/brand-assets/org-a/icon192-deadbeef0123.png",
+    icon512Url: "/api/brand-assets/org-a/icon512-deadbeef0123.png",
+  };
+  await testQuery(`update org set branding = branding || $2::jsonb where id = $1`, [
+    orgAId,
+    JSON.stringify(icons),
+  ]);
+  try {
+    const manifest = JSON.parse((await get("/api/manifest.webmanifest", slugA)).text);
+    assert.equal(manifest.icons[0].src, icons.icon192Url);
+    assert.equal(manifest.icons[0].sizes, "192x192");
+    assert.equal(manifest.icons[1].src, icons.icon512Url);
+    // The 512 is served twice: once any-purpose, once maskable. Both must be
+    // the ORG's icon — a default leaking into either slot is a tenant showing
+    // another brand on the home screen.
+    assert.equal(manifest.icons[2].src, icons.icon512Url);
+    assert.equal(manifest.icons[2].purpose, "maskable");
+  } finally {
+    await testQuery(`update org set branding = $2 where id = $1`, [
+      orgAId,
+      JSON.stringify(ORG_A_BRANDING),
+    ]);
+    clearTenantCache();
+  }
+});
+
 test("manifest for an org with empty branding is all defaults", async () => {
   const res = await get("/api/manifest.webmanifest", slugB);
   assert.equal(res.status, 200);

@@ -14,6 +14,7 @@ import {
   playFanfare,
 } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -821,7 +822,7 @@ export default function PopAShot() {
         <TopBar title="Pop-a-Shot" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🏀</span>
+            <Icon name="game.pop-a-shot" className="text-6xl" />
             <div className="text-5xl font-black text-fairway-50">{score}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">in {Math.round(CLOCK_MS / 1000)} seconds</p>
@@ -860,7 +861,7 @@ export default function PopAShot() {
       <TopBar title="Pop-a-Shot" back="/arcade" />
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-4 text-sm">
         <span className={`font-bold ${bonus ? 'text-warning' : 'text-fairway-50'}`}>
-          ⏱ <span className="tabular-nums">{secondsLeft}</span>s
+          <Icon name="state.timer" /> <span className="tabular-nums">{secondsLeft}</span>s
           {bonus && <span className="ml-2 rounded bg-warning/20 px-1.5 py-0.5 text-xs font-black text-warning">×3</span>}
         </span>
         <span className="text-fairway-300">
@@ -879,7 +880,7 @@ export default function PopAShot() {
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="text-5xl">🏀</span>
+            <Icon name="game.pop-a-shot" className="text-5xl" />
             <p className="text-sm text-fairway-100">
               Flick up to shoot — every make is 2 points. In the last 15 seconds the hoop slides and
               makes are worth 3. Beat the {Math.round(CLOCK_MS / 1000)}-second clock!

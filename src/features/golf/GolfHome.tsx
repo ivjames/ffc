@@ -4,9 +4,10 @@ import { Screen, TopBar, Content, Button, TagChip } from '../../ui/components';
 import { getActiveRound } from '../../db';
 import { courseById, coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
-import { themeEmoji } from '../../lib/theme';
+import { themeIcon } from '../../lib/theme';
 import { playClick, playCup } from '../../lib/sound';
 import type { LocalRound } from '../../types';
+import Icon from '../../ui/Icon';
 
 // Mini Golf section hub. Golf used to BE the app's home screen; in the FEC
 // restructure it becomes one section among several, reached from the drawer or
@@ -80,7 +81,7 @@ export default function GolfHome() {
                   style={{ '--puck-accent': c.accent } as CSSProperties}
                 >
                   <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
-                    {themeEmoji(c.theme)}
+                    <Icon name={themeIcon(c.theme)} />
                   </span>
                 </span>
                 <span className="text-sm font-black leading-tight text-fairway-50">{c.name}</span>
@@ -93,16 +94,16 @@ export default function GolfHome() {
           {/* Guest side of a shared multi-device round — the host's QR deep-links
               here too; this is the manual "enter a code" path. */}
           <Button variant="ghost" onClick={() => navigate('/join')}>
-            📲 Join a friend's game
+            <Icon name="action.play-together" /> Join a friend's game
           </Button>
           <Button variant="ghost" onClick={() => navigate('/golf/leaderboard')}>
-            🏆 Leaderboard
+            <Icon name="action.leaderboard" /> Leaderboard
           </Button>
           <Button variant="ghost" onClick={() => navigate('/golf/hunt')}>
-            🔍 Scavenger hunt
+            <Icon name="nav.hunt" /> Scavenger hunt
           </Button>
           <Button variant="ghost" onClick={() => navigate('/golf/rules')}>
-            📖 Rules
+            <Icon name="action.rules" /> Rules
           </Button>
         </div>
       </Content>

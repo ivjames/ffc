@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { loadImage, encodeJpeg, blobToBase64 } from '../../lib/image';
 import { useCurrentLocationId } from '../../lib/location';
+import Icon from '../../ui/Icon';
 import {
   putBoothDraft,
   getBoothDraft,
@@ -790,7 +791,7 @@ export default function PhotoBooth() {
   const selected = stickers.find((st) => st.id === selectedId) ?? null;
 
   // Square control key for the sticker-adjust row.
-  const keyBtn = (label: string, onClick: () => void, aria: string) => (
+  const keyBtn = (label: ReactNode, onClick: () => void, aria: string) => (
     <button
       onClick={onClick}
       aria-label={aria}
@@ -943,7 +944,11 @@ export default function PhotoBooth() {
                 {keyBtn('+', () => updateSelected((st) => ({ scale: Math.min(3, st.scale * 1.2) })), 'Bigger')}
                 {keyBtn('↺', () => updateSelected((st) => ({ rot: st.rot - 15 })), 'Rotate left')}
                 {keyBtn('↻', () => updateSelected((st) => ({ rot: st.rot + 15 })), 'Rotate right')}
-                {keyBtn('🗑️', () => selectedId !== null && removeSticker(selectedId), 'Remove sticker')}
+                {keyBtn(
+                  <Icon name="action.delete" />,
+                  () => selectedId !== null && removeSticker(selectedId),
+                  'Remove sticker',
+                )}
               </>
             ) : (
               <span className="text-xs text-fairway-100/80">
@@ -1038,15 +1043,23 @@ export default function PhotoBooth() {
               {saving
                 ? 'Saving…'
                 : editor.editingId
-                  ? '✅ Save changes'
-                  : '✅ Save to camera roll'}
+                  ? (
+                      <>
+                        <Icon name="state.done" /> Save changes
+                      </>
+                    )
+                  : (
+                      <>
+                        <Icon name="state.done" /> Save to camera roll
+                      </>
+                    )}
             </Button>
             <Button
               variant="ghost"
               onClick={() => void onShareFromEditor()}
               disabled={saving || !venueReady}
             >
-              📤 Share
+              <Icon name="action.share" /> Share
             </Button>
             {!venueReady && (
               <p className="text-center text-[11px] text-fairway-100/80">
@@ -1092,7 +1105,7 @@ export default function PhotoBooth() {
         </p>
 
         <Button onClick={() => fileRef.current?.click()} sound="cup">
-          📸 Take a photo
+          <Icon name="action.take-photo" /> Take a photo
         </Button>
 
         {galleryError && (
@@ -1134,7 +1147,7 @@ export default function PhotoBooth() {
                     aria-hidden="true"
                     className="absolute bottom-1 right-1 rounded-full bg-black/55 px-1.5 py-0.5 text-xs leading-none"
                   >
-                    ✏️
+                    <Icon name="action.edit" />
                   </span>
                 )}
               </button>
@@ -1158,7 +1171,13 @@ export default function PhotoBooth() {
           />
           <div className="mx-auto mt-4 flex w-full max-w-md flex-col gap-2">
             <Button onClick={() => void onShareStored(viewing)} disabled={viewerBusy}>
-              {viewerBusy ? '…' : '📤 Share'}
+              {viewerBusy ? (
+                        '…'
+                      ) : (
+                        <>
+                          <Icon name="action.share" /> Share
+                        </>
+                      )}
             </Button>
             {/* Re-open in the editor — only when this device holds the draft. */}
             {editableIds.has(viewing.id) && (
@@ -1167,7 +1186,7 @@ export default function PhotoBooth() {
                 onClick={() => void onEditPhoto(viewing)}
                 disabled={viewerBusy}
               >
-                ✏️ Edit stickers
+                <Icon name="action.edit" /> Edit stickers
               </Button>
             )}
             <Button
@@ -1175,7 +1194,13 @@ export default function PhotoBooth() {
               onClick={() => void onDeleteStored(viewing)}
               disabled={viewerBusy}
             >
-              {deleteArmed ? 'Tap again to delete' : '🗑️ Delete'}
+              {deleteArmed ? (
+                        'Tap again to delete'
+                      ) : (
+                        <>
+                          <Icon name="action.delete" /> Delete
+                        </>
+                      )}
             </Button>
             <Button variant="ghost" onClick={() => setViewing(null)} disabled={viewerBusy}>
               Close

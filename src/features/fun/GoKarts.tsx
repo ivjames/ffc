@@ -8,6 +8,7 @@ import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -985,7 +986,7 @@ export default function GoKarts() {
         <TopBar title="Go-Karts" back="/arcade" right={<span className="pr-1 text-sm text-fairway-300">{track.name}</span>} />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🏁</span>
+            <Icon name="game.go-karts" className="text-6xl" />
             <div className="text-2xl font-black text-fairway-50">Race complete!</div>
             <div className="text-5xl font-black text-fairway-50">{fmt(total)}s</div>
             <p className="text-sm text-fairway-300">

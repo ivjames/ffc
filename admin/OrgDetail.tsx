@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, type Branding, type BrandingAssetKind, type Org } from './api';
 import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
 import { AppPreview, InstallPreview, ContrastNotes } from './OrgBrandingPreview';
+import { deriveAppIcons } from './appIcon';
 
 // The platform defaults from MULTI-VENUE.md §2 — shown as placeholders so an
 // empty field visibly means "use the platform default". The logo trio has NO
@@ -196,6 +197,7 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
   // kinds), post the file, then fill the text field with the returned
   // /api/brand-assets/... URL. Saving is still the explicit Save button —
   // the upload endpoint never touches org.branding.
+  const [uploading, setUploading] = useState(false);
   const uploadFor = (key: AssetField) => async (file: File) => {
     setErr(null);
     const kind = ASSET_KIND_BY_FIELD[key];
@@ -208,13 +210,43 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
       setErr('That file is too large (max 1 MiB).');
       return;
     }
+    setUploading(true);
     try {
       const { url } = await api.uploadBrandingAsset(org.id, kind, file);
       set(key)(url);
     } catch (e) {
       setErr((e as Error).message);
+    } finally {
+      setUploading(false);
     }
   };
+
+  // "Use logo" — derive BOTH manifest icons from the logo this org already
+  // uploaded and push them through the same upload endpoint a hand-made file
+  // uses. The icon kinds demand PNG at exactly 192/512 (so the manifest cannot
+  // lie to the installer), which a logo never is; this does that conversion in
+  // the browser rather than teaching the server to resize images. See appIcon.ts.
+  //
+  // The fields are filled, not saved — Save branding stays the one explicit
+  // commit, exactly like a manual upload.
+  const [deriving, setDeriving] = useState(false);
+  async function useLogoAsIcon() {
+    setErr(null);
+    setDeriving(true);
+    try {
+      const background = values.backgroundColor.trim() || BRANDING_DEFAULTS.backgroundColor;
+      const derived = await deriveAppIcons(values.logoUrl.trim(), background);
+      for (const { kind, file } of derived) {
+        const { url } = await api.uploadBrandingAsset(org.id, kind, file);
+        set(kind === 'icon192' ? 'icon192Url' : 'icon512Url')(url);
+      }
+      toast('Icons generated from the logo — review them, then Save branding.');
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setDeriving(false);
+    }
+  }
 
   async function save() {
     setErr(null);
@@ -363,9 +395,27 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
           </p>
         </div>
       </div>
-
+      <div className="mt-2 flex items-center gap-2">
+        <Button
+          variant="ghost"
+          onClick={useLogoAsIcon}
+          disabled={deriving || busy || uploading || values.logoUrl.trim() === ''}
+        >
+          {deriving ? 'Generating…' : 'Use logo as app icon'}
+        </Button>
+        <span className="text-xs text-slate-500">
+          {values.logoUrl.trim() === ''
+            ? 'Upload a logo first to generate the 192 and 512 icons from it.'
+            : 'Fills both icon fields with squares generated from the logo, on the background color.'}
+        </span>
+      </div>
       <div className="mt-3">
-        <Button onClick={save} disabled={busy}>
+        {/* Gated on the asset work too, not just `busy`. Saving while an upload
+            or an icon generation is in flight would submit the OLD urls and
+            then unmount this card via onSaved() → reload, orphaning the
+            uploads and dropping their state updates — while the operator still
+            sees a success toast. */}
+        <Button onClick={save} disabled={busy || deriving || uploading}>
           {busy ? 'Saving…' : 'Save branding'}
         </Button>
       </div>

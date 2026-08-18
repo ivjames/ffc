@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { useFitCanvas } from '../fun/useFitCanvas';
 import GameHighScore from '../fun/GameHighScore';
@@ -21,6 +22,8 @@ import {
   type Hole,
 } from './world';
 import { generateHole } from './generate';
+import Icon from '../../ui/Icon';
+import type { DrawnIcon } from '../../ui/icons/registry';
 
 // Arcade Putt — a playable mini-golf minigame. Drag from the ball to aim (the
 // drag direction sets the line, its length sets power) and release to putt. The
@@ -73,14 +76,14 @@ const SINK_MS = 650;
 // button still skips the wait.
 const AUTO_ADVANCE_MS = 3000;
 
-function holeResult(strokes: number, par: number): { label: string; emoji: string } {
+function holeResult(strokes: number, par: number): { label: string; icon: DrawnIcon } {
   const d = strokes - par;
-  if (strokes === 1) return { label: 'Hole in one!', emoji: '🏌️' };
-  if (d <= -2) return { label: 'Eagle', emoji: '🦅' };
-  if (d === -1) return { label: 'Birdie', emoji: '🐦' };
-  if (d === 0) return { label: 'Par', emoji: '⛳️' };
-  if (d === 1) return { label: 'Bogey', emoji: '😬' };
-  return { label: `+${d}`, emoji: '😵' };
+  if (strokes === 1) return { label: 'Hole in one!', icon: 'score.hole-in-one' };
+  if (d <= -2) return { label: 'Eagle', icon: 'score.eagle' };
+  if (d === -1) return { label: 'Birdie', icon: 'score.birdie' };
+  if (d === 0) return { label: 'Par', icon: 'score.par' };
+  if (d === 1) return { label: 'Bogey', icon: 'score.bogey' };
+  return { label: `+${d}`, icon: 'score.over-par' };
 }
 
 function toParText(diff: number): string {
@@ -480,7 +483,7 @@ export default function PuttGolf() {
   const [strokes, setStrokes] = useState(0);
   const [scores, setScores] = useState<number[]>([]);
   const [holes, setHoles] = useState<Hole[]>([]);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState<ReactNode>('');
   const scoresRef = useRef<number[]>([]);
 
   const startHole = useCallback((index: number) => {
@@ -597,7 +600,11 @@ export default function PuttGolf() {
           gs.phase = 'splash';
           setStrokes(gs.strokes);
           setPhase('splash');
-          setNote('💦 Splash! +1 penalty — dropped by the water');
+          setNote(
+            <>
+              <Icon name="score.water-hazard" /> Splash! +1 penalty — dropped by the water
+            </>,
+          );
         } else if (res === 'stopped') {
           gs.phase = 'aim';
           setPhase('aim');
@@ -735,9 +742,18 @@ export default function PuttGolf() {
       : phase === 'rolling'
         ? 'Rolling…'
         : phase === 'splash'
-          ? '💦 Splash! +1 penalty'
+          ? (
+              <>
+                <Icon name="score.water-hazard" /> Splash! +1 penalty
+              </>
+            )
           : phase === 'sunk'
-            ? `${result?.emoji} ${result?.label} — ${strokes} on par ${hole?.par}`
+            ? (
+                <>
+                  {result && <Icon name={result.icon} />} {result?.label} — {strokes} on par{' '}
+                  {hole?.par}
+                </>
+              )
             : '';
 
   // Mode picker — the entry screen.
@@ -755,7 +771,7 @@ export default function PuttGolf() {
         <TopBar title="Arcade Putt" back="/arcade" />
         <Content>
           <div className="mt-6 text-center">
-            <div className="text-5xl">⛳️</div>
+            <Icon name="game.arcade-putt" className="text-5xl" />
             <BrandMark className="mx-auto mt-3 h-4 w-44 text-fairway-400" />
             <h2 className="mt-2 text-2xl font-black text-fairway-50">Choose your game</h2>
             <p className="mx-auto mt-1 max-w-xs text-sm text-fairway-100/70">
@@ -763,9 +779,9 @@ export default function PuttGolf() {
             </p>
           </div>
           <div className="mt-6 space-y-3">
-            <Button onClick={() => beginRound('course')}>🏁 9-Hole Course</Button>
+            <Button onClick={() => beginRound('course')}><Icon name="state.finish" /> 9-Hole Course</Button>
             <Button variant="ghost" onClick={() => beginRound('endless')}>
-              ♾️ Endless (procedural)
+              <Icon name="score.endless" /> Endless (procedural)
             </Button>
           </div>
           <p className="mx-auto mt-6 max-w-xs text-center text-xs text-fairway-400">
@@ -847,7 +863,7 @@ export default function PuttGolf() {
       <Content>
         <div className="mt-4">
             <div className="mb-4 text-center">
-              <div className="text-5xl">🏆</div>
+              <Icon name="award.trophy" className="text-5xl" />
               <h2 className="mt-2 text-2xl font-black text-fairway-50">
                 {isEndless ? 'Run complete' : 'Round complete'}
               </h2>
@@ -870,7 +886,7 @@ export default function PuttGolf() {
                       <span className="text-sm text-fairway-400">par {h.par}</span>
                       <span className="font-mono font-bold text-fairway-50">{scores[i] ?? '—'}</span>
                       <span className="w-24 text-right text-sm text-fairway-300">
-                        {r.emoji} {r.label}
+                        <Icon name={r.icon} /> {r.label}
                       </span>
                     </div>
                   );

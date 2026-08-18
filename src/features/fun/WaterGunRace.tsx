@@ -6,6 +6,7 @@ import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playWaterBump, playTick, playScore, playBuzz, playFanfare } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -788,7 +789,7 @@ export default function WaterGunRace() {
         <TopBar title="Water Gun Race" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">{won ? '🎈' : '🤡'}</span>
+            <Icon name={won ? 'state.win' : 'state.lose'} className="text-6xl" />
             <div className="text-2xl font-black text-fairway-50">
               {won ? 'You win the race!' : 'The clowns got you'}
             </div>
@@ -852,7 +853,7 @@ export default function WaterGunRace() {
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="text-5xl">🔫</span>
+            <Icon name="game.water-gun-race" className="text-5xl" />
             <p className="text-sm text-fairway-100">
               Hold and drag below the clown — the stream lands just above your finger, so keep the
               drifting bullseye in view. On-target water inflates your

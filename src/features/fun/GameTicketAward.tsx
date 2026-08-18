@@ -4,6 +4,7 @@ import { awardGameTickets, type GameAwardOutcome } from '../../lib/pos/gameRewar
 import { usePos } from '../../lib/pos';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
 import { useSession } from '../../lib/session';
+import Icon from '../../ui/Icon';
 
 // Drop-in ticket-award banner for a mini-game's end screen. Self-gating:
 // renders nothing unless this venue sells the gameRewards add-on. With a
@@ -55,7 +56,7 @@ export default function GameTicketAward({
         className="surface-1 mt-4 flex w-full items-center justify-between rounded-2xl border border-fairway-800/60 px-4 py-3 text-left transition-transform active:translate-y-px"
       >
         <span className="text-sm text-fairway-100/80">
-          🎟️{' '}
+          <Icon name="award.ticket" />{' '}
           {signedOut ? (
             <>
               Sign in and link your rewards card to earn <b>{tickets} tickets</b> from games like
@@ -92,7 +93,7 @@ export default function GameTicketAward({
           venue's per-game ceiling or the card's remaining daily allowance. */}
       {outcome?.status === 'awarded' && (
         <span className="font-bold text-fairway-50">
-          🎟️ +{outcome.tickets} tickets
+          <Icon name="award.ticket" /> +{outcome.tickets} tickets
           {outcome.newTicketBalance !== null && (
             <> · card balance {outcome.newTicketBalance.toLocaleString()}</>
           )}

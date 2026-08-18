@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import Icon from './Icon';
 import { isMuted, subscribeMuted, toggleMuted, playClick } from '../lib/sound';
 
 // Small, always-available mute switch. Fixed to the bottom-left so it mirrors
@@ -18,7 +19,7 @@ export default function SoundToggle() {
       aria-pressed={muted}
       title={muted ? 'Sound off' : 'Sound on'}
     >
-      {muted ? '🔇' : '🔊'}
+      <Icon name={muted ? 'control.sound-off' : 'control.sound-on'} />
     </button>
   );
 }

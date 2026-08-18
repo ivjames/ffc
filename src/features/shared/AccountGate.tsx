@@ -1,6 +1,7 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useSession, refreshSession } from '../../lib/session';
+import Icon from '../../ui/Icon';
 
 // Account gate (layout route) — the sibling of GeofenceGate, for the screens
 // that are about a person rather than a place.
@@ -34,9 +35,7 @@ function Pending({ loading }: { loading: boolean }) {
       <TopBar title="One moment" back="/" />
       <Content>
         <div className="mx-auto mt-10 max-w-sm space-y-5 text-center">
-          <div className="text-5xl" aria-hidden="true">
-            👤
-          </div>
+          <Icon name="state.account" className="text-5xl" />
           <h1 className="text-xl font-black text-fairway-50">
             {loading ? 'Checking your account…' : 'Couldn’t reach your account'}
           </h1>
@@ -68,9 +67,7 @@ function SignInRequired() {
       <TopBar title="Sign in" back="/" />
       <Content>
         <div className="mx-auto mt-10 max-w-sm space-y-5 text-center">
-          <div className="text-5xl" aria-hidden="true">
-            ✨
-          </div>
+          <Icon name="state.guest" className="text-5xl" />
           <h1 className="text-xl font-black text-fairway-50">Sign in to continue</h1>
           <p className="text-sm text-fairway-100/80">
             This part of the app is yours — your rewards card, teams and achievements. Sign in

@@ -141,8 +141,12 @@ export function Button({
   // index.css); the ghost variant is a subtler raised surface that dips a pixel.
   // Extra bottom padding leaves room for each key's lip so the label stays
   // centered in the visible face.
+  // `gap-2` rather than a space between the icon and the label: this is a FLEX
+  // container, and flex discards whitespace-only text nodes, so a `{' '}` or a
+  // plain space in the JSX vanishes and the icon ends up jammed against the
+  // word. Every icon-plus-label button in the app relies on this gap.
   const base =
-    'flex w-full items-center justify-center rounded-2xl px-4 pb-4 pt-3.5 text-base font-bold transition disabled:opacity-40 disabled:shadow-none disabled:active:translate-y-0';
+    'flex w-full items-center justify-center gap-2 rounded-2xl px-4 pb-4 pt-3.5 text-base font-bold transition disabled:opacity-40 disabled:shadow-none disabled:active:translate-y-0';
   const variants = {
     // The primary action also catches a one-shot light sweep on mount (btn-sheen)
     // so it reads as the lit, tappable "candy" element on the screen.

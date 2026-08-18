@@ -14,6 +14,7 @@ import {
   playFanfare,
 } from '../../lib/sound';
 import type { Particle, Floater } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -792,7 +793,7 @@ export default function ShootingGallery() {
         <TopBar title="Shooting Gallery" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🦆</span>
+            <Icon name="game.shooting-gallery" className="text-6xl" />
             <div className="text-5xl font-black text-fairway-50">{score}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">
@@ -859,7 +860,7 @@ export default function ShootingGallery() {
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="text-5xl">🦆</span>
+            <Icon name="game.shooting-gallery" className="text-5xl" />
             <p className="text-sm text-fairway-100">
               Tin ducks glide across three shelves — tap to shoot. Six shells per magazine, then a
               quick reload. {GAME_MS / 1000} seconds on the clock!

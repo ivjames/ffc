@@ -18,6 +18,7 @@ import {
   type HuntOwner,
 } from './api';
 import VenueHuntStart from './VenueHuntStart';
+import Icon from '../../ui/Icon';
 import {
   endVenueHuntSession,
   getVenueHuntSession,
@@ -315,7 +316,7 @@ export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
         <TopBar title="Scavenger hunt" back={backTo} />
         <Content>
           <div className="mt-10 text-center">
-            <div className="text-5xl">🔍</div>
+            <Icon name="nav.hunt" className="text-5xl" />
             <h2 className="mt-3 text-xl font-bold text-fairway-50">
               Start a round to play
             </h2>
@@ -343,7 +344,7 @@ export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
         <TopBar title="Scavenger hunt" back={backTo} />
         <Content>
           <div className="mt-10 text-center">
-            <div className="text-5xl">🔍</div>
+            <Icon name="nav.hunt" className="text-5xl" />
             <h2 className="mt-3 text-xl font-bold text-fairway-50">
               No hunt here yet
             </h2>
@@ -509,7 +510,13 @@ export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
                           aria-expanded={hintShown}
                           className="text-xs font-semibold text-fairway-400 active:opacity-70"
                         >
-                          {hintShown ? 'Hide hint' : '💡 Hint'}
+                          {hintShown ? (
+                        'Hide hint'
+                      ) : (
+                        <>
+                          <Icon name="action.hint" /> Hint
+                        </>
+                      )}
                         </button>
                         {hintShown && (
                           <div className="mt-1 text-xs text-fairway-100/70">{item.hint}</div>
@@ -539,7 +546,13 @@ export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
                             disabled={sharingFindId !== null}
                             className="surface-1 rounded-full border border-fairway-800/60 px-2.5 py-1 text-xs font-semibold text-fairway-200 transition-transform active:translate-y-px disabled:opacity-40"
                           >
-                            {sharingFindId === f.id ? 'Sharing…' : `📤 ${f.playerTag}'s photo`}
+                            {sharingFindId === f.id ? (
+                          'Sharing…'
+                        ) : (
+                          <>
+                            <Icon name="action.share" /> {f.playerTag}'s photo
+                          </>
+                        )}
                           </button>
                         ))}
                       </div>
@@ -554,11 +567,23 @@ export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
                       ? 'Checking…'
                       : item.countable
                         ? myCount > 0
-                          ? '📷 Snap another'
-                          : '📷 Snap'
+                          ? (
+                              <>
+                                <Icon name="action.take-photo" /> Snap another
+                              </>
+                            )
+                          : (
+                              <>
+                                <Icon name="action.take-photo" /> Snap
+                              </>
+                            )
                         : foundByMe
                           ? 'Found'
-                          : '📷 Snap'}
+                          : (
+                              <>
+                                <Icon name="action.take-photo" /> Snap
+                              </>
+                            )}
                   </button>
                 </div>
 
