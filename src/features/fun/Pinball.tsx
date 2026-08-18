@@ -34,533 +34,55 @@ import {
   shakeOffset,
 } from './fx';
 
+import {
+  W,
+  H,
+  BALL_R,
+  PF_L,
+  PF_R,
+  OUT_R,
+  PF_CX,
+  BALLS,
+  FIXED,
+  FLIP_LEN,
+  FLIP_R,
+  INLANE_X,
+  INLANE_Y,
+  PLUNGE_X,
+  RACK_Y,
+  SAVE_S,
+  PLUNGE_HEAD_Y,
+  PLUNGE_SQUASH,
+  ARCH_Y,
+  ARCH_PTS,
+  DRAIN_Y,
+  BUMPERS,
+  SLINGS,
+  TIP_L,
+  TIP_R,
+  BANKS,
+  BANK_PTS,
+  BANK_BONUS,
+  LAMPS,
+  OUT_BOT_Y,
+  OUT_MOUTH_X,
+  OUT_TOP_Y,
+  OUT_X,
+  mirrorX,
+  freshGS,
+  launchBall,
+  step,
+} from './pinballTable';
+import type { Flipper, GS, Phase, Sling } from './pinballTable';
+
 // §12 Pinball — the flagship Fun Zone mini-game. A real pop-bumper table:
 // press-and-hold to charge the spring plunger and launch up the shooter lane,
 // then flip with the left/right halves of the screen (multi-touch, both
 // flippers at once). Pop bumpers, slingshots and rollover lanes score across
-// 3 balls, with a 2-second ball saver after each launch. The sim is a
-// gravity + circle-vs-segment physics engine at 240 Hz fixed substeps; the
-// flippers are rotating capsule segments that transfer their surface velocity
-// to the ball at the contact point. All client-side, canvas, offline.
-
-// —— Table geometry (logical units; the canvas scales to fit) —————————————————
-const W = 340;
-const H = 560;
-const BALL_R = 7;
-const PF_L = 8; // playfield left wall
-const PF_R = 306; // shooter-lane inner wall = playfield right edge
-const OUT_R = 332; // outer right wall
-const PF_CX = (PF_L + PF_R) / 2; // playfield centerline (157)
-const BALLS = 3;
-
-// —— Physics ——————————————————————————————————————————————————————————————————
-// 240 Hz substeps: at the 1500 u/s speed cap a step moves ≤6.25u — under the
-// 7u ball radius, so the ball can never tunnel through a wall or flipper.
-const FIXED = 1000 / 240; // ms per substep
-const DT = 1 / 240; // the same substep in seconds, for the integrator
-const G = 880; // gravity down the table (u/s²)
-const DRAG = 0.1; // air drag fraction per second
-const MAXV = 1500; // ball speed cap (u/s)
-const WALL_PAD = 2; // wall half-thickness (segment endpoints act as round posts)
-const WALL_E = 0.52; // wall restitution
-const REST_VN = 40; // impacts slower than this don't bounce (lets the ball rest)
-
-// Blade length + pivot spread size the center drain: resting tips sit
-// 106 − 2·cos(0.52)·39 ≈ 38px apart, ~10px more than the ball needs to pass
-// (2·(BALL_R + FLIP_R) = 28). The old 42px blades on 94px-apart pivots left
-// the gap 7px NEGATIVE — the table literally could not drain down the middle.
-const FLIP_LEN = 39;
-const FLIP_R = 7; // flipper capsule half-thickness
-const ANG_UP = 26; // flip-up angular speed (rad/s)
-const ANG_DOWN = 15; // drop-back angular speed (rad/s)
-
-const CHARGE_S = 1.1; // seconds of hold for a full plunger charge
-const SAVE_S = 2; // ball-saver window after each launch
-const BUMP_V = 480; // pop-bumper kick speed
-const SLING_V = 430; // slingshot kick speed
-
-const PLUNGE_X = (PF_R + OUT_R) / 2;
-const RACK_Y = 523; // racked ball center at zero charge
-const PLUNGE_HEAD_Y = 530; // plunger head at rest
-const PLUNGE_SQUASH = 22; // how far a full charge compresses the spring
-
-// —— Top arch: one circular arc from the left wall over to the outer right
-// wall, approximated as segments so the ball glides around it.
-const ARCH_Y = 150; // y where the arch meets both side walls
-const ARCH_CX = 170;
-const ARCH_CY = 260;
-const ARCH_R = Math.hypot(ARCH_CX - PF_L, ARCH_CY - ARCH_Y);
-const ARCH_PTS: FxVec[] = (() => {
-  const a0 = Math.atan2(ARCH_Y - ARCH_CY, PF_L - ARCH_CX);
-  const a1 = Math.atan2(ARCH_Y - ARCH_CY, OUT_R - ARCH_CX);
-  const pts: FxVec[] = [];
-  for (let i = 0; i <= 22; i++) {
-    const a = a0 + ((a1 - a0) * i) / 22;
-    pts.push({ x: ARCH_CX + Math.cos(a) * ARCH_R, y: ARCH_CY + Math.sin(a) * ARCH_R });
-  }
-  return pts;
-})();
-
-// One-way gate at the top of the shooter lane: a launched ball passes it going
-// over the arch, but from the playfield side it behaves as a wall, so the ball
-// can't fall back into the lane. `gNx/gNy` is the blocked-side normal — the
-// segment only collides when the ball's center is on that side.
-type Seg = { ax: number; ay: number; bx: number; by: number; gNx?: number; gNy?: number };
-
-const SEGS: Seg[] = (() => {
-  const segs: Seg[] = [];
-  for (let i = 0; i < ARCH_PTS.length - 1; i++) {
-    const a = ARCH_PTS[i];
-    const b = ARCH_PTS[i + 1];
-    segs.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y });
-  }
-  segs.push(
-    { ax: PF_L, ay: ARCH_Y, bx: PF_L, by: 462 }, // left wall
-    { ax: OUT_R, ay: ARCH_Y, bx: OUT_R, by: H }, // outer right wall
-    { ax: PF_R, ay: 168, bx: PF_R, by: H }, // shooter-lane inner wall
-    { ax: PF_R, ay: 547, bx: OUT_R, by: 547 }, // lane floor (under the plunger)
-    { ax: PF_R, ay: 119, bx: PF_R, by: 168, gNx: -1, gNy: 0 }, // one-way gate
-    // Outlane dividers + inlane guides. Channel widths are 28px against an
-    // effective ball diameter of 18 (BALL_R + WALL_PAD each side) — anything
-    // near 20px is a wedge pocket the ball jams in instead of falling through.
-    { ax: 36, ay: 404, bx: 36, by: 468 }, // left outlane divider
-    // The inlane guides run all the way to the flipper pivots: ending short
-    // left a notch at the guide-end/pivot junction where the ball could rest
-    // dead — unflippable too, since surface velocity at the pivot is ~zero.
-    { ax: 36, ay: 468, bx: 104, by: 490 }, // left inlane guide → flipper pivot
-    { ax: 278, ay: 404, bx: 278, by: 468 }, // right outlane divider
-    { ax: 278, ay: 468, bx: 210, by: 490 }, // right inlane guide → flipper pivot
-    // Rollover lane fins — short guides bracketing the lamps, detached from
-    // the arch so the dome stays open playfield instead of walled columns.
-    { ax: 94, ay: 136, bx: 94, by: 192 },
-    { ax: 136, ay: 136, bx: 136, by: 192 },
-    { ax: 178, ay: 136, bx: 178, by: 192 },
-    { ax: 220, ay: 136, bx: 220, by: 192 },
-  );
-  return segs;
-})();
-
-type SlingFace = { p: FxVec; q: FxVec; nx: number; ny: number };
-type Sling = { a: FxVec; b: FxVec; c: FxVec; m: FxVec; faces: SlingFace[] };
-
-/** Triangular slingshot: edges a-b and b-c are passive walls; the kicking
- *  face bulges outward through `m`, split into two chords with their own
- *  normals. A flat face fires every kick along one fixed direction, which
- *  lets the two slings volley the ball in a stable "tick-tock" — the convex
- *  face varies the kick by contact point, so volleys diverge. */
-function makeSling(a: FxVec, b: FxVec, c: FxVec): Sling {
-  let nx = c.y - a.y;
-  let ny = -(c.x - a.x);
-  const mx = (a.x + c.x) / 2;
-  const my = (a.y + c.y) / 2;
-  if (nx * (PF_CX - mx) + ny * (300 - my) < 0) {
-    nx = -nx;
-    ny = -ny;
-  }
-  const l = Math.hypot(nx, ny) || 1;
-  nx /= l;
-  ny /= l;
-  const m = { x: mx + nx * 7, y: my + ny * 7 };
-  const faces = ([
-    [a, m],
-    [m, c],
-  ] as Array<[FxVec, FxVec]>).map(([p, q]) => {
-    let fx = q.y - p.y;
-    let fy = -(q.x - p.x);
-    if (fx * nx + fy * ny < 0) {
-      fx = -fx;
-      fy = -fy;
-    }
-    const fl = Math.hypot(fx, fy) || 1;
-    return { p, q, nx: fx / fl, ny: fy / fl };
-  });
-  return { a, b, c, m, faces };
-}
-
-// The slings' outer edges (a-b) lean 5px inward at the top so they are NOT
-// parallel to the outlane dividers beside them — a parallel channel lets a
-// horizontal ball ping-pong between the two faces indefinitely; the lean turns
-// every rebound slightly downward instead.
-// The slings float ~34px above the inlane guides — a ball can always pass
-// UNDER the wedge to reach the flipper, so nothing on the lower table forms a
-// closed pocket it could wedge into.
-const SLINGS: Sling[] = [
-  makeSling({ x: 69, y: 384 }, { x: 64, y: 442 }, { x: 96, y: 452 }),
-  makeSling({ x: 245, y: 384 }, { x: 250, y: 442 }, { x: 218, y: 452 }),
-];
-
-const BUMPERS = [
-  { x: 105, y: 238, r: 16 },
-  { x: 209, y: 238, r: 16 },
-  { x: 157, y: 302, r: 16 },
-  // Side pair below the triangle — fills the mid-table flanks.
-  { x: 62, y: 322, r: 14 },
-  { x: 252, y: 322, r: 14 },
-];
-
-// Two 3-target drop banks angled along the upper flanks. Each target is a
-// short standup segment: a firm hit drops it (+150), and dropping all three
-// pays the bank bonus and pops them back up. The bank line stands 28px off
-// the side wall so the channel behind it stays ball-passable, open at both
-// ends — no new pockets.
-type BankTarget = { ax: number; ay: number; bx: number; by: number };
-function bankTargets(x0: number, y0: number, x1: number, y1: number): BankTarget[] {
-  const spans: Array<[number, number]> = [
-    [0.06, 0.26],
-    [0.4, 0.6],
-    [0.74, 0.94],
-  ];
-  return spans.map(([a, b]) => ({
-    ax: x0 + (x1 - x0) * a,
-    ay: y0 + (y1 - y0) * a,
-    bx: x0 + (x1 - x0) * b,
-    by: y0 + (y1 - y0) * b,
-  }));
-}
-const BANKS: BankTarget[][] = [
-  bankTargets(36, 202, 74, 282),
-  bankTargets(278, 202, 240, 282),
-];
-const BANK_PTS = 150;
-const BANK_BONUS = 1000;
-
-const LAMPS = [
-  { x: 115, y: 168 },
-  { x: 157, y: 168 },
-  { x: 199, y: 168 },
-];
-
-// —— Game state ———————————————————————————————————————————————————————————————
-type Phase = 'ready' | 'play' | 'done';
-type Ball = { x: number; y: number; vx: number; vy: number };
-type Flipper = {
-  px: number;
-  py: number;
-  rest: number; // blade angle at rest (rad from +x)
-  raised: number; // blade angle when flipped
-  angle: number;
-  omega: number; // rad/s this substep (drives the impulse transfer)
-  pressed: boolean;
-};
-type Ev =
-  | { kind: 'bumper'; x: number; y: number; i: number }
-  | { kind: 'sling'; x: number; y: number; i: number }
-  | { kind: 'lane'; x: number; y: number }
-  | { kind: 'lanes' }
-  | { kind: 'nudge'; x: number; y: number }
-  | { kind: 'target'; x: number; y: number }
-  | { kind: 'bank'; x: number; y: number };
-type GS = {
-  phase: Phase;
-  time: number; // sim clock (s) — all cooldowns/deadlines live on this
-  ballNo: number; // 1-based
-  score: number;
-  ball: Ball;
-  live: boolean; // false = racked on the plunger
-  saveUntil: number; // ball-saver deadline (sim time)
-  plunger: { pointerId: number | null; t: number }; // t = charge 0..1
-  fL: Flipper;
-  fR: Flipper;
-  bumperCd: number[];
-  slingCd: number[];
-  lamps: boolean[];
-  banks: boolean[][]; // per-bank per-target: true = dropped
-  pointers: Map<number, 'L' | 'R'>; // flipper pointers by pointerId
-  events: Ev[]; // drained by the frame loop for sounds/fx
-  stillT: number; // seconds the live ball has sat near-motionless (stuck watchdog)
-};
-
-const L_REST = 0.52;
-const R_REST = Math.PI - 0.52;
-
-function freshGS(): GS {
-  return {
-    phase: 'ready',
-    time: 0,
-    ballNo: 1,
-    score: 0,
-    ball: { x: PLUNGE_X, y: RACK_Y, vx: 0, vy: 0 },
-    live: false,
-    saveUntil: 0,
-    plunger: { pointerId: null, t: 0 },
-    fL: { px: 104, py: 490, rest: L_REST, raised: -0.55, angle: L_REST, omega: 0, pressed: false },
-    fR: { px: 210, py: 490, rest: R_REST, raised: Math.PI + 0.55, angle: R_REST, omega: 0, pressed: false },
-    bumperCd: [0, 0, 0, 0, 0],
-    slingCd: [0, 0],
-    lamps: [false, false, false],
-    banks: BANKS.map((bank) => bank.map(() => false)),
-    pointers: new Map(),
-    events: [],
-    stillT: 0,
-  };
-}
-
-/** Circle-vs-segment: push the ball out along the contact normal and reflect
- *  with restitution `e`. Returns the impact speed when a bounce was applied
- *  (0 otherwise) so callers can detect kicks. */
-function collideSeg(
-  b: Ball,
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-  rad: number,
-  e: number,
-): number {
-  const abx = bx - ax;
-  const aby = by - ay;
-  const len2 = abx * abx + aby * aby || 1e-6;
-  let t = ((b.x - ax) * abx + (b.y - ay) * aby) / len2;
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
-  const qx = ax + abx * t;
-  const qy = ay + aby * t;
-  let nx = b.x - qx;
-  let ny = b.y - qy;
-  const d = Math.hypot(nx, ny);
-  if (d >= rad) return 0;
-  if (d < 1e-4) {
-    const l = Math.hypot(aby, abx) || 1;
-    nx = -aby / l;
-    ny = abx / l;
-  } else {
-    nx /= d;
-    ny /= d;
-  }
-  b.x = qx + nx * rad;
-  b.y = qy + ny * rad;
-  const vn = b.vx * nx + b.vy * ny;
-  if (vn < 0) {
-    const eff = -vn < REST_VN ? 0 : e;
-    b.vx -= (1 + eff) * vn * nx;
-    b.vy -= (1 + eff) * vn * ny;
-    if (eff > 0) {
-      // Anti-stall: deflect every real bounce by a hair (±1.4°) so the ball
-      // can never settle into a periodic ping-pong between two facing walls
-      // (lane dividers, arch chords). Sub-REST_VN glides are exempt, so the
-      // ball still rolls smoothly along the arch. Sim-side RNG is fine here —
-      // only the draw path must stay deterministic.
-      const j = (Math.random() - 0.5) * 0.05;
-      const cj = Math.cos(j);
-      const sj = Math.sin(j);
-      const rvx = b.vx * cj - b.vy * sj;
-      b.vy = b.vx * sj + b.vy * cj;
-      b.vx = rvx;
-    }
-    return -vn;
-  }
-  return 0;
-}
-
-/** Ball vs rotating flipper capsule. The blade's surface velocity at the
- *  contact point (ω × r) joins the reflection, so a ball resting on a flipper
- *  is launched when it flips. */
-function collideFlipper(b: Ball, f: Flipper): void {
-  const tx = f.px + Math.cos(f.angle) * FLIP_LEN;
-  const ty = f.py + Math.sin(f.angle) * FLIP_LEN;
-  const abx = tx - f.px;
-  const aby = ty - f.py;
-  const len2 = abx * abx + aby * aby || 1e-6;
-  let t = ((b.x - f.px) * abx + (b.y - f.py) * aby) / len2;
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
-  const qx = f.px + abx * t;
-  const qy = f.py + aby * t;
-  let nx = b.x - qx;
-  let ny = b.y - qy;
-  const d = Math.hypot(nx, ny);
-  const min = BALL_R + FLIP_R;
-  if (d >= min) return;
-  if (d < 1e-4) {
-    nx = 0;
-    ny = -1;
-  } else {
-    nx /= d;
-    ny /= d;
-  }
-  b.x = qx + nx * min;
-  b.y = qy + ny * min;
-  const ux = -(qy - f.py) * f.omega;
-  const uy = (qx - f.px) * f.omega;
-  const vn = (b.vx - ux) * nx + (b.vy - uy) * ny;
-  if (vn < 0) {
-    const eff = -vn < REST_VN && Math.abs(f.omega) < 1 ? 0 : 0.35;
-    b.vx -= (1 + eff) * vn * nx;
-    b.vy -= (1 + eff) * vn * ny;
-  }
-}
-
-function stepFlipper(f: Flipper): void {
-  const target = f.pressed ? f.raised : f.rest;
-  const prev = f.angle;
-  const maxStep = (f.pressed ? ANG_UP : ANG_DOWN) * DT;
-  const d = target - f.angle;
-  f.angle = Math.abs(d) <= maxStep ? target : f.angle + Math.sign(d) * maxStep;
-  f.omega = (f.angle - prev) / DT;
-}
-
-/** One 240 Hz physics substep. Gameplay events land in gs.events. */
-function step(gs: GS): void {
-  gs.time += DT;
-  stepFlipper(gs.fL);
-  stepFlipper(gs.fR);
-  if (gs.plunger.pointerId !== null && !gs.live) {
-    gs.plunger.t = Math.min(1, gs.plunger.t + DT / CHARGE_S);
-  }
-  if (!gs.live) return;
-
-  const b = gs.ball;
-  b.vy += G * DT;
-  const k = 1 - DRAG * DT;
-  b.vx *= k;
-  b.vy *= k;
-  b.x += b.vx * DT;
-  b.y += b.vy * DT;
-
-  // Two constraint passes keep the ball stable when wedged (flipper vs wall).
-  for (let iter = 0; iter < 2; iter++) {
-    for (const s of SEGS) {
-      if (s.gNx !== undefined) {
-        // One-way gate: only solid from its blocked side.
-        if ((b.x - s.ax) * s.gNx + (b.y - s.ay) * (s.gNy ?? 0) <= 0) continue;
-      }
-      collideSeg(b, s.ax, s.ay, s.bx, s.by, BALL_R + WALL_PAD, WALL_E);
-    }
-
-    for (let i = 0; i < SLINGS.length; i++) {
-      const sl = SLINGS[i];
-      collideSeg(b, sl.a.x, sl.a.y, sl.b.x, sl.b.y, BALL_R + WALL_PAD, WALL_E);
-      collideSeg(b, sl.b.x, sl.b.y, sl.c.x, sl.c.y, BALL_R + WALL_PAD, WALL_E);
-      let hit = 0;
-      let fnx = 0;
-      let fny = 0;
-      for (const f of sl.faces) {
-        const h = collideSeg(b, f.p.x, f.p.y, f.q.x, f.q.y, BALL_R + WALL_PAD, 0.5);
-        if (h > hit) {
-          hit = h;
-          fnx = f.nx;
-          fny = f.ny;
-        }
-      }
-      if (hit > 70 && gs.time >= gs.slingCd[i]) {
-        gs.slingCd[i] = gs.time + 0.15;
-        // Kick along the struck chord's normal, wobbled a few degrees so
-        // repeat kicks never retrace the same line (keeps a bit of the
-        // tangential motion too).
-        const j = (Math.random() - 0.5) * 0.12;
-        const kx = fnx * Math.cos(j) - fny * Math.sin(j);
-        const ky = fnx * Math.sin(j) + fny * Math.cos(j);
-        const vt = b.vx * -ky + b.vy * kx;
-        b.vx = kx * SLING_V + -ky * vt * 0.35;
-        b.vy = ky * SLING_V + kx * vt * 0.35;
-        gs.score += 50;
-        gs.events.push({ kind: 'sling', x: b.x, y: b.y, i });
-      }
-    }
-
-    for (let i = 0; i < BUMPERS.length; i++) {
-      const bp = BUMPERS[i];
-      const dx = b.x - bp.x;
-      const dy = b.y - bp.y;
-      const d = Math.hypot(dx, dy) || 1e-4;
-      const min = bp.r + BALL_R;
-      if (d >= min) continue;
-      const nx = dx / d;
-      const ny = dy / d;
-      b.x = bp.x + nx * min;
-      b.y = bp.y + ny * min;
-      if (gs.time >= gs.bumperCd[i]) {
-        // Pop-bumper: fires the ball outward at full kick speed.
-        gs.bumperCd[i] = gs.time + 0.1;
-        b.vx = nx * BUMP_V + b.vx * 0.2;
-        b.vy = ny * BUMP_V + b.vy * 0.2;
-        gs.score += 100;
-        gs.events.push({ kind: 'bumper', x: bp.x + nx * bp.r, y: bp.y + ny * bp.r, i });
-      } else {
-        const vn = b.vx * nx + b.vy * ny;
-        if (vn < 0) {
-          b.vx -= 1.6 * vn * nx;
-          b.vy -= 1.6 * vn * ny;
-        }
-      }
-    }
-
-    // Drop-target banks: only standing targets collide; a firm hit drops the
-    // target, and clearing the bank pays the bonus and pops all three back up.
-    for (let bi = 0; bi < BANKS.length; bi++) {
-      for (let ti = 0; ti < BANKS[bi].length; ti++) {
-        if (gs.banks[bi][ti]) continue;
-        const t = BANKS[bi][ti];
-        const hit = collideSeg(b, t.ax, t.ay, t.bx, t.by, BALL_R + 2.5, 0.55);
-        if (hit > 60) {
-          gs.banks[bi][ti] = true;
-          gs.score += BANK_PTS;
-          const mx = (t.ax + t.bx) / 2;
-          const my = (t.ay + t.by) / 2;
-          gs.events.push({ kind: 'target', x: mx, y: my });
-          if (gs.banks[bi].every(Boolean)) {
-            gs.score += BANK_BONUS;
-            gs.banks[bi] = BANKS[bi].map(() => false);
-            gs.events.push({ kind: 'bank', x: mx, y: my });
-          }
-        }
-      }
-    }
-
-    collideFlipper(b, gs.fL);
-    collideFlipper(b, gs.fR);
-  }
-
-  const sp = Math.hypot(b.vx, b.vy);
-  if (sp > MAXV) {
-    b.vx = (b.vx / sp) * MAXV;
-    b.vy = (b.vy / sp) * MAXV;
-  }
-
-  // Stuck-ball watchdog. The table has no slope toward the drain, so the ball
-  // can come to a true dead rest cradled between contacts — REST_VN kills
-  // every bounce there and the anti-stall bounce jitter never fires on a
-  // resting contact. After ~1.2s of standstill, give it the bump a tilted
-  // playfield would. The flipper zone is exempt only WHILE a flipper is held
-  // up (that's a deliberate trap); a ball dead-rested on lowered flippers —
-  // e.g. balanced at a flipper pivot, where flipping imparts ~zero surface
-  // velocity — is a stuck ball like any other. The shooter lane stays exempt
-  // so weak launches can fall back and re-rack in peace.
-  const flipperHeld = gs.fL.pressed || gs.fR.pressed;
-  if (sp < 26 && b.x < PF_R - BALL_R && (b.y < 462 || !flipperHeld)) {
-    gs.stillT += DT;
-    if (gs.stillT >= 1.2) {
-      gs.stillT = 0;
-      if (b.y >= 440) {
-        // At the flippers: pop mostly upward so the player gets a real save
-        // attempt — a sideways shove here would feed the drain.
-        b.vx += (b.x > PF_CX ? -1 : 1) * (30 + Math.random() * 30);
-        b.vy -= 150 + Math.random() * 50;
-      } else {
-        const dir = b.x > PF_CX ? -1 : 1;
-        b.vx += dir * (90 + Math.random() * 60);
-        b.vy -= 30 + Math.random() * 40;
-      }
-      gs.events.push({ kind: 'nudge', x: b.x, y: b.y });
-    }
-  } else {
-    gs.stillT = 0;
-  }
-
-  // Rollover lanes: light the lamp, and all three lit pays the LANES bonus.
-  for (let i = 0; i < LAMPS.length; i++) {
-    if (gs.lamps[i]) continue;
-    const L = LAMPS[i];
-    if (Math.hypot(b.x - L.x, b.y - L.y) < 13) {
-      gs.lamps[i] = true;
-      gs.score += 500;
-      gs.events.push({ kind: 'lane', x: L.x, y: L.y });
-      if (gs.lamps.every(Boolean)) {
-        gs.score += 2000;
-        gs.lamps = [false, false, false];
-        gs.events.push({ kind: 'lanes' });
-      }
-    }
-  }
-}
+// 3 balls, with a 4-second ball-saver budget per ball. This file is the shell
+// — rendering, input and the frame loop; the table geometry and the
+// 240 Hz physics sim live in ./pinballTable so they can also run headless
+// (scripts/pinball-sim.ts) when the table's balance is being tuned.
 
 // —— juice: rendering-only effects (no gameplay state) ————————————————————————
 // These live outside GS so the fixed-timestep sim is never touched; they're
@@ -638,13 +160,14 @@ function traceInnerWalls(c: CanvasRenderingContext2D) {
   c.beginPath();
   c.moveTo(PF_R, 168);
   c.lineTo(PF_R, H);
-  // Outlane dividers + inlane guides (matching SEGS).
-  c.moveTo(36, 404);
-  c.lineTo(36, 468);
-  c.lineTo(104, 490);
-  c.moveTo(278, 404);
-  c.lineTo(278, 468);
-  c.lineTo(210, 490);
+  // Outlane dividers + inlane guides, straight off the same constants SEGS
+  // uses — the dividers lean in at the top, pinching the outlane mouths.
+  c.moveTo(OUT_MOUTH_X, OUT_TOP_Y);
+  c.lineTo(OUT_X, OUT_BOT_Y);
+  c.lineTo(INLANE_X, INLANE_Y);
+  c.moveTo(mirrorX(OUT_MOUTH_X), OUT_TOP_Y);
+  c.lineTo(mirrorX(OUT_X), OUT_BOT_Y);
+  c.lineTo(mirrorX(INLANE_X), INLANE_Y);
   // Rollover lane fins — short guides around the lamps (matching SEGS).
   c.moveTo(94, 136);
   c.lineTo(94, 192);
@@ -922,10 +445,10 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   }
 
   // Ball-saver lamp across the drain while the saver is armed.
-  if (gs.live && gs.time < gs.saveUntil) {
+  if (gs.live && gs.saveLeft > 0) {
     ctx.save();
     ctx.globalAlpha = 0.45 + 0.4 * Math.sin(now / 120);
-    neonLine(ctx, 137, 548, 177, 548, '#4ade80', 3, 12);
+    neonLine(ctx, TIP_L - 4, 548, TIP_R + 4, 548, '#4ade80', 3, 12);
     ctx.restore();
   }
 
@@ -1033,12 +556,12 @@ export default function Pinball() {
           // A weak launch fell back down the shooter lane: quietly re-rack.
           gs.live = false;
           gs.plunger.t = 0;
-        } else if (b.y > H + 24) {
+        } else if (b.y > DRAIN_Y) {
           // Drained.
           gs.live = false;
           gs.plunger.t = 0;
           fx.trail.length = 0;
-          if (gs.time < gs.saveUntil) {
+          if (gs.saveLeft > 0) {
             playUndo();
             spawnFloater(fx.floaters, PF_CX, 470, 'BALL SAVED', '#4ade80', { size: 20, life: 1000 });
           } else if (gs.ballNo >= BALLS) {
@@ -1048,6 +571,7 @@ export default function Pinball() {
           } else {
             playBuzz();
             gs.ballNo += 1;
+            gs.saveLeft = SAVE_S; // fresh saver budget for the new ball
             setBallNo(gs.ballNo);
             spawnFloater(fx.floaters, PF_CX, 470, 'DRAIN', '#94a3b8', { size: 18, life: 800 });
           }
@@ -1125,13 +649,7 @@ export default function Pinball() {
     const gs = gsRef.current;
     const t = gs.plunger.t;
     const b = gs.ball;
-    b.x = PLUNGE_X;
-    b.y = RACK_Y + t * PLUNGE_SQUASH;
-    b.vx = 0;
-    b.vy = -(620 + 820 * t);
-    gs.live = true;
-    gs.saveUntil = gs.time + SAVE_S;
-    gs.plunger.t = 0;
+    launchBall(gs, t);
     fxRef.current.plungerPop = 1;
     playStroke();
     playBump(0.4 + t); // spring thunk scaled with the charge
