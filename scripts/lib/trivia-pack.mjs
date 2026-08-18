@@ -471,6 +471,13 @@ export function applyPackRepairs(rows, entries) {
     const at = field.indexOf(e.b);
     if (at === -1) { skip("before-not-found"); continue; }
     if (field.indexOf(e.b, at + 1) !== -1) { skip("ambiguous-match"); continue; }
+    // An entry must not continue a word on either side — "shows star" matching
+    // inside "TV shows starred" would corrupt correct text.
+    const alpha = (ch) => ch !== undefined && /[a-z]/i.test(ch);
+    if ((alpha(field[at - 1]) && alpha(e.b[0])) || (alpha(field[at + e.b.length]) && alpha(e.b[e.b.length - 1]))) {
+      skip("mid-word-match");
+      continue;
+    }
     const fixed = field.slice(0, at) + e.a + field.slice(at + e.b.length);
 
     const candidate = isPrompt

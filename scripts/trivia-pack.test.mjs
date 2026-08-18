@@ -151,6 +151,15 @@ describe('applyPackRepairs', () => {
     expect(skipped[0].reason).toBe('not-insertion-only');
   });
 
+  test('refuses a match that continues a word on either side', () => {
+    const rows = [{ ...mkRows()[0], prompt: 'Which TV shows starred a big-headed kid?' }];
+    const { applied, skipped } = applyPackRepairs(rows, [
+      { q: 'Which TV shows starred a big-headed kid?', f: 'p', b: 'shows star', a: "show's star" },
+    ]);
+    expect(applied).toBe(0);
+    expect(skipped[0].reason).toBe('mid-word-match');
+  });
+
   test('refuses a substring that matches more than once', () => {
     const rows = [{ ...mkRows()[0], prompt: 'The dogs saw the dogs bone.' }];
     const { skipped } = applyPackRepairs(rows, [
