@@ -122,6 +122,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const say = (msg, bad) => { $("status").innerHTML = bad ? '<span class="err">' + esc(msg) + "</span>" : esc(msg); };
 
 let planned = null;
+// Which pricing request is the current one. Changing the venue twice quickly
+// leaves two /plan calls in flight, and the slower one must not land: it would
+// redraw ITS estimate and arm Synthesize against a configuration the selects
+// no longer show, so the next click would spend on the wrong venue.
+let planSeq = 0;
 
 async function loadVenues() {
   try {
@@ -148,6 +153,7 @@ async function loadRuns() {
 
 async function price() {
   if (!$("venue").value) return;
+  const seq = ++planSeq;
   say("Pricing…");
   $("run").disabled = true;
   try {
@@ -155,7 +161,9 @@ async function price() {
     // these rather than re-reading the selects, so the operator can only ever
     // spend on the configuration they saw a number for.
     const asked = { locationId: $("venue").value, questions: Number($("count").value) };
-    planned = Object.assign(await api("/plan", { method: "POST", body: JSON.stringify(asked) }), { asked });
+    const priced = await api("/plan", { method: "POST", body: JSON.stringify(asked) });
+    if (seq !== planSeq) return; // superseded by a newer selection
+    planned = Object.assign(priced, { asked });
     $("burn").hidden = false;
     $("burn").innerHTML =
       "<div>Would synthesize <strong>" + planned.clips + " clips</strong> — " +
@@ -168,7 +176,16 @@ async function price() {
       .join("");
     $("run").disabled = false;
     say("Nothing spent yet — Synthesize bills the amount above.");
-  } catch (e) { say(e.message, true); }
+  } catch (e) {
+    if (seq !== planSeq) return;
+    // The button is the retry now that there is only one. Leaving it disabled
+    // on a failed price — a venue with an empty bank, a blip — would strand
+    // the page until a reload, which is the dead end this page just lost.
+    planned = null;
+    $("burn").hidden = true;
+    $("run").disabled = false;
+    say(e.message + " — Synthesize retries.", true);
+  }
 }
 
 $("run").onclick = async () => {
