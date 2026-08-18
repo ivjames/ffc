@@ -91,10 +91,23 @@ export type Org = {
   status: string;
   sortOrder: number;
   archivedAt: string | null;
+  createdAt?: string;
+  /** List-only rollups (GET /orgs). Absent on the single-org GET. */
   locationCount?: number;
+  adminCount?: number;
   /** Stored branding overrides only (defaults NOT merged in). Optional while
    *  the multi-venue server rollout is in flight. */
   branding?: Branding;
+};
+
+/** A Master Control account. super_admin accounts are platform-wide (orgId
+ *  null); an org_admin is pinned to exactly one org and only ever sees it. */
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: 'super_admin' | 'org_admin';
+  orgId: string | null;
+  createdAt: string;
 };
 
 export type Location = {
@@ -257,6 +270,34 @@ export type RewardSummary = {
 
 // A stored photo-booth picture (the AI-free pipeline — no moderation verdict
 // or people flags exist; staff review IS the moderation).
+// A row in the live-trivia question bank. `source` is null when a person wrote
+// it — by hand here, or in the House Pack seed — and names the bulk import
+// otherwise ('opentriviaqa'), which is what lets the UI mark a row as donated
+// and carry its CC BY-SA credit.
+export type TriviaQuestion = {
+  id: string;
+  orgId: string | null;
+  locationId: string | null;
+  category: string;
+  prompt: string;
+  choices: string[];
+  answer: number;
+  difficulty: number;
+  active: boolean;
+  source: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+};
+
+export type TriviaPage = {
+  questions: TriviaQuestion[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type TriviaCategory = { category: string; n: number };
+
 export type AdminBoothPhoto = {
   id: string;
   locationName: string | null;
@@ -581,6 +622,56 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 // --- Endpoints --------------------------------------------------------------
+
+// --- Voice bench (Polly TTS bake-off) ---------------------------------------
+// super_admin only; /run spends on the AWS key in the server's environment.
+export type TtsVenue = { id: string; name: string; slug: string; orgId: string | null; orgName: string | null };
+export type TtsLine = { label: string; text: string };
+export type TtsEngineTotals = { clips: number; chars: number; usd: number };
+export type TtsPlan = {
+  venue: TtsVenue;
+  lines: TtsLine[];
+  clips: number;
+  chars: number;
+  usd: number;
+  byEngine: Record<string, TtsEngineTotals>;
+  usdPerM: number;
+  /** False when AWS_REGION has no generative engine — the lineup is neural
+   *  only, and the estimate already reflects that. */
+  generative: boolean;
+  region: string;
+};
+export type TtsClip = {
+  lineLabel: string;
+  text: string;
+  voice: string;
+  engine: string;
+  styleLabel: string;
+  file: string;
+  chars: number;
+  billed?: number;
+  usd?: number;
+  error?: string;
+};
+export type TtsRun = {
+  runId: string;
+  venue?: string;
+  createdAt: string;
+  clips: TtsClip[];
+  billed: number;
+  usd: number;
+  errors: number;
+};
+export type TtsRunSummary = {
+  runId: string;
+  createdAt: string;
+  venue: string | null;
+  clips: number;
+  billed: number;
+  usd: number;
+  errors: number;
+};
+
 export const api = {
   overview: () => req<Overview>('GET', '/overview'),
 
@@ -617,6 +708,36 @@ export const api = {
   // sign-out event (the session is still perfectly valid).
   changePassword: (currentPassword: string, newPassword: string) =>
     req<{ ok: true }>('POST', '/me/password', { currentPassword, newPassword }, { quiet401: true }),
+
+  // Master Control accounts. super_admin only, server-side — every one of
+  // these 403s for an org_admin, so the callers gate on the role rather than
+  // rendering a panel that can only fail.
+  listUsers: () => req<AdminUser[]>('GET', '/users'),
+  // Password omitted on purpose: the server emails a set-password invite, so
+  // no operator ever knows (or has to transmit) someone else's password.
+  // `inviteSent: false` means the account exists but the mail failed —
+  // recoverable with "Forgot password", never a reason to retry the create.
+  inviteUser: (user: { email: string; role: AdminUser['role']; orgId: string | null }) =>
+    req<{ ok: true; user: AdminUser; inviteSent?: boolean; inviteLink?: string | null }>(
+      'POST',
+      '/users',
+      user
+    ),
+  updateUser: (id: string, fields: Partial<Pick<AdminUser, 'email' | 'role' | 'orgId'>>) =>
+    req<{ ok: true; user: AdminUser }>('PATCH', `/users/${id}`, fields),
+  // Re-mail a set-password link. NOT the public /password/forgot endpoint:
+  // minting a token kills the user's outstanding one, and the public endpoint
+  // discards the link it generates (it must — it is unauthenticated), so
+  // resending through it would invalidate a hand-relayed link and return
+  // nothing to replace it. This route is super_admin-gated and so may hand the
+  // link back, like the invite. `kind` is 'invite' for an account that never
+  // set a password (7-day link), 'reset' for an active one (2 hours).
+  resendUserInvite: (id: string) =>
+    req<{ ok: true; kind: 'invite' | 'reset'; sent: boolean; inviteLink: string | null }>(
+      'POST',
+      `/users/${id}/resend-invite`
+    ),
+  deleteUser: (id: string) => req<{ ok: true }>('DELETE', `/users/${id}`),
 
   listOrgs: (archived = false) => req<Org[]>('GET', `/orgs${archived ? '?archived=1' : ''}`),
   getOrg: (id: string) => req<{ org: Org; locations: Location[] }>('GET', `/orgs/${id}`),
@@ -679,6 +800,40 @@ export const api = {
     req<{ ok: true; announcement: Announcement }>(
       'POST',
       `/announcements/${id}/${archived ? 'archive' : 'unarchive'}`
+    ),
+
+  // Live-trivia question bank. The list is PAGED and returns `total` — the
+  // platform pack alone runs to ~48,000 rows after the OpenTriviaQA import, so
+  // there is no "fetch them all" call here on purpose.
+  listTriviaQuestions: (opts: {
+    category?: string;
+    q?: string;
+    orgId?: string;
+    includeArchived?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.category) p.set('category', opts.category);
+    if (opts.q) p.set('q', opts.q);
+    if (opts.orgId) p.set('orgId', opts.orgId);
+    if (opts.includeArchived) p.set('includeArchived', '1');
+    if (opts.limit !== undefined) p.set('limit', String(opts.limit));
+    if (opts.offset) p.set('offset', String(opts.offset));
+    const s = p.toString();
+    return req<TriviaPage>('GET', `/trivia/questions${s ? `?${s}` : ''}`);
+  },
+  listTriviaCategories: (orgId?: string) =>
+    req<{ categories: TriviaCategory[] }>(
+      'GET',
+      `/trivia/categories${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''}`
+    ),
+  saveTriviaQuestion: (q: Partial<TriviaQuestion>) =>
+    req<{ ok: true; question: TriviaQuestion }>('POST', '/trivia/questions', q),
+  archiveTriviaQuestion: (id: string, archived: boolean) =>
+    req<{ ok: true; question: TriviaQuestion }>(
+      'POST',
+      `/trivia/questions/${id}/${archived ? 'archive' : 'unarchive'}`
     ),
 
   // Office reporting (punchlist #2).
@@ -901,4 +1056,29 @@ export const api = {
   syntheticStart: (params: SyntheticBotParams) =>
     req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/start', params),
   syntheticStop: () => req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/stop'),
+
+  // Voice bench — Polly bake-off for live trivia's read-aloud. `plan` prices a
+  // run and spends nothing; `run` is the one that bills.
+  ttsVenues: () => req<{ venues: TtsVenue[] }>('GET', '/tts-bakeoff/venues'),
+  ttsPlan: (body: { locationId: string; questions: number }) =>
+    req<TtsPlan>('POST', '/tts-bakeoff/plan', body),
+  ttsRun: (body: { locationId: string; questions: number }) =>
+    req<{ run: TtsRun }>('POST', '/tts-bakeoff/run', body),
+  ttsRuns: () => req<{ runs: TtsRunSummary[] }>('GET', '/tts-bakeoff/runs'),
+  ttsRunGet: (runId: string) =>
+    req<{ run: TtsRun }>('GET', `/tts-bakeoff/runs/${encodeURIComponent(runId)}`),
+  // An <audio src> can't carry the auth header, same constraint as the photo
+  // thumbnails — fetch the bytes and hand back a Blob for an object URL.
+  fetchTtsClip: async (runId: string, file: string) => {
+    const res = await fetch(
+      `/api/admin/tts-bakeoff/audio/${encodeURIComponent(runId)}/${encodeURIComponent(file)}`,
+      { credentials: 'same-origin', headers: { 'x-app-token': getToken() } }
+    );
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
 };

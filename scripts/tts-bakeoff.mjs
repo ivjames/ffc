@@ -3,10 +3,11 @@
 //   cd /var/www/ffc/server && npm run tts:bakeoff -- --location upland
 //   cd /var/www/ffc/server && npm run tts:bakeoff -- --location upland --yes
 //
-// A thin CLI over server/lib/ttsBakeoff.js, which the Master Control page at
-// /api/admin/tts-bakeoff/ui drives too — so the script and the page audition
-// identically. Prefer the page: the clips have to be judged on the tablet you
-// host from, and files on the droplet are not listenable.
+// A thin CLI over server/lib/ttsBakeoff.js, which Master Control's Voice bench
+// screen (Ops → Voice bench, admin/VoiceBench.tsx) drives too — so the script
+// and the screen audition identically. Prefer the screen: the clips have to be
+// judged on the tablet you host from, and files on the droplet are not
+// listenable. A run made here shows up there under "replay a past run".
 //
 // A bare run prices the batch and spends nothing. --yes synthesizes, and the
 // report uses the API's own RequestCharacters rather than an estimate.
@@ -124,7 +125,8 @@ async function main() {
     console.log(`  cost        $${run.usd.toFixed(4)}`);
     if (run.errors) console.log(`  failed      ${run.errors} clip(s)`);
     console.log(`  files       ${join(bakeoffDir(), runId)}`);
-    console.log(`\n  Listen in Master Control: /api/admin/tts-bakeoff/ui\n`);
+    console.log(`\n  Listen in Master Control → Ops → Voice bench (/voice-bench),`);
+    console.log(`  which lists this run under "replay a past run".\n`);
   } finally {
     await pool.end();
   }

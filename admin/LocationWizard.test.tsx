@@ -51,13 +51,28 @@ function renderWizard(isSuperAdmin: boolean, ownOrgId: string | null) {
 }
 
 describe('LocationWizard — super_admin', () => {
-  test('shows a full org picker listing every org', async () => {
+  test('shows a full org picker listing every org, with no way to opt out', async () => {
     renderWizard(true, null);
     const select = await screen.findByRole('combobox');
     expect(select).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'My Org' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Other Org' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: '— unassigned —' })).toBeInTheDocument();
+    // An org-less venue belongs to no tenant: no subdomain serves it, no org
+    // page lists it, and no org admin can see it. The placeholder prompts for
+    // a choice instead of offering that as one.
+    expect(screen.queryByRole('option', { name: '— unassigned —' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '— pick an org —' })).toBeInTheDocument();
+  });
+
+  test('cannot submit until an org is picked', async () => {
+    const user = userEvent.setup();
+    renderWizard(true, null);
+    await screen.findByRole('combobox');
+    await user.type(screen.getByPlaceholderText('Riverside'), 'New Venue');
+    const submit = screen.getByRole('button', { name: 'Create location' });
+    expect(submit).toBeDisabled();
+    await user.selectOptions(screen.getByRole('combobox'), 'org-2');
+    expect(submit).toBeEnabled();
   });
 
   test('submitting sends whatever org was picked', async () => {

@@ -6,7 +6,7 @@ import { normalizeBranding } from "./branding.js";
 import { isReservedOrgSlug } from "./reservedSlugs.js";
 
 export const ORG_COLS = `id, name, slug, status, sort_order as "sortOrder",
-  branding, archived_at as "archivedAt"`;
+  branding, archived_at as "archivedAt", created_at as "createdAt"`;
 
 export function normalizeOrg(body) {
   if (body == null || typeof body !== "object" || Array.isArray(body)) {

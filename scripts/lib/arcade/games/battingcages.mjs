@@ -79,7 +79,7 @@ export default {
     };
 
     for (let pitch = 0; pitch < PITCHES; pitch++) {
-      if (await d.page.getByRole('button', { name: 'Play again' }).isVisible().catch(() => false)) {
+      if (await d.page.getByRole('button', { name: /^(Play|Race) again$/ }).isVisible().catch(() => false)) {
         break; // a desynced pitch count must not out-run the round
       }
       // Load the bat — the press also starts the pitch clock.

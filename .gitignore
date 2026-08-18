@@ -43,3 +43,6 @@ coverage/
 bakeoff-data/
 server/bakeoff-data/
 __pycache__/
+
+# arcade-traffic session cache (real session cookies — never commit)
+.arcade-sessions.json

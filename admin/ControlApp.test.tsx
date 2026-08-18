@@ -21,6 +21,7 @@ vi.mock('./api', async () => {
       huntUsage: vi.fn(),
       listLaunchSignups: vi.fn(),
       exportLaunchSignupsCsv: vi.fn(),
+      listOrgs: vi.fn(),
     },
   };
 });
@@ -65,6 +66,7 @@ beforeEach(() => {
     orgSummary: [],
   });
   vi.mocked(api.listLaunchSignups).mockReset().mockResolvedValue([]);
+  vi.mocked(api.listOrgs).mockReset().mockResolvedValue([]);
   vi.mocked(api.exportLaunchSignupsCsv).mockReset();
 });
 
@@ -327,6 +329,24 @@ describe('nav gating', () => {
     expect(screen.queryByRole('link', { name: 'Provision site' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Synthetic' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Signups' })).not.toBeInTheDocument();
+  });
+
+  // The venue wizard had a top-level entry of its own, which is what made an
+  // org-less venue easy to create — and forced the Orgs item to special-case
+  // /locations/new out of its own active range. Venues are reached through
+  // their org now, and Orgs stays lit across every venue screen.
+  test('no top-level "New location" entry — venues are reached through their org', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: SUPER_ADMIN_USER });
+    renderApp();
+    await screen.findByText('FFC · Master Control');
+    expect(screen.queryByRole('link', { name: 'New location' })).not.toBeInTheDocument();
+  });
+
+  test('Orgs stays the lit nav item on the venue wizard', async () => {
+    vi.mocked(api.me).mockResolvedValue({ ok: true, user: SUPER_ADMIN_USER });
+    renderApp(['/locations/new']);
+    await screen.findByText('FFC · Master Control');
+    expect(screen.getByRole('link', { name: 'Orgs' })).toHaveAttribute('aria-current', 'page');
   });
 
   test('super_admin sees Signups in Ops and /signups renders the page', async () => {

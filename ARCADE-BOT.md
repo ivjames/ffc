@@ -66,8 +66,8 @@ the guide isn't drawn at all.
 
 Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`, `axethrow`,
 `darts`, `whackamole`, `bowling`, `shootinggallery`, `clawmachine`,
-`battingcages`, `watergunrace`, `trivia`, `milkbottle`, `airhockey`, `pinball`
-— 16 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
+`battingcages`, `watergunrace`, `trivia`, `milkbottle`, `airhockey`, `pinball`,
+`bumpercars`, `bumperboats`, `gokarts` — **all 19** games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
 usefully, for *why* each unsupported game isn't in it.
 
 The gap is narrowing rather than fixed. Whack-a-Mole was the first REACTIVE
@@ -77,8 +77,12 @@ are a known 3×3 grid, so nothing has to be tracked frame to frame; games with
 genuinely moving entities (a duck on a rail, a puck, a pinball) need the
 position recovered from pixels and predicted forward, which is the next step up.
 
-Still out: the three driving games (go-karts, bumper cars, bumper boats), which
-need continuous steering.
+Every game in the server's earning registry now has a policy. Go-Karts is the
+weakest of them: it completes races but its lap times are dominated by barrier
+scraping and the opening wrong-way stall rather than by the skill knob, so its
+expert/beginner ordering is **not** established (78s vs 55–86s). A best lap of
+~6.5s is achievable against the ~25s it turns, so a centred racing line is the
+open work there.
 
 Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
@@ -100,6 +104,9 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | Milk Bottle | 27–33 | 21–27 | 33 |
 | Air Hockey | 7 (wins) | 0–1 | 7 goals |
 | Pinball | 8010 mean | 6800 mean | — (high variance) |
+| Bumper Cars | 24–30 | 16–22 | (30s clock) |
+| Bumper Boats | 19–31 | 15–17 | (30s clock) |
+| Go-Karts | 78s | 55–86s | (time — lower is better) |
 
 Two honest caveats:
 
@@ -126,7 +133,7 @@ node scripts/arcade-bot.mjs --rounds 20 --out arcade-profile.json
 
 # replay it at volume (dry run first)
 node scripts/arcade-traffic.mjs --profile arcade-profile.json \
-  --location <venue-uuid> --player-id <card> --plays 200 --dry-run
+  --location <venue-uuid> --players 8 --plays 200 --dry-run
 ```
 
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
@@ -139,16 +146,43 @@ the session instead, since `--headed` has nothing to display to there:
 node scripts/arcade-bot.mjs --game skeeball --skill 1 --video ./vid   # → ./vid/*.webm
 ```
 
-## Player ids are real loyalty cards
+## Awards ride a signed-in session — there is no `playerId`
 
-`playerId` is a **loyalty vendor card id**, and the award route forwards it
-straight to the vendor. Made-up ids don't work — the CenterEdge mock 404s any
-unseeded player, so the award comes back 502 and leaves a `pending` reservation
-holding daily-cap budget.
+The award route is `tenant(), requireUser` and resolves the card from the
+**session**, not the request: *"the card is the session's, never the request's"*.
+Posting a `playerId` does nothing; posting without a cookie is a flat 401. So
+each synthetic player is a real account, minted before any award:
 
-So pass real test-card ids with `--player-id` (repeatable) or `--players-file`.
-The `synthetic-card-<n>` fallback exists only so `--dry-run` can show a payload's
-shape; the script refuses to post with it and says why.
+```
+POST /api/auth/request-code  {email}        -> {bypassCode}
+POST /api/auth/verify        {email, code}  -> session cookie
+POST /api/loyalty/link       {locationId, cardNumber}
+POST /api/game-rewards/award {locationId, game, tickets, sessionId}
+```
+
+`--players N` fabricates N cards at the loyalty vendor and signs an account in
+for each, so no card list is needed. Against a real vendor — which issues cards
+at a counter, not over an API — pass existing numbers with `--card` /
+`--cards-file` instead. Either way a card the vendor doesn't know fails at link
+time, before anything is posted.
+
+**The pool is rate-limited.** `/api/auth/request-code` allows 10 per IP per
+hour, so a single run can mint at most 10 new accounts and refuses more up
+front. Sessions are cached to `--sessions-file` and reused free on later runs,
+so the pool grows across runs and a warm one costs no auth calls at all.
+
+The bypass code is only returned when no mail provider is configured and
+`NODE_ENV` isn't production — the dev/staging shape this tool is for. Against a
+mail-configured deployment, sessions can't be minted from a script; the run
+refuses to start and asks for `--cookie` values from real sessions.
+
+### Verified end to end
+
+Against a local stack (Postgres + `ffc-api` + the CenterEdge mock): 20 awards
+across 2 cards, 20 ok / 0 failed, 157 req/s, 761 of 805 tickets paid — the
+shortfall being one per-round trim and one daily-cap zero, both fired by the
+server. Ledger rows matched, and the vendor balances moved (PL-1001 4380 →
+4880), confirming the awards reached the POS and not just our table.
 
 ## Safety and cleanup
 

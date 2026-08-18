@@ -783,9 +783,26 @@ what the credit has to say and where. Rebuilding the pack from upstream is
 `scripts/build-trivia-pack.mjs`; the build is deterministic, so an unchanged
 corpus rebuilds to a byte-identical file.
 
-A full pack makes the admin list endpoint a paged one: `GET
-/api/admin/trivia/questions` takes `limit` (default 200, max 1000), `offset`
-and `category`, and returns `{ questions, total, limit, offset }`.
+### Reviewing the bank
+
+**Master Control → Engagement → Trivia** (`admin/Trivia.tsx`) is where an
+operator actually looks at the bank: search, category filter, paging, and
+per-row archive/restore, plus create and edit. It mirrors the API's scope
+rules rather than inventing its own — an `org_admin` sees the platform pack
+read-only (no Edit/Archive buttons, because the server would 403) and their
+own venue's questions fully editable.
+
+The endpoints behind it:
+
+- `GET /api/admin/trivia/questions` — paged. `limit` (default 200, max 1000),
+  `offset`, `category`, `q`, `includeArchived`; returns
+  `{ questions, total, limit, offset }`. `q` is a substring match on the
+  prompt (`ILIKE`), with `%` and `_` escaped so a search for "50%" means a
+  percent sign. `ORDER BY` carries an `id` tiebreaker because a bulk import
+  writes every row with the same `created_at`.
+- `GET /api/admin/trivia/categories` — `{ categories: [{ category, n }] }`,
+  derived from the rows rather than configured, so a category someone invents
+  in the form shows up in the filter by itself.
 
 ## Testing
 

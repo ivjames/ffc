@@ -6,17 +6,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, HOURS_DAY_KEYS, type ProvisionPayload, type ProvisionResult } from './api';
 import { Button, Card, Field, Input, Banner, PageHeader, Segmented, Select, useToast } from './ui';
+// Shared with the Orgs list and org page, which show the same address for an
+// org that already exists — one definition of "where does a tenant live".
+import { platformDomain } from './platform';
 
 const autoSlug = (v: string) =>
   v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-
-// The admin SPA lives on admin.<platform domain>, so the player subdomain a
-// new org will get is derivable from our own hostname. Null in dev (localhost)
-// — the previews then show a placeholder instead of a bogus URL.
-function platformDomain(): string | null {
-  const host = window.location.hostname;
-  return host.startsWith('admin.') ? host.slice(6) : null;
-}
 
 // --- Branding palettes ------------------------------------------------------
 

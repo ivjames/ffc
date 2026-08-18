@@ -5,6 +5,7 @@ import JoinQr from '../shared/JoinQr';
 import { useCurrentLocationId } from '../../lib/location';
 import { useSession } from '../../lib/session';
 import { useDeadline, formatCountdown } from './useDeadline';
+import { Setting, Chip } from './triviaSetupControls';
 import { playClick } from '../../lib/sound';
 import {
   estimateSeconds,
@@ -546,41 +547,6 @@ export default function TriviaHost() {
         <QuestionCredit />
       </Content>
     </Screen>
-  );
-}
-
-function Setting({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-4">
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-fairway-400">
-        {label}
-      </p>
-      {children}
-    </div>
-  );
-}
-
-function Chip({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={() => {
-        playClick();
-        onClick();
-      }}
-      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-        on ? 'bg-fairway-400 text-fairway-950' : 'border border-fairway-800 text-fairway-100/70'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 
