@@ -15,14 +15,19 @@ async function loginAs(page: Page, email: string, password: string) {
   await expect(page.getByText('FFC · Master Control')).toBeVisible();
 }
 
-test('super_admin sees the Create-org form and an org-detail Archive button', async ({ page }) => {
+test('super_admin gets the create-a-site path and an org-detail Archive button', async ({
+  page,
+}) => {
   await loginAs(page, E2E_SUPER_ADMIN.email, E2E_SUPER_ADMIN.password);
 
   await page.getByRole('link', { name: 'Orgs' }).click();
-  await expect(page.getByRole('heading', { name: 'New org (owner / franchise)' })).toBeVisible();
+  // Creating is the provisioning wizard, not a bare name+slug form.
+  await expect(page.getByRole('link', { name: '+ New site' })).toBeVisible();
 
   await page.getByText(E2E_ORG_NAME).click();
   await expect(page.getByRole('button', { name: 'Archive' })).toBeVisible();
+  // Accounts are a super_admin concern, so the tab is theirs alone.
+  await expect(page.getByRole('link', { name: 'Team' })).toBeVisible();
 });
 
 test('org_admin does not see super_admin-only controls', async ({ page }) => {
@@ -30,16 +35,22 @@ test('org_admin does not see super_admin-only controls', async ({ page }) => {
   await expect(page.getByText(/org admin/)).toBeVisible();
 
   await page.getByRole('link', { name: 'Orgs' }).click();
-  await expect(page.getByRole('heading', { name: 'New org (owner / franchise)' })).not.toBeVisible();
-  await expect(page.getByText('Only a super admin can create or rename orgs.')).toBeVisible();
+  await expect(page.getByRole('link', { name: '+ New site' })).not.toBeVisible();
 
   await page.getByText(E2E_ORG_NAME).click();
   await expect(page.getByRole('button', { name: 'Archive' })).not.toBeVisible();
-  await expect(page.getByRole('button', { name: '+ Location' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Team' })).not.toBeVisible();
+  // Renaming an org is super_admin only, same as the server's POST /orgs gate.
+  await expect(page.getByRole('button', { name: 'Save org' })).not.toBeVisible();
 
-  // Scoped to the nav bar — the org-detail page above also has its own
-  // "+ Location" link (pre-scoped to that org), which would otherwise match too.
-  await page.getByRole('navigation').getByRole('link', { name: '+ Location' }).click();
+  // Venues are reached through the org that owns them — there is no top-level
+  // new-location entry any more.
+  await expect(page.getByRole('navigation').getByRole('link', { name: 'New location' })).toHaveCount(
+    0
+  );
+  await page.getByRole('link', { name: /^Venues/ }).click();
+  await page.getByRole('link', { name: '+ Location' }).click();
+  // An org_admin's org is fixed to their own: no picker, just their name.
   await expect(page.locator('select')).toHaveCount(0);
   await expect(page.getByText(E2E_ORG_NAME)).toBeVisible();
 });
@@ -50,7 +61,10 @@ test('org_admin can still create, then archive/unarchive, their own location end
   const venueName = `E2E Org Admin Venue ${Date.now()}`;
   await loginAs(page, E2E_ORG_ADMIN.email, E2E_ORG_ADMIN.password);
 
-  await page.getByRole('navigation').getByRole('link', { name: '+ Location' }).click();
+  await page.getByRole('link', { name: 'Orgs' }).click();
+  await page.getByText(E2E_ORG_NAME).click();
+  await page.getByRole('link', { name: /^Venues/ }).click();
+  await page.getByRole('link', { name: '+ Location' }).click();
   // A raw, case-sensitive CSS attribute selector, not getByPlaceholder/getByLabel
   // — the Slug field's placeholder is also "riverside" (lowercase) when Name is
   // empty, and Playwright's text-based locators match case-insensitively by

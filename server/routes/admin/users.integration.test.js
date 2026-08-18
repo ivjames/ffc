@@ -175,6 +175,100 @@ test("POST /api/admin/users without a password creates a pending account and mai
   assert.equal(body.inviteLink, `http://localhost:5174/set-password?token=${mailedToken}`);
 });
 
+// The whole reason this route exists rather than pointing the admin UI at the
+// public /password/forgot: minting a token deletes the user's outstanding one,
+// and the public endpoint must discard the link it generates, so resending
+// through it would invalidate a hand-relayed link and hand back nothing.
+test("POST /api/admin/users/:id/resend-invite mints a fresh link and returns it", async () => {
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const email = `resend-${stamp}@example.com`;
+  const created = await (
+    await superAdmin("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify({ email, role: "org_admin", orgId }),
+    })
+  ).json();
+  userIds.push(created.user.id);
+  const firstToken = created.inviteLink.match(/token=([0-9a-f]{64})/)[1];
+
+  const res = await superAdmin(`/api/admin/users/${created.user.id}/resend-invite`, {
+    method: "POST",
+  });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.sent, true);
+  // Still pending, so it is an invite (7 days), not a 2-hour reset.
+  assert.equal(body.kind, "invite");
+
+  // A REPLACEMENT link comes back — the point of the route.
+  const secondToken = body.inviteLink.match(/token=([0-9a-f]{64})/)[1];
+  assert.notEqual(secondToken, firstToken);
+  const mail = mailLog[mailLog.length - 1] ?? "";
+  assert.equal(mail.includes(secondToken), true, "the mailed link is the returned one");
+
+  // Exactly one live token: the old one is gone, so the operator being handed
+  // the new link is not a nicety, it is the only working link that now exists.
+  const live = await testQuery(
+    `select kind from admin_password_token where admin_user_id = $1 and used_at is null`,
+    [created.user.id]
+  );
+  assert.equal(live.rowCount, 1);
+
+  const audited = await testQuery(
+    `select action, detail from admin_audit where entity = 'admin_user' and entity_id = $1
+      and action = 'user.resend_invite'`,
+    [created.user.id]
+  );
+  assert.equal(audited.rowCount, 1);
+  // Booleans only — the audit log must never hold the capability itself.
+  assert.equal(audited.rows[0].detail.inviteLinkReturned, true);
+  assert.equal(JSON.stringify(audited.rows[0].detail).includes(secondToken), false);
+});
+
+test("POST /api/admin/users/:id/resend-invite sends a reset for an account that has a password", async () => {
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const email = `resend-active-${stamp}@example.com`;
+  const created = await (
+    await superAdmin("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify({ email, password: "password123", role: "org_admin", orgId }),
+    })
+  ).json();
+  userIds.push(created.user.id);
+
+  const body = await (
+    await superAdmin(`/api/admin/users/${created.user.id}/resend-invite`, { method: "POST" })
+  ).json();
+  assert.equal(body.kind, "reset");
+  const live = await testQuery(
+    `select kind from admin_password_token where admin_user_id = $1 and used_at is null`,
+    [created.user.id]
+  );
+  assert.equal(live.rows[0].kind, "reset");
+});
+
+test("POST /api/admin/users/:id/resend-invite is super_admin only and 404s an unknown id", async () => {
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const created = await (
+    await superAdmin("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify({ email: `resend-gate-${stamp}@example.com`, role: "org_admin", orgId }),
+    })
+  ).json();
+  userIds.push(created.user.id);
+
+  const denied = await asOrgAdmin(`/api/admin/users/${created.user.id}/resend-invite`, {
+    method: "POST",
+  });
+  assert.equal(denied.status, 403);
+
+  const missing = await superAdmin(
+    `/api/admin/users/00000000-0000-4000-8000-000000000009/resend-invite`,
+    { method: "POST" }
+  );
+  assert.equal(missing.status, 404);
+});
+
 test("POST /api/admin/users validates email, password length, role, and org_admin requiring orgId", async () => {
   const cases = [
     { body: { email: "not-an-email", password: "password123" }, match: /email must be/ },

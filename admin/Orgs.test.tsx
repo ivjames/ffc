@@ -1,6 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Orgs from './Orgs';
 import { api, type Org } from './api';
@@ -8,17 +7,25 @@ import { api, type Org } from './api';
 vi.mock('./api', () => ({
   api: {
     listOrgs: vi.fn(),
-    saveOrg: vi.fn(),
   },
 }));
 
 const ORGS: Org[] = [
-  { id: 'org-1', name: 'Test Org', slug: 'test-org', status: 'active', sortOrder: 0, archivedAt: null, locationCount: 2 },
+  {
+    id: 'org-1',
+    name: 'Test Org',
+    slug: 'test-org',
+    status: 'active',
+    sortOrder: 0,
+    archivedAt: null,
+    locationCount: 2,
+    adminCount: 1,
+    branding: { themeColor: '#112233' },
+  },
 ];
 
 beforeEach(() => {
   vi.mocked(api.listOrgs).mockReset().mockResolvedValue(ORGS);
-  vi.mocked(api.saveOrg).mockReset();
 });
 
 function renderOrgs(isSuperAdmin: boolean) {
@@ -29,33 +36,50 @@ function renderOrgs(isSuperAdmin: boolean) {
   );
 }
 
-describe('Orgs — super_admin', () => {
-  test('shows the "Create org" form', async () => {
-    renderOrgs(true);
-    expect(await screen.findByText('Test Org')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'New org (owner / franchise)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Create org' })).toBeInTheDocument();
-  });
-
-  test('submitting the form calls api.saveOrg with the entered name/slug', async () => {
-    vi.mocked(api.saveOrg).mockResolvedValue({
-      ok: true,
-      org: { id: 'org-2', name: 'New Org', slug: 'new-org', status: 'active', sortOrder: 0, archivedAt: null },
-    });
-    const user = userEvent.setup();
+describe('Orgs — creating', () => {
+  // The bare name+slug form is gone: it made step 1 of a 6-step checklist and
+  // left a tenant nobody could sign in to, on an empty catalog.
+  test('super_admin gets one create path, and it is the provisioning wizard', async () => {
     renderOrgs(true);
     await screen.findByText('Test Org');
+    const create = screen.getByRole('link', { name: '+ New site' });
+    expect(create).toHaveAttribute('href', '/provision');
+    expect(screen.queryByRole('button', { name: 'Create org' })).not.toBeInTheDocument();
+  });
 
-    await user.type(screen.getByPlaceholderText('Acme Family Fun'), 'New Org');
-    await user.click(screen.getByRole('button', { name: 'Create org' }));
+  test('org_admin gets no create control at all', async () => {
+    renderOrgs(false);
+    await screen.findByText('Test Org');
+    expect(screen.queryByRole('link', { name: '+ New site' })).not.toBeInTheDocument();
+  });
 
-    await waitFor(() =>
-      expect(api.saveOrg).toHaveBeenCalledWith({ name: 'New Org', slug: 'new-org' })
-    );
+  test('the empty state points at the same one path', async () => {
+    vi.mocked(api.listOrgs).mockResolvedValue([]);
+    renderOrgs(true);
+    expect(await screen.findByText(/No orgs yet/)).toBeInTheDocument();
   });
 });
 
-describe('Orgs — status badge', () => {
+describe('Orgs — what a row says', () => {
+  test("shows the org's subdomain, not a slash-prefixed pseudo-path", async () => {
+    renderOrgs(true);
+    await screen.findByText('Test Org');
+    // jsdom has no admin.<domain> hostname, so the domain isn't derivable and
+    // the row says so rather than inventing one.
+    expect(screen.getByText(/test-org\.<platform domain>/)).toBeInTheDocument();
+    expect(screen.queryByText('/test-org')).not.toBeInTheDocument();
+  });
+
+  test('venue count is pluralised off the real count', async () => {
+    vi.mocked(api.listOrgs).mockResolvedValue([
+      { ...ORGS[0], locationCount: 1 },
+      { ...ORGS[0], id: 'org-2', name: 'Two', slug: 'two', locationCount: 2 },
+    ]);
+    renderOrgs(true);
+    expect(await screen.findByText('1 venue')).toBeInTheDocument();
+    expect(screen.getByText('2 venues')).toBeInTheDocument();
+  });
+
   test('a suspended org shows the Suspended pill; active orgs do not', async () => {
     vi.mocked(api.listOrgs).mockResolvedValue([
       ...ORGS,
@@ -67,6 +91,8 @@ describe('Orgs — status badge', () => {
         sortOrder: 1,
         archivedAt: null,
         locationCount: 1,
+        adminCount: 1,
+        branding: {},
       },
     ]);
     renderOrgs(true);
@@ -75,18 +101,31 @@ describe('Orgs — status badge', () => {
   });
 });
 
-describe('Orgs — org_admin', () => {
-  test('hides the "Create org" form and shows a restriction note instead', async () => {
-    renderOrgs(false);
-    expect(await screen.findByText('Test Org')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'New org (owner / franchise)' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create org' })).not.toBeInTheDocument();
-    expect(screen.getByText('Only a super admin can create or rename orgs.')).toBeInTheDocument();
+// Half-finished onboarding is the failure mode this list exists to catch: an
+// org with no branding/venue/admin serves an empty stock-looking site that
+// nobody can administer, and nothing used to say so.
+describe('Orgs — setup gaps', () => {
+  test('a fully set-up org stays quiet', async () => {
+    renderOrgs(true);
+    await screen.findByText('Test Org');
+    expect(screen.queryByText(/^Setup:/)).not.toBeInTheDocument();
   });
 
-  test('empty state message differs from the super_admin one (no "create one on the right")', async () => {
-    vi.mocked(api.listOrgs).mockResolvedValue([]);
-    renderOrgs(false);
-    expect(await screen.findByText('No org yet.')).toBeInTheDocument();
+  test('names every missing piece', async () => {
+    vi.mocked(api.listOrgs).mockResolvedValue([
+      { ...ORGS[0], branding: {}, locationCount: 0, adminCount: 0 },
+    ]);
+    renderOrgs(true);
+    expect(
+      await screen.findByText('Setup: no branding, no venue, no admin account')
+    ).toBeInTheDocument();
+  });
+
+  test('an unknown admin count (older response) is never reported as zero', async () => {
+    vi.mocked(api.listOrgs).mockResolvedValue([
+      { ...ORGS[0], branding: {}, locationCount: 1, adminCount: undefined },
+    ]);
+    renderOrgs(true);
+    expect(await screen.findByText('Setup: no branding')).toBeInTheDocument();
   });
 });
