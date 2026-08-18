@@ -7,10 +7,10 @@ import type { DrawnIcon } from '../../ui/icons/registry';
 import Icon from '../../ui/Icon';
 
 // Player achievements gallery. The server grants three round achievements
-// (server/routes/rounds.js: hole_in_one, under_par, hunt_master) and pays them
-// out as tickets on a linked card; there's no player-facing catalog of them, so
-// this is that surface — a badges wall showing what's earnable and which ones
-// this device has already unlocked.
+// (server/routes/rounds.js: hole_in_one, under_par, hunt_master); they're
+// BADGES and pay nothing — no tickets, no loyalty-card credit, no counter
+// redemption (see server/lib/rewards.js). This is their player-facing catalog:
+// a wall showing what's earnable and which ones this device has unlocked.
 //
 // Earned state is computed from locally-stored completed rounds (the offline
 // source of truth), so it works with no account and no network:
@@ -91,7 +91,7 @@ export default function Achievements() {
         <p className="mb-3 text-center text-sm text-fairway-100/70">
           {earned == null
             ? 'Checking your rounds…'
-            : `${earnedCount} of ${BADGES.length} unlocked · earn tickets at the counter`}
+            : `${earnedCount} of ${BADGES.length} unlocked`}
         </p>
 
         <ul className="space-y-2">

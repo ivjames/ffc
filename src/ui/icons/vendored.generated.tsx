@@ -4,7 +4,7 @@
 // Artwork from two sources, both copied in rather than imported, so only the
 // icons the app actually uses ship and both packages stay devDependencies:
 //
-//   74 from Lucide (https://lucide.dev), ISC licence. Copyright (c) for
+//   73 from Lucide (https://lucide.dev), ISC licence. Copyright (c) for
 //   portions Lucide are held by Lucide Contributors 2022, and copyright for
 //   portions of Feather are held by Cole Bemis 2013-2022.
 //
@@ -122,15 +122,6 @@ export const VENDORED_ART = {
       <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
       <path d="M9 18h6" />
       <path d="M10 22h4" />
-    </>
-  ),
-  'game.coin-pusher': (
-    <>
-      {/* lucide/coins */}
-      <path d="M13.744 17.736a6 6 0 1 1-7.48-7.48" />
-      <path d="M15 6h1v4" />
-      <path d="m6.134 14.768.866-.5 2 3.464" />
-      <circle cx="16" cy="8" r="6" />
     </>
   ),
   'game.high-striker': (
@@ -700,7 +691,6 @@ export const VENDORED_SOURCE: Partial<Record<IconName, string>> = {
   'game.axe-throwing': 'lucide/axe',
   'game.darts': 'lucide/target',
   'game.fun-facts': 'lucide/lightbulb',
-  'game.coin-pusher': 'lucide/coins',
   'game.high-striker': 'lucide/hammer',
   'game.trivia': 'lucide/brain',
   'score.hole-in-one': 'lucide/star',

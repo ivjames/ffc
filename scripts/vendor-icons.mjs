@@ -67,7 +67,6 @@ const VENDOR = {
   'game.axe-throwing': ['axe'],
   'game.darts': ['target', 'concentric rings. award.hole-in-one shared 🎯 and stays a badge.'],
   'game.fun-facts': ['lightbulb', 'the bulb belongs to the fact deck; action.hint takes the question mark.'],
-  'game.coin-pusher': ['coins'],
   'game.high-striker': ['hammer', 'the long-handled hammer. whack-a-mole shared 🔨 and keeps the bespoke mallet.'],
   'game.trivia': ['brain'],
 

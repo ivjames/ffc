@@ -2,9 +2,9 @@
   "generated": "scripts/icon-inventory.mjs",
   "totals": {
     "marker": 0,
-    "prose": 100,
+    "prose": 96,
     "sticker": 32,
-    "symbol": 114,
+    "symbol": 112,
     "roles": 0
   },
   "overloaded": {},
@@ -367,7 +367,7 @@
       "area": "admin",
       "component": "Rewards",
       "file": "admin/Rewards.tsx",
-      "line": 195,
+      "line": 172,
       "context": "{c.rounds} rounds · <b>{c.tickets.toLocaleString()}</b> tickets"
     },
     {
@@ -2543,54 +2543,6 @@
       "context": "score >= 30 ? 'Claw whisperer! 🏆' : score >= 15 ? 'Arcade ace! 🕹️' : score >= 1 ? 'A prize is a prize! 🧸' : 'The claw"
     },
     {
-      "glyph": "🎰",
-      "kind": "prose",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "fun",
-      "component": "CoinPusher",
-      "file": "src/features/fun/CoinPusher.tsx",
-      "line": 884,
-      "context": "? 'The house is worried. 🎰'"
-    },
-    {
-      "glyph": "💰",
-      "kind": "prose",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "fun",
-      "component": "CoinPusher",
-      "file": "src/features/fun/CoinPusher.tsx",
-      "line": 886,
-      "context": "? 'Jackpot instincts! 💰'"
-    },
-    {
-      "glyph": "👍",
-      "kind": "prose",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "fun",
-      "component": "CoinPusher",
-      "file": "src/features/fun/CoinPusher.tsx",
-      "line": 888,
-      "context": "? 'Nice cascade! 👍'"
-    },
-    {
-      "glyph": "🪙",
-      "kind": "prose",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "fun",
-      "component": "CoinPusher",
-      "file": "src/features/fun/CoinPusher.tsx",
-      "line": 889,
-      "context": ": 'The machine always wins… 🪙';"
-    },
-    {
       "glyph": "🎯",
       "kind": "prose",
       "role": null,
@@ -3355,7 +3307,7 @@
       "area": "install",
       "component": "Install",
       "file": "src/features/install/Install.tsx",
-      "line": 154,
+      "line": 171,
       "context": "<span aria-hidden>➕</span>."
     },
     {
@@ -3369,18 +3321,6 @@
       "file": "src/features/locations/LocationPicker.tsx",
       "line": 77,
       "context": "<span className=\"text-xl text-fairway-400\">›</span>"
-    },
-    {
-      "glyph": "·",
-      "kind": "symbol",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "me",
-      "component": "Achievements",
-      "file": "src/features/me/Achievements.tsx",
-      "line": 94,
-      "context": ": `${earnedCount} of ${BADGES.length} unlocked · earn tickets at the counter`}"
     },
     {
       "glyph": "›",
@@ -4135,7 +4075,7 @@
       "area": "scorecard",
       "component": "Summary",
       "file": "src/features/scorecard/Summary.tsx",
-      "line": 400,
+      "line": 388,
       "context": "{s ?? '·'}"
     },
     {
@@ -4147,19 +4087,7 @@
       "area": "scorecard",
       "component": "Summary",
       "file": "src/features/scorecard/Summary.tsx",
-      "line": 561,
-      "context": "Claimed ✓"
-    },
-    {
-      "glyph": "✓",
-      "kind": "symbol",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "scorecard",
-      "component": "Summary",
-      "file": "src/features/scorecard/Summary.tsx",
-      "line": 580,
+      "line": 446,
       "context": "return <p className=\"text-center text-xs text-fairway-100/70\">Saved to leaderboard ✓</p>;"
     },
     {
@@ -5843,18 +5771,6 @@
       "context": "'game.pinball': { means: 'Pinball.', draw: 'The cabinet in plan: tall rounded rect, a bumper circle, the ball, and two f"
     },
     {
-      "glyph": "🪙",
-      "kind": "catalog",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "ui",
-      "component": "manifest",
-      "file": "src/ui/icons/manifest.ts",
-      "line": 90,
-      "context": "'game.coin-pusher': { means: 'The coin pusher.', draw: 'Two overlapping coin stacks seen from the side.', placeholder: '"
-    },
-    {
       "glyph": "⛳️",
       "kind": "catalog",
       "role": null,
@@ -5863,7 +5779,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 91,
+      "line": 90,
       "context": "'game.arcade-putt': { means: 'Arcade Putt — the in-app putting mini-game.', draw: 'A golf ball on a tee. nav.golf keeps "
     },
     {
@@ -5875,7 +5791,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 92,
+      "line": 91,
       "context": "'game.ring-toss': { means: 'Ring toss.', draw: 'A ring mid-air over an upright peg.', placeholder: '🎪' },"
     },
     {
@@ -5887,7 +5803,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 93,
+      "line": 92,
       "context": "'game.skee-ball': { means: 'Skee-Ball.', draw: 'The alley in perspective — a trapezoid narrowing upward to the ringed ta"
     },
     {
@@ -5899,7 +5815,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 93,
+      "line": 92,
       "context": "'game.skee-ball': { means: 'Skee-Ball.', draw: 'The alley in perspective — a trapezoid narrowing upward to the ringed ta"
     },
     {
@@ -5911,7 +5827,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 94,
+      "line": 93,
       "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle i"
     },
     {
@@ -5923,7 +5839,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 94,
+      "line": 93,
       "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle i"
     },
     {
@@ -5935,7 +5851,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 94,
+      "line": 93,
       "context": "'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle i"
     },
     {
@@ -5947,7 +5863,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 95,
+      "line": 94,
       "context": "'game.trivia': { means: 'Trivia.', draw: 'A brain in plan, two lobes.', placeholder: '🧠' },"
     },
     {
@@ -5959,7 +5875,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 96,
+      "line": 95,
       "context": "'game.water-gun-race': { means: 'The water gun race.', draw: 'A water pistol with a JET aimed at a rising target.', not:"
     },
     {
@@ -5971,7 +5887,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 96,
+      "line": 95,
       "context": "'game.water-gun-race': { means: 'The water gun race.', draw: 'A water pistol with a JET aimed at a rising target.', not:"
     },
     {
@@ -5983,7 +5899,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 97,
+      "line": 96,
       "context": "'game.challenge-spinner': { means: 'The challenge spinner wheel.', draw: 'A segmented wheel with a pointer at the top.',"
     },
     {
@@ -5995,7 +5911,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 102,
+      "line": 101,
       "context": "'score.hole-in-one': { means: 'Sank it in one.', draw: 'A star — the exceptional result, the one score that is not measu"
     },
     {
@@ -6007,7 +5923,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 103,
+      "line": 102,
       "context": "'score.eagle': { means: 'Two under par.', draw: 'A single feather. Bird-family so it groups with score.birdie, but not t"
     },
     {
@@ -6019,7 +5935,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 104,
+      "line": 103,
       "context": "'score.birdie': { means: 'One under par.', draw: 'A small bird in profile, or one chevron down.', placeholder: '🐦' },"
     },
     {
@@ -6031,7 +5947,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 105,
+      "line": 104,
       "context": "'score.par': { means: 'Level par.', draw: 'A dot dead centre in a ring — the ball in the cup, exactly as expected.', not"
     },
     {
@@ -6043,7 +5959,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 105,
+      "line": 104,
       "context": "'score.par': { means: 'Level par.', draw: 'A dot dead centre in a ring — the ball in the cup, exactly as expected.', not"
     },
     {
@@ -6055,7 +5971,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 106,
+      "line": 105,
       "context": "'score.bogey': { means: 'One over par.', draw: 'A face with a flat mouth and one raised brow — a wince, not a frown; sta"
     },
     {
@@ -6067,7 +5983,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 107,
+      "line": 106,
       "context": "'score.over-par': { means: 'Two or more over par.', draw: 'The far end of the face ramp: par is neutral, bogey winces, t"
     },
     {
@@ -6079,7 +5995,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 108,
+      "line": 107,
       "context": "'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'Two falling droplets — water as a hazar"
     },
     {
@@ -6091,7 +6007,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 108,
+      "line": 107,
       "context": "'score.water-hazard': { means: 'Ball in the water — one stroke penalty.', draw: 'Two falling droplets — water as a hazar"
     },
     {
@@ -6103,7 +6019,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 109,
+      "line": 108,
       "context": "'score.endless': { means: 'Endless (procedural) mode.', draw: 'A lemniscate — a clean infinity loop.', placeholder: '♾️'"
     },
     {
@@ -6115,7 +6031,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 112,
+      "line": 111,
       "context": "'award.trophy': { means: 'A win, or an earned award.', draw: 'A two-handled cup on a plinth.', not: 'action.leaderboard "
     },
     {
@@ -6127,7 +6043,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 112,
+      "line": 111,
       "context": "'award.trophy': { means: 'A win, or an earned award.', draw: 'A two-handled cup on a plinth.', not: 'action.leaderboard "
     },
     {
@@ -6139,7 +6055,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 113,
+      "line": 112,
       "context": "'award.medal': { means: 'An achievement medal.', draw: 'A disc on a short ribbon.', placeholder: '🏅' },"
     },
     {
@@ -6151,7 +6067,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 114,
+      "line": 113,
       "context": "'award.ticket': { means: 'Redemption tickets.', draw: 'An arcade ticket: perforated edge, notched ends.', not: 'nav.rewa"
     },
     {
@@ -6163,7 +6079,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 115,
+      "line": 114,
       "context": "'award.hole-in-one': { means: 'The “hole in one” achievement badge.', draw: 'A rosette badge on a ribbon. score.hole-in-"
     },
     {
@@ -6175,7 +6091,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 115,
+      "line": 114,
       "context": "'award.hole-in-one': { means: 'The “hole in one” achievement badge.', draw: 'A rosette badge on a ribbon. score.hole-in-"
     },
     {
@@ -6187,7 +6103,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 115,
+      "line": 114,
       "context": "'award.hole-in-one': { means: 'The “hole in one” achievement badge.', draw: 'A rosette badge on a ribbon. score.hole-in-"
     },
     {
@@ -6199,7 +6115,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 116,
+      "line": 115,
       "context": "'award.under-par': { means: 'The “under par” achievement badge.', draw: 'A line trending downward — below par is the goo"
     },
     {
@@ -6211,7 +6127,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 117,
+      "line": 116,
       "context": "'award.hunt-master': { means: 'The “hunt master” achievement badge.', draw: 'The detective silhouette — brimmed hat over"
     },
     {
@@ -6223,7 +6139,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 117,
+      "line": 116,
       "context": "'award.hunt-master': { means: 'The “hunt master” achievement badge.', draw: 'The detective silhouette — brimmed hat over"
     },
     {
@@ -6235,7 +6151,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 122,
+      "line": 121,
       "context": "'order.received': { means: 'Order received.', draw: 'A receipt with a torn lower edge.', placeholder: '🧾' },"
     },
     {
@@ -6247,7 +6163,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 123,
+      "line": 122,
       "context": "'order.sent-to-kitchen': { means: 'Sent to the kitchen.', draw: 'A paper plane, nose up.', placeholder: '📨' },"
     },
     {
@@ -6259,7 +6175,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 124,
+      "line": 123,
       "context": "'order.being-prepared': { means: 'Being prepared.', draw: 'A pan with an egg, one heat curl above.', placeholder: '🍳' }"
     },
     {
@@ -6271,7 +6187,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 125,
+      "line": 124,
       "context": "'order.ready': { means: 'Ready for pickup.', draw: 'A service bell (dome + plunger), still.', not: 'order.notify — same "
     },
     {
@@ -6283,7 +6199,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 126,
+      "line": 125,
       "context": "'order.picked-up': { means: 'Picked up — enjoy.', draw: 'A hand holding out a platter — your order, handed over. Better "
     },
     {
@@ -6295,7 +6211,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 127,
+      "line": 126,
       "context": "'order.notify': { means: 'Turn on “tell me when it’s ready”.', draw: 'A bell with motion ticks — an ALERT being armed.',"
     },
     {
@@ -6307,7 +6223,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 127,
+      "line": 126,
       "context": "'order.notify': { means: 'Turn on “tell me when it’s ready”.', draw: 'A bell with motion ticks — an ALERT being armed.',"
     },
     {
@@ -6319,7 +6235,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 128,
+      "line": 127,
       "context": "'order.cart': { means: 'The food cart / basket.', draw: 'A shopping basket in outline.', placeholder: '🛒' },"
     },
     {
@@ -6331,7 +6247,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 131,
+      "line": 130,
       "context": "'action.take-photo': { means: 'Take a photo.', draw: 'An aperture iris — the shutter itself, so the booth’s ACTION reads"
     },
     {
@@ -6343,7 +6259,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 132,
+      "line": 131,
       "context": "'action.share': { means: 'Share this.', draw: 'A box with an arrow leaving through the top.', placeholder: '📤' },"
     },
     {
@@ -6355,7 +6271,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 133,
+      "line": 132,
       "context": "'action.delete': { means: 'Delete / remove.', draw: 'A waste bin with a lid line.', placeholder: '🗑️' },"
     },
     {
@@ -6367,7 +6283,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 134,
+      "line": 133,
       "context": "'action.edit': { means: 'Edit.', draw: 'A pencil at 45°, tip lower-left.', placeholder: '✏️' },"
     },
     {
@@ -6379,7 +6295,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 135,
+      "line": 134,
       "context": "'action.hint': { means: 'Reveal a hint.', draw: 'A question mark in a circle — asking for help. The bulb belongs to game"
     },
     {
@@ -6391,7 +6307,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 136,
+      "line": 135,
       "context": "'action.refresh': { means: 'Reload — a new version is available.', draw: 'Two arrows chasing in a circle.', placeholder:"
     },
     {
@@ -6403,7 +6319,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 137,
+      "line": 136,
       "context": "'action.feedback': { means: 'Send feedback.', draw: 'A speech bubble with a tail.', placeholder: '💬' },"
     },
     {
@@ -6415,7 +6331,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 138,
+      "line": 137,
       "context": "'action.play-together': { means: 'Play together — everyone on their own phone.', draw: 'A phone with a small radiating a"
     },
     {
@@ -6427,7 +6343,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 139,
+      "line": 138,
       "context": "'action.rules': { means: 'Read the rules.', draw: 'An open book, two pages.', placeholder: '📖' },"
     },
     {
@@ -6439,7 +6355,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 140,
+      "line": 139,
       "context": "'action.scorecard': { means: 'View the scorecard.', draw: 'A clipboard with three ruled lines.', placeholder: '📋' },"
     },
     {
@@ -6451,7 +6367,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 141,
+      "line": 140,
       "context": "'action.leaderboard': { means: 'View the leaderboard.', draw: 'A numbered list — ranked standings. Distinct from award.t"
     },
     {
@@ -6463,7 +6379,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 141,
+      "line": 140,
       "context": "'action.leaderboard': { means: 'View the leaderboard.', draw: 'A numbered list — ranked standings. Distinct from award.t"
     },
     {
@@ -6475,7 +6391,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 146,
+      "line": 145,
       "context": "'control.skin': { means: 'Open the theme (skin) picker.', draw: 'An artist’s palette with a thumb hole.', placeholder: '"
     },
     {
@@ -6487,7 +6403,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 147,
+      "line": 146,
       "context": "'control.theme-light': { means: 'Switch to light mode.', draw: 'A sun: disc plus eight short rays.', placeholder: '☀️' }"
     },
     {
@@ -6499,7 +6415,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 148,
+      "line": 147,
       "context": "'control.theme-dark': { means: 'Switch to dark mode.', draw: 'A crescent moon, same optical size as the sun disc.', plac"
     },
     {
@@ -6511,7 +6427,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 149,
+      "line": 148,
       "context": "'control.sound-on': { means: 'Sound is on.', draw: 'A speaker with two arcs.', placeholder: '🔊' },"
     },
     {
@@ -6523,7 +6439,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 150,
+      "line": 149,
       "context": "'control.sound-off': { means: 'Sound is muted.', draw: 'The same speaker with a cross — same body, so only the state cha"
     },
     {
@@ -6535,7 +6451,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 153,
+      "line": 152,
       "context": "'state.done': { means: 'Step complete / confirmed.', draw: 'A check inside a circle.', placeholder: '✅' },"
     },
     {
@@ -6547,7 +6463,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 154,
+      "line": 153,
       "context": "'state.locked': { means: 'Private or locked.', draw: 'A closed padlock, shackle down.', placeholder: '🔒' },"
     },
     {
@@ -6559,7 +6475,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 155,
+      "line": 154,
       "context": "'state.account': { means: 'A signed-in player.', draw: 'A bust enclosed in a circle — an account. nav.me keeps the bare "
     },
     {
@@ -6571,7 +6487,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 156,
+      "line": 155,
       "context": "'state.guest': { means: 'A guest / not yet signed in.', draw: 'A four-point sparkle.', placeholder: '✨' },"
     },
     {
@@ -6583,7 +6499,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 157,
+      "line": 156,
       "context": "'state.teams': { means: 'Teams / group play.', draw: 'Two overlapping busts.', placeholder: '👥' },"
     },
     {
@@ -6595,7 +6511,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 158,
+      "line": 157,
       "context": "'state.located': { means: 'You are at the venue.', draw: 'A map pin with a check inside — presence confirmed. nav.locati"
     },
     {
@@ -6607,7 +6523,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 159,
+      "line": 158,
       "context": "'state.no-venue': { means: 'No venue found / out of range.', draw: 'A compass rose with a tilted needle.', placeholder: "
     },
     {
@@ -6619,7 +6535,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 160,
+      "line": 159,
       "context": "'state.announcement': { means: 'A venue announcement.', draw: 'A megaphone, mouth right.', placeholder: '📣' },"
     },
     {
@@ -6631,7 +6547,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 161,
+      "line": 160,
       "context": "'state.cpu': { means: 'The CPU opponent.', draw: 'A blocky robot head with two eyes and an antenna.', placeholder: '🤖' "
     },
     {
@@ -6643,7 +6559,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 162,
+      "line": 161,
       "context": "'state.timer': { means: 'Time remaining.', draw: 'A stopwatch with a crown button.', placeholder: '⏱' },"
     },
     {
@@ -6655,7 +6571,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 163,
+      "line": 162,
       "context": "'state.finish': { means: 'Finished / start a round.', draw: 'A chequered flag on a staff — what 🏁 actually meant. It wa"
     },
     {
@@ -6667,7 +6583,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 163,
+      "line": 162,
       "context": "'state.finish': { means: 'Finished / start a round.', draw: 'A chequered flag on a staff — what 🏁 actually meant. It wa"
     },
     {
@@ -6679,7 +6595,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 164,
+      "line": 163,
       "context": "'state.celebrate': { means: 'Celebration — a win, an accepted invite.', draw: 'A confetti burst, no container.', not: 'o"
     },
     {
@@ -6691,7 +6607,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 164,
+      "line": 163,
       "context": "'state.celebrate': { means: 'Celebration — a win, an accepted invite.', draw: 'A confetti burst, no container.', not: 'o"
     },
     {
@@ -6703,7 +6619,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 165,
+      "line": 164,
       "context": "'state.win': { means: 'You won this round.', draw: 'A balloon on a string.', placeholder: '🎈' },"
     },
     {
@@ -6715,7 +6631,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 166,
+      "line": 165,
       "context": "'state.lose': { means: 'You lost this round.', draw: 'A frowning face. score.bogey takes the wince, so the two losing st"
     },
     {
@@ -6727,7 +6643,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 167,
+      "line": 166,
       "context": "'brand.mark': { means: 'Venue brand fallback when no logo is uploaded.', draw: 'A ferris wheel: hub, spokes, gondolas.',"
     },
     {
@@ -6739,7 +6655,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 173,
+      "line": 172,
       "context": "'course.default': { means: 'A course with no specific theme.', draw: 'A plain pennant on a staff — a course whose theme "
     },
     {
@@ -6751,7 +6667,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 174,
+      "line": 173,
       "context": "'course.classic': { means: 'The classic mini-golf course.', draw: 'A windmill — the mini-golf obstacle everyone pictures"
     },
     {
@@ -6763,7 +6679,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 174,
+      "line": 173,
       "context": "'course.classic': { means: 'The classic mini-golf course.', draw: 'A windmill — the mini-golf obstacle everyone pictures"
     },
     {
@@ -6775,7 +6691,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 175,
+      "line": 174,
       "context": "'course.blue': { means: 'The Blue course.', draw: 'A plain ring, stroked in the course accent. The colour is the identit"
     },
     {
@@ -6787,7 +6703,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 176,
+      "line": 175,
       "context": "'course.green': { means: 'The Green course.', draw: 'A plain ring, stroked in the course accent — identical to course.bl"
     },
     {
@@ -6799,7 +6715,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 177,
+      "line": 176,
       "context": "'course.red': { means: 'The Red course.', draw: 'A plain ring, stroked in the course accent — identical to course.blue b"
     },
     {
@@ -6811,7 +6727,19 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 178,
+      "line": 177,
+      "context": "'course.california': { means: 'The California / tropical course.', draw: 'A single palm with a leaning trunk. course.jun"
+    },
+    {
+      "glyph": "🌴",
+      "kind": "catalog",
+      "role": null,
+      "roleFrom": null,
+      "needsReview": false,
+      "area": "ui",
+      "component": "manifest",
+      "file": "src/ui/icons/manifest.ts",
+      "line": 177,
       "context": "'course.california': { means: 'The California / tropical course.', draw: 'A single palm with a leaning trunk. course.jun"
     },
     {
@@ -6824,18 +6752,6 @@
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
       "line": 178,
-      "context": "'course.california': { means: 'The California / tropical course.', draw: 'A single palm with a leaning trunk. course.jun"
-    },
-    {
-      "glyph": "🌴",
-      "kind": "catalog",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "ui",
-      "component": "manifest",
-      "file": "src/ui/icons/manifest.ts",
-      "line": 179,
       "context": "'course.jungle': { means: 'The Jungle Run course.', draw: 'A grove of round-canopy trees — deliberately not a palm, so t"
     },
     {
@@ -6847,7 +6763,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 179,
+      "line": 178,
       "context": "'course.jungle': { means: 'The Jungle Run course.', draw: 'A grove of round-canopy trees — deliberately not a palm, so t"
     },
     {
@@ -6859,7 +6775,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 179,
+      "line": 178,
       "context": "'course.jungle': { means: 'The Jungle Run course.', draw: 'A grove of round-canopy trees — deliberately not a palm, so t"
     },
     {
@@ -6871,7 +6787,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 180,
+      "line": 179,
       "context": "'course.dragon': { means: 'The Dragon course.', draw: 'A dragon head in profile with a horn.', placeholder: '🐉' },"
     },
     {
@@ -6883,7 +6799,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 181,
+      "line": 180,
       "context": "'course.western': { means: 'The Western course.', draw: 'A cowboy hat, brim curling up at the sides.', placeholder: '🤠'"
     },
     {
@@ -6895,7 +6811,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 182,
+      "line": 181,
       "context": "'course.pirate': { means: 'The Pirate’s Cove course.', draw: 'A skull-and-crossbones flag on a staff.', placeholder: '🏴"
     },
     {
@@ -6907,7 +6823,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 183,
+      "line": 182,
       "context": "'course.space': { means: 'The Space Odyssey course.', draw: 'A rocket, nose up, two fins.', placeholder: '🚀' },"
     },
     {
@@ -6919,7 +6835,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 184,
+      "line": 183,
       "context": "'course.haunted': { means: 'The Haunted Manor course.', draw: 'A ghost with a wavy hem.', placeholder: '👻' },"
     },
     {
@@ -6931,7 +6847,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 202,
+      "line": 201,
       "context": "'nav.ui 🏠': 'nav.home',"
     },
     {
@@ -6943,7 +6859,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 203,
+      "line": 202,
       "context": "'nav.golf ⛳️': 'nav.golf',"
     },
     {
@@ -6955,7 +6871,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 204,
+      "line": 203,
       "context": "'nav.arcade 🎮': 'nav.arcade',"
     },
     {
@@ -6967,7 +6883,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 205,
+      "line": 204,
       "context": "'nav.food 🌭': 'nav.food',"
     },
     {
@@ -6979,7 +6895,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 206,
+      "line": 205,
       "context": "'nav.photos 📸': 'nav.photos',"
     },
     {
@@ -6991,7 +6907,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 207,
+      "line": 206,
       "context": "'nav.hunt 🔍': 'nav.hunt',"
     },
     {
@@ -7003,7 +6919,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 208,
+      "line": 207,
       "context": "'nav.me 👤': 'nav.me',"
     },
     {
@@ -7015,7 +6931,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 209,
+      "line": 208,
       "context": "'nav.locations 📍': 'nav.locations',"
     },
     {
@@ -7027,7 +6943,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 210,
+      "line": 209,
       "context": "'nav.install ⬇️': 'nav.install',"
     },
     {
@@ -7039,7 +6955,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 211,
+      "line": 210,
       "context": "'me.rewards 🎟️': 'nav.rewards',"
     },
     {
@@ -7051,7 +6967,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 214,
+      "line": 213,
       "context": "'arcade.airhockey 🏒': 'game.air-hockey',"
     },
     {
@@ -7063,7 +6979,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 215,
+      "line": 214,
       "context": "'arcade.axe 🪓': 'game.axe-throwing',"
     },
     {
@@ -7075,7 +6991,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 216,
+      "line": 215,
       "context": "'arcade.batting ⚾️': 'game.batting-cages',"
     },
     {
@@ -7087,7 +7003,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 217,
+      "line": 216,
       "context": "'arcade.boats 🚤': 'game.bumper-boats',"
     },
     {
@@ -7099,7 +7015,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 218,
+      "line": 217,
       "context": "'arcade.bottles 🥛': 'game.milk-bottles',"
     },
     {
@@ -7111,7 +7027,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 219,
+      "line": 218,
       "context": "'arcade.bowling 🎳': 'game.bowling',"
     },
     {
@@ -7123,7 +7039,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 220,
+      "line": 219,
       "context": "'arcade.bumper 🚗': 'game.bumper-cars',"
     },
     {
@@ -7135,7 +7051,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 221,
+      "line": 220,
       "context": "'arcade.claw 🧸': 'game.claw-machine',"
     },
     {
@@ -7147,7 +7063,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 222,
+      "line": 221,
       "context": "'arcade.darts 🎯': 'game.darts',"
     },
     {
@@ -7159,7 +7075,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 223,
+      "line": 222,
       "context": "'arcade.facts 💡': 'game.fun-facts',"
     },
     {
@@ -7171,7 +7087,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 224,
+      "line": 223,
       "context": "'arcade.gallery 🦆': 'game.shooting-gallery',"
     },
     {
@@ -7183,7 +7099,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 225,
+      "line": 224,
       "context": "'arcade.hoops 🏀': 'game.pop-a-shot',"
     },
     {
@@ -7195,7 +7111,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 226,
+      "line": 225,
       "context": "'arcade.karts 🏁': 'game.go-karts',"
     },
     {
@@ -7207,7 +7123,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 227,
+      "line": 226,
       "context": "'arcade.mole 🔨': 'game.whack-a-mole',"
     },
     {
@@ -7219,20 +7135,8 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 228,
+      "line": 227,
       "context": "'arcade.pinball 🕹️': 'game.pinball',"
-    },
-    {
-      "glyph": "🪙",
-      "kind": "catalog",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "ui",
-      "component": "manifest",
-      "file": "src/ui/icons/manifest.ts",
-      "line": 229,
-      "context": "'arcade.pusher 🪙': 'game.coin-pusher',"
     },
     {
       "glyph": "⛳️",
@@ -7243,7 +7147,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 230,
+      "line": 228,
       "context": "'arcade.putt ⛳️': 'game.arcade-putt',"
     },
     {
@@ -7255,7 +7159,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 231,
+      "line": 229,
       "context": "'arcade.rings 🎪': 'game.ring-toss',"
     },
     {
@@ -7267,7 +7171,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 232,
+      "line": 230,
       "context": "'arcade.skeeball 🎳': 'game.skee-ball',"
     },
     {
@@ -7279,7 +7183,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 233,
+      "line": 231,
       "context": "'arcade.striker 🔔': 'game.high-striker',"
     },
     {
@@ -7291,7 +7195,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 234,
+      "line": 232,
       "context": "'arcade.trivia 🧠': 'game.trivia',"
     },
     {
@@ -7303,7 +7207,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 235,
+      "line": 233,
       "context": "'arcade.watergun 💦': 'game.water-gun-race',"
     },
     {
@@ -7315,7 +7219,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 240,
+      "line": 238,
       "context": "'fun.airhockey 🏒': 'game.air-hockey',"
     },
     {
@@ -7327,7 +7231,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 241,
+      "line": 239,
       "context": "'fun.airhockey 🏆': 'award.trophy',"
     },
     {
@@ -7339,7 +7243,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 242,
+      "line": 240,
       "context": "'fun.airhockey 🤖': 'state.cpu',"
     },
     {
@@ -7351,7 +7255,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 243,
+      "line": 241,
       "context": "'fun.axethrow 🪓': 'game.axe-throwing',"
     },
     {
@@ -7363,7 +7267,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 244,
+      "line": 242,
       "context": "'fun.battingcages ⚾️': 'game.batting-cages',"
     },
     {
@@ -7375,7 +7279,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 245,
+      "line": 243,
       "context": "'fun.bowling 🎳': 'game.bowling',"
     },
     {
@@ -7387,7 +7291,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 246,
+      "line": 244,
       "context": "'fun.bumper-boats 🚤': 'game.bumper-boats',"
     },
     {
@@ -7399,7 +7303,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 247,
+      "line": 245,
       "context": "'fun.bumper-cars 🚗': 'game.bumper-cars',"
     },
     {
@@ -7411,7 +7315,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 248,
+      "line": 246,
       "context": "'fun.bumperarena ⏱': 'state.timer',"
     },
     {
@@ -7423,20 +7327,8 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 249,
+      "line": 247,
       "context": "'fun.clawmachine 🧸': 'game.claw-machine',"
-    },
-    {
-      "glyph": "🪙",
-      "kind": "catalog",
-      "role": null,
-      "roleFrom": null,
-      "needsReview": false,
-      "area": "ui",
-      "component": "manifest",
-      "file": "src/ui/icons/manifest.ts",
-      "line": 250,
-      "context": "'fun.coinpusher 🪙': 'game.coin-pusher',"
     },
     {
       "glyph": "🎯",
@@ -7447,7 +7339,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 251,
+      "line": 248,
       "context": "'fun.darts 🎯': 'game.darts',"
     },
     {
@@ -7459,7 +7351,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 252,
+      "line": 249,
       "context": "'fun.gokarts 🏁': 'game.go-karts',"
     },
     {
@@ -7471,7 +7363,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 253,
+      "line": 250,
       "context": "'fun.highstriker 🔨': 'game.high-striker',"
     },
     {
@@ -7483,7 +7375,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 254,
+      "line": 251,
       "context": "'fun.milkbottle 🥎': 'game.milk-bottles',"
     },
     {
@@ -7495,7 +7387,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 255,
+      "line": 252,
       "context": "'fun.pinball 🕹️': 'game.pinball',"
     },
     {
@@ -7507,7 +7399,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 256,
+      "line": 253,
       "context": "'fun.popashot 🏀': 'game.pop-a-shot',"
     },
     {
@@ -7519,7 +7411,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 257,
+      "line": 254,
       "context": "'fun.popashot ⏱': 'state.timer',"
     },
     {
@@ -7531,7 +7423,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 258,
+      "line": 255,
       "context": "'fun.ringtoss 🎪': 'game.ring-toss',"
     },
     {
@@ -7543,7 +7435,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 259,
+      "line": 256,
       "context": "'fun.shootinggallery 🦆': 'game.shooting-gallery',"
     },
     {
@@ -7555,7 +7447,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 260,
+      "line": 257,
       "context": "'fun.skeeball 🎳': 'game.skee-ball',"
     },
     {
@@ -7567,7 +7459,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 261,
+      "line": 258,
       "context": "'fun.trivia 🧠': 'game.trivia',"
     },
     {
@@ -7579,7 +7471,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 262,
+      "line": 259,
       "context": "'fun.whackamole 🔨': 'game.whack-a-mole',"
     },
     {
@@ -7591,7 +7483,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 263,
+      "line": 260,
       "context": "'fun.watergunrace 🔫': 'game.water-gun-race',"
     },
     {
@@ -7603,7 +7495,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 264,
+      "line": 261,
       "context": "'fun.watergunrace 🎈': 'state.win',"
     },
     {
@@ -7615,7 +7507,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 265,
+      "line": 262,
       "context": "'fun.watergunrace 🤡': 'state.lose',"
     },
     {
@@ -7627,7 +7519,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 266,
+      "line": 263,
       "context": "'fun.spinner 🔻': 'game.challenge-spinner',"
     },
     {
@@ -7639,7 +7531,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 267,
+      "line": 264,
       "context": "'fun.spinner ⛳️': 'nav.golf',"
     },
     {
@@ -7651,7 +7543,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 268,
+      "line": 265,
       "context": "'fun.spinner 🎉': 'state.celebrate',"
     },
     {
@@ -7663,7 +7555,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 269,
+      "line": 266,
       "context": "'fun.earns-tickets 🎟️': 'award.ticket',"
     },
     {
@@ -7675,7 +7567,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 270,
+      "line": 267,
       "context": "'fun.gameticketaward 🎟️': 'award.ticket',"
     },
     {
@@ -7687,7 +7579,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 273,
+      "line": 270,
       "context": "'putt.hole-in-one 🏌️': 'score.hole-in-one',"
     },
     {
@@ -7699,7 +7591,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 274,
+      "line": 271,
       "context": "'putt.eagle 🦅': 'score.eagle',"
     },
     {
@@ -7711,7 +7603,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 275,
+      "line": 272,
       "context": "'putt.birdie 🐦': 'score.birdie',"
     },
     {
@@ -7723,7 +7615,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 276,
+      "line": 273,
       "context": "'putt.par ⛳️': 'score.par',"
     },
     {
@@ -7735,7 +7627,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 277,
+      "line": 274,
       "context": "'putt.bogey 😬': 'score.bogey',"
     },
     {
@@ -7747,7 +7639,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 278,
+      "line": 275,
       "context": "'putt.hole-in-one 😵': 'score.over-par',"
     },
     {
@@ -7759,7 +7651,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 279,
+      "line": 276,
       "context": "'putt.puttgolf 💦': 'score.water-hazard',"
     },
     {
@@ -7771,7 +7663,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 280,
+      "line": 277,
       "context": "'putt.puttgolf ♾️': 'score.endless',"
     },
     {
@@ -7783,7 +7675,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 281,
+      "line": 278,
       "context": "'putt.puttgolf ⛳️': 'game.arcade-putt',"
     },
     {
@@ -7795,7 +7687,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 282,
+      "line": 279,
       "context": "'putt.puttgolf 🏁': 'state.finish',"
     },
     {
@@ -7807,7 +7699,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 283,
+      "line": 280,
       "context": "'putt.puttgolf 🏆': 'award.trophy',"
     },
     {
@@ -7819,7 +7711,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 286,
+      "line": 283,
       "context": "'me.hole-in-one 🎯': 'award.hole-in-one',"
     },
     {
@@ -7831,7 +7723,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 287,
+      "line": 284,
       "context": "'scorecard.hole-in-one 🎯': 'award.hole-in-one',"
     },
     {
@@ -7843,7 +7735,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 288,
+      "line": 285,
       "context": "'me.under-par ⛳': 'award.under-par',"
     },
     {
@@ -7855,7 +7747,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 289,
+      "line": 286,
       "context": "'scorecard.under-par ⛳': 'award.under-par',"
     },
     {
@@ -7867,7 +7759,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 290,
+      "line": 287,
       "context": "'me.hunt-master 🕵️': 'award.hunt-master',"
     },
     {
@@ -7879,7 +7771,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 291,
+      "line": 288,
       "context": "'scorecard.hunt-master 🕵️': 'award.hunt-master',"
     },
     {
@@ -7891,7 +7783,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 294,
+      "line": 291,
       "context": "'food.food 🛒': 'order.cart',"
     },
     {
@@ -7903,7 +7795,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 295,
+      "line": 292,
       "context": "'food.order-received 🧾': 'order.received',"
     },
     {
@@ -7915,7 +7807,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 296,
+      "line": 293,
       "context": "'food.sent-to-the-kitchen 📨': 'order.sent-to-kitchen',"
     },
     {
@@ -7927,7 +7819,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 297,
+      "line": 294,
       "context": "'food.being-prepared 🍳': 'order.being-prepared',"
     },
     {
@@ -7939,7 +7831,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 298,
+      "line": 295,
       "context": "'food.activeorderscard 🍳': 'order.being-prepared',"
     },
     {
@@ -7951,7 +7843,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 299,
+      "line": 296,
       "context": "'food.ready-for-pickup 🔔': 'order.ready',"
     },
     {
@@ -7963,7 +7855,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 300,
+      "line": 297,
       "context": "'food.picked-up-enjoy 🎉': 'order.picked-up',"
     },
     {
@@ -7975,7 +7867,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 301,
+      "line": 298,
       "context": "'food.orderstatus 🔔': 'order.notify',"
     },
     {
@@ -7987,7 +7879,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 302,
+      "line": 299,
       "context": "'food.orderstatus ✅': 'state.done',"
     },
     {
@@ -7999,7 +7891,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 305,
+      "line": 302,
       "context": "'photos.photobooth 📸': 'action.take-photo',"
     },
     {
@@ -8011,7 +7903,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 306,
+      "line": 303,
       "context": "'photos.photobooth 📤': 'action.share',"
     },
     {
@@ -8023,7 +7915,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 307,
+      "line": 304,
       "context": "'photos.photobooth 🗑️': 'action.delete',"
     },
     {
@@ -8035,7 +7927,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 308,
+      "line": 305,
       "context": "'photos.photobooth ✏️': 'action.edit',"
     },
     {
@@ -8047,7 +7939,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 309,
+      "line": 306,
       "context": "'photos.photobooth ✅': 'state.done',"
     },
     {
@@ -8059,7 +7951,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 312,
+      "line": 309,
       "context": "'hunt.hunt 🔍': 'nav.hunt',"
     },
     {
@@ -8071,7 +7963,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 313,
+      "line": 310,
       "context": "'hunt.venuehuntstart 🔍': 'nav.hunt',"
     },
     {
@@ -8083,7 +7975,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 314,
+      "line": 311,
       "context": "'scorecard.scavenger-hunt 🔍': 'nav.hunt',"
     },
     {
@@ -8095,7 +7987,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 315,
+      "line": 312,
       "context": "'golf.golfhome 🔍': 'nav.hunt',"
     },
     {
@@ -8107,7 +7999,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 316,
+      "line": 313,
       "context": "'hunt.hunt 💡': 'action.hint',"
     },
     {
@@ -8119,7 +8011,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 317,
+      "line": 314,
       "context": "'hunt.hunt 📷': 'action.take-photo',"
     },
     {
@@ -8131,7 +8023,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 318,
+      "line": 315,
       "context": "'hunt.hunt 📤': 'action.share',"
     },
     {
@@ -8143,7 +8035,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 321,
+      "line": 318,
       "context": "'golf.golfhome 📲': 'action.play-together',"
     },
     {
@@ -8155,7 +8047,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 322,
+      "line": 319,
       "context": "'golf.golfhome 🏆': 'action.leaderboard',"
     },
     {
@@ -8167,7 +8059,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 323,
+      "line": 320,
       "context": "'golf.golfhome 📖': 'action.rules',"
     },
     {
@@ -8179,7 +8071,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 324,
+      "line": 321,
       "context": "'scorecard.playersetup 📲': 'action.play-together',"
     },
     {
@@ -8191,7 +8083,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 325,
+      "line": 322,
       "context": "'scorecard.playersetup 🏅': 'award.medal',"
     },
     {
@@ -8203,7 +8095,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 326,
+      "line": 323,
       "context": "'scorecard.challenge-spinner 🎡': 'game.challenge-spinner',"
     },
     {
@@ -8215,7 +8107,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 332,
+      "line": 329,
       "context": "'scorecard.summary 🏆': 'action.leaderboard',"
     },
     {
@@ -8227,7 +8119,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 333,
+      "line": 330,
       "context": "'scorecard.summary 📋': 'action.scorecard',"
     },
     {
@@ -8239,7 +8131,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 334,
+      "line": 331,
       "context": "'scorecard.summary 📸': 'action.take-photo',"
     },
     {
@@ -8251,7 +8143,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 335,
+      "line": 332,
       "context": "'scorecard.summary 🎟️': 'award.ticket',"
     },
     {
@@ -8263,7 +8155,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 336,
+      "line": 333,
       "context": "'scorecard.coursepicker 📍': 'state.located',"
     },
     {
@@ -8275,7 +8167,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 337,
+      "line": 334,
       "context": "'courses.courselist 📍': 'state.located',"
     },
     {
@@ -8287,7 +8179,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 340,
+      "line": 337,
       "context": "'me.mehome 👤': 'state.account',"
     },
     {
@@ -8299,7 +8191,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 341,
+      "line": 338,
       "context": "'me.mehome ✨': 'state.guest',"
     },
     {
@@ -8311,7 +8203,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 342,
+      "line": 339,
       "context": "'me.mehome 🏅': 'award.medal',"
     },
     {
@@ -8323,7 +8215,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 343,
+      "line": 340,
       "context": "'me.mehome 👥': 'state.teams',"
     },
     {
@@ -8335,7 +8227,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 344,
+      "line": 341,
       "context": "'me.mehome 🎟️': 'nav.rewards',"
     },
     {
@@ -8347,7 +8239,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 345,
+      "line": 342,
       "context": "'me.mehome ⬇️': 'nav.install',"
     },
     {
@@ -8359,7 +8251,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 346,
+      "line": 343,
       "context": "'me.mehome 🔒': 'state.locked',"
     },
     {
@@ -8371,7 +8263,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 347,
+      "line": 344,
       "context": "'shared.accountgate 👤': 'state.account',"
     },
     {
@@ -8383,7 +8275,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 348,
+      "line": 345,
       "context": "'shared.accountgate ✨': 'state.guest',"
     },
     {
@@ -8395,7 +8287,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 349,
+      "line": 346,
       "context": "'account.account 👥': 'state.teams',"
     },
     {
@@ -8407,7 +8299,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 350,
+      "line": 347,
       "context": "'account.account 🏌️': 'score.hole-in-one',"
     },
     {
@@ -8419,7 +8311,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 351,
+      "line": 348,
       "context": "'account.account 🎟️': 'award.ticket',"
     },
     {
@@ -8431,7 +8323,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 354,
+      "line": 351,
       "context": "'rewards.rewards 🎟️': 'award.ticket',"
     },
     {
@@ -8443,7 +8335,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 355,
+      "line": 352,
       "context": "'rewards.rewards 🕹️': 'nav.arcade',"
     },
     {
@@ -8455,7 +8347,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 356,
+      "line": 353,
       "context": "'ui.adoptionbonustoast 🎟️': 'award.ticket',"
     },
     {
@@ -8467,7 +8359,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 359,
+      "line": 356,
       "context": "'home.home 🌭': 'nav.food',"
     },
     {
@@ -8479,7 +8371,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 360,
+      "line": 357,
       "context": "'home.home 🛒': 'order.cart',"
     },
     {
@@ -8491,7 +8383,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 361,
+      "line": 358,
       "context": "'home.home 👤': 'state.account',"
     },
     {
@@ -8503,7 +8395,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 362,
+      "line": 359,
       "context": "'home.home 🎡': 'brand.mark',"
     },
     {
@@ -8515,7 +8407,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 365,
+      "line": 362,
       "context": "'locations.locationpicker 🧭': 'state.no-venue',"
     },
     {
@@ -8527,7 +8419,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 366,
+      "line": 363,
       "context": "'locations.locationpicker 📍': 'state.located',"
     },
     {
@@ -8539,7 +8431,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 367,
+      "line": 364,
       "context": "'shared.geofencegate 📍': 'state.located',"
     },
     {
@@ -8551,7 +8443,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 368,
+      "line": 365,
       "context": "'shared.tenantunavailable 🧭': 'state.no-venue',"
     },
     {
@@ -8563,7 +8455,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 371,
+      "line": 368,
       "context": "'install.install ⛳️': 'nav.golf',"
     },
     {
@@ -8575,7 +8467,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 372,
+      "line": 369,
       "context": "'install.install ✅': 'state.done',"
     },
     {
@@ -8587,7 +8479,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 373,
+      "line": 370,
       "context": "'ui.adoptionnudge 📲': 'action.play-together',"
     },
     {
@@ -8599,7 +8491,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 374,
+      "line": 371,
       "context": "'ui.adoptionnudge 🏆': 'award.trophy',"
     },
     {
@@ -8611,7 +8503,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 377,
+      "line": 374,
       "context": "'ui.choose-a-theme 🎨': 'control.skin',"
     },
     {
@@ -8623,7 +8515,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 378,
+      "line": 375,
       "context": "'ui.themetoggle ☀️': 'control.theme-light',"
     },
     {
@@ -8635,7 +8527,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 379,
+      "line": 376,
       "context": "'ui.themetoggle 🌙': 'control.theme-dark',"
     },
     {
@@ -8647,7 +8539,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 380,
+      "line": 377,
       "context": "'ui.navdrawer 🌙': 'control.theme-dark',"
     },
     {
@@ -8659,7 +8551,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 381,
+      "line": 378,
       "context": "'ui.soundtoggle 🔊': 'control.sound-on',"
     },
     {
@@ -8671,7 +8563,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 382,
+      "line": 379,
       "context": "'ui.soundtoggle 🔇': 'control.sound-off',"
     },
     {
@@ -8683,7 +8575,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 383,
+      "line": 380,
       "context": "'ui.navdrawer 🔊': 'control.sound-on',"
     },
     {
@@ -8695,7 +8587,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 384,
+      "line": 381,
       "context": "'ui.updatemodal 🔄': 'action.refresh',"
     },
     {
@@ -8707,7 +8599,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 385,
+      "line": 382,
       "context": "'ui.announcementbanner 📣': 'state.announcement',"
     },
     {
@@ -8719,7 +8611,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 386,
+      "line": 383,
       "context": "'ui.feedbackbutton 💬': 'action.feedback',"
     },
     {
@@ -8731,7 +8623,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 387,
+      "line": 384,
       "context": "'ui.feedbackbutton 📸': 'action.take-photo',"
     },
     {
@@ -8743,7 +8635,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 390,
+      "line": 387,
       "context": "'tv.tvwall ⛳️': 'nav.golf',"
     },
     {
@@ -8755,7 +8647,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 391,
+      "line": 388,
       "context": "'tv.tvleaderboard 🏅': 'award.medal',"
     },
     {
@@ -8767,7 +8659,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 396,
+      "line": 393,
       "context": "'theme.default ⛳️': 'course.default',"
     },
     {
@@ -8779,7 +8671,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 397,
+      "line": 394,
       "context": "'theme.classic ⛳️': 'course.classic',"
     },
     {
@@ -8791,7 +8683,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 398,
+      "line": 395,
       "context": "'theme.blue 🔵': 'course.blue',"
     },
     {
@@ -8803,7 +8695,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 399,
+      "line": 396,
       "context": "'theme.green 🟢': 'course.green',"
     },
     {
@@ -8815,7 +8707,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 400,
+      "line": 397,
       "context": "'theme.red 🔴': 'course.red',"
     },
     {
@@ -8827,7 +8719,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 401,
+      "line": 398,
       "context": "'theme.california 🌴': 'course.california',"
     },
     {
@@ -8839,7 +8731,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 402,
+      "line": 399,
       "context": "'theme.jungle 🌴': 'course.jungle',"
     },
     {
@@ -8851,7 +8743,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 403,
+      "line": 400,
       "context": "'theme.dragon 🐉': 'course.dragon',"
     },
     {
@@ -8863,7 +8755,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 404,
+      "line": 401,
       "context": "'theme.western 🤠': 'course.western',"
     },
     {
@@ -8875,7 +8767,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 405,
+      "line": 402,
       "context": "'theme.pirate 🏴‍☠️': 'course.pirate',"
     },
     {
@@ -8887,7 +8779,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 406,
+      "line": 403,
       "context": "'theme.space 🚀': 'course.space',"
     },
     {
@@ -8899,7 +8791,7 @@
       "area": "ui",
       "component": "manifest",
       "file": "src/ui/icons/manifest.ts",
-      "line": 407,
+      "line": 404,
       "context": "'theme.haunted 👻': 'course.haunted',"
     },
     {
@@ -8935,7 +8827,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 139,
+      "line": 130,
       "context": "{/* the long-handled hammer. whack-a-mole shared 🔨 and keeps the bespoke mallet. */}"
     },
     {
@@ -8947,7 +8839,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 224,
+      "line": 215,
       "context": "{/* water as a hazard. game.water-gun-race shared 💦 and keeps the aimed jet. */}"
     },
     {
@@ -8959,7 +8851,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 232,
+      "line": 223,
       "context": "{/* the object won. action.leaderboard shared 🏆 and takes the ranked list. */}"
     },
     {
@@ -8971,7 +8863,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 304,
+      "line": 295,
       "context": "{/* the still bell. order.notify shared 🔔 and takes the ringing one. */}"
     },
     {
@@ -8983,7 +8875,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 322,
+      "line": 313,
       "context": "{/* a plate handed over. state.celebrate shared 🎉 and keeps the popper. */}"
     },
     {
@@ -8995,7 +8887,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 386,
+      "line": 377,
       "context": "{/* asking for help. game.fun-facts shared 💡 and keeps the bulb. */}"
     },
     {
@@ -9007,7 +8899,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 642,
+      "line": 633,
       "context": "{/* a palm. course.jungle shared 🌴 and takes the broadleaf grove. */}"
     },
     {
@@ -9019,7 +8911,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 652,
+      "line": 643,
       "context": "{/* a grove, so the two 🌴 courses stop being the same picture. */}"
     },
     {
@@ -9031,7 +8923,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 817,
+      "line": 807,
       "context": "{/* crossed sticks. Not strictly an air-hockey striker, but it matches the 🏒 the app already chose and reads at size. *"
     },
     {
@@ -9043,7 +8935,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 824,
+      "line": 814,
       "context": "{/* a wheel, which frees the chequered flag for state.finish — what 🏁 actually meant. */}"
     },
     {
@@ -9055,7 +8947,7 @@
       "area": "ui",
       "component": "vendored.generated",
       "file": "src/ui/icons/vendored.generated.tsx",
-      "line": 831,
+      "line": 821,
       "context": "{/* the hat-and-magnifier silhouette — exactly the 🕵️ it replaces. */}"
     }
   ]
