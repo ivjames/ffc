@@ -5,7 +5,7 @@ import { sanitizeTagInput, tagError, TAG_LENGTH } from '../../lib/sanitize';
 import { fetchMe } from '../../lib/authApi';
 import { joinGame } from '../../lib/gamesApi';
 import { createSharedLocalRound } from '../../lib/sharedMerge';
-import { getRound, putRound } from '../../db';
+import { getRound, markActivity, putRound } from '../../db';
 
 // Join a shared game by code (QR deep link lands here as /join?code=XXXXXX).
 // No account needed — a guest phone claims a roster slot with just a tag.
@@ -53,6 +53,9 @@ export default function JoinGame() {
       );
       return;
     }
+    void markActivity('social', 'join'); // achievements (device-local)
+    // The roster size at join time feeds the "all four seats" badge.
+    void markActivity('social', 'seats', res.snapshot.players.length);
     const clientId = `shared:${res.snapshot.game.id}`;
     // Rejoin on a device that already mirrors this game: keep the local state
     // (scores survive), just refresh the credentials.

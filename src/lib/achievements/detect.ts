@@ -1,7 +1,14 @@
-import type { LocalRound } from '../../types';
-import { COURSES } from '../../data/courses';
+import type { ActivityMark, LocalRound } from '../../types';
+import { COURSES, LOCATIONS } from '../../data/courses';
 import { STROKE_CAP } from '../scoring';
-import { ACHIEVEMENTS, type Achievement, type ReachContext } from './catalog';
+import { venueDayWindow, type VenueHours } from '../venueHours';
+import { ARCADE_GAME_COUNT } from './arcade';
+import {
+  ACHIEVEMENTS,
+  CATEGORY_ORDER,
+  type Achievement,
+  type ReachContext,
+} from './catalog';
 
 // On-device achievement detection. Every rule here reads only completed rounds
 // in IndexedDB, so the wall works with no account and no network — the same
@@ -42,6 +49,8 @@ export type PlayerRound = {
   strokes: (number | null)[];
   /** Every slot's card, this one included — the multi-player rules need it. */
   field: (number | null)[][];
+  /** Every slot's tag, positionally aligned with `field`. */
+  fieldTags: string[];
   slot: number;
   /**
    * The 3-char player tag. Tags repeat by design, so this is a weak identity —
@@ -65,6 +74,28 @@ export type CourseInfo = { id: string; locationId: string | null; pars: number[]
 export function liveCatalog(): CourseInfo[] {
   return COURSES.map((c) => ({ id: c.id, locationId: c.locationId ?? null, pars: c.pars }));
 }
+
+/** A venue's clock, for the rules that care when a round started. */
+export type VenueInfo = { id: string; tz: string | null; hours: VenueHours | null };
+
+export function liveVenues(): VenueInfo[] {
+  return LOCATIONS.map((l) => ({ id: l.id, tz: l.tz ?? null, hours: l.hours ?? null }));
+}
+
+/**
+ * Everything the rules read besides the rounds themselves.
+ * All optional: a caller with only rounds still gets every round-shaped badge.
+ */
+export type DetectContext = {
+  catalog?: CourseInfo[];
+  venues?: VenueInfo[];
+  /** Device-local tallies for things rounds can't see (db.getActivity). */
+  activity?: ActivityMark[];
+  /** App state that is true-or-not rather than counted. */
+  app?: { installed?: boolean; signedIn?: boolean; carded?: boolean };
+  /** Badges already banked, so the meta rules can count them. */
+  alreadyEarned?: Iterable<string>;
+};
 
 const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
 const entered = (s: (number | null)[]) => s.filter((n): n is number => n != null);
@@ -92,6 +123,7 @@ export function playerRounds(
     if (!course) continue;
     const slots = r.playerTags.map((_, i) => i);
     const field = slots.map((i) => r.scores[i] ?? []);
+    const fieldTags = slots.map((i) => r.playerTags[i] ?? '');
     // Shared game: this device speaks only for its own seat (see the header).
     const owned = r.shared ? [r.shared.slot] : slots;
     for (const slot of owned) {
@@ -104,6 +136,7 @@ export function playerRounds(
         pars: course.pars,
         strokes,
         field,
+        fieldTags,
         slot,
         tag: r.playerTags[slot] ?? '',
         completedAt: r.completedAt,
@@ -292,6 +325,12 @@ const ROUND_RULES: Record<string, (r: PlayerRound) => boolean> = {
   },
 };
 
+// Round rules that additionally need the venue's clock.
+const CLOCK_RULES: Record<string, (r: PlayerRound, w: { minutes: number; open: number; close: number }) => boolean> = {
+  early_bird: (_r, w) => w.minutes >= w.open && w.minutes < w.open + 60,
+  night_owl: (_r, w) => w.minutes >= w.close - 60 && w.minutes < w.close,
+};
+
 /** Strokes-and-par for one nine, or null if it isn't fully carded. */
 function nineSplit(r: PlayerRound, start: number): { strokes: number; par: number } | null {
   const holes = r.pars.slice(start, start + 9).map((p, i) => [p, start + i] as const);
@@ -436,6 +475,80 @@ const CAREER_RULES: Record<string, (rs: PlayerRound[], catalog: CourseInfo[]) =>
     return false;
   },
 
+  three_peat: (rs) =>
+    new Set(byRound(rs).map(({ round }) => new Date(round.completedAt).toDateString())).size >= 3,
+
+  weekend_warrior: (rs) => {
+    // Saturday and Sunday of the SAME weekend — a Sunday and the following
+    // Saturday are two different weekends and shouldn't count.
+    const weekends = new Map<string, Set<number>>();
+    for (const { round } of byRound(rs)) {
+      const d = new Date(round.completedAt);
+      const day = d.getDay(); // 0 Sun … 6 Sat
+      if (day !== 0 && day !== 6) continue;
+      // Key both days onto the Saturday that opens their weekend.
+      const saturday = new Date(d);
+      saturday.setDate(d.getDate() - (day === 0 ? 1 : 0));
+      const key = saturday.toDateString();
+      const days = weekends.get(key) ?? new Set<number>();
+      days.add(day);
+      weekends.set(key, days);
+    }
+    return [...weekends.values()].some((days) => days.size === 2);
+  },
+
+  century_club: (rs) =>
+    byRound(rs).reduce(
+      (holes, { seats }) =>
+        holes + Math.max(...seats.map((s) => s.strokes.filter((v) => v != null).length), 0),
+      0,
+    ) >= 100,
+
+  anniversary: (rs) => {
+    const rounds = byRound(rs);
+    if (rounds.length === 0) return false;
+    const first = rounds[0].round.completedAt;
+    const aYear = new Date(first);
+    aYear.setFullYear(aYear.getFullYear() + 1);
+    return rounds.some(({ round }) => round.completedAt >= aYear.getTime());
+  },
+
+  // Person-scoped: your OWN total repeating on a course is the joke.
+  groundhog_day: (rs) =>
+    byTag(rs).some((seats) => {
+      const seen = new Set<string>();
+      for (const r of seats) {
+        if (!isFull(r.strokes, r.pars)) continue;
+        const key = `${r.courseId}:${total(r.strokes)}`;
+        if (seen.has(key)) return true;
+        seen.add(key);
+      }
+      return false;
+    }),
+
+  // Three rounds sharing an opponent — counted per (me, them) TAG pair, so one
+  // regular partner across three nights earns it and three strangers do not.
+  // Slot position can't stand in for identity: seat 1 is a different person
+  // every round.
+  rivalry: (rs) => {
+    const pairs = new Map<string, number>();
+    for (const { seats } of byRound(rs)) {
+      const seenThisRound = new Set<string>();
+      for (const me of seats) {
+        // Everyone else at the round is an opponent — including the other seats
+        // of a pass-and-play game, which this device also owns.
+        me.fieldTags.forEach((theirs, i) => {
+          if (i === me.slot || !theirs || !me.tag) return;
+          const key = `${me.tag}|${theirs}`;
+          if (seenThisRound.has(key)) return; // one round counts once per pair
+          seenThisRound.add(key);
+          pairs.set(key, (pairs.get(key) ?? 0) + 1);
+        });
+      }
+    }
+    return [...pairs.values()].some((n) => n >= 3);
+  },
+
   // Person-scoped: a streak belongs to whoever kept losing, and in
   // pass-and-play somebody comes last every single round.
   consolation_prize: (rs) =>
@@ -478,18 +591,135 @@ export function reachableAchievements(ctx = reachContext()): Achievement[] {
   return ACHIEVEMENTS.filter((a) => a.reach == null || a.reach(ctx));
 }
 
-/** Every locally-detectable badge these stored rounds have earned. */
-export function detectEarned(
-  rounds: LocalRound[],
-  catalog: CourseInfo[] = liveCatalog(),
-): Set<string> {
+// ── Secret round rules ──────────────────────────────────────────────────────
+
+const SECRET_RULES: Record<string, (r: PlayerRound) => boolean> = {
+  lucky_sevens: (r) => isFull(r.strokes, r.pars) && total(r.strokes) === 77,
+  flatline: (r) => {
+    if (!isFull(r.strokes, r.pars)) return false;
+    const first = r.strokes[0];
+    return r.strokes.every((s) => s === first);
+  },
+  palindrome: (r) => {
+    if (!isFull(r.strokes, r.pars)) return false;
+    const front = r.strokes.slice(0, 9);
+    const back = r.strokes.slice(9, 18);
+    return front.every((s, i) => s === back[8 - i]);
+  },
+  // Device-local wall clock, not the venue's: this is about the player's night,
+  // and a round can be started before the app knows which venue it's at.
+  the_grind: (r) => new Date(r.completedAt).getHours() >= 21,
+};
+
+// ── Activity rules ──────────────────────────────────────────────────────────
+// Read the device-local marks (db.markActivity) for things no round records.
+
+type Marks = {
+  count: (kind: ActivityMark['kind'], name: string) => number;
+  best: (kind: ActivityMark['kind'], name: string) => number;
+  distinct: (kind: ActivityMark['kind']) => number;
+  totalOf: (kind: ActivityMark['kind']) => number;
+};
+
+function marksOf(activity: ActivityMark[]): Marks {
+  const byId = new Map(activity.map((a) => [a.id, a]));
+  return {
+    count: (kind, name) => byId.get(`${kind}:${name}`)?.count ?? 0,
+    best: (kind, name) => byId.get(`${kind}:${name}`)?.best ?? 0,
+    distinct: (kind) => activity.filter((a) => a.kind === kind && a.count > 0).length,
+    totalOf: (kind) =>
+      activity.filter((a) => a.kind === kind).reduce((n, a) => n + a.count, 0),
+  };
+}
+
+const ACTIVITY_RULES: Record<string, (m: Marks) => boolean> = {
+  // Arcade
+  arcade_rookie: (m) => m.distinct('game') >= 1,
+  sampler: (m) => m.distinct('game') >= 5,
+  completionist: (m) => m.distinct('game') >= ARCADE_GAME_COUNT,
+  regular_player: (m) => m.totalOf('game') >= 50,
+  maxed_out: (m) => m.count('feat', 'ticket-ceiling') >= 1,
+  trivia_buff: (m) => m.count('feat', 'trivia-perfect') >= 1,
+  pinball_wizard: (m) => m.count('feat', 'pinball-million') >= 1,
+
+  // Photo booth
+  say_cheese: (m) => m.count('booth', 'photo') >= 1,
+  photogenic: (m) => m.count('booth', 'photo') >= 5,
+  sticker_bomb: (m) => m.best('booth', 'photo') >= 10,
+  framed: (m) => m.count('booth', 'frame') >= 1,
+  directors_cut: (m) => m.count('booth', 'reedit') >= 1,
+
+  // Playing together
+  host: (m) => m.count('social', 'host') >= 1,
+  joiner: (m) => m.count('social', 'join') >= 1,
+  squad_goals: (m) => m.best('social', 'seats') >= 4,
+
+  // Regulars
+  refueled: (m) => m.count('food', 'order') >= 1,
+  turn_snack: (m) => m.count('food', 'mid-round') >= 1,
+};
+
+// ── Meta rules ──────────────────────────────────────────────────────────────
+// Counted over the badges themselves, so they run LAST, after everything else
+// has been resolved. They never count each other — a wall of nothing but meta
+// badges would be a strange thing to be proud of.
+
+const META_KEYS = new Set(['trophy_case', 'curator', 'legend']);
+
+function metaEarned(earned: Set<string>, reachable: Achievement[]): string[] {
+  const others = reachable.filter((a) => !META_KEYS.has(a.key));
+  const got = others.filter((a) => earned.has(a.key)).length;
+  const out: string[] = [];
+  if (got >= 20) out.push('trophy_case');
+  if (got === others.length && others.length > 0) out.push('legend');
+  const complete = CATEGORY_ORDER.some((cat) => {
+    const inCat = others.filter((a) => a.category === cat);
+    return inCat.length > 0 && inCat.every((a) => earned.has(a.key));
+  });
+  if (complete) out.push('curator');
+  return out;
+}
+
+/** Every locally-detectable badge this device's history has earned. */
+export function detectEarned(rounds: LocalRound[], ctx: DetectContext = {}): Set<string> {
+  const catalog = ctx.catalog ?? liveCatalog();
+  const venues = ctx.venues ?? liveVenues();
   const cards = playerRounds(rounds, catalog);
-  const earned = new Set<string>();
+  const earned = new Set<string>(ctx.alreadyEarned ?? []);
+
   for (const [key, rule] of Object.entries(ROUND_RULES)) {
+    if (cards.some((c) => rule(c))) earned.add(key);
+  }
+  for (const [key, rule] of Object.entries(SECRET_RULES)) {
     if (cards.some((c) => rule(c))) earned.add(key);
   }
   for (const [key, rule] of Object.entries(CAREER_RULES)) {
     if (rule(cards, catalog)) earned.add(key);
+  }
+
+  // Clock rules need the venue that owns the course, and its configured hours.
+  const venueById = new Map(venues.map((v) => [v.id, v]));
+  for (const [key, rule] of Object.entries(CLOCK_RULES)) {
+    const hit = cards.some((c) => {
+      const venue = c.locationId ? venueById.get(c.locationId) : undefined;
+      if (!venue) return false;
+      const window = venueDayWindow(venue.hours, venue.tz, new Date(c.completedAt));
+      return window != null && rule(c, window);
+    });
+    if (hit) earned.add(key);
+  }
+
+  const marks = marksOf(ctx.activity ?? []);
+  for (const [key, rule] of Object.entries(ACTIVITY_RULES)) {
+    if (rule(marks)) earned.add(key);
+  }
+
+  if (ctx.app?.installed) earned.add('home_screen_hero');
+  if (ctx.app?.signedIn) earned.add('made_it_official');
+  if (ctx.app?.carded) earned.add('carded');
+
+  for (const key of metaEarned(earned, reachableAchievements(reachContext(catalog)))) {
+    earned.add(key);
   }
   return earned;
 }

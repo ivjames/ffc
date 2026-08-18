@@ -10,7 +10,7 @@ import {
   isValidTag,
   TAG_LENGTH,
 } from '../../lib/sanitize';
-import { createLocalRound, putRound } from '../../db';
+import { createLocalRound, markActivity, putRound } from '../../db';
 import { fetchMe, type AppUser } from '../../lib/authApi';
 import { createGame, fetchSnapshot } from '../../lib/gamesApi';
 import { createSharedLocalRound } from '../../lib/sharedMerge';
@@ -121,6 +121,7 @@ export default function PlayerSetup() {
       : { game: res.game, players: [{ slot: 0, tag: hostTag, userId: me.id, displayName: me.displayName }], scores: [] };
     const round = createSharedLocalRound(snapshot, res.participantToken, res.slot);
     await putRound(round);
+    void markActivity('social', 'host'); // achievements (device-local)
     navigate(`/games/${res.game.id}/lobby`, { replace: true });
   }
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getActiveRound, markActivity } from '../../db';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { formatCents, orderTotals } from '../../lib/pos/pricing';
@@ -65,6 +66,12 @@ export default function Checkout() {
       return;
     }
     clearCart();
+    // Achievements: an order placed, and whether it was placed mid-round —
+    // ordering from the turn is its own small badge (lib/achievements).
+    void markActivity('food', 'order');
+    void getActiveRound().then((r) => {
+      if (r) void markActivity('food', 'mid-round');
+    });
     // Remember the order on-device so Home and /food can link back to its
     // status screen after the user navigates away.
     recordOrder({

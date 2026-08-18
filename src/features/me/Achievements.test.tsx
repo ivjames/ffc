@@ -26,7 +26,22 @@ vi.mock('../../data/courses', () => {
 });
 
 const rounds = vi.hoisted(() => ({ current: [] as LocalRound[] }));
-vi.mock('../../db', () => ({ getAllRounds: () => Promise.resolve(rounds.current) }));
+const banked = vi.hoisted(() => ({ current: [] as { key: string; earnedAt: number }[] }));
+const saved = vi.hoisted(() => ({ keys: [] as string[] }));
+vi.mock('../../db', () => ({
+  getAllRounds: () => Promise.resolve(rounds.current),
+  getActivity: () => Promise.resolve([]),
+  getEarnedBadges: () => Promise.resolve(banked.current),
+  putEarnedBadges: (keys: string[]) => {
+    saved.keys.push(...keys);
+    return Promise.resolve();
+  },
+}));
+
+// App state the wall reads for the install / account / card badges.
+vi.mock('../../lib/session', () => ({ useSession: () => ({ user: null }) }));
+vi.mock('../../lib/rewardsCard', () => ({ useLinkedPlayerId: () => null }));
+vi.mock('../../lib/pwaInstall', () => ({ isStandalone: () => false }));
 
 import Achievements from './Achievements';
 
@@ -53,6 +68,8 @@ const renderWall = () =>
 
 beforeEach(() => {
   rounds.current = [];
+  banked.current = [];
+  saved.keys = [];
 });
 afterEach(cleanup);
 
@@ -94,9 +111,23 @@ describe('Achievements wall', () => {
     expect(screen.getByText('Course Collector')).toBeInTheDocument();
   });
 
-  it('flags the badge only the venue can grant', async () => {
+  it('flags badges only the venue can grant', async () => {
     renderWall();
     await waitFor(() => expect(screen.getByText('Hunt Master')).toBeInTheDocument());
-    expect(screen.getByText('At the venue')).toBeInTheDocument();
+    expect(screen.getAllByText('At the venue').length).toBeGreaterThan(0);
+  });
+
+  it('banks newly-earned badges so a cleared history cannot take them back', async () => {
+    rounds.current = [aceRound()];
+    renderWall();
+    await waitFor(() => expect(saved.keys).toContain('hole_in_one'));
+  });
+
+  it('shows a badge that was banked earlier even with no rounds left', async () => {
+    banked.current = [{ key: 'hole_in_one', earnedAt: 1 }];
+    renderWall();
+    // No rounds on the device at all, but the badge stays earned.
+    await waitFor(() => expect(screen.getAllByText('Earned').length).toBeGreaterThan(0));
+    expect(screen.getByText('Hole-in-One')).toBeInTheDocument();
   });
 });

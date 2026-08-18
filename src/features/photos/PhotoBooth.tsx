@@ -5,6 +5,7 @@ import { loadImage, encodeJpeg, blobToBase64 } from '../../lib/image';
 import { useCurrentLocationId } from '../../lib/location';
 import Icon from '../../ui/Icon';
 import {
+  markActivity,
   putBoothDraft,
   getBoothDraft,
   deleteBoothDraft,
@@ -714,6 +715,13 @@ export default function PhotoBooth() {
         frameId,
         updatedAt: Date.now(),
       }).catch(() => {});
+
+      // Achievements (lib/achievements). Device-local and never uploaded, like
+      // the draft above. Stickers are tallied under their own mark so a re-edit
+      // can raise the high-water without inflating the photo count.
+      void markActivity('booth', editor.editingId ? 'reedit' : 'photo');
+      void markActivity('booth', 'stickers', stickers.length);
+      if (frameId) void markActivity('booth', 'frame');
 
       closeEditor();
       void refreshGallery();

@@ -116,6 +116,26 @@ export function todaysHours(
   return hours[weekday] ?? 'closed';
 }
 
+/**
+ * Where an instant falls inside the venue's own opening day: minutes past
+ * midnight, plus that day's configured hours as minutes. Null when the venue
+ * has no hours/zone set, or is closed that day — callers can't reason about
+ * "just after opening" without them. Used by the achievement rules that care
+ * about WHEN a round started (lib/achievements).
+ */
+export function venueDayWindow(
+  hours: VenueHours | null | undefined,
+  tz: string | null | undefined,
+  at: Date,
+): { minutes: number; open: number; close: number } | null {
+  const day = todaysHours(hours, tz, at);
+  if (!day || day === 'closed') return null;
+  const open = toMinutes(day.open);
+  const close = toMinutes(day.close);
+  if (!Number.isFinite(open) || !Number.isFinite(close)) return null;
+  return { minutes: tzParts(tz, at).minutes, open, close };
+}
+
 export function weekdayLabel(day: WeekdayKey): string {
   return WEEKDAY_LABELS[day];
 }

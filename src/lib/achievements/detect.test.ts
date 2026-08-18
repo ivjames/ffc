@@ -1,7 +1,15 @@
 import { describe, test, expect } from 'vitest';
-import { detectEarned, playerRounds, reachContext, reachableAchievements, type CourseInfo } from './detect';
+import {
+  detectEarned,
+  playerRounds,
+  reachContext,
+  reachableAchievements,
+  type CourseInfo,
+  type VenueInfo,
+} from './detect';
 import { ACHIEVEMENTS } from './catalog';
-import type { LocalRound } from '../../types';
+import { ARCADE_GAME_KEYS } from './arcade';
+import type { ActivityMark, LocalRound } from '../../types';
 
 // A flat par-3 course: par 54 over 18 holes. Every scoring rule below is stated
 // against it, so the numbers in the tests are easy to hold in your head.
@@ -40,7 +48,7 @@ const withHoles = (base: number, patch: Record<number, number | null>) => {
   return c;
 };
 
-const earn = (rounds: LocalRound[]) => detectEarned(rounds, CATALOG);
+const earn = (rounds: LocalRound[]) => detectEarned(rounds, { catalog: CATALOG, venues: [] });
 const has = (rounds: LocalRound[], key: string) => earn(rounds).has(key);
 
 describe('playerRounds', () => {
@@ -397,5 +405,216 @@ describe('catalog integrity', () => {
 
   test('a fresh device has earned nothing', () => {
     expect(earn([]).size).toBe(0);
+  });
+});
+
+
+// ── The rest of the catalog ─────────────────────────────────────────────────
+
+const mark = (
+  kind: ActivityMark['kind'],
+  name: string,
+  count = 1,
+  best = 0,
+): ActivityMark => ({ id: `${kind}:${name}`, kind, name, count, best, firstAt: 1, lastAt: 1 });
+
+const earnWith = (activity: ActivityMark[]) =>
+  detectEarned([], { catalog: CATALOG, venues: [], activity });
+
+describe('arcade', () => {
+  test('counts distinct games, then the whole roster', () => {
+    expect(earnWith([mark('game', 'bowling')]).has('arcade_rookie')).toBe(true);
+    const five = ARCADE_GAME_KEYS.slice(0, 5).map((g) => mark('game', g));
+    expect(earnWith(five).has('sampler')).toBe(true);
+    expect(earnWith(five).has('completionist')).toBe(false);
+    const all = ARCADE_GAME_KEYS.map((g) => mark('game', g));
+    expect(earnWith(all).has('completionist')).toBe(true);
+  });
+
+  test('rounds played accumulate across games', () => {
+    expect(earnWith([mark('game', 'bowling', 49)]).has('regular_player')).toBe(false);
+    expect(
+      earnWith([mark('game', 'bowling', 25), mark('game', 'darts', 25)]).has('regular_player'),
+    ).toBe(true);
+  });
+
+  test('feats a game reports for itself', () => {
+    expect(earnWith([mark('feat', 'ticket-ceiling')]).has('maxed_out')).toBe(true);
+    expect(earnWith([mark('feat', 'trivia-perfect')]).has('trivia_buff')).toBe(true);
+    expect(earnWith([mark('feat', 'pinball-million')]).has('pinball_wizard')).toBe(true);
+    expect(earnWith([mark('game', 'pinball', 5)]).has('pinball_wizard')).toBe(false);
+  });
+});
+
+describe('photo booth', () => {
+  test('photos counted, stickers measured at their high-water mark', () => {
+    expect(earnWith([mark('booth', 'photo')]).has('say_cheese')).toBe(true);
+    expect(earnWith([mark('booth', 'photo', 4)]).has('photogenic')).toBe(false);
+    expect(earnWith([mark('booth', 'photo', 5)]).has('photogenic')).toBe(true);
+    // Ten stickers on ONE photo, not ten across five.
+    expect(earnWith([mark('booth', 'photo', 5, 3)]).has('sticker_bomb')).toBe(false);
+    expect(earnWith([mark('booth', 'photo', 1, 10)]).has('sticker_bomb')).toBe(true);
+  });
+});
+
+describe('app state', () => {
+  test('installed / signed in / carded are stated, not derived', () => {
+    const none = detectEarned([], { catalog: CATALOG, venues: [] });
+    expect(none.has('home_screen_hero')).toBe(false);
+    expect(none.has('carded')).toBe(false);
+    const all = detectEarned([], {
+      catalog: CATALOG,
+      venues: [],
+      app: { installed: true, signedIn: true, carded: true },
+    });
+    expect(all.has('home_screen_hero')).toBe(true);
+    expect(all.has('made_it_official')).toBe(true);
+    expect(all.has('carded')).toBe(true);
+  });
+});
+
+describe('the venue clock', () => {
+  const VENUES: VenueInfo[] = [
+    { id: 'v1', tz: 'UTC', hours: { mon: { open: '10:00', close: '22:00' } } },
+  ];
+  // 2026-08-03 is a Monday.
+  const at = (hhmm: string) => new Date(`2026-08-03T${hhmm}:00Z`).getTime();
+  const roundAt = (t: number) =>
+    round([card(3)], { completedAt: t, createdAt: t, courseId: 'c1' });
+  const clock = (t: number) =>
+    detectEarned([roundAt(t)], { catalog: CATALOG, venues: VENUES });
+
+  test('early bird is the first hour open; night owl the last before close', () => {
+    expect(clock(at('10:30')).has('early_bird')).toBe(true);
+    expect(clock(at('11:30')).has('early_bird')).toBe(false);
+    expect(clock(at('21:30')).has('night_owl')).toBe(true);
+    expect(clock(at('20:30')).has('night_owl')).toBe(false);
+    // Closed-hours or unconfigured venues simply never award them.
+    expect(detectEarned([roundAt(at('10:30'))], { catalog: CATALOG, venues: [] }).has('early_bird')).toBe(false);
+  });
+});
+
+describe('secrets', () => {
+  test('exact totals and shapes', () => {
+    // 18 fours is 72; five of them at five makes 77.
+    const seventySeven = withHoles(4, { 0: 5, 1: 5, 2: 5, 3: 5, 4: 5 });
+    const t = seventySeven.reduce((a: number, b) => a + (b ?? 0), 0);
+    expect(t).toBe(77);
+    expect(has([round([seventySeven])], 'lucky_sevens')).toBe(true);
+    expect(has([round([card(3)])], 'lucky_sevens')).toBe(false);
+
+    expect(has([round([card(3)])], 'flatline')).toBe(true);
+    expect(has([round([withHoles(3, { 4: 2 })])], 'flatline')).toBe(false);
+  });
+
+  test('a palindrome mirrors the front nine on the back', () => {
+    const front = [2, 3, 4, 3, 2, 5, 3, 3, 4];
+    const mirrored = [...front, ...[...front].reverse()];
+    expect(has([round([mirrored])], 'palindrome')).toBe(true);
+    expect(has([round([[...front, ...front]])], 'palindrome')).toBe(false);
+  });
+
+  test('groundhog day is your own total, twice, on one course', () => {
+    const score = (t: number, n: number, courseId = 'c1') =>
+      round([card(n)], { completedAt: t, createdAt: t, courseId });
+    expect(has([score(1, 3), score(2, 3)], 'groundhog_day')).toBe(true);
+    expect(has([score(1, 3), score(2, 3, 'c2')], 'groundhog_day')).toBe(false);
+    expect(has([score(1, 3), score(2, 4)], 'groundhog_day')).toBe(false);
+  });
+});
+
+describe('regulars', () => {
+  const on = (iso: string, over: Partial<LocalRound> = {}) => {
+    const t = new Date(iso).getTime();
+    return round([card(3)], { completedAt: t, createdAt: t, ...over });
+  };
+
+  test('three different days', () => {
+    expect(has([on('2026-08-03T12:00'), on('2026-08-03T18:00')], 'three_peat')).toBe(false);
+    expect(
+      has(
+        [on('2026-08-03T12:00'), on('2026-08-04T12:00'), on('2026-08-05T12:00')],
+        'three_peat',
+      ),
+    ).toBe(true);
+  });
+
+  test('weekend warrior needs the SAME weekend', () => {
+    // 2026-08-01 Sat, 2026-08-02 Sun — one weekend.
+    expect(has([on('2026-08-01T12:00'), on('2026-08-02T12:00')], 'weekend_warrior')).toBe(true);
+    // Sunday then the NEXT Saturday is two different weekends.
+    expect(has([on('2026-08-02T12:00'), on('2026-08-08T12:00')], 'weekend_warrior')).toBe(false);
+    expect(has([on('2026-08-03T12:00'), on('2026-08-04T12:00')], 'weekend_warrior')).toBe(false);
+  });
+
+  test('a hundred holes, counted once per round', () => {
+    const five = [1, 2, 3, 4, 5].map((d) => on(`2026-08-0${d}T12:00`));
+    expect(has(five, 'century_club')).toBe(false); // 90
+    expect(has([...five, on('2026-08-06T12:00')], 'century_club')).toBe(true); // 108
+    // A four-player round is still 18 holes played, not 72.
+    const foursome = round([card(3), card(3), card(3), card(3)], {
+      completedAt: 1,
+      createdAt: 1,
+    });
+    expect(has(Array.from({ length: 5 }, () => foursome), 'century_club')).toBe(false);
+  });
+
+  test('anniversary is a year after the first round', () => {
+    expect(has([on('2026-08-03T12:00'), on('2027-06-03T12:00')], 'anniversary')).toBe(false);
+    expect(has([on('2026-08-03T12:00'), on('2027-08-04T12:00')], 'anniversary')).toBe(true);
+  });
+
+  test('rivalry follows an opponent tag, not a seat', () => {
+    const vs = (t: number, theirTag: string) =>
+      round([card(3), card(4)], {
+        completedAt: t,
+        createdAt: t,
+        playerTags: ['ME1', theirTag],
+      });
+    expect(has([vs(1, 'YOU'), vs(2, 'YOU')], 'rivalry')).toBe(false);
+    expect(has([vs(1, 'YOU'), vs(2, 'YOU'), vs(3, 'YOU')], 'rivalry')).toBe(true);
+    // Three different opponents is not a rivalry.
+    expect(has([vs(1, 'AAA'), vs(2, 'BBB'), vs(3, 'CCC')], 'rivalry')).toBe(false);
+  });
+});
+
+describe('meta badges', () => {
+  const catalogCtx = { catalog: CATALOG, venues: [] };
+
+  test('count other badges, never each other', () => {
+    const twenty = ACHIEVEMENTS.filter((a) => a.local && !['trophy_case', 'curator', 'legend'].includes(a.key))
+      .slice(0, 20)
+      .map((a) => a.key);
+    const earned = detectEarned([], { ...catalogCtx, alreadyEarned: twenty });
+    expect(earned.has('trophy_case')).toBe(true);
+    expect(earned.has('legend')).toBe(false);
+
+    // Meta badges must not count toward each other: nineteen real badges plus
+    // all three meta ones is still nineteen, so Trophy Case stays locked.
+    const nineteen = ACHIEVEMENTS.filter(
+      (a) => a.local && !['trophy_case', 'curator', 'legend'].includes(a.key),
+    )
+      .slice(0, 19)
+      .map((a) => a.key);
+    const padded = detectEarned([], {
+      ...catalogCtx,
+      alreadyEarned: [...nineteen, 'curator', 'legend'],
+    });
+    expect(padded.has('trophy_case')).toBe(false);
+  });
+
+  test('curator completes one category', () => {
+    const hunt = ACHIEVEMENTS.filter((a) => a.category === 'hunt').map((a) => a.key);
+    expect(detectEarned([], { ...catalogCtx, alreadyEarned: hunt }).has('curator')).toBe(true);
+    expect(detectEarned([], { ...catalogCtx, alreadyEarned: hunt.slice(0, 1) }).has('curator')).toBe(
+      false,
+    );
+  });
+
+  test('already-earned badges are carried forward, never dropped', () => {
+    // The wall unions stored badges with freshly derived ones: a badge whose
+    // proving round has been cleared must survive.
+    const earned = detectEarned([], { ...catalogCtx, alreadyEarned: ['hole_in_one'] });
+    expect(earned.has('hole_in_one')).toBe(true);
   });
 });

@@ -26,7 +26,17 @@ import type { DrawnIcon } from '../../ui/icons/registry';
 // fails is omitted from the wall and from its "n of m" count. Evaluated
 // against the deployment's own catalog, so nobody edits this file per client.
 
-export type AchievementCategory = 'scoring' | 'drama' | 'wipeouts' | 'courses' | 'hunt';
+export type AchievementCategory =
+  | 'scoring'
+  | 'drama'
+  | 'courses'
+  | 'hunt'
+  | 'arcade'
+  | 'booth'
+  | 'social'
+  | 'habit'
+  | 'wipeouts'
+  | 'secret';
 
 /** What a deployment's catalog looks like, for `reach` (see lib/achievements). */
 export type ReachContext = {
@@ -58,9 +68,14 @@ export type Achievement = {
 export const CATEGORY_LABELS: Record<AchievementCategory, string> = {
   scoring: 'Scoring',
   drama: 'The field',
-  wipeouts: 'Wipeouts',
   courses: 'Courses & venues',
   hunt: 'Scavenger hunt',
+  arcade: 'Arcade',
+  booth: 'Photo booth',
+  social: 'Playing together',
+  habit: 'Regulars',
+  wipeouts: 'Wipeouts',
+  secret: 'Secrets',
 };
 
 /** Render order for the wall — best-known first, humour before the long tail. */
@@ -69,7 +84,12 @@ export const CATEGORY_ORDER: AchievementCategory[] = [
   'drama',
   'courses',
   'hunt',
+  'arcade',
+  'booth',
+  'social',
+  'habit',
   'wipeouts',
+  'secret',
 ];
 
 export const ACHIEVEMENTS: Achievement[] = [
@@ -123,6 +143,16 @@ export const ACHIEVEMENTS: Achievement[] = [
   // Server-granted: verified finds live in hunt_find, not the round record, so
   // there is nothing on-device to detect this from.
   { key: 'hunt_master', label: 'Hunt Master', how: "Complete a course's scavenger hunt during a round.", icon: 'award.hunt-master', category: 'hunt', local: false },
+  { key: 'first_find', label: 'First Find', how: 'Get one hunt photo verified.', icon: 'nav.hunt', category: 'hunt', local: false },
+  { key: 'eagle_eye', label: 'Eagle Eye', how: 'Nail a find the verifier is certain about.', icon: 'action.hint', category: 'hunt', local: false },
+  { key: 'sharpshooter', label: 'Sharpshooter', how: 'Get five finds verified without a single rejection.', icon: 'game.darts', category: 'hunt', local: false },
+  { key: 'persistence', label: 'Persistence', how: 'Land a find after three failed attempts at it.', icon: 'action.refresh', category: 'hunt', local: false },
+  { key: 'above_board', label: 'Above Board', how: 'Finish a hunt with every photo above suspicion.', icon: 'state.done', category: 'hunt', local: false },
+  { key: 'hoarder', label: 'Hoarder', how: 'Find ten of something there are many of.', icon: 'state.celebrate', category: 'hunt', local: false },
+  { key: 'multitasker', label: 'Multitasker', how: 'Finish the hunt and beat par in the same round.', icon: 'award.trophy', category: 'hunt', local: false },
+  { key: 'quick_draw', label: 'Quick Draw', how: 'Finish the hunt before the back nine.', icon: 'state.timer', category: 'hunt', local: false },
+  { key: 'grand_hunter', label: 'Grand Hunter', how: "Complete every course's hunt at one venue.", icon: 'nav.locations', category: 'hunt', local: false },
+  { key: 'naturalist', label: 'Naturalist', how: 'Complete a hunt without a single rejected photo.', icon: 'award.medal', category: 'hunt', local: false },
 
   // ── Wipeouts ──────────────────────────────────────────────────────────────
   // These only work BECAUSE achievements pay nothing: a badge for playing badly
@@ -136,6 +166,66 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'windmills_revenge', label: "Windmill's Revenge", how: 'Max out the same hole on the same course in two different rounds.', icon: 'score.water-hazard', category: 'wipeouts', local: true, secret: true },
   { key: 'consolation_prize', label: 'Consolation Prize', how: 'Finish last three rounds in a row.', icon: 'award.medal', category: 'wipeouts', local: true, secret: true },
   { key: 'rock_bottom', label: 'Rock Bottom', how: 'Max out the stroke cap on every hole of a round.', icon: 'score.over-par', category: 'wipeouts', local: true, secret: true },
+
+  // ── Arcade ────────────────────────────────────────────────────────────────
+  // The fun-zone games score themselves in the browser, which is exactly why
+  // the server caps what they may PAY. As status badges that objection is moot
+  // — nothing is minted — so the arcade is fair game here. Counted from
+  // device-local activity marks; nothing is sent anywhere.
+  { key: 'arcade_rookie', label: 'Arcade Rookie', how: 'Play any arcade game.', icon: 'nav.arcade', category: 'arcade', local: true },
+  { key: 'sampler', label: 'Sampler', how: 'Play five different arcade games.', icon: 'game.challenge-spinner', category: 'arcade', local: true },
+  { key: 'completionist', label: 'Completionist', how: 'Play every game in the arcade.', icon: 'award.trophy', category: 'arcade', local: true },
+  { key: 'maxed_out', label: 'Maxed Out', how: "Hit a game's top ticket payout in a single round.", icon: 'award.ticket', category: 'arcade', local: true },
+  { key: 'regular_player', label: 'Frequent Flyer', how: 'Play fifty arcade rounds.', icon: 'state.timer', category: 'arcade', local: true },
+  { key: 'trivia_buff', label: 'Trivia Buff', how: 'Answer every trivia question correctly.', icon: 'game.trivia', category: 'arcade', local: true },
+  // NOT here, deliberately: per-game skill feats (three strikes in a row, a
+  // darts bullseye, ringing the high striker, a claw win, a mole streak, a
+  // clean shooting gallery). Each needs an event only that game's engine knows
+  // — bowling, for one, keeps a flat roll list that has to be walked back into
+  // frames — and a badge nothing can ever unlock is worse than a shorter
+  // catalog. They are specified in ACHIEVEMENTS-BRAINSTORM.md and land when
+  // each game reports its own feat through GameTicketAward's `feat` prop.
+  { key: 'pinball_wizard', label: 'Pinball Wizard', how: 'Break a million on the pinball table.', icon: 'game.pinball', category: 'arcade', local: true },
+
+  // ── Photo booth ───────────────────────────────────────────────────────────
+  { key: 'say_cheese', label: 'Say Cheese', how: 'Save your first photo-booth picture.', icon: 'action.take-photo', category: 'booth', local: true },
+  { key: 'photogenic', label: 'Photogenic', how: 'Save five booth photos.', icon: 'nav.photos', category: 'booth', local: true },
+  { key: 'sticker_bomb', label: 'Sticker Bomb', how: 'Put ten or more stickers on one photo.', icon: 'state.celebrate', category: 'booth', local: true },
+  { key: 'framed', label: 'Framed', how: 'Finish a booth photo with a venue frame.', icon: 'action.edit', category: 'booth', local: true },
+  { key: 'directors_cut', label: "Director's Cut", how: 'Re-open a saved photo and change it.', icon: 'action.refresh', category: 'booth', local: true },
+
+  // ── Playing together ──────────────────────────────────────────────────────
+  { key: 'host', label: 'Host', how: 'Start a shared game other phones join.', icon: 'action.play-together', category: 'social', local: true },
+  { key: 'joiner', label: 'Crashed the Party', how: "Join someone else's shared game.", icon: 'state.teams', category: 'social', local: true },
+  { key: 'squad_goals', label: 'Squad Goals', how: 'Fill all four seats of a shared game.', icon: 'state.teams', category: 'social', local: true },
+  { key: 'rivalry', label: 'Rivalry', how: 'Play three rounds against the same opponent.', icon: 'action.leaderboard', category: 'social', local: true },
+  // NOT here: "play a round with a team". gamesApi.createGame takes a teamId,
+  // but nothing in the app passes one yet, so no round can be tied to a team
+  // and the badge would be permanently unearnable. It lands with the flow.
+
+  // ── Regulars ──────────────────────────────────────────────────────────────
+  { key: 'home_screen_hero', label: 'Home Screen Hero', how: 'Install the app on your home screen.', icon: 'nav.install', category: 'habit', local: true },
+  { key: 'made_it_official', label: 'Made It Official', how: 'Create an account.', icon: 'state.account', category: 'habit', local: true },
+  { key: 'carded', label: 'Carded', how: 'Link your rewards card.', icon: 'nav.rewards', category: 'habit', local: true },
+  { key: 'three_peat', label: 'Three-Peat', how: 'Play on three different days.', icon: 'state.timer', category: 'habit', local: true },
+  { key: 'weekend_warrior', label: 'Weekend Warrior', how: 'Play on both days of the same weekend.', icon: 'state.celebrate', category: 'habit', local: true },
+  { key: 'century_club', label: 'Century Club', how: 'Play a hundred holes.', icon: 'award.medal', category: 'habit', local: true },
+  { key: 'anniversary', label: 'Anniversary', how: 'Play a round a year after your first.', icon: 'state.celebrate', category: 'habit', local: true },
+  { key: 'refueled', label: 'Refueled', how: 'Order food from the app.', icon: 'nav.food', category: 'habit', local: true },
+  { key: 'turn_snack', label: 'Turn Snack', how: 'Order food in the middle of a round.', icon: 'order.cart', category: 'habit', local: true },
+  { key: 'night_owl', label: 'Night Owl', how: 'Start a round in the last hour before close.', icon: 'control.theme-dark', category: 'habit', local: true },
+  { key: 'early_bird', label: 'Early Bird', how: 'Start a round in the first hour after opening.', icon: 'control.theme-light', category: 'habit', local: true },
+
+  // ── Secrets ───────────────────────────────────────────────────────────────
+  // Hidden until earned, so the how-to is never a spoiler.
+  { key: 'lucky_sevens', label: 'Lucky Sevens', how: 'Card exactly 77 for a round.', icon: 'state.celebrate', category: 'secret', local: true, secret: true },
+  { key: 'palindrome', label: 'Palindrome', how: 'Play a round whose back nine mirrors its front nine.', icon: 'action.refresh', category: 'secret', local: true, secret: true },
+  { key: 'flatline', label: 'Flatline', how: 'Score exactly the same on all eighteen holes.', icon: 'score.par', category: 'secret', local: true, secret: true },
+  { key: 'the_grind', label: 'The Grind', how: 'Start a round after nine at night.', icon: 'control.theme-dark', category: 'secret', local: true, secret: true },
+  { key: 'groundhog_day', label: 'Groundhog Day', how: 'Card the identical total twice on the same course.', icon: 'action.refresh', category: 'secret', local: true, secret: true },
+  { key: 'trophy_case', label: 'Trophy Case', how: 'Earn twenty other badges.', icon: 'award.trophy', category: 'secret', local: true },
+  { key: 'curator', label: 'Curator', how: 'Complete any one category.', icon: 'award.medal', category: 'secret', local: true },
+  { key: 'legend', label: 'Legend', how: 'Earn every other badge.', icon: 'brand.mark', category: 'secret', local: true },
 ];
 
 export const ACHIEVEMENTS_BY_KEY = new Map(ACHIEVEMENTS.map((a) => [a.key, a]));

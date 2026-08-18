@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Screen, TopBar, Content } from '../../ui/components';
-import { getAllRounds } from '../../db';
+import { getActivity, getAllRounds, getEarnedBadges, putEarnedBadges } from '../../db';
+import { useLinkedPlayerId } from '../../lib/rewardsCard';
+import { useSession } from '../../lib/session';
+import { isStandalone } from '../../lib/pwaInstall';
 import Icon from '../../ui/Icon';
 import {
   CATEGORY_LABELS,
@@ -34,10 +37,34 @@ export default function Achievements() {
   // The catalog is read once per mount: it depends on the venue list, which is
   // hydrated at boot, and the wall is not a hot path.
   const shown = useMemo(() => reachableAchievements(), []);
+  const signedIn = useSession().user != null;
+  const carded = useLinkedPlayerId() != null;
 
   useEffect(() => {
-    void getAllRounds().then((rounds) => setEarned(detectEarned(rounds)));
-  }, []);
+    let alive = true;
+    void (async () => {
+      const [rounds, activity, banked] = await Promise.all([
+        getAllRounds(),
+        getActivity(),
+        getEarnedBadges(),
+      ]);
+      // Union, never subtract: what the stored rounds prove is added to what has
+      // already been banked, so a cleared round history can't take a badge back.
+      const all = detectEarned(rounds, {
+        activity,
+        app: { installed: isStandalone(), signedIn, carded },
+        alreadyEarned: banked.map((b) => b.key),
+      });
+      if (!alive) return;
+      setEarned(all);
+      // Bank anything newly proved, so it survives the next cache clear.
+      const known = new Set(banked.map((b) => b.key));
+      void putEarnedBadges([...all].filter((k) => !known.has(k)));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [signedIn, carded]);
 
   const earnedCount = earned ? shown.filter((a) => earned.has(a.key)).length : 0;
 
