@@ -182,6 +182,7 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
   // kinds), post the file, then fill the text field with the returned
   // /api/brand-assets/... URL. Saving is still the explicit Save button —
   // the upload endpoint never touches org.branding.
+  const [uploading, setUploading] = useState(false);
   const uploadFor = (key: AssetField) => async (file: File) => {
     setErr(null);
     const kind = ASSET_KIND_BY_FIELD[key];
@@ -194,11 +195,14 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
       setErr('That file is too large (max 1 MiB).');
       return;
     }
+    setUploading(true);
     try {
       const { url } = await api.uploadBrandingAsset(org.id, kind, file);
       set(key)(url);
     } catch (e) {
       setErr((e as Error).message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -337,7 +341,7 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
         <Button
           variant="ghost"
           onClick={useLogoAsIcon}
-          disabled={deriving || values.logoUrl.trim() === ''}
+          disabled={deriving || busy || uploading || values.logoUrl.trim() === ''}
         >
           {deriving ? 'Generating…' : 'Use logo as app icon'}
         </Button>
@@ -348,7 +352,12 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
         </span>
       </div>
       <div className="mt-3">
-        <Button onClick={save} disabled={busy}>
+        {/* Gated on the asset work too, not just `busy`. Saving while an upload
+            or an icon generation is in flight would submit the OLD urls and
+            then unmount this card via onSaved() → reload, orphaning the
+            uploads and dropping their state updates — while the operator still
+            sees a success toast. */}
+        <Button onClick={save} disabled={busy || deriving || uploading}>
           {busy ? 'Saving…' : 'Save branding'}
         </Button>
       </div>

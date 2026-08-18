@@ -312,6 +312,32 @@ describe('OrgDetail — branding asset upload', () => {
     vi.restoreAllMocks();
   });
 
+  // Saving mid-generation would submit the OLD icon urls and then unmount this
+  // card via onSaved() → reload, so the in-flight uploads land nowhere — with a
+  // success toast still on screen. Both buttons lock each other out.
+  test('Save is locked while icons are being generated', async () => {
+    let release: (v: { kind: 'icon192'; file: File }[]) => void = () => {};
+    vi.spyOn(appIcon, 'deriveAppIcons').mockReturnValue(
+      new Promise((res) => {
+        release = res as never;
+      })
+    );
+    const user = userEvent.setup();
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    await user.type(logoUrlInput(), '/api/brand-assets/org-1/logo-cccccccccccc.png');
+
+    const save = screen.getByRole('button', { name: 'Save branding' });
+    expect(save).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Use logo as app icon' }));
+    await waitFor(() => expect(save).toBeDisabled());
+
+    release([]);
+    await waitFor(() => expect(save).toBeEnabled());
+    expect(api.updateOrgBranding).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
   test('a cross-origin logo explains itself instead of failing silently', async () => {
     vi.spyOn(appIcon, 'deriveAppIcons').mockRejectedValue(
       new Error('That logo is hosted on another domain and cannot be read here.')
