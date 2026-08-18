@@ -647,6 +647,18 @@ export const api = {
     ),
   updateUser: (id: string, fields: Partial<Pick<AdminUser, 'email' | 'role' | 'orgId'>>) =>
     req<{ ok: true; user: AdminUser }>('PATCH', `/users/${id}`, fields),
+  // Re-mail a set-password link. NOT the public /password/forgot endpoint:
+  // minting a token kills the user's outstanding one, and the public endpoint
+  // discards the link it generates (it must — it is unauthenticated), so
+  // resending through it would invalidate a hand-relayed link and return
+  // nothing to replace it. This route is super_admin-gated and so may hand the
+  // link back, like the invite. `kind` is 'invite' for an account that never
+  // set a password (7-day link), 'reset' for an active one (2 hours).
+  resendUserInvite: (id: string) =>
+    req<{ ok: true; kind: 'invite' | 'reset'; sent: boolean; inviteLink: string | null }>(
+      'POST',
+      `/users/${id}/resend-invite`
+    ),
   deleteUser: (id: string) => req<{ ok: true }>('DELETE', `/users/${id}`),
 
   listOrgs: (archived = false) => req<Org[]>('GET', `/orgs${archived ? '?archived=1' : ''}`),

@@ -100,6 +100,10 @@ export default function OrgTeam({
   const toast = useToast();
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Only set while no mail provider is configured — the fresh link, for the
+  // operator to relay by hand. Cleared on the next action so a stale (already
+  // superseded) link never lingers on screen.
+  const [resentLink, setResentLink] = useState<string | null>(null);
   const members = (users ?? []).filter((u) => u.orgId === org.id);
 
   async function remove(user: AdminUser) {
@@ -111,6 +115,7 @@ export default function OrgTeam({
       return;
     }
     setActionErr(null);
+    setResentLink(null);
     setBusyId(user.id);
     try {
       await api.deleteUser(user.id);
@@ -123,17 +128,26 @@ export default function OrgTeam({
     }
   }
 
-  // Re-mail a set-password link. There is no dedicated resend endpoint —
-  // "forgot password" IS the resend path (it works for an invited account that
-  // never set one), so this reuses it rather than adding a parallel route.
-  // Always reports success: the endpoint deliberately gives no account-exists
-  // oracle, so there is nothing truthful to distinguish.
+  // Re-mail a set-password link, through the super_admin-gated user route —
+  // NOT the public "forgot password" endpoint. Minting a token deletes the
+  // user's outstanding one (exactly one live link at a time), and the public
+  // endpoint must discard the link it generates, so resending through it would
+  // silently invalidate a link the operator had relayed by hand and hand back
+  // nothing in its place. This route returns the replacement when there is no
+  // mail provider to carry it.
   async function resend(user: AdminUser) {
     setActionErr(null);
+    setResentLink(null);
     setBusyId(user.id);
     try {
-      await api.forgotPassword(user.email);
-      toast('Set-password link sent.');
+      const res = await api.resendUserInvite(user.id);
+      setResentLink(res.inviteLink);
+      toast(
+        res.sent
+          ? `Set-password link emailed to ${user.email}.`
+          : 'Link regenerated, but it could not be emailed — relay it by hand.',
+        res.sent ? 'success' : 'info'
+      );
     } catch (e) {
       setActionErr((e as Error).message);
     } finally {
@@ -150,6 +164,13 @@ export default function OrgTeam({
           listed — they are not members of any one org.
         </p>
         {actionErr && <Banner kind="error">{actionErr}</Banner>}
+        {resentLink && (
+          <Banner kind="info">
+            No mail provider is configured, so the new set-password link is returned here for you
+            to relay: <span className="break-all font-mono text-xs">{resentLink}</span>. Any
+            earlier link for this person no longer works.
+          </Banner>
+        )}
         {loading && <Spinner />}
         {error && <Banner kind="error">{error.message}</Banner>}
         {!loading && !error && members.length === 0 && (

@@ -18,7 +18,7 @@ vi.mock('./api', () => ({
     listUsers: vi.fn(),
     inviteUser: vi.fn(),
     deleteUser: vi.fn(),
-    forgotPassword: vi.fn(),
+    resendUserInvite: vi.fn(),
   },
 }));
 
@@ -48,7 +48,9 @@ beforeEach(() => {
   vi.mocked(api.listUsers).mockReset().mockResolvedValue([]);
   vi.mocked(api.inviteUser).mockReset();
   vi.mocked(api.deleteUser).mockReset();
-  vi.mocked(api.forgotPassword).mockReset().mockResolvedValue({ ok: true });
+  vi.mocked(api.resendUserInvite)
+    .mockReset()
+    .mockResolvedValue({ ok: true, kind: 'invite', sent: true, inviteLink: null });
 });
 
 // The three logo fields share this placeholder (no platform default), so
@@ -564,12 +566,35 @@ describe('OrgDetail — team tab', () => {
     confirm.mockRestore();
   });
 
-  test('"Resend link" reuses the forgot-password mailer', async () => {
+  // NOT the public forgot-password endpoint: minting a token deletes the
+  // user's outstanding one, and that endpoint must discard the link it makes,
+  // so resending through it would kill a hand-relayed link and return nothing
+  // to replace it — while still reporting success.
+  test('"Resend link" goes through the super_admin-gated user route', async () => {
     vi.mocked(api.listUsers).mockResolvedValue([MEMBER]);
     const user = userEvent.setup();
     renderOrgDetail(true, '/team');
     await screen.findByText('manager@example.com');
     await user.click(screen.getByRole('button', { name: 'Resend link' }));
-    await waitFor(() => expect(api.forgotPassword).toHaveBeenCalledWith('manager@example.com'));
+    await waitFor(() => expect(api.resendUserInvite).toHaveBeenCalledWith('user-1'));
+  });
+
+  test('with no mail provider, the REPLACEMENT link is surfaced for relaying', async () => {
+    vi.mocked(api.listUsers).mockResolvedValue([MEMBER]);
+    vi.mocked(api.resendUserInvite).mockResolvedValue({
+      ok: true,
+      kind: 'invite',
+      sent: false,
+      inviteLink: 'https://admin.example/set-password?token=fresh',
+    });
+    const user = userEvent.setup();
+    renderOrgDetail(true, '/team');
+    await screen.findByText('manager@example.com');
+    await user.click(screen.getByRole('button', { name: 'Resend link' }));
+    expect(
+      await screen.findByText('https://admin.example/set-password?token=fresh')
+    ).toBeInTheDocument();
+    // …and says plainly that the old link is dead, because minting killed it.
+    expect(screen.getByText(/earlier link for this person no longer works/)).toBeInTheDocument();
   });
 });
