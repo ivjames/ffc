@@ -10,6 +10,7 @@ import LocationWizard from './LocationWizard';
 import LocationDetail from './LocationDetail';
 import Archived from './Archived';
 import Announcements from './Announcements';
+import Trivia from './Trivia';
 import Rewards from './Rewards';
 import Photos from './Photos';
 import BoothPhotos from './BoothPhotos';
@@ -54,6 +55,13 @@ const ICON_PATHS = {
     <>
       <path d="m3 11 18-5v12L3 13v-2z" />
       <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+    </>
+  ),
+  trivia: (
+    <>
+      <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-2.8-.4L3 21l1.9-5.1A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z" />
+      <path d="M10.1 9.3a2 2 0 1 1 2.7 1.9c-.5.2-.8.7-.8 1.2v.4" />
+      <path d="M12 16h.01" />
     </>
   ),
   rewards: (
@@ -191,6 +199,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Engagement',
     items: [
       { to: '/announcements', label: 'Announcements', icon: 'announcements' },
+      { to: '/trivia', label: 'Trivia', icon: 'trivia' },
       { to: '/rewards', label: 'Rewards', icon: 'rewards' },
       { to: '/hunt', label: 'Hunt', icon: 'hunt' },
     ],
@@ -563,6 +572,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             />
             <Route path="/locations/:id" element={<LocationDetail />} />
             <Route path="/announcements" element={<Announcements isSuperAdmin={isSuperAdmin} />} />
+            <Route path="/trivia" element={<Trivia isSuperAdmin={isSuperAdmin} />} />
             <Route path="/rewards" element={<Rewards />} />
             <Route path="/hunt" element={<Hunt isSuperAdmin={isSuperAdmin} />} />
             <Route path="/hunt/items/:id" element={<HuntItemDetail />} />

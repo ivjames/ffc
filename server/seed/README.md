@@ -33,7 +33,10 @@ not repeat it under every question:
   **not** on the single-player game at `/arcade/trivia`, which deals the
   house's own bundled deck.
 - The pack header and the `source` column keep the credit attached to the data
-  itself, so a row's provenance survives outside the UI.
+  itself, so a row's provenance survives outside the UI. **Master Control →
+  Trivia** shows that column per row ("from opentriviaqa") and carries the
+  licence credit in a banner, so an operator curating the bank can see which
+  questions are donated and which are the venue's own.
 
 ShareAlike attaches to the *collection*, not to the facts in it, and not to
 this application's code. Questions written in Master Control are the operator's
