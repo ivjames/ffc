@@ -133,7 +133,7 @@ node scripts/arcade-bot.mjs --rounds 20 --out arcade-profile.json
 
 # replay it at volume (dry run first)
 node scripts/arcade-traffic.mjs --profile arcade-profile.json \
-  --location <venue-uuid> --player-id <card> --plays 200 --dry-run
+  --location <venue-uuid> --players 8 --plays 200 --dry-run
 ```
 
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
@@ -146,16 +146,43 @@ the session instead, since `--headed` has nothing to display to there:
 node scripts/arcade-bot.mjs --game skeeball --skill 1 --video ./vid   # → ./vid/*.webm
 ```
 
-## Player ids are real loyalty cards
+## Awards ride a signed-in session — there is no `playerId`
 
-`playerId` is a **loyalty vendor card id**, and the award route forwards it
-straight to the vendor. Made-up ids don't work — the CenterEdge mock 404s any
-unseeded player, so the award comes back 502 and leaves a `pending` reservation
-holding daily-cap budget.
+The award route is `tenant(), requireUser` and resolves the card from the
+**session**, not the request: *"the card is the session's, never the request's"*.
+Posting a `playerId` does nothing; posting without a cookie is a flat 401. So
+each synthetic player is a real account, minted before any award:
 
-So pass real test-card ids with `--player-id` (repeatable) or `--players-file`.
-The `synthetic-card-<n>` fallback exists only so `--dry-run` can show a payload's
-shape; the script refuses to post with it and says why.
+```
+POST /api/auth/request-code  {email}        -> {bypassCode}
+POST /api/auth/verify        {email, code}  -> session cookie
+POST /api/loyalty/link       {locationId, cardNumber}
+POST /api/game-rewards/award {locationId, game, tickets, sessionId}
+```
+
+`--players N` fabricates N cards at the loyalty vendor and signs an account in
+for each, so no card list is needed. Against a real vendor — which issues cards
+at a counter, not over an API — pass existing numbers with `--card` /
+`--cards-file` instead. Either way a card the vendor doesn't know fails at link
+time, before anything is posted.
+
+**The pool is rate-limited.** `/api/auth/request-code` allows 10 per IP per
+hour, so a single run can mint at most 10 new accounts and refuses more up
+front. Sessions are cached to `--sessions-file` and reused free on later runs,
+so the pool grows across runs and a warm one costs no auth calls at all.
+
+The bypass code is only returned when no mail provider is configured and
+`NODE_ENV` isn't production — the dev/staging shape this tool is for. Against a
+mail-configured deployment, sessions can't be minted from a script; the run
+refuses to start and asks for `--cookie` values from real sessions.
+
+### Verified end to end
+
+Against a local stack (Postgres + `ffc-api` + the CenterEdge mock): 20 awards
+across 2 cards, 20 ok / 0 failed, 157 req/s, 761 of 805 tickets paid — the
+shortfall being one per-round trim and one daily-cap zero, both fired by the
+server. Ledger rows matched, and the vendor balances moved (PL-1001 4380 →
+4880), confirming the awards reached the POS and not just our table.
 
 ## Safety and cleanup
 
