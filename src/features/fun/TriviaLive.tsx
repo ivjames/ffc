@@ -3,7 +3,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { QuestionCredit } from '../shared/Credits';
 import QrScanner from '../shared/QrScanner';
+import JoinQr from '../shared/JoinQr';
 import { joinCodeFromScan } from '../../lib/scanJoinCode';
+import { useCurrentLocationId } from '../../lib/location';
 import { useDeadline, formatCountdown } from './useDeadline';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
 import {
@@ -24,8 +26,19 @@ import {
   submitAnswer,
   subscribeSession,
   mergeSnapshot,
+  listOpenSessions,
+  advance,
+  endSession,
   type TriviaSnapshot,
+  type OpenTriviaGame,
 } from '../../lib/triviaLiveApi';
+import {
+  loadPlayer,
+  savePlayer,
+  loadOwner,
+  saveOwner,
+  type StoredPlayer,
+} from './triviaLiveStorage';
 
 // /arcade/trivia/live — the player's seat at a live trivia game.
 //
@@ -46,29 +59,6 @@ import {
 // question a half-second apart can't hear either. It's for the player who
 // wants their own phone to read to them — the back of the room, or a screen
 // that's hard to see — so it's a quiet per-device switch, not a game setting.
-
-const TOKEN_KEY = 'ffc.trivia.live';
-
-type Stored = { sessionId: string; participantToken: string; entrantId: string; name: string };
-
-function loadStored(): Stored | null {
-  try {
-    const raw = sessionStorage.getItem(TOKEN_KEY);
-    return raw ? (JSON.parse(raw) as Stored) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveStored(value: Stored | null) {
-  try {
-    if (value) sessionStorage.setItem(TOKEN_KEY, JSON.stringify(value));
-    else sessionStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // Private mode with storage disabled — the game still plays for as long as
-    // this component stays mounted, which is the whole session in practice.
-  }
-}
 
 /** Countdown for the open question, from the server's asked_at. Local clock
  *  drift only affects the bar's smoothness, never the score — the server
@@ -105,7 +95,15 @@ export default function TriviaLive() {
   const navigate = useNavigate();
   const { sessionId: routeSession } = useParams();
   const [params] = useSearchParams();
-  const [stored, setStored] = useState<Stored | null>(loadStored);
+  const locationId = useCurrentLocationId();
+  // The venue's chalkboard: live games whose creators marked them open. Only
+  // polled while this phone is on the join form — a seated player has a game.
+  const [openGames, setOpenGames] = useState<OpenTriviaGame[]>([]);
+  const [stored, setStored] = useState<StoredPlayer | null>(loadPlayer);
+  // The owner capability, present only on the device that started the game
+  // from /arcade/trivia/start. Pacing only — "start now", "end the game" —
+  // never information; the owner answers questions like anyone else.
+  const [owner, setOwner] = useState(loadOwner);
   const [snapshot, setSnapshot] = useState<TriviaSnapshot | null>(null);
   const [joinCode, setJoinCode] = useState(params.get('code') ?? '');
   const [name, setName] = useState('');
@@ -136,6 +134,23 @@ export default function TriviaLive() {
 
   const sessionId = stored?.sessionId ?? routeSession ?? null;
 
+  useEffect(() => {
+    if (stored || !locationId) return;
+    let live = true;
+    const load = () =>
+      void listOpenSessions(locationId).then((r) => {
+        if (live && r.ok) setOpenGames(r.sessions);
+      });
+    load();
+    // Gentle poll: the board changes on the pace people start games, not the
+    // pace they answer questions.
+    const timer = setInterval(load, 10_000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [stored, locationId]);
+
   // Live stream + an initial snapshot, so a phone that joins mid-question
   // isn't blank until the host advances.
   useEffect(() => {
@@ -153,8 +168,15 @@ export default function TriviaLive() {
       // A token for a game that has ended or been cleaned up: drop it rather
       // than leaving the player staring at a spinner forever.
       else if (r.status === 404) {
-        saveStored(null);
+        savePlayer(null);
         setStored(null);
+        // A dead game's owner capability points at nothing — drop it with
+        // the seat.
+        setOwner((prev) => {
+          if (prev?.sessionId !== sessionId) return prev;
+          saveOwner(null);
+          return null;
+        });
       }
     });
     const stop = subscribeSession(sessionId, { participant: stored.participantToken }, (s) => {
@@ -298,13 +320,13 @@ export default function TriviaLive() {
       setError(res.error === 'offline' ? "Can't reach the game — check your signal." : res.error);
       return;
     }
-    const next: Stored = {
+    const next: StoredPlayer = {
       sessionId: res.snapshot.session.id,
       participantToken: res.participantToken,
       entrantId: res.entrant.id,
       name: res.entrant.name,
     };
-    saveStored(next);
+    savePlayer(next);
     setStored(next);
     setSnapshot(res.snapshot);
   }, [joinCode, name, isTeam]);
@@ -327,11 +349,40 @@ export default function TriviaLive() {
 
   function leave() {
     stopSpeaking();
-    saveStored(null);
+    savePlayer(null);
     setStored(null);
+    // Walking away from a game you started doesn't end it for the others —
+    // but the capability to end it leaves with this seat, so drop it too.
+    if (owner?.sessionId === sessionId) {
+      saveOwner(null);
+      setOwner(null);
+    }
     setSnapshot(null);
     navigate('/arcade');
   }
+
+  // The owner's two pacing moves, both shortcuts the clock would make anyway.
+  const iOwnThis = owner != null && owner.sessionId === sessionId;
+  const startNow = useCallback(async () => {
+    if (!owner || !sessionId) return;
+    playClick();
+    await advance(sessionId, owner.hostToken);
+    // No local state to set: the transition comes back over SSE for everyone,
+    // this phone included.
+  }, [owner, sessionId]);
+
+  const endForEveryone = useCallback(async () => {
+    if (!owner || !sessionId) return;
+    const res = await endSession(sessionId, owner.hostToken);
+    if (!res.ok && res.status !== 404) {
+      setError(
+        res.error === 'offline'
+          ? "Couldn't reach the game to end it — check your signal and try again."
+          : res.error,
+      );
+    }
+    // The final board arrives over SSE; this seat stays to see it.
+  }, [owner, sessionId]);
 
   // --- Join form ------------------------------------------------------------
   if (!stored) {
@@ -340,12 +391,55 @@ export default function TriviaLive() {
         <TopBar title="Live Trivia" back="/arcade" />
         <Content>
           <p className="mb-4 text-center text-sm text-fairway-100/70">
-            Enter the code on the screen to join the game.
+            Join with a code — or start a game of your own.
           </p>
           {error && (
             <p className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
               {error}
             </p>
+          )}
+          {/* The venue's chalkboard: games whose creators opened them to the
+              whole room. Tapping one just fills the code in — the join stays
+              one path, and the player still picks their name below. */}
+          {openGames.length > 0 && (
+            <div className="mb-4">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-fairway-400">
+                Open games here now
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {openGames.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => {
+                      playClick();
+                      setError(null);
+                      setJoinCode(g.joinCode);
+                    }}
+                    className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left ${
+                      joinCode === g.joinCode
+                        ? 'border-fairway-400/70 bg-fairway-400/10'
+                        : 'border-fairway-800/60 bg-fairway-900/40'
+                    }`}
+                  >
+                    <span className="text-xl">🎲</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-fairway-50">
+                        {g.status === 'lobby'
+                          ? 'Starting soon'
+                          : `On question ${g.currentIndex + 1} of ${g.totalQuestions}`}
+                      </span>
+                      <span className="block text-xs text-fairway-400">
+                        {g.entrantCount} {g.entrantCount === 1 ? 'player' : 'players'} · code{' '}
+                        {g.joinCode}
+                      </span>
+                    </span>
+                    <span className="text-xs font-semibold text-fairway-300">
+                      {joinCode === g.joinCode ? 'Selected' : 'Join →'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {/* Scanning first, typing second. Six characters heard across a
               loud room is where players are actually lost: the codes B/8,
@@ -419,14 +513,26 @@ export default function TriviaLive() {
           <Button onClick={doJoin} disabled={busy || joinCode.length < 4 || name.trim() === ''}>
             {busy ? 'Joining…' : 'Join the game'}
           </Button>
+          {/* No game to join? Any player can make one — private for their
+              table, or open to the whole room. No host involved: the game
+              runs itself. */}
+          <button
+            onClick={() => {
+              playClick();
+              navigate('/arcade/trivia/start');
+            }}
+            className="mt-5 w-full rounded-xl border border-fairway-700 bg-fairway-900/60 px-4 py-3 text-sm font-semibold text-fairway-100/90 active:bg-fairway-800"
+          >
+            🎉 Start your own game
+          </button>
           {/* Staff entry point. Deliberately understated and at the bottom:
               players outnumber hosts by the size of the room, and a guest who
               taps it lands on a screen that just tells them to sign in. */}
           <button
             onClick={() => navigate('/arcade/trivia/host')}
-            className="mt-6 w-full text-center text-xs text-fairway-400"
+            className="mt-4 w-full text-center text-xs text-fairway-400"
           >
-            Running the game? Set one up →
+            Hosting with a mic? Use the host screen →
           </button>
           <QuestionCredit />
         </Content>
@@ -467,6 +573,7 @@ export default function TriviaLive() {
           myScore={me?.score ?? 0}
           myRank={me?.rank ?? null}
           onAnswer={answer}
+          onStartNow={iOwnThis && session.status === 'lobby' ? startNow : null}
         />
         {error && (
           <p className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
@@ -488,6 +595,16 @@ export default function TriviaLive() {
         <button onClick={leave} className="mt-3 w-full text-center text-xs text-fairway-400">
           Leave the game
         </button>
+        {iOwnThis && session.status !== 'final' && session.status !== 'abandoned' && (
+          // You started it, you can call it — the one owner move that isn't
+          // just the clock arriving early. Explicit about its blast radius.
+          <button
+            onClick={endForEveryone}
+            className="mt-3 w-full text-center text-xs text-fairway-400"
+          >
+            End the game for everyone
+          </button>
+        )}
         <QuestionCredit />
       </Content>
     </Screen>
@@ -507,6 +624,7 @@ function LiveBody({
   myScore,
   myRank,
   onAnswer,
+  onStartNow,
 }: {
   session: TriviaSnapshot['session'];
   question: TriviaSnapshot['question'];
@@ -522,6 +640,9 @@ function LiveBody({
   myScore: number;
   myRank: number | null;
   onAnswer: (choice: number) => void;
+  /** Present only on the phone that started this game, and only in the lobby:
+   *  the owner's shortcut past the lobby clock once everyone's in. */
+  onStartNow?: (() => void) | null;
 }) {
   const left = useCountdown(
     session.askedAt,
@@ -534,6 +655,10 @@ function LiveBody({
   const startsIn = useDeadline(session.status === 'lobby' ? session.autoAt : null);
 
   if (session.status === 'lobby') {
+    // TriviaLive reads `?code=` straight into its code field, so this link
+    // lands a friend on the join form with only a name left to type — the
+    // same prefill the host screen's QR uses.
+    const joinUrl = `${window.location.origin}/arcade/trivia/live?code=${session.joinCode}`;
     return (
       <div className="text-center">
         <div className="text-5xl">🎤</div>
@@ -544,6 +669,30 @@ function LiveBody({
             : 'Waiting for more players'}{' '}
           · {entrantCount} {entrantCount === 1 ? 'player' : 'players'} so far
         </p>
+        {/* Every seat can recruit: in a game among friends there is no host
+            screen for the code to live on, so the lobby itself is the invite.
+            Nothing secret is shown — everyone here typed this code to get
+            in. */}
+        <div className="mx-auto mt-4 max-w-xs rounded-2xl border border-fairway-800/60 bg-fairway-900/40 px-4 py-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-fairway-400">
+            {session.config.open ? 'Open game — anyone can join' : 'Invite your friends'}
+          </p>
+          <p className="my-1.5 text-3xl font-black tracking-[0.2em] text-fairway-50">
+            {session.joinCode}
+          </p>
+          <div className="mt-2 flex justify-center">
+            <JoinQr url={joinUrl} />
+          </div>
+          <p className="mt-2 text-xs text-fairway-100/70">
+            Scan to join, or type the code at{' '}
+            <span className="font-semibold">{window.location.host}/arcade/trivia/live</span>
+          </p>
+        </div>
+        {onStartNow && (
+          <div className="mt-4">
+            <Button onClick={onStartNow}>Everyone's in — start now</Button>
+          </div>
+        )}
         <Board board={board} myEntrantId={myEntrantId} showScores={false} />
       </div>
     );

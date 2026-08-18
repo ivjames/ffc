@@ -43,6 +43,10 @@ export type TriviaSnapshot = {
       teams: boolean;
       revealSeconds: number;
       lobbySeconds: number;
+      /** Listed on the venue's open-games board (join code included) vs. a
+       *  private room only the shared code can find. Sessions from before the
+       *  flag existed carry no value and read as private. */
+      open?: boolean;
     };
   };
   question: TriviaQuestionView | null;
@@ -166,6 +170,7 @@ export function createSession(input: {
     teams?: boolean;
     revealSeconds?: number;
     lobbySeconds?: number;
+    open?: boolean;
   };
 }) {
   // `dealt` can be under `requested` when the chosen category holds fewer
@@ -220,6 +225,26 @@ export function endSession(id: string, host: string) {
     method: 'POST',
     body: JSON.stringify({ host }),
   });
+}
+
+/** One row on the venue's open-games board. Carrying the join code is the
+ *  point: an open game is one anyone present may walk into. */
+export type OpenTriviaGame = {
+  id: string;
+  joinCode: string;
+  status: TriviaStatus;
+  currentIndex: number;
+  totalQuestions: number;
+  questionSeconds: number;
+  autoAt: string | null;
+  createdAt: string;
+  entrantCount: number;
+};
+
+export function listOpenSessions(locationId: string) {
+  return call<{ sessions: OpenTriviaGame[] }>(
+    `/sessions/open?locationId=${encodeURIComponent(locationId)}`,
+  );
 }
 
 export function fetchCategories(locationId: string) {
