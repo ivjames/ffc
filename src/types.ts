@@ -38,6 +38,12 @@ export type LocalRound = {
   // Present only on shared multi-device rounds. Shared rounds never enter the
   // 'pending' push queue — the server finalizes them at completion instead.
   shared?: SharedInfo;
+  // When this round's server-granted achievements were pulled into the local
+  // earned set (see features/me/Achievements). Absent = not yet imported, which
+  // is what makes the import self-healing: a round the worker synced in the
+  // background, or one whose fetch failed, is simply retried on the next visit
+  // to the wall.
+  grantsImportedAt?: number;
 };
 
 // One queued cell write from this device, awaiting delivery to the shared

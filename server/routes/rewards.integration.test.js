@@ -261,6 +261,71 @@ test("multitasker and grand hunter — the two composed in the grant path", asyn
 });
 
 
+test("grand hunter counts only LIVE courses at the venue", async () => {
+  // Archiving a course removes it from /api/content, so players can't pick it.
+  // Counting it would make "every course at this venue" permanently unreachable
+  // for anyone without a historical grant on the retired one.
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Arch Venue ${stamp}`, `arch-${stamp}`]
+  );
+  const venue = loc.rows[0].id;
+  const mkCourse = async (n) =>
+    (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [`${n} ${stamp}`, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+  const live1 = await mkCourse("L1");
+  const live2 = await mkCourse("L2");
+  const retired = await mkCourse("RT");
+  await testQuery(`update course set archived_at = now() where id = $1`, [retired]);
+  await testQuery(
+    `insert into hunt_item (course_id, slug, name) values ($1, $2, $2)`,
+    [retired, `rt-${stamp}`]
+  );
+  const mkItem = async (courseId, slug) =>
+    (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $2) returning id`,
+        [courseId, slug]
+      )
+    ).rows[0].id;
+  const item1 = await mkItem(live1, `l1-${stamp}`);
+  const item2 = await mkItem(live2, `l2-${stamp}`);
+  const cookie = await signedIn();
+
+  const play = async (courseId, itemId, suffix) => {
+    const clientId = `arch-${suffix}-${stamp}`;
+    await testQuery(
+      `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'ARC', $2, true)`,
+      [clientId, itemId]
+    );
+    await postRound(
+      {
+        clientId,
+        courseId,
+        playerTags: ["ARC"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(3) },
+      },
+      cookie
+    );
+    return (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json()).map(
+      (g) => g.achievement
+    );
+  };
+
+  await play(live1, item1, "one");
+  // Both LIVE courses hunted. The archived one is not required.
+  const second = await play(live2, item2, "two");
+  assert.ok(second.includes("grand_hunter"), "an archived course must not block the badge");
+});
+
+
 test("grand hunter needs a seat whose owner is unambiguous", async () => {
   // A signed-in host with three guests owns the round, but only their own seat
   // is theirs. Crediting every finisher would let a rotating cast of companions

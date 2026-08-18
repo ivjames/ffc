@@ -5,7 +5,7 @@ import CourseTheme from '../../ui/CourseTheme';
 import { accentInk } from '../../lib/theme';
 import Confetti from '../../ui/Confetti';
 import { courseById, locationById } from '../../data/courses';
-import { getRound, putEarnedBadges, putRound } from '../../db';
+import { getRound, putRound } from '../../db';
 import { syncPending, fetchRewards, type RewardRow } from '../../sync';
 import { completeGame } from '../../lib/gamesApi';
 import { applyCompleted } from '../../lib/sharedMerge';
@@ -100,30 +100,23 @@ export default function Summary() {
   // then. Offline: the card simply doesn't show (the grants are still waiting
   // on the server whenever the round lands).
   const syncState = round?.syncState;
-  // Hoisted out of the effect below so it's an honest dependency rather than a
-  // value captured from whichever render happened to run it.
-  const sharedSlot = round?.shared?.slot ?? null;
   useEffect(() => {
     if (syncState !== 'synced') return;
     let alive = true;
+    // Display only. Banking these for the achievements wall is the WALL's job
+    // (features/me/Achievements): a round can reach 'synced' in the background
+    // worker long after this screen unmounts, so an import that lived here
+    // would miss exactly the offline rounds it most needs to catch.
     fetchRewards(clientId).then(
       (rows) => {
         if (alive) setRewards(rows);
-        // Bank them for the achievements wall. Server-granted badges (the hunt)
-        // are invisible to on-device detection, so without this they could
-        // never appear there — and the meta badges, which count every other
-        // badge, could never complete. Ownership follows the same rule the
-        // wall's own rules use: a shared game speaks only for this device's
-        // seat, pass-and-play for the whole group on the phone.
-        const mine = sharedSlot == null ? rows : rows.filter((r) => r.playerIndex === sharedSlot);
-        void putEarnedBadges(mine.map((r) => r.achievement));
       },
       () => {},
     );
     return () => {
       alive = false;
     };
-  }, [clientId, syncState, sharedSlot]);
+  }, [clientId, syncState]);
 
   const course = round ? courseById(round.courseId) : undefined;
 

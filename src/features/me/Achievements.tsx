@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Screen, TopBar, Content } from '../../ui/components';
-import { getActivity, getAllRounds, getEarnedBadges, putEarnedBadges } from '../../db';
+import { getActivity, getAllRounds, getEarnedBadges, putEarnedBadges, putRound } from '../../db';
+import { fetchRewards } from '../../sync';
+import type { LocalRound } from '../../types';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
 import { useSession } from '../../lib/session';
 import { isStandalone } from '../../lib/pwaInstall';
@@ -43,11 +45,12 @@ export default function Achievements() {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [rounds, activity, banked] = await Promise.all([
-        getAllRounds(),
-        getActivity(),
-        getEarnedBadges(),
-      ]);
+      const rounds = await getAllRounds();
+      // Pull in anything the SERVER granted (the hunt group) before reading the
+      // banked set. On-device detection can't see those, and the meta badges
+      // count every other badge, so without this they'd never complete.
+      await importServerGrants(rounds);
+      const [activity, banked] = await Promise.all([getActivity(), getEarnedBadges()]);
       // Union, never subtract: what the stored rounds prove is added to what has
       // already been banked, so a cleared round history can't take a badge back.
       const all = detectEarned(rounds, {
@@ -108,6 +111,40 @@ export default function Achievements() {
         </p>
       </Content>
     </Screen>
+  );
+}
+
+/**
+ * Fetch and bank the achievements the server granted for synced rounds.
+ *
+ * Done here, once per round ever, rather than on the summary screen: a round
+ * can reach 'synced' in the background worker long after that screen unmounts
+ * (an offline round finished in the car park), and an import living there would
+ * miss exactly those. Each round is marked when its grants land, so this costs
+ * one request per round for the life of the device — and a round whose fetch
+ * fails simply stays unmarked and is retried on the next visit.
+ *
+ * Ownership follows the same rule the detection rules use: a shared game speaks
+ * only for this device's seat; pass-and-play speaks for the whole group on the
+ * phone.
+ */
+async function importServerGrants(rounds: LocalRound[]): Promise<void> {
+  const pending = rounds.filter((r) => r.syncState === 'synced' && r.grantsImportedAt == null);
+  if (pending.length === 0) return;
+  await Promise.all(
+    pending.map(async (round) => {
+      try {
+        const rows = await fetchRewards(round.clientId);
+        const slot = round.shared?.slot;
+        const mine = slot == null ? rows : rows.filter((r) => r.playerIndex === slot);
+        await putEarnedBadges(mine.map((r) => r.achievement));
+        await putRound({ ...round, grantsImportedAt: Date.now() });
+      } catch {
+        // Offline, or the server hiccuped. Leave the round unmarked so the next
+        // visit tries again — a missing badge is recoverable, a wrongly-marked
+        // round is not.
+      }
+    }),
   );
 }
 
