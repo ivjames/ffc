@@ -37,9 +37,22 @@
 //   to mint sessions from a script, and this refuses to start rather than
 //   pretending; supply --cookie values from real sessions instead.
 //
-//   Card numbers are the loyalty vendor's own (the CenterEdge mock seeds
-//   770001112223 and friends). A card that does not exist there fails at link
-//   time, before any award is posted.
+// THE POOL IS RATE-LIMITED, AND SESSIONS ARE CACHED BECAUSE OF IT
+//   /api/auth/request-code allows 10 per IP PER HOUR and /verify 10 per minute,
+//   so a run can mint at most 10 new accounts however many cards it is given —
+//   the eleventh 429s. That is a real ceiling, not a bug to code around, so the
+//   run refuses to exceed it up front instead of discovering it mid-pool, and a
+//   429 is reported as the rate limit rather than as a missing bypass code.
+//
+//   Sessions are therefore CACHED to --sessions-file and reused on later runs.
+//   A pool grows across runs (10 more per hour) and costs no auth calls at all
+//   once warm, which is what makes a large pool practical.
+//
+// CARDS ARE FABRICATED, NOT SUPPLIED
+//   --players N registers N fresh cards with the loyalty vendor and links one
+//   to each account, so a pool needs no hand-maintained card list. The vendor
+//   mock grows a registration endpoint for this; a real vendor issues cards at
+//   a counter, so there --card / --cards-file remain the way in.
 //
 // SAFETY / ISOLATION, AND THE LIMIT OF IT
 //   Every award is posted with a reserved session id —
@@ -59,14 +72,21 @@
 // USAGE
 //   node scripts/arcade-traffic.mjs --profile arcade-profile.json \
 //     --api http://localhost:8060 --location <uuid> \
-//     --player-id <card> --plays 200 [--yes] [--dry-run]
+//     --players 8 --plays 200 [--yes] [--dry-run]
 //
 //   --profile FILE     score profile from arcade-bot.mjs --out (required)
 //   --api URL          API base (env FFC_API_BASE, default http://localhost:8060)
 //   --location UUID    venue to award against (required)
 //   --plays N          awards per sweep (default 100)
-//   --card NUMBER      loyalty CARD NUMBER to link a synthetic account to,
-//                      repeatable; each becomes one signed-in player
+//   --players N        fabricate N cards at the vendor and sign N accounts in
+//                      (capped by the auth rate limit; cached sessions are free)
+//   --sessions-file F  cache signed-in sessions here and reuse them (default
+//                      .arcade-sessions.json)
+//   --vendor-base URL  loyalty vendor API for card creation
+//                      (default http://127.0.0.1:8070/api/v1)
+//   --vendor-token T   bearer for the vendor (default ce-mock-dev-token)
+//   --card NUMBER      an EXISTING card number to link, repeatable — use when
+//                      cards cannot be fabricated (a real vendor)
 //   --cards-file F     file of card numbers, one per line (blank/# lines skipped)
 //   --email-domain D   where synthetic accounts live (default example.com)
 //   --cookie C         use an existing session cookie instead of signing in,
@@ -84,7 +104,7 @@
 //   count, latency p50/p95/max, throughput, tickets requested vs actually
 //   awarded (the server clamps), and the annualized volume the cadence projects.
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { makeRng } from './lib/arcade/skill.mjs';
 
@@ -96,6 +116,10 @@ function parseArgs(argv) {
     plays: 100,
     cards: [],
     cardsFile: null,
+    players: 0,
+    sessionsFile: '.arcade-sessions.json',
+    vendorBase: process.env.CENTEREDGE_API_BASE || 'http://127.0.0.1:8070/api/v1',
+    vendorToken: process.env.CENTEREDGE_API_TOKEN || 'ce-mock-dev-token',
     emailDomain: 'example.com',
     cookies: [],
     games: [],
@@ -114,6 +138,10 @@ function parseArgs(argv) {
     else if (k === '--location') a.location = next();
     else if (k === '--plays') a.plays = Number(next());
     else if (k === '--card') a.cards.push(next());
+    else if (k === '--players') a.players = Number(next());
+    else if (k === '--sessions-file') a.sessionsFile = next();
+    else if (k === '--vendor-base') a.vendorBase = next();
+    else if (k === '--vendor-token') a.vendorToken = next();
     else if (k === '--cards-file') a.cardsFile = next();
     else if (k === '--email-domain') a.emailDomain = next();
     else if (k === '--cookie') a.cookies.push(next());
@@ -166,6 +194,26 @@ function sessionCookie(res) {
   return null;
 }
 
+/** Auth rate limits (server/routes/auth.js): request-code is 10/IP/hour. */
+export const MAX_NEW_SESSIONS_PER_RUN = 10;
+
+/** Register a fresh card with the loyalty vendor; returns its cardNumber. */
+async function fabricateCard(base, token, label) {
+  const res = await fetch(`${base}/players`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ displayName: label }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.player?.cardNumber) {
+    throw new Error(
+      `could not register a card at ${base} (${res.status} ${data?.error ?? ''}). ` +
+        'A real vendor issues cards at a counter — pass --card with existing numbers instead.',
+    );
+  }
+  return data.player.cardNumber;
+}
+
 /**
  * Turn one loyalty card number into a signed-in player: request a code, verify
  * it, link the card. Returns the session cookie, or throws with the step that
@@ -183,6 +231,15 @@ async function mintPlayer(api, locationId, cardNumber, email) {
   };
 
   const asked = await post('/api/auth/request-code', { email });
+  if (asked.res.status === 429) {
+    // Distinct from a missing bypass code: this is the 10/IP/hour limit, and
+    // reporting it as "mail is configured" sends the reader somewhere useless.
+    throw new Error(
+      'rate limited by /api/auth/request-code (10 per IP per hour). The pool ' +
+        'cannot grow further this hour — reuse the cached sessions file, or ' +
+        'pass --cookie values from real sessions.',
+    );
+  }
   const code = asked.data?.bypassCode;
   if (!code) {
     throw new Error(
@@ -208,6 +265,12 @@ async function mintPlayer(api, locationId, cardNumber, email) {
 function printCleanup(runId, realCards) {
   console.log(`\nCleanup (our side only):`);
   console.log(`  delete from game_ticket_award where session_id like 'synthetic:${runId}:%';`);
+  // Minting a pool leaves accounts behind — an app_user per card plus its card
+  // link, auth codes and sessions. They are cheap but they accumulate every
+  // run, so the teardown has to name them or the "cleanup" is not one.
+  console.log('  -- and the accounts this run minted (cascades to links/sessions):');
+  console.log(`  delete from app_user where email like 'synthbot+${runId}-%';`);
+  console.log("  -- every run ever:  delete from app_user where email like 'synthbot+%';");
   if (realCards) {
     console.log(
       '  ⚠ This clears OUR ledger, not the loyalty vendor. Settled awards have\n' +
@@ -250,20 +313,24 @@ async function main() {
       if (id && !id.startsWith('#')) cards.push(id);
     }
   }
-  const realCards = cards.length > 0 || args.cookies.length > 0;
+  const havePlayers = cards.length > 0 || args.cookies.length > 0 || args.players > 0;
+  const realCards = havePlayers;
 
   console.log(`arcade-traffic — run ${runId}`);
   console.log(`  profile   ${args.profile} (captured ${profile.capturedAt}, ${ageDays.toFixed(1)}d old)`);
   console.log(`  games     ${pools.map((p) => `${p.key}(${p.samples.length})`).join(', ')}`);
   console.log(`  target    ${args.api}  venue ${args.location}`);
   console.log(`  volume    ${args.plays} award(s)/sweep × ${args.sweeps === Infinity ? '∞' : args.sweeps} sweep(s)`);
-  console.log(
-    `  players   ${args.cookies.length ? `${args.cookies.length} supplied session(s)` : `${cards.length} card(s) to sign in`}`,
-  );
+  const poolDesc = [
+    args.cookies.length ? `${args.cookies.length} supplied session(s)` : '',
+    cards.length ? `${cards.length} given card(s)` : '',
+    args.players ? `${args.players} fabricated` : '',
+  ].filter(Boolean).join(' + ') || 'none';
+  console.log(`  players   ${poolDesc}`);
   if (ageDays > 30) {
     console.log('  ⚠ profile is over 30 days old — re-capture before trusting these scores');
   }
-  if (!realCards && !args.dryRun) {
+  if (!havePlayers && !args.dryRun) {
     // Fail loudly rather than posting a few hundred requests that all 401.
     console.error(
       '\n  ✗ No players. The award route resolves the card from the SIGNED-IN\n' +
@@ -306,27 +373,75 @@ async function main() {
     if (!ok) return console.log('aborted.');
   }
 
-  // Sign the synthetic players in BEFORE any awards, so a bad card or a
-  // mail-configured deployment fails on the first request rather than a
-  // hundred in.
-  const sessions = [...args.cookies];
-  for (let i = 0; i < cards.length; i++) {
+  // Reuse cached sessions first — they cost no auth calls, which is the only
+  // way a pool larger than the hourly limit is reachable at all.
+  const cache = existsSync(args.sessionsFile)
+    ? JSON.parse(readFileSync(args.sessionsFile, 'utf8'))
+    : { sessions: [] };
+  const cached = Array.isArray(cache.sessions) ? cache.sessions : [];
+  const sessions = [...args.cookies, ...cached.map((c) => c.cookie)];
+  if (cached.length) console.log(`  reusing ${cached.length} cached session(s) from ${args.sessionsFile}`);
+
+  const want = Math.max(args.players - cached.length, 0);
+
+  // Enforce the auth ceiling BEFORE fabricating anything. Checking after left
+  // a run that refused to start having already registered 14 orphan cards at
+  // the vendor — cheap, but litter the operator never asked for.
+  const newSessions = cards.length + want;
+  if (newSessions > MAX_NEW_SESSIONS_PER_RUN) {
+    console.error(
+      `\n  ✗ ${newSessions} new sessions requested, but /api/auth/request-code\n` +
+        `    allows ${MAX_NEW_SESSIONS_PER_RUN} per IP per hour. Run with at most that many now —\n` +
+        `    cached sessions in ${args.sessionsFile} are reused free, so the pool\n` +
+        '    grows across runs — or pass --cookie values from real sessions.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  // Fabricate cards for any --players asked for beyond what is cached.
+  // Cards are fabricated LAZILY, one immediately before the account that links
+  // it. Registering the whole pool up front meant a run that hit the auth rate
+  // limit partway left the surplus behind as orphan cards at the vendor.
+  const toLink = [...cards, ...Array.from({ length: want }, () => null)];
+
+  const minted = [];
+  for (let i = 0; i < toLink.length && !args.dryRun; i++) {
     const email = `synthbot+${runId}-${i + 1}@${args.emailDomain}`;
     try {
-      sessions.push(await mintPlayer(args.api, args.location, cards[i], email));
-      console.log(`  signed in ${email} -> card ${cards[i]}`);
+      const card =
+        toLink[i] ??
+        (await fabricateCard(args.vendorBase, args.vendorToken, `Synthetic ${runId}-${i + 1}`));
+      const cookie = await mintPlayer(args.api, args.location, card, email);
+      sessions.push(cookie);
+      minted.push({ email, card, cookie });
+      console.log(`  signed in ${email} -> card ${card}`);
     } catch (err) {
       console.error(`  ✗ ${err.message}`);
+      // Keep whatever DID sign in: those sessions are real, and discarding them
+      // would burn the hour's auth budget for nothing.
+      if (minted.length) {
+        writeFileSync(args.sessionsFile, JSON.stringify({ sessions: [...cached, ...minted] }, null, 2));
+        console.error(`    (kept ${minted.length} session(s) in ${args.sessionsFile})`);
+      }
       process.exitCode = 1;
       return;
     }
   }
-  if (!sessions.length) {
+  if (minted.length) {
+    writeFileSync(
+      args.sessionsFile,
+      JSON.stringify({ sessions: [...cached, ...minted] }, null, 2),
+    );
+    console.log(`  cached ${minted.length} new session(s) -> ${args.sessionsFile}`);
+  }
+
+  if (!sessions.length && !args.dryRun) {
     console.error('  ✗ no usable sessions');
     process.exitCode = 1;
     return;
   }
-  console.log(`  ${sessions.length} session(s) ready\n`);
+  if (!args.dryRun) console.log(`  ${sessions.length} session(s) ready\n`);
 
   const fresh = () => ({ ok: 0, failed: 0, requested: 0, awarded: 0, clamped: 0, capped: 0, lat: [] });
   // Per-sweep counters are what the sweep line reports; run totals accumulate

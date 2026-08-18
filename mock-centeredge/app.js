@@ -438,6 +438,33 @@ export function createApp({ stateFile = null } = {}) {
 
   // ---- Player card / loyalty ---------------------------------------------
 
+  // Register a player. The real vendor issues cards at a kiosk or counter, not
+  // over this API — this exists so load and traffic tooling can mint a pool of
+  // disposable cards instead of hand-maintaining seeded ones. Dev mock only.
+  app.post('/api/v1/players', (req, res) => {
+    const { cardNumber, displayName, tickets } = req.body ?? {};
+    if (cardNumber !== undefined && (typeof cardNumber !== 'string' || !cardNumber.trim())) {
+      return res.status(400).json({ ok: false, error: 'cardNumber must be a non-empty string' });
+    }
+    const card = (cardNumber ?? `77${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 900 + 100)}`).trim();
+    if (findPlayer(state, card)) {
+      return res.status(409).json({ ok: false, error: 'card already registered' });
+    }
+    const id = `PL-${Math.floor(Math.random() * 900000 + 100000)}`;
+    const player = {
+      id,
+      cardNumber: card,
+      displayName: typeof displayName === 'string' && displayName.trim() ? displayName.trim() : 'Synthetic Player',
+      email: null,
+      memberSince: new Date().toISOString().slice(0, 10),
+      tier: 'member',
+      balances: { gamePlayCredits: 0, tickets: Number.isInteger(tickets) ? tickets : 0 },
+    };
+    state.players.set(id, player);
+    persist();
+    res.status(201).json({ ok: true, player });
+  });
+
   app.get('/api/v1/players/:id', (req, res) => {
     const player = findPlayer(state, req.params.id);
     if (!player) return res.status(404).json({ ok: false, error: 'player not found' });

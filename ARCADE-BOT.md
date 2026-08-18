@@ -133,7 +133,7 @@ node scripts/arcade-bot.mjs --rounds 20 --out arcade-profile.json
 
 # replay it at volume (dry run first)
 node scripts/arcade-traffic.mjs --profile arcade-profile.json \
-  --location <venue-uuid> --player-id <card> --plays 200 --dry-run
+  --location <venue-uuid> --players 8 --plays 200 --dry-run
 ```
 
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
@@ -160,9 +160,16 @@ POST /api/loyalty/link       {locationId, cardNumber}
 POST /api/game-rewards/award {locationId, game, tickets, sessionId}
 ```
 
-Pass loyalty **card numbers** with `--card` (repeatable) or `--cards-file`; the
-CenterEdge mock seeds `770001112223` and friends. A card the vendor doesn't know
-fails at link time, before anything is posted.
+`--players N` fabricates N cards at the loyalty vendor and signs an account in
+for each, so no card list is needed. Against a real vendor — which issues cards
+at a counter, not over an API — pass existing numbers with `--card` /
+`--cards-file` instead. Either way a card the vendor doesn't know fails at link
+time, before anything is posted.
+
+**The pool is rate-limited.** `/api/auth/request-code` allows 10 per IP per
+hour, so a single run can mint at most 10 new accounts and refuses more up
+front. Sessions are cached to `--sessions-file` and reused free on later runs,
+so the pool grows across runs and a warm one costs no auth calls at all.
 
 The bypass code is only returned when no mail provider is configured and
 `NODE_ENV` isn't production — the dev/staging shape this tool is for. Against a
