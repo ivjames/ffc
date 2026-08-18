@@ -35,6 +35,11 @@
 - Deploys clone this whole repo; `ffc deploy` (bin/ffc) pulls **main** only —
   feature branches are checked out manually + `ffc restart`.
 - Server tests: `cd server && TEST_DATABASE_URL=... npm test` (needs Postgres).
+- Live trivia's question bank ships two ways: a 57-question House Pack seeded by
+  `schema.sql`, and a committed 48k-question OpenTriviaQA pack loaded on demand
+  by `cd server && npm run import:trivia` (never during a deploy). The pack is
+  CC BY-SA 4.0 — imported rows carry `source = 'opentriviaqa'` and any surface
+  that deals them needs a visible credit; see `server/seed/README.md`.
 - Model pricing/decisions for vision features: see `IMAGE-DESCRIPTION-PRICING.md`
   and `HUNT-PRICING.md`; re-verify provider rates at build time — cheap vision
   tiers churn fast.

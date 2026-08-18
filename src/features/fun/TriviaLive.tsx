@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { QuestionCredit } from '../shared/Credits';
 import QrScanner from '../shared/QrScanner';
 import { joinCodeFromScan } from '../../lib/scanJoinCode';
 import { useDeadline, formatCountdown } from './useDeadline';
@@ -427,6 +428,7 @@ export default function TriviaLive() {
           >
             Running the game? Set one up →
           </button>
+          <QuestionCredit />
         </Content>
       </Screen>
     );
@@ -438,6 +440,7 @@ export default function TriviaLive() {
         <TopBar title="Live Trivia" back="/arcade" />
         <Content>
           <p className="text-center text-sm text-fairway-100/70">Connecting to the game…</p>
+          <QuestionCredit />
         </Content>
       </Screen>
     );
@@ -485,6 +488,7 @@ export default function TriviaLive() {
         <button onClick={leave} className="mt-3 w-full text-center text-xs text-fairway-400">
           Leave the game
         </button>
+        <QuestionCredit />
       </Content>
     </Screen>
   );

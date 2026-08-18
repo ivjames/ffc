@@ -13,6 +13,7 @@ import CourseMap from './features/courses/CourseMap';
 import LocationPicker from './features/locations/LocationPicker';
 import Rules from './features/rules/Rules';
 import Privacy from './features/privacy/Privacy';
+import Credits from './features/shared/Credits';
 import TvLeaderboard from './features/tv/TvLeaderboard';
 import TvWall from './features/tv/TvWall';
 import Hunt from './features/hunt/Hunt';
@@ -265,6 +266,10 @@ export default function App() {
         </Route>
         {/* Plain-language disclosure of everything the app records. */}
         <Route path="/me/privacy" element={<Privacy />} />
+        {/* Attribution for third-party content the app ships (live-trivia
+            questions, icons). Linked from the screens that use it — CC BY-SA
+            lets a hyperlink carry the notice, this is what it points at. */}
+        <Route path="/credits" element={<Credits />} />
 
         {/* ── Stable external targets (NOT renamespaced) ────────────────── */}
         {/* Emailed-invite deep link — must keep its original path for links

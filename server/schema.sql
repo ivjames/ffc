@@ -1222,6 +1222,21 @@ create table if not exists trivia_question (
 create index if not exists trivia_question_pack_idx
   on trivia_question (org_id, category) where archived_at is null and active;
 
+-- Where a row came from. Null means a person wrote it — by hand in Master
+-- Control, or in the House Pack seed below. A value names the bulk import that
+-- produced it ('opentriviaqa'), which is what makes such an import reversible:
+-- forty-eight thousand donated questions have to be retirable in one statement
+-- by an operator who decides they want their own voice back, and telling them
+-- apart from a hand-written row is the only way to do that safely.
+alter table trivia_question add column if not exists source text;
+
+-- Both the House Pack seed and the bulk importer decide what to write by
+-- asking "is this prompt already in the platform pack?". Without this that
+-- question is a sequential scan, once per batch, over a table the import is
+-- itself growing to fifty thousand rows.
+create index if not exists trivia_question_platform_prompt_idx
+  on trivia_question (prompt) where org_id is null;
+
 -- One live game. `question_ids` is fixed at start so the running order can't
 -- shift underneath a game in progress (an admin editing the bank mid-round
 -- must not change what the room is looking at). `status` is the state machine
