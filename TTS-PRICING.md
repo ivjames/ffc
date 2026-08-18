@@ -78,6 +78,27 @@ per-game bill *and* puts venue wifi back in the critical path mid-question.
 Inworld, Hume and Rime do not address storage on their pricing pages — ask
 before designing around them.
 
+## The generative engine
+
+Neural read as "meh" the first time it was auditioned on real questions, which
+is the usual verdict on it for anything performed rather than announced. The
+bench now offers both engines side by side:
+
+- **en-US generative voices**: Danielle, Joanna, Matthew, Ruth, Salli, Stephen,
+  Tiffany. The bench runs Joanna and Matthew on both engines (so the same voice
+  can be compared directly) plus Ruth and Stephen generative-only.
+- **$30/M against neural's $16.** A 5,000-question bank: $28 once, versus $15.
+  Still not the deciding factor.
+- **No newscaster, no DRC** — generative supports neither. It is expressive
+  without markup rather than because of it, so those knobs stop applying.
+- **Region-limited**: us-east-1, us-west-2, eu-central-1/2, eu-west-2,
+  ca-central-1, and several ap-* regions. Not every region Polly serves.
+- **One caveat worth weighing for trivia**: AWS documents an emergency-stop
+  mechanism against model hallucination, and says it "could end up cutting a
+  word during a generation step". A clipped word in a question read to a room
+  is a worse failure than a flat delivery, so listen for it. Cached audio helps
+  — a bad clip is caught once and re-synthesized, not re-rolled every game.
+
 ## Polly specifics that shaped the design
 
 - **Voices**: en-US neural includes Danielle, Gregory, Joanna, Kendra,
@@ -96,9 +117,8 @@ before designing around them.
 
 ## Auditioning
 
-**Master Control → Overview → "Voice bench"**, or `/api/admin/tts-bakeoff/ui`
-directly: pick a venue, price the run, synthesize, and play the clips in the
-page. That is the one that matters — the clips have to be judged on the tablet
+**Master Control → Ops → Voice bench** (`admin/VoiceBench.tsx`): pick a venue,
+see the price, synthesize, and play the clips. That is the one that matters — the clips have to be judged on the tablet
 you host from, through the speaker the room hears, and files written to a
 directory on the droplet are not listenable.
 

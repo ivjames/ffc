@@ -35,17 +35,13 @@ import {
   router as visionBakeoffRouter,
   publicRouter as visionBakeoffPublicRouter,
 } from "./visionBakeoff.js";
-import {
-  router as ttsBakeoffRouter,
-  publicRouter as ttsBakeoffPublicRouter,
-} from "./ttsBakeoff.js";
+import { router as ttsBakeoffRouter } from "./ttsBakeoff.js";
 
 export const router = Router();
 
 router.use(authPublicRouter); // POST /login — no auth required
 router.use(passwordPublicRouter); // POST /password/{forgot,token-check,set} — pre-auth by design (emailed set-password links)
 router.use(visionBakeoffPublicRouter); // GET /vision-bakeoff/ui — static page, no secrets; its API calls auth themselves
-router.use(ttsBakeoffPublicRouter); // GET /tts-bakeoff/ui — same deal for the voice bench
 
 router.use(requireAdminAuth); // everything below needs APP_TOKEN or a session
 

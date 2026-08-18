@@ -609,6 +609,56 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 // --- Endpoints --------------------------------------------------------------
+
+// --- Voice bench (Polly TTS bake-off) ---------------------------------------
+// super_admin only; /run spends on the AWS key in the server's environment.
+export type TtsVenue = { id: string; name: string; slug: string; orgId: string | null; orgName: string | null };
+export type TtsLine = { label: string; text: string };
+export type TtsEngineTotals = { clips: number; chars: number; usd: number };
+export type TtsPlan = {
+  venue: TtsVenue;
+  lines: TtsLine[];
+  clips: number;
+  chars: number;
+  usd: number;
+  byEngine: Record<string, TtsEngineTotals>;
+  usdPerM: number;
+  /** False when AWS_REGION has no generative engine — the lineup is neural
+   *  only, and the estimate already reflects that. */
+  generative: boolean;
+  region: string;
+};
+export type TtsClip = {
+  lineLabel: string;
+  text: string;
+  voice: string;
+  engine: string;
+  styleLabel: string;
+  file: string;
+  chars: number;
+  billed?: number;
+  usd?: number;
+  error?: string;
+};
+export type TtsRun = {
+  runId: string;
+  venue?: string;
+  createdAt: string;
+  clips: TtsClip[];
+  billed: number;
+  usd: number;
+  errors: number;
+};
+export type TtsRunSummary = {
+  runId: string;
+  createdAt: string;
+  venue: string | null;
+  clips: number;
+  billed: number;
+  usd: number;
+  errors: number;
+};
+
 export const api = {
   overview: () => req<Overview>('GET', '/overview'),
 
@@ -963,4 +1013,29 @@ export const api = {
   syntheticStart: (params: SyntheticBotParams) =>
     req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/start', params),
   syntheticStop: () => req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/stop'),
+
+  // Voice bench — Polly bake-off for live trivia's read-aloud. `plan` prices a
+  // run and spends nothing; `run` is the one that bills.
+  ttsVenues: () => req<{ venues: TtsVenue[] }>('GET', '/tts-bakeoff/venues'),
+  ttsPlan: (body: { locationId: string; questions: number }) =>
+    req<TtsPlan>('POST', '/tts-bakeoff/plan', body),
+  ttsRun: (body: { locationId: string; questions: number }) =>
+    req<{ run: TtsRun }>('POST', '/tts-bakeoff/run', body),
+  ttsRuns: () => req<{ runs: TtsRunSummary[] }>('GET', '/tts-bakeoff/runs'),
+  ttsRunGet: (runId: string) =>
+    req<{ run: TtsRun }>('GET', `/tts-bakeoff/runs/${encodeURIComponent(runId)}`),
+  // An <audio src> can't carry the auth header, same constraint as the photo
+  // thumbnails — fetch the bytes and hand back a Blob for an object URL.
+  fetchTtsClip: async (runId: string, file: string) => {
+    const res = await fetch(
+      `/api/admin/tts-bakeoff/audio/${encodeURIComponent(runId)}/${encodeURIComponent(file)}`,
+      { credentials: 'same-origin', headers: { 'x-app-token': getToken() } }
+    );
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('ffc-admin-unauthorized'));
+      throw new AuthError('unauthorized');
+    }
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`);
+    return res.blob();
+  },
 };

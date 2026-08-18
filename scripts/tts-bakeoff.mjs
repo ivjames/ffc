@@ -3,10 +3,11 @@
 //   cd /var/www/ffc/server && npm run tts:bakeoff -- --location upland
 //   cd /var/www/ffc/server && npm run tts:bakeoff -- --location upland --yes
 //
-// A thin CLI over server/lib/ttsBakeoff.js, which the Master Control page at
-// /api/admin/tts-bakeoff/ui drives too — so the script and the page audition
-// identically. Prefer the page: the clips have to be judged on the tablet you
-// host from, and files on the droplet are not listenable.
+// A thin CLI over server/lib/ttsBakeoff.js, which Master Control's Voice bench
+// screen (Ops → Voice bench, admin/VoiceBench.tsx) drives too — so the script
+// and the screen audition identically. Prefer the screen: the clips have to be
+// judged on the tablet you host from, and files on the droplet are not
+// listenable. A run made here shows up there under "replay a past run".
 //
 // A bare run prices the batch and spends nothing. --yes synthesizes, and the
 // report uses the API's own RequestCharacters rather than an estimate.
@@ -14,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  NEURAL_USD_PER_M,
+  ENGINES,
   STYLES,
   VOICES,
   bakeoffDir,
@@ -90,11 +91,16 @@ async function main() {
     console.log(`\nPolly bake-off — pre-flight`);
     console.log(`  venue       ${venue.name}${venue.orgName ? ` (${venue.orgName})` : ""}`);
     console.log(`  questions   ${bank.length}, spread shortest to longest`);
-    console.log(`  voices      ${VOICES.map((v) => v.id).join(", ")}`);
-    console.log(`  styles      ${STYLES.map((s) => s.label).join(", ")}`);
+    console.log(`  voices      ${VOICES.map((v) => `${v.id} (${v.engines.join("+")})`).join(", ")}`);
+    console.log(`  styles      ${STYLES.map((s) => s.label).join(", ")} — neural only`);
     console.log(`  clips       ${est.clips}`);
     console.log(`  billable    ${est.chars.toLocaleString()} characters`);
-    console.log(`  estimate    $${est.usd.toFixed(4)} at $${NEURAL_USD_PER_M}/M neural`);
+    // Per engine, because they are priced differently and a single blended
+    // rate would misreport whichever way the mix leans.
+    for (const [name, e] of Object.entries(est.byEngine)) {
+      console.log(`    ${name.padEnd(11)}${e.clips} clips, ${e.chars.toLocaleString()} chars, $${e.usd.toFixed(4)} at $${ENGINES[name].usdPerM}/M`);
+    }
+    console.log(`  estimate    $${est.usd.toFixed(4)}`);
 
     if (!has("yes")) {
       console.log(`\nNothing spent. Re-run with --yes to synthesize.\n`);
@@ -119,7 +125,8 @@ async function main() {
     console.log(`  cost        $${run.usd.toFixed(4)}`);
     if (run.errors) console.log(`  failed      ${run.errors} clip(s)`);
     console.log(`  files       ${join(bakeoffDir(), runId)}`);
-    console.log(`\n  Listen in Master Control: /api/admin/tts-bakeoff/ui\n`);
+    console.log(`\n  Listen in Master Control → Ops → Voice bench (/voice-bench),`);
+    console.log(`  which lists this run under "replay a past run".\n`);
   } finally {
     await pool.end();
   }

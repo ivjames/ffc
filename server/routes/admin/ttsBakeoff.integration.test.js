@@ -4,7 +4,8 @@
 // refuses before reaching AWS when no credentials are configured, which is
 // exactly the case a test environment is in. What IS covered is everything
 // that decides whether the bench is safe to put in front of an operator:
-//   - the page is reachable pre-auth (a static shell), the data is not,
+//   - the data needs super_admin, and the standalone page is gone (the UI is
+//     a Master Control screen now),
 //   - /plan prices a run without spending,
 //   - the bank it prices is scoped to ONE venue, so a bench on a multi-tenant
 //     box can't read another client's questions into a page on disk,
@@ -95,14 +96,11 @@ after(async () => {
   await close();
 });
 
-test("the page is reachable without auth; the data behind it is not", async () => {
+test("the data needs auth, and the standalone page is gone", async () => {
+  // The UI is admin/VoiceBench.tsx now. The old server-rendered page was
+  // pre-auth by necessity; nothing here should be reachable without a login.
   const page = await fetch(`${baseUrl}/api/admin/tts-bakeoff/ui`);
-  assert.equal(page.status, 200);
-  assert.match(page.headers.get("content-type") ?? "", /html/);
-  const html = await page.text();
-  assert.match(html, /Voice bake-off/);
-  // A static shell: no credentials, no venue list baked into it.
-  assert.ok(!/AKIA|aws_secret|x-app-token"\s*:\s*"/i.test(html));
+  assert.ok(page.status === 401 || page.status === 404, `ui -> ${page.status}`);
 
   const venues = await fetch(`${baseUrl}/api/admin/tts-bakeoff/venues`);
   assert.equal(venues.status, 401);
