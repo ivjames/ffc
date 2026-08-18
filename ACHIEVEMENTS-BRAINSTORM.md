@@ -1,9 +1,13 @@
 # Achievements — Brainstorm & Expansion Catalog
 
-Last updated: 2026-08-17. A candidate catalog for growing the app's
-achievements from the current three into a real badge wall. The catalog itself
-is **not built** — it's the menu to pick from. The premise underneath it is:
-the ticket payout has been removed, in code, and achievements now pay nothing.
+Last updated: 2026-08-18. A candidate catalog for growing the app's
+achievements from the current three into a real badge wall.
+
+**Status: the first slate is built.** 48 locally-detected badges ship in
+`src/lib/achievements/` (catalog + rules) behind a grouped wall — see
+[What's built](#whats-built). The rest of this document is the menu the
+remainder still comes from. The premise underneath all of it: the ticket payout
+has been removed, in code, and achievements now pay nothing.
 
 Companion docs: [`post-meeting-punchlist.md`](./post-meeting-punchlist.md) (#8,
 the rewards/ticket tie-in these came out of — now retired) and
@@ -398,17 +402,54 @@ and it costs nothing to be playful here.
    client — which is the same instinct as the naming rule, applied to scale
    instead of content.
 
-## Suggested first slate
+## What's built
 
-The catalog is **103 entries**: 63 local, 20 server, 20 needing new tracking.
+`src/lib/achievements/catalog.ts` is the single definition of every badge — key,
+label, how-to, icon, category, secret flag, reachability. `detect.ts` holds the
+rules; `Achievements.tsx` is only a surface over the two. The round summary
+renders achievement names from the same catalog, so the two screens cannot
+drift.
 
-Ship the **48 local golf badges** first — scoring (22), round shape (10),
-wipeouts (8), and the local half of courses & venues (8). All of it is pure
-arithmetic over data already in IndexedDB, works offline and signed-out, and
-needs no migration, no new endpoint, and no trust surface. That alone takes the
-wall from 3 badges to 48.
+Shipped: the scoring (22), field (10), course/venue (8) and wipeout (8)
+categories, plus the server-granted hunt badge — **49 entries, 48 of them
+detected on-device** from stored rounds, four of those secret. All of it works
+offline and signed-out, with no new endpoint, no schema change, and no trust
+surface.
 
-Then, in order: the **11 hunt badges** (server-side but nearly free — the
-columns already exist), the **fun-zone counter** (one small local store,
-unlocking 13 more), and finally **account-synced earned state** so the wall
-survives a cleared cache.
+Three decisions worth recording, because none were obvious from the catalog:
+
+1. **Whose round is it.** A pass-and-play round is one phone holding a whole
+   group, so every seat counts toward that device's wall. A shared multi-device
+   game is the opposite: each player has their own phone and their own wall, and
+   every device fetches the same roster — so only this device's seat counts, or
+   one player's ace would unlock the badge on all four phones. This is the same
+   distinction the retired ticket-claim path drew, for the same reason; the
+   payout went away, the question of whose round it was did not.
+2. **What a career rule counts.** Flattening history into one list per seat
+   makes a four-player afternoon look like four rounds — "two rounds in a day"
+   would fire on a single foursome, and one player's win would break another's
+   losing streak. So each career rule declares its unit: *by round* for
+   device-scoped facts (five visits to a venue), *by player tag* for anything
+   needing continuity (beating your own best, losing three in a row). Tags
+   repeat by design and are a weak identity, but across one device's history
+   they are the only handle on "the same person again".
+3. **Icons reuse the existing set.** The icon system is hand-drawn and curated,
+   one idea per icon, and `DrawnIcon` only accepts names that have art — so 45
+   bespoke drawings would be a large art commitment made badly and at speed.
+   Each badge instead points at the semantically closest existing icon
+   (`score.birdie`, `state.win`, `award.trophy`). Bespoke badge art is a design
+   pass worth doing deliberately, later, and the catalog is where it would land.
+
+### Still to build
+
+- **The hunt badges** (11) — server-side but nearly free: `hunt_find` already
+  stores `confidence`, `flagged`, and `countable`.
+- **The fun zone** (13), **photo booth** (5), **social** (6), **habit** (9) —
+  each needs a small device-local counter that does not exist yet.
+- **Secret & meta** (8) — the meta ones ("earn twenty other badges") need only
+  the catalog, so they are the cheapest remaining group.
+- **Earned-state durability.** Detection re-derives from stored rounds on every
+  visit, so clearing site data silently empties the wall. Persisting an
+  earned-set — and syncing it to the account for signed-in players, so the wall
+  follows them across devices — is the one piece of new persistence worth
+  building, and it should land before the catalog grows much further.

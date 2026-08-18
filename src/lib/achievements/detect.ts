@@ -1,0 +1,495 @@
+import type { LocalRound } from '../../types';
+import { COURSES } from '../../data/courses';
+import { STROKE_CAP } from '../scoring';
+import { ACHIEVEMENTS, type Achievement, type ReachContext } from './catalog';
+
+// On-device achievement detection. Every rule here reads only completed rounds
+// in IndexedDB, so the wall works with no account and no network — the same
+// offline-first stance the rest of the round record takes.
+//
+// ── Whose achievements are these? ───────────────────────────────────────────
+//
+// The wall is per-device, and what "this device played" means depends on how
+// the round was played:
+//
+//   pass-and-play  one phone, one group, everyone's scores typed on it — the
+//                  device IS the group, so every slot counts.
+//   shared game    each player is on their own phone with their own wall, and
+//                  every device fetches the same roster — so only this device's
+//                  own slot counts, or one player's ace would unlock the badge
+//                  on all four phones.
+//
+// This mirrors the rule the old ticket-claim path used for exactly the same
+// reason (it stopped one reward paying onto four cards); the payout is gone,
+// but the question of whose round it was did not go with it.
+//
+// ── What is deliberately NOT here ───────────────────────────────────────────
+//
+// Earned state is RE-DERIVED on every visit rather than stored. That is the
+// existing behaviour and it keeps a badge honest — it can never claim a round
+// the device no longer has — but it also means clearing site data silently
+// empties the wall. Persisting an earned-set (and syncing it to the account for
+// signed-in players, so the wall follows them across devices) is the next piece
+// of work; see ACHIEVEMENTS-BRAINSTORM.md.
+
+/** One player's card inside one completed round — the unit every rule reads. */
+export type PlayerRound = {
+  roundId: string;
+  courseId: string;
+  locationId: string | null;
+  pars: number[];
+  /** This player's card. */
+  strokes: (number | null)[];
+  /** Every slot's card, this one included — the multi-player rules need it. */
+  field: (number | null)[][];
+  slot: number;
+  /**
+   * The 3-char player tag. Tags repeat by design, so this is a weak identity —
+   * but across ONE device's history it is the only handle on "the same person
+   * again", and the career streaks below need one (see CAREER_RULES).
+   */
+  tag: string;
+  completedAt: number;
+};
+
+/**
+ * The slice of the venue catalog these rules need. Passed in rather than read
+ * off the COURSES global because that global boots EMPTY and is filled by the
+ * first /api/content hydrate (see data/courses.ts) — a rule that closed over it
+ * at import time would silently judge every round against no course at all.
+ * Defaulting to the live catalog keeps call sites simple; naming it as a
+ * parameter keeps every rule a pure function of its inputs.
+ */
+export type CourseInfo = { id: string; locationId: string | null; pars: number[] };
+
+export function liveCatalog(): CourseInfo[] {
+  return COURSES.map((c) => ({ id: c.id, locationId: c.locationId ?? null, pars: c.pars }));
+}
+
+const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
+const entered = (s: (number | null)[]) => s.filter((n): n is number => n != null);
+const total = (s: (number | null)[]) => sum(entered(s));
+const isFull = (s: (number | null)[], pars: number[]) => entered(s).length === pars.length;
+const coursePar = (pars: number[]) => sum(pars);
+
+/** Aces in this card. */
+const aces = (s: (number | null)[]) => entered(s).filter((n) => n === 1).length;
+
+/**
+ * Flatten stored rounds into the per-player cards this device owns.
+ * Rounds that are unfinished, or on a course this build doesn't know (so par is
+ * unknowable), are skipped rather than guessed at.
+ */
+export function playerRounds(
+  rounds: LocalRound[],
+  catalog: CourseInfo[] = liveCatalog(),
+): PlayerRound[] {
+  const byId = new Map(catalog.map((c) => [c.id, c]));
+  const out: PlayerRound[] = [];
+  for (const r of rounds) {
+    if (r.completedAt == null) continue;
+    const course = byId.get(r.courseId);
+    if (!course) continue;
+    const slots = r.playerTags.map((_, i) => i);
+    const field = slots.map((i) => r.scores[i] ?? []);
+    // Shared game: this device speaks only for its own seat (see the header).
+    const owned = r.shared ? [r.shared.slot] : slots;
+    for (const slot of owned) {
+      const strokes = r.scores[slot];
+      if (!strokes) continue;
+      out.push({
+        roundId: r.clientId,
+        courseId: r.courseId,
+        locationId: course.locationId,
+        pars: course.pars,
+        strokes,
+        field,
+        slot,
+        tag: r.playerTags[slot] ?? '',
+        completedAt: r.completedAt,
+      });
+    }
+  }
+  return out.sort((a, b) => a.completedAt - b.completedAt);
+}
+
+// ── Multi-player helpers ────────────────────────────────────────────────────
+
+/** Totals through hole index `upto`, or null if anyone has a gap that far. */
+function runningTotals(field: (number | null)[][], upto: number): number[] | null {
+  const totals: number[] = [];
+  for (const card of field) {
+    let t = 0;
+    for (let h = 0; h <= upto; h++) {
+      const v = card[h];
+      if (v == null) return null;
+      t += v;
+    }
+    totals.push(t);
+  }
+  return totals;
+}
+
+/** The index holding an OUTRIGHT lead (lowest, alone), or null if tied. */
+function soleLeader(totals: number[]): number | null {
+  let best = Infinity;
+  let who = -1;
+  let ties = 0;
+  totals.forEach((t, i) => {
+    if (t < best) {
+      best = t;
+      who = i;
+      ties = 1;
+    } else if (t === best) ties++;
+  });
+  return ties === 1 ? who : null;
+}
+
+const isMultiplayer = (r: PlayerRound) => r.field.length >= 2;
+const allFull = (r: PlayerRound) => r.field.every((c) => isFull(c, r.pars));
+/** Final totals when every player carded out, else null. */
+const finalTotals = (r: PlayerRound) => (allFull(r) ? runningTotals(r.field, r.pars.length - 1) : null);
+
+// ── Per-round rules ─────────────────────────────────────────────────────────
+// Each answers "did THIS card, in THIS round, earn the badge?".
+
+const ROUND_RULES: Record<string, (r: PlayerRound) => boolean> = {
+  hole_in_one: (r) => aces(r.strokes) >= 1,
+  double_ace: (r) => aces(r.strokes) >= 2,
+  triple_ace: (r) => aces(r.strokes) >= 3,
+  hot_start: (r) => r.strokes[0] === 1,
+  closer: (r) => r.strokes[r.pars.length - 1] === 1,
+  halfway_hero: (r) => r.strokes[8] === 1,
+  bookends: (r) => r.strokes[0] === 1 && r.strokes[r.pars.length - 1] === 1,
+
+  birdie: (r) => r.pars.some((p, i) => r.strokes[i] != null && r.strokes[i]! < p),
+  birdie_streak: (r) => {
+    let run = 0;
+    for (let i = 0; i < r.pars.length; i++) {
+      const s = r.strokes[i];
+      if (s != null && s < r.pars[i]) {
+        if (++run >= 3) return true;
+      } else run = 0;
+    }
+    return false;
+  },
+  perfect_nine: (r) => {
+    let run = 0;
+    for (let i = 0; i < r.pars.length; i++) {
+      const s = r.strokes[i];
+      if (s != null && s <= r.pars[i]) {
+        if (++run >= 9) return true;
+      } else run = 0;
+    }
+    return false;
+  },
+  threading_it: (r) => {
+    const fours = r.pars.map((p, i) => [p, i] as const).filter(([p]) => p === 4);
+    if (fours.length === 0) return false;
+    return fours.every(([p, i]) => r.strokes[i] != null && r.strokes[i]! < p);
+  },
+
+  under_par: (r) => isFull(r.strokes, r.pars) && total(r.strokes) < coursePar(r.pars),
+  even_steven: (r) => isFull(r.strokes, r.pars) && total(r.strokes) === coursePar(r.pars),
+  so_close: (r) => isFull(r.strokes, r.pars) && total(r.strokes) - coursePar(r.pars) === 1,
+  deep_red: (r) => isFull(r.strokes, r.pars) && coursePar(r.pars) - total(r.strokes) >= 10,
+  the_long_way: (r) => isFull(r.strokes, r.pars) && total(r.strokes) - coursePar(r.pars) >= 20,
+  bogey_free: (r) =>
+    isFull(r.strokes, r.pars) && r.pars.every((p, i) => r.strokes[i]! <= p),
+  par_machine: (r) => isFull(r.strokes, r.pars) && r.pars.every((p, i) => r.strokes[i] === p),
+  metronome: (r) =>
+    isFull(r.strokes, r.pars) && r.pars.every((p, i) => Math.abs(r.strokes[i]! - p) <= 1),
+  survivor: (r) =>
+    isFull(r.strokes, r.pars) &&
+    total(r.strokes) < coursePar(r.pars) &&
+    entered(r.strokes).some((s) => s >= STROKE_CAP),
+
+  front_nine: (r) => nineUnderPar(r, 0),
+  back_nine: (r) => nineUnderPar(r, 9),
+  comeback: (r) => {
+    const front = nineSplit(r, 0);
+    const back = nineSplit(r, 9);
+    if (!front || !back) return false;
+    return front.strokes - front.par >= 3 && back.strokes < back.par;
+  },
+
+  capped_out: (r) => entered(r.strokes).filter((s) => s >= STROKE_CAP).length >= 5,
+  rock_bottom: (r) =>
+    isFull(r.strokes, r.pars) && entered(r.strokes).every((s) => s >= STROKE_CAP),
+  escape_artist: (r) =>
+    r.pars.some((_, i) => r.strokes[i] != null && r.strokes[i]! >= STROKE_CAP && r.strokes[i + 1] === 1),
+  rally_killer: (r) =>
+    r.pars.some(
+      (_, i) => r.strokes[i] === 1 && r.strokes[i + 1] != null && r.strokes[i + 1]! >= STROKE_CAP,
+    ),
+
+  // ── The field ─────────────────────────────────────────────────────────────
+  party_of_four: (r) => r.field.length === 4 && allFull(r),
+  full_house: (r) =>
+    r.field.length === 4 &&
+    allFull(r) &&
+    r.field.every((c) => total(c) < coursePar(r.pars)),
+  photo_finish: (r) => {
+    const totals = finalTotals(r);
+    if (!totals || !isMultiplayer(r) || soleLeader(totals) !== r.slot) return false;
+    const others = totals.filter((_, i) => i !== r.slot);
+    return Math.min(...others) - totals[r.slot] === 1;
+  },
+  ringer: (r) => {
+    const totals = finalTotals(r);
+    if (!totals || r.field.length !== 4 || soleLeader(totals) !== r.slot) return false;
+    const others = totals.filter((_, i) => i !== r.slot);
+    return Math.min(...others) - totals[r.slot] >= 10;
+  },
+  dead_heat: (r) => {
+    const totals = finalTotals(r);
+    if (!totals || !isMultiplayer(r)) return false;
+    const best = Math.min(...totals);
+    return totals[r.slot] === best && totals.filter((t) => t === best).length >= 2;
+  },
+  good_sport: (r) => {
+    const totals = finalTotals(r);
+    if (!totals || !isMultiplayer(r)) return false;
+    const worst = Math.max(...totals);
+    return totals[r.slot] === worst && totals.filter((t) => t === worst).length === 1;
+  },
+  clean_sweep: (r) => {
+    if (!isMultiplayer(r) || !allFull(r)) return false;
+    return r.pars.every((_, h) =>
+      r.field.every((card, i) => i === r.slot || card[h]! > r.strokes[h]!),
+    );
+  },
+  photo_bomb: (r) =>
+    isMultiplayer(r) &&
+    r.pars.some(
+      (p, h) =>
+        r.strokes[h] === 1 &&
+        r.field.every((card, i) => i === r.slot || (card[h] != null && card[h]! > p)),
+    ),
+  wire_to_wire: (r) => {
+    if (!isMultiplayer(r) || !allFull(r)) return false;
+    return r.pars.every((_, h) => {
+      const totals = runningTotals(r.field, h);
+      return totals != null && soleLeader(totals) === r.slot;
+    });
+  },
+  underdog: (r) => {
+    const totals = finalTotals(r);
+    if (!totals || !isMultiplayer(r) || soleLeader(totals) !== r.slot) return false;
+    // Never held the outright lead at any point before the final hole.
+    for (let h = 0; h < r.pars.length - 1; h++) {
+      const running = runningTotals(r.field, h);
+      if (running && soleLeader(running) === r.slot) return false;
+    }
+    return true;
+  },
+  come_from_behind: (r) => {
+    const totals = finalTotals(r);
+    if (!totals || !isMultiplayer(r) || soleLeader(totals) !== r.slot) return false;
+    const penultimate = runningTotals(r.field, r.pars.length - 2);
+    // Strictly behind the best score with one hole to play.
+    return penultimate != null && penultimate[r.slot] > Math.min(...penultimate);
+  },
+};
+
+/** Strokes-and-par for one nine, or null if it isn't fully carded. */
+function nineSplit(r: PlayerRound, start: number): { strokes: number; par: number } | null {
+  const holes = r.pars.slice(start, start + 9).map((p, i) => [p, start + i] as const);
+  if (holes.length < 9) return null;
+  if (holes.some(([, i]) => r.strokes[i] == null)) return null;
+  return {
+    strokes: sum(holes.map(([, i]) => r.strokes[i]!)),
+    par: sum(holes.map(([p]) => p)),
+  };
+}
+function nineUnderPar(r: PlayerRound, start: number): boolean {
+  const nine = nineSplit(r, start);
+  return nine != null && nine.strokes < nine.par;
+}
+
+// ── Career rules ────────────────────────────────────────────────────────────
+// These read the whole history at once. `rs` arrives sorted oldest-first, and
+// carries one entry PER SEAT — which is the trap these rules have to dodge.
+//
+// A pass-and-play round contributes every seat, so a naive scan over `rs` sees
+// a four-player round as four rounds: "two rounds in a day" would fire on one
+// afternoon foursome, and one player's win would break another's losing streak.
+// So each rule below declares its unit:
+//
+//   byRound   device-scoped — "this device played five times at that venue".
+//             Seats collapse; the round is counted once.
+//   byTag     person-scoped — "you beat your own best". Continuity across
+//             rounds matters, so entries are grouped by player tag.
+
+/** One entry per round, keeping the seats that belong to it. */
+function byRound(rs: PlayerRound[]): { round: PlayerRound; seats: PlayerRound[] }[] {
+  const map = new Map<string, PlayerRound[]>();
+  for (const r of rs) {
+    const list = map.get(r.roundId) ?? [];
+    list.push(r);
+    map.set(r.roundId, list);
+  }
+  return [...map.values()]
+    .map((seats) => ({ round: seats[0], seats }))
+    .sort((a, b) => a.round.completedAt - b.round.completedAt);
+}
+
+/** Seats grouped by player tag, each list oldest-first. */
+function byTag(rs: PlayerRound[]): PlayerRound[][] {
+  const map = new Map<string, PlayerRound[]>();
+  for (const r of rs) {
+    const list = map.get(r.tag) ?? [];
+    list.push(r);
+    map.set(r.tag, list);
+  }
+  return [...map.values()];
+}
+
+const CAREER_RULES: Record<string, (rs: PlayerRound[], catalog: CourseInfo[]) => boolean> = {
+  // The starter badge: the first course you finish is, by definition, one you
+  // had never played.
+  new_ground: (rs) => rs.length >= 1,
+
+  road_trip: (rs) => new Set(rs.map((r) => r.locationId).filter(Boolean)).size >= 3,
+
+  regular: (rs) => {
+    const byVenue = new Map<string, number>();
+    for (const { round } of byRound(rs)) {
+      if (!round.locationId) continue;
+      byVenue.set(round.locationId, (byVenue.get(round.locationId) ?? 0) + 1);
+    }
+    return [...byVenue.values()].some((n) => n >= 5);
+  },
+
+  marathon: (rs) => {
+    const days = new Map<string, number>();
+    for (const { round, seats } of byRound(rs)) {
+      if (!seats.some((s) => isFull(s.strokes, s.pars))) continue;
+      const day = new Date(round.completedAt).toDateString();
+      days.set(day, (days.get(day) ?? 0) + 1);
+    }
+    return [...days.values()].some((n) => n >= 2);
+  },
+
+  course_collector: (rs, catalog) => {
+    const played = new Set(rs.map((r) => r.courseId));
+    return venuesWithCourses(catalog).some(
+      (v) => v.courseIds.length > 0 && v.courseIds.every((id) => played.has(id)),
+    );
+  },
+
+  grand_slam: (rs, catalog) => {
+    const beaten = new Set(rs.filter((r) => ROUND_RULES.under_par(r)).map((r) => r.courseId));
+    return venuesWithCourses(catalog).some(
+      (v) => v.courseIds.length > 0 && v.courseIds.every((id) => beaten.has(id)),
+    );
+  },
+
+  // Person-scoped: beating the stranger who used this phone last week is not a
+  // personal best.
+  personal_best: (rs) =>
+    byTag(rs).some((seats) => {
+      const best = new Map<string, number>();
+      for (const r of seats) {
+        if (!isFull(r.strokes, r.pars)) continue;
+        const t = total(r.strokes);
+        const prior = best.get(r.courseId);
+        if (prior != null && t < prior) return true;
+        if (prior == null || t < prior) best.set(r.courseId, t);
+      }
+      return false;
+    }),
+
+  // A course has to have beaten YOU at least twice before beating it back
+  // counts as revenge.
+  nemesis: (rs) =>
+    byTag(rs).some((seats) => {
+      const overPar = new Map<string, number>();
+      for (const r of seats) {
+        if (!isFull(r.strokes, r.pars)) continue;
+        const diff = total(r.strokes) - coursePar(r.pars);
+        const losses = overPar.get(r.courseId) ?? 0;
+        if (diff < 0 && losses >= 2) return true;
+        if (diff > 0) overPar.set(r.courseId, losses + 1);
+      }
+      return false;
+    }),
+
+  // Device-scoped, and counted once per round: capping the same hole twice in
+  // ONE round is a bad afternoon, not a grudge.
+  windmills_revenge: (rs) => {
+    const seen = new Set<string>();
+    for (const { seats } of byRound(rs)) {
+      const thisRound = new Set<string>();
+      for (const r of seats) {
+        r.pars.forEach((_, h) => {
+          if (r.strokes[h] != null && r.strokes[h]! >= STROKE_CAP) {
+            thisRound.add(`${r.courseId}:${h}`);
+          }
+        });
+      }
+      for (const k of thisRound) {
+        if (seen.has(k)) return true;
+        seen.add(k);
+      }
+    }
+    return false;
+  },
+
+  // Person-scoped: a streak belongs to whoever kept losing, and in
+  // pass-and-play somebody comes last every single round.
+  consolation_prize: (rs) =>
+    byTag(rs).some((seats) => {
+      let streak = 0;
+      for (const r of seats) {
+        if (!isMultiplayer(r) || !allFull(r)) continue;
+        if (ROUND_RULES.good_sport(r)) {
+          if (++streak >= 3) return true;
+        } else streak = 0;
+      }
+      return false;
+    }),
+};
+
+/** Courses grouped by the venue that owns them, from the live catalog. */
+function venuesWithCourses(catalog: CourseInfo[]): { locationId: string; courseIds: string[] }[] {
+  const byVenue = new Map<string, string[]>();
+  for (const c of catalog) {
+    if (!c.locationId) continue;
+    const list = byVenue.get(c.locationId) ?? [];
+    list.push(c.id);
+    byVenue.set(c.locationId, list);
+  }
+  return [...byVenue].map(([locationId, courseIds]) => ({ locationId, courseIds }));
+}
+
+/** What this deployment's catalog can support — drives `Achievement.reach`. */
+export function reachContext(catalog: CourseInfo[] = liveCatalog()): ReachContext {
+  const venues = venuesWithCourses(catalog);
+  return {
+    venueCount: new Set(catalog.map((c) => c.locationId).filter(Boolean)).size,
+    maxCoursesAtOneVenue: venues.reduce((m, v) => Math.max(m, v.courseIds.length), 0),
+    hasParFourHole: catalog.some((c) => c.pars.includes(4)),
+  };
+}
+
+/** The badges worth showing here — see the reachability note in catalog.ts. */
+export function reachableAchievements(ctx = reachContext()): Achievement[] {
+  return ACHIEVEMENTS.filter((a) => a.reach == null || a.reach(ctx));
+}
+
+/** Every locally-detectable badge these stored rounds have earned. */
+export function detectEarned(
+  rounds: LocalRound[],
+  catalog: CourseInfo[] = liveCatalog(),
+): Set<string> {
+  const cards = playerRounds(rounds, catalog);
+  const earned = new Set<string>();
+  for (const [key, rule] of Object.entries(ROUND_RULES)) {
+    if (cards.some((c) => rule(c))) earned.add(key);
+  }
+  for (const [key, rule] of Object.entries(CAREER_RULES)) {
+    if (rule(cards, catalog)) earned.add(key);
+  }
+  return earned;
+}
