@@ -9,12 +9,25 @@ const PARS = Array(18).fill(3); // course par 54
 const fullCard = (strokes, playerIndex = 0) =>
   Array.from({ length: 18 }, (_, i) => ({ playerIndex, hole: i + 1, strokes }));
 
-test("the catalog labels every achievement a round can grant", () => {
-  // The catalog is what Master Control and the player app render a grant as, so
-  // an achievement missing here would surface as a raw key.
+test("the catalog labels every achievement this server can grant", () => {
+  // Master Control renders grants through this catalog (routes/admin/rewards.js
+  // serves the label with the rollup), so a key missing here reaches a venue
+  // manager as raw snake_case. Listed explicitly: adding a grant without adding
+  // its label should fail here rather than in front of an operator.
   assert.deepEqual(Object.keys(ACHIEVEMENTS).sort(), [
+    "above_board",
+    "eagle_eye",
+    "first_find",
+    "grand_hunter",
+    "hoarder",
     "hole_in_one",
     "hunt_master",
+    "multitasker",
+    "naturalist",
+    "persistence",
+    "quick_draw",
+    "sharpshooter",
+    "team_player",
     "under_par",
   ]);
   for (const label of Object.values(ACHIEVEMENTS)) {
@@ -177,6 +190,21 @@ test("quick draw ignores optional countable finds made later", () => {
   assert.ok(
     !keys([find({ hole: 3, itemId: "many", countable: true })]).includes("quick_draw")
   );
+});
+
+test("quick draw ignores finds for items the venue deactivated", () => {
+  const done = new Set(["AAA"]);
+  const keys = (rows) => huntAchievements(rows, { completedTags: done }).map((g) => g.achievement);
+  // The active list was finished on the front nine. A later find for an item
+  // that no longer counts toward completion must not count against it either.
+  assert.ok(
+    keys([
+      find({ hole: 5, active: true }),
+      find({ hole: 13, itemId: "gone", active: false, createdAt: 6 }),
+    ]).includes("quick_draw")
+  );
+  // Rows without the flag at all are treated as active (older callers).
+  assert.ok(!keys([find({ hole: 13 })]).includes("quick_draw"));
 });
 
 test("each player's finds are judged separately", () => {

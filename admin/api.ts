@@ -235,6 +235,8 @@ export type Announcement = {
 // ticket column: a grant carries no value to bank.
 export type RewardAchievementTotal = {
   achievement: string;
+  /** Staff-facing name, from the server's catalog (server/lib/rewards.js). */
+  label: string;
   granted: number; // achievements earned in the window
 };
 
@@ -243,6 +245,7 @@ export type RewardSummaryRow = {
   locationId: string | null;
   locationName: string | null;
   achievement: string;
+  label: string;
   granted: number;
 };
 
