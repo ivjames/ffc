@@ -22,6 +22,7 @@ import {
   dedupeKey,
   isApostropheInsertion,
   isFamilySafe,
+  isDoubledWordRemoval,
   isMinorTextEdit,
   loadPackRepairs,
   loadPackTypos,
@@ -219,6 +220,27 @@ describe('isMinorTextEdit', () => {
     expect(isMinorTextEdit('a cat', 'a large orange cat')).toBe(false);
   });
 
+  test('admits a doubled-word deletion, which a proportional bound would refuse', () => {
+    // "have have" -> "have" is five characters out of nine; measured as a
+    // proportion it looks like a rewrite, so the shape is recognised instead.
+    expect(isMinorTextEdit('have have', 'have')).toBe(true);
+    expect(isMinorTextEdit('movies movies', 'movies')).toBe(true);
+    expect(isMinorTextEdit('the The', 'The')).toBe(true);
+    expect(isDoubledWordRemoval('allows allows some', 'allows some')).toBe(true);
+  });
+
+  test('the doubled-word rule only matches an adjacent repeat', () => {
+    expect(isDoubledWordRemoval('the cat sat', 'the sat')).toBe(false);
+    expect(isDoubledWordRemoval('have have', 'has')).toBe(false);
+    // A legitimately repeated name is the right SHAPE — refusing it is the
+    // verifier's job, not the gate's, so this documents the division.
+    expect(isDoubledWordRemoval('Duran Duran', 'Duran')).toBe(true);
+  });
+
+  test('refuses a name substitution dressed up as a typo fix', () => {
+    expect(isMinorTextEdit('Wanker', 'Wubbzy')).toBe(false);
+  });
+
   test('bounds blast radius, not meaning — a short swap is the verifier\'s problem', () => {
     // Documented deliberately: no string metric separates "was"->"were" from
     // "cat"->"dog", so this gate cannot be the thing that decides correctness.
@@ -287,6 +309,28 @@ describe('applyPackTypos', () => {
     expect(applied).toBe(0);
     expect(skipped[0].reason).toBe('guarded-row');
     expect(rows[1].choices[0]).toBe('Lenyd Skynard');
+  });
+
+  test('refuses a choice fix that would collide with another choice', () => {
+    // "Commercial or mercantile activity. (noun)" over four manglings of
+    // "business" is a spelling question that never says the word, so only the
+    // structure gives it away: correcting a distractor duplicates the answer.
+    const rows = [
+      {
+        prompt: 'Commercial or mercantile activity. (noun)',
+        choices: ['bussines', 'buisness', 'bussiness', 'business'],
+        answer: 3,
+        category: 'General Knowledge',
+        difficulty: 2,
+        active: true,
+      },
+    ];
+    const { applied, skipped } = applyPackTypos(rows, [
+      { q: 'Commercial or mercantile activity. (noun)', f: 2, b: 'bussiness', a: 'business' },
+    ]);
+    expect(applied).toBe(0);
+    expect(skipped[0].reason).toBe('would-duplicate-choice');
+    expect(rows[0].choices).toEqual(['bussines', 'buisness', 'bussiness', 'business']);
   });
 
   test('refuses an entry that rewrites rather than corrects', () => {

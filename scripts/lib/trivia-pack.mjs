@@ -482,6 +482,16 @@ function applyEdits(rows, entries, { allow, allowReason, guard }) {
     }
     const fixed = field.slice(0, at) + e.a + field.slice(at + e.b.length);
 
+    // A choice edit that lands on another choice means the options were near
+    // misses of each other on purpose — a spelling question that never says
+    // the word "spelling", like "Commercial or mercantile activity. (noun)"
+    // over four manglings of "business". Structure catches what vocabulary
+    // cannot, so this guard is checked for every overlay.
+    if (!isPrompt) {
+      const clash = row.choices.some((c, i) => i !== e.f && c.trim().toLowerCase() === fixed.trim().toLowerCase());
+      if (clash) { skip("would-duplicate-choice"); continue; }
+    }
+
     const candidate = isPrompt
       ? { ...row, prompt: fixed }
       : { ...row, choices: row.choices.map((c, i) => (i === e.f ? fixed : c)) };
@@ -566,10 +576,33 @@ function editDistance(a, b, cap) {
  */
 export function isMinorTextEdit(before, after) {
   if (!before || !after || before === after) return false;
+  if (isDoubledWordRemoval(before, after)) return true;
   const words = (s) => s.trim().split(/\s+/).length;
   if (Math.abs(words(before) - words(after)) > 1) return false;
   const cap = Math.min(20, Math.max(4, Math.ceil(before.length * 0.25)));
   return editDistance(before, after, cap) <= cap;
+}
+
+/**
+ * True when `after` is `before` with one adjacent repeated word dropped.
+ *
+ * Deleting a doubled word costs its whole length plus a space, which busts a
+ * proportional distance bound on a short span — "have have" -> "have" is five
+ * characters out of nine. So this class of edit is recognised for what it is
+ * rather than measured: the two spans must be identical word sequences apart
+ * from one word that repeats the one before it, case-insensitively, which is
+ * a defect no matter which of the pair survives ("the The" -> "The").
+ */
+export function isDoubledWordRemoval(before, after) {
+  const b = before.trim().split(/\s+/);
+  const a = after.trim().split(/\s+/);
+  if (b.length !== a.length + 1) return false;
+  for (let i = 1; i < b.length; i++) {
+    if (b[i].toLowerCase() !== b[i - 1].toLowerCase()) continue;
+    const collapsed = b.slice(0, i).concat(b.slice(i + 1));
+    if (collapsed.length === a.length && collapsed.every((w, k) => w === a[k])) return true;
+  }
+  return false;
 }
 
 /**
