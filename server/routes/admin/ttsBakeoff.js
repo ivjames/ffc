@@ -17,6 +17,7 @@ import { isSuperAdmin } from "../../lib/adminAuth.js";
 import {
   NEURAL_USD_PER_M,
   bakeoffDir,
+  generativeAvailable,
   estimate,
   linesFor,
   listRuns,
@@ -74,6 +75,10 @@ router.post("/plan", async (req, res) => {
       lines: plan.lines.map((l) => ({ label: l.label, text: l.text })),
       ...estimate(plan.clips),
       usdPerM: NEURAL_USD_PER_M,
+      // Named so the page can say why generative is missing rather than
+      // leaving the operator to wonder where half the lineup went.
+      generative: plan.generative,
+      region: process.env.AWS_REGION || "us-east-1",
     });
   } catch (err) {
     console.error("[tts-bakeoff] plan error:", err);
@@ -148,5 +153,11 @@ async function buildPlan({ locationId, questions }) {
   });
   if (bank.length === 0) return { error: "no active questions in this venue's bank", status: 409 };
   const lines = linesFor(bank);
-  return { venue, lines, clips: planClips(lines) };
+  const generative = generativeAvailable();
+  return {
+    venue,
+    lines,
+    generative,
+    clips: planClips(lines, { generative }),
+  };
 }

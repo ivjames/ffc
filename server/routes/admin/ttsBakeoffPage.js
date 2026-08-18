@@ -165,12 +165,19 @@ async function price() {
     if (seq !== planSeq) return; // superseded by a newer selection
     planned = Object.assign(priced, { asked });
     $("burn").hidden = false;
+    const split = Object.entries(planned.byEngine || {})
+      .map(([name, e]) => e.clips + " " + name + " ($" + e.usd.toFixed(4) + ")")
+      .join(" + ");
     $("burn").innerHTML =
       "<div>Would synthesize <strong>" + planned.clips + " clips</strong> — " +
       planned.chars.toLocaleString() + " billable characters, <strong>$" + planned.usd.toFixed(4) +
-      "</strong> at $" + planned.usdPerM + "/M (Polly neural)</div>" +
-      '<div class="note">Nothing spent yet. The first 1M neural characters a month are free for the ' +
-      "first 12 months, so this may bill nothing at all.</div>";
+      "</strong></div>" +
+      '<div class="note">' + (split ? split + ". " : "") +
+      (planned.generative === false
+        ? "Generative is not available in " + esc(planned.region) + " — neural only. "
+        : "") +
+      "Neural is $16/M, generative $30/M. Nothing spent yet; the first 1M neural characters a " +
+      "month are free for the first 12 months.</div>";
     $("out").innerHTML = planned.lines
       .map((l) => '<section><h2>' + esc(l.label) + '</h2><p class="said">' + esc(l.text) + "</p></section>")
       .join("");
@@ -241,9 +248,10 @@ async function showRun(run) {
   }
   $("out").innerHTML = [...groups.entries()].map(([label, clips]) =>
     '<section><h2>' + esc(label) + '</h2><p class="said">' + esc(clips[0].text) + "</p>" +
-    "<table><tr><th>voice</th><th>style</th><th>listen</th><th>chars</th></tr>" +
+    "<table><tr><th>voice</th><th>engine</th><th>style</th><th>listen</th><th>chars</th></tr>" +
     clips.map((c, i) =>
-      "<tr><td>" + esc(c.voice) + "</td><td>" + esc(c.styleLabel) + "</td><td>" +
+      "<tr><td>" + esc(c.voice) + "</td><td>" + esc(c.engine || "neural") + "</td><td>" +
+      esc(c.styleLabel) + "</td><td>" +
       (c.error ? '<span class="err">' + esc(c.error) + "</span>"
                : '<span data-clip="' + esc(run.runId) + "|" + esc(c.file) + '">loading…</span>') +
       '</td><td class="num">' + (c.billed || 0) + "</td></tr>").join("") +
