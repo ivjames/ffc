@@ -20,15 +20,26 @@
 //   notices. Re-running the capture is what keeps this honest, and a profile
 //   carries the date it was captured so a stale one is visible.
 //
-// PLAYER IDS ARE NOT SYNTHETIC
-//   `playerId` is a LOYALTY VENDOR card id, and the award route forwards it
-//   straight to the vendor (routes/gameRewards.js → lib/posLoyalty.js). Made-up
-//   ids do not work: the CenterEdge mock 404s any unseeded player, so the award
-//   comes back 502 and leaves a 'pending' reservation holding daily-cap budget.
-//   So pass real test-card ids with --player-id (repeatable) or --players-file.
-//   The `synthetic-card-<n>` fallback pool exists only so --dry-run can show the
-//   shape of a payload; using it against a live API is expected to fail, and the
-//   script says so before it posts anything.
+// AWARDS RIDE A SIGNED-IN SESSION — THERE IS NO playerId FIELD
+//   The award route is `tenant(), requireUser` and resolves the card from the
+//   SESSION, not the request: "the card is the session's, never the request's"
+//   (routes/gameRewards.js). Posting a playerId does nothing; posting without a
+//   cookie is a flat 401. So each synthetic player here is a real account:
+//
+//     POST /api/auth/request-code  {email}              -> {bypassCode}
+//     POST /api/auth/verify        {email, code}        -> session cookie
+//     POST /api/loyalty/link       {locationId, cardNumber}
+//     POST /api/game-rewards/award {locationId, game, tickets, sessionId}
+//
+//   The bypass code is returned only when no mail provider is configured and
+//   NODE_ENV is not production (auth.js) — which is exactly the dev/staging
+//   shape this tool is for. Against a mail-configured deployment there is no way
+//   to mint sessions from a script, and this refuses to start rather than
+//   pretending; supply --cookie values from real sessions instead.
+//
+//   Card numbers are the loyalty vendor's own (the CenterEdge mock seeds
+//   770001112223 and friends). A card that does not exist there fails at link
+//   time, before any award is posted.
 //
 // SAFETY / ISOLATION, AND THE LIMIT OF IT
 //   Every award is posted with a reserved session id —
@@ -54,9 +65,12 @@
 //   --api URL          API base (env FFC_API_BASE, default http://localhost:8060)
 //   --location UUID    venue to award against (required)
 //   --plays N          awards per sweep (default 100)
-//   --player-id ID     a real loyalty card id to award against, repeatable
-//   --players-file F   file of card ids, one per line (blank/# lines ignored)
-//   --players N        size of the placeholder pool when no real ids are given
+//   --card NUMBER      loyalty CARD NUMBER to link a synthetic account to,
+//                      repeatable; each becomes one signed-in player
+//   --cards-file F     file of card numbers, one per line (blank/# lines skipped)
+//   --email-domain D   where synthetic accounts live (default example.com)
+//   --cookie C         use an existing session cookie instead of signing in,
+//                      repeatable — for deployments with mail configured
 //   --game KEY         restrict to these games, repeatable (default: all in profile)
 //   --interval-min M   minutes between sweeps (default: single sweep and exit)
 //   --sweeps N         stop after N sweeps (default 1, or forever with --interval-min)
@@ -80,9 +94,10 @@ function parseArgs(argv) {
     api: process.env.FFC_API_BASE || 'http://localhost:8060',
     location: null,
     plays: 100,
-    players: 25,
-    playerIds: [],
-    playersFile: null,
+    cards: [],
+    cardsFile: null,
+    emailDomain: 'example.com',
+    cookies: [],
     games: [],
     intervalMin: null,
     sweeps: null,
@@ -98,9 +113,10 @@ function parseArgs(argv) {
     else if (k === '--api') a.api = next();
     else if (k === '--location') a.location = next();
     else if (k === '--plays') a.plays = Number(next());
-    else if (k === '--players') a.players = Number(next());
-    else if (k === '--player-id') a.playerIds.push(next());
-    else if (k === '--players-file') a.playersFile = next();
+    else if (k === '--card') a.cards.push(next());
+    else if (k === '--cards-file') a.cardsFile = next();
+    else if (k === '--email-domain') a.emailDomain = next();
+    else if (k === '--cookie') a.cookies.push(next());
     else if (k === '--game') a.games.push(next());
     else if (k === '--interval-min') a.intervalMin = Number(next());
     else if (k === '--sweeps') a.sweeps = Number(next());
@@ -140,6 +156,55 @@ async function confirm(question) {
   return /^y(es)?$/i.test(answer.trim());
 }
 
+/** The session cookie from a Set-Cookie header list, or null. */
+function sessionCookie(res) {
+  const raw = res.headers.getSetCookie?.() ?? [];
+  for (const c of raw) {
+    const first = c.split(';')[0];
+    if (first.includes('=')) return first;
+  }
+  return null;
+}
+
+/**
+ * Turn one loyalty card number into a signed-in player: request a code, verify
+ * it, link the card. Returns the session cookie, or throws with the step that
+ * failed — a card the vendor does not know fails HERE, before any award is
+ * posted, which is where a bad pool should surface.
+ */
+async function mintPlayer(api, locationId, cardNumber, email) {
+  const post = async (path, body, cookie) => {
+    const res = await fetch(`${api}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body),
+    });
+    return { res, data: await res.json().catch(() => ({})) };
+  };
+
+  const asked = await post('/api/auth/request-code', { email });
+  const code = asked.data?.bypassCode;
+  if (!code) {
+    throw new Error(
+      'no bypassCode from /api/auth/request-code — this deployment has a mail ' +
+        'provider configured (or is production), so sessions cannot be minted ' +
+        'from a script. Pass --cookie values from real sessions instead.',
+    );
+  }
+
+  const verified = await post('/api/auth/verify', { email, code });
+  const cookie = sessionCookie(verified.res);
+  if (!verified.res.ok || !cookie) {
+    throw new Error(`verify failed for ${email}: ${verified.data?.error ?? verified.res.status}`);
+  }
+
+  const linked = await post('/api/loyalty/link', { locationId, cardNumber }, cookie);
+  if (!linked.res.ok) {
+    throw new Error(`link failed for card ${cardNumber}: ${linked.data?.error ?? linked.res.status}`);
+  }
+  return cookie;
+}
+
 function printCleanup(runId, realCards) {
   console.log(`\nCleanup (our side only):`);
   console.log(`  delete from game_ticket_award where session_id like 'synthetic:${runId}:%';`);
@@ -177,19 +242,15 @@ async function main() {
 
   const ageDays = (Date.now() - Date.parse(profile.capturedAt)) / 86_400_000;
 
-  // Real vendor card ids if supplied; otherwise a clearly-labelled placeholder
-  // pool that only makes sense for --dry-run (see the header note).
-  let cards = [...args.playerIds];
-  if (args.playersFile) {
-    for (const line of readFileSync(args.playersFile, 'utf8').split(/\r?\n/)) {
+  // Card NUMBERS to sign accounts in against (or ready-made session cookies).
+  let cards = [...args.cards];
+  if (args.cardsFile) {
+    for (const line of readFileSync(args.cardsFile, 'utf8').split(/\r?\n/)) {
       const id = line.trim();
       if (id && !id.startsWith('#')) cards.push(id);
     }
   }
-  const realCards = cards.length > 0;
-  if (!realCards) {
-    cards = Array.from({ length: args.players }, (_, i) => `synthetic-card-${i + 1}`);
-  }
+  const realCards = cards.length > 0 || args.cookies.length > 0;
 
   console.log(`arcade-traffic — run ${runId}`);
   console.log(`  profile   ${args.profile} (captured ${profile.capturedAt}, ${ageDays.toFixed(1)}d old)`);
@@ -197,21 +258,19 @@ async function main() {
   console.log(`  target    ${args.api}  venue ${args.location}`);
   console.log(`  volume    ${args.plays} award(s)/sweep × ${args.sweeps === Infinity ? '∞' : args.sweeps} sweep(s)`);
   console.log(
-    `  players   ${cards.length} card(s)` +
-      (realCards ? '' : ' — PLACEHOLDER ids, not real loyalty cards'),
+    `  players   ${args.cookies.length ? `${args.cookies.length} supplied session(s)` : `${cards.length} card(s) to sign in`}`,
   );
   if (ageDays > 30) {
     console.log('  ⚠ profile is over 30 days old — re-capture before trusting these scores');
   }
   if (!realCards && !args.dryRun) {
-    // Fail loudly rather than posting a few hundred requests that all 502 and
-    // leave 'pending' reservations eating the venue's daily-cap budget.
+    // Fail loudly rather than posting a few hundred requests that all 401.
     console.error(
-      '\n  ✗ No real card ids given. playerId is a LOYALTY VENDOR card id and the\n' +
-        '    award route forwards it to the vendor, which rejects unknown cards —\n' +
-        '    every request would 502 and leave a pending reservation behind.\n' +
-        '    Pass --player-id <card> (repeatable) or --players-file <file>,\n' +
-        '    or use --dry-run to inspect payloads without posting.',
+      '\n  ✗ No players. The award route resolves the card from the SIGNED-IN\n' +
+        '    SESSION, not the request body, so every post without one is a 401.\n' +
+        '    Pass --card <number> (repeatable) or --cards-file <file> to sign\n' +
+        '    synthetic accounts in, --cookie <c> to reuse real sessions, or\n' +
+        '    --dry-run to inspect payloads without posting.',
     );
     process.exitCode = 1;
     return;
@@ -232,7 +291,6 @@ async function main() {
         '  ' +
           JSON.stringify({
             locationId: args.location,
-            playerId: cards[Math.floor(rng() * cards.length)],
             game: pool.key,
             tickets: s.tickets,
             sessionId: `synthetic:${runId}:${randomUUID()}`,
@@ -248,6 +306,28 @@ async function main() {
     if (!ok) return console.log('aborted.');
   }
 
+  // Sign the synthetic players in BEFORE any awards, so a bad card or a
+  // mail-configured deployment fails on the first request rather than a
+  // hundred in.
+  const sessions = [...args.cookies];
+  for (let i = 0; i < cards.length; i++) {
+    const email = `synthbot+${runId}-${i + 1}@${args.emailDomain}`;
+    try {
+      sessions.push(await mintPlayer(args.api, args.location, cards[i], email));
+      console.log(`  signed in ${email} -> card ${cards[i]}`);
+    } catch (err) {
+      console.error(`  ✗ ${err.message}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+  if (!sessions.length) {
+    console.error('  ✗ no usable sessions');
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`  ${sessions.length} session(s) ready\n`);
+
   const fresh = () => ({ ok: 0, failed: 0, requested: 0, awarded: 0, clamped: 0, capped: 0, lat: [] });
   // Per-sweep counters are what the sweep line reports; run totals accumulate
   // for the final summary. Reporting cumulative numbers under a sweep's label
@@ -262,16 +342,16 @@ async function main() {
       const s = pool.samples[Math.floor(rng() * pool.samples.length)];
       const body = {
         locationId: args.location,
-        playerId: cards[Math.floor(rng() * cards.length)],
         game: pool.key,
         tickets: s.tickets,
         sessionId: `synthetic:${runId}:${randomUUID()}`,
       };
+      const cookie = sessions[Math.floor(rng() * sessions.length)];
       const t0 = Date.now();
       try {
         const res = await fetch(`${args.api}/api/game-rewards/award`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', cookie },
           body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => ({}));

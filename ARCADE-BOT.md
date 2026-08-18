@@ -146,16 +146,36 @@ the session instead, since `--headed` has nothing to display to there:
 node scripts/arcade-bot.mjs --game skeeball --skill 1 --video ./vid   # → ./vid/*.webm
 ```
 
-## Player ids are real loyalty cards
+## Awards ride a signed-in session — there is no `playerId`
 
-`playerId` is a **loyalty vendor card id**, and the award route forwards it
-straight to the vendor. Made-up ids don't work — the CenterEdge mock 404s any
-unseeded player, so the award comes back 502 and leaves a `pending` reservation
-holding daily-cap budget.
+The award route is `tenant(), requireUser` and resolves the card from the
+**session**, not the request: *"the card is the session's, never the request's"*.
+Posting a `playerId` does nothing; posting without a cookie is a flat 401. So
+each synthetic player is a real account, minted before any award:
 
-So pass real test-card ids with `--player-id` (repeatable) or `--players-file`.
-The `synthetic-card-<n>` fallback exists only so `--dry-run` can show a payload's
-shape; the script refuses to post with it and says why.
+```
+POST /api/auth/request-code  {email}        -> {bypassCode}
+POST /api/auth/verify        {email, code}  -> session cookie
+POST /api/loyalty/link       {locationId, cardNumber}
+POST /api/game-rewards/award {locationId, game, tickets, sessionId}
+```
+
+Pass loyalty **card numbers** with `--card` (repeatable) or `--cards-file`; the
+CenterEdge mock seeds `770001112223` and friends. A card the vendor doesn't know
+fails at link time, before anything is posted.
+
+The bypass code is only returned when no mail provider is configured and
+`NODE_ENV` isn't production — the dev/staging shape this tool is for. Against a
+mail-configured deployment, sessions can't be minted from a script; the run
+refuses to start and asks for `--cookie` values from real sessions.
+
+### Verified end to end
+
+Against a local stack (Postgres + `ffc-api` + the CenterEdge mock): 20 awards
+across 2 cards, 20 ok / 0 failed, 157 req/s, 761 of 805 tickets paid — the
+shortfall being one per-round trim and one daily-cap zero, both fired by the
+server. Ledger rows matched, and the vendor balances moved (PL-1001 4380 →
+4880), confirming the awards reached the POS and not just our table.
 
 ## Safety and cleanup
 
