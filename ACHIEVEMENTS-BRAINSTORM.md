@@ -3,8 +3,8 @@
 Last updated: 2026-08-18. A candidate catalog for growing the app's
 achievements from the current three into a real badge wall.
 
-**Status: built.** 99 badges ship — 89 detected on-device in
-`src/lib/achievements/`, 10 granted server-side from the hunt. See
+**Status: built — the whole catalog.** 101 badges ship: 89 detected on-device
+in `src/lib/achievements/`, 12 granted server-side. Nothing is cut. See
 [What's built](#whats-built) for what shipped, what was deliberately cut, and
 why. The premise underneath all of it: the ticket payout has been removed, in
 code, and achievements now pay nothing.
@@ -407,8 +407,8 @@ label, how-to, icon, category, secret flag, reachability. `detect.ts` holds the
 on-device rules; `server/lib/rewards.js` holds the hunt rules. The wall and the
 round summary are both surfaces over the catalog, so they cannot drift.
 
-**99 badges**: scoring (22), the field (10), courses & venues (8), hunt (10),
-arcade (13), photo booth (5), playing together (4), regulars (11), wipeouts (8),
+**101 badges**: scoring (22), the field (10), courses & venues (8), hunt (11),
+arcade (13), photo booth (5), playing together (5), regulars (11), wipeouts (8),
 secrets (8). 89 are detected on-device and work offline and signed-out.
 
 **Durability.** IndexedDB v4 adds an `achievements` store. The wall unions what
@@ -457,15 +457,27 @@ because only that game knows what happened. Five needed no engine change at all
 Two needed a small counter: Darts gained `bulls` (incremented where a `B50` ring
 scores) and Whack-a-Mole gained `streak`/`bestStreak` (reset by a bomb).
 
-### Cut rather than faked
+### The last two
 
-A badge nothing can ever unlock is worse than a shorter catalog. Two remain cut,
-each blocked on something that doesn't exist yet:
+Both were cut once as "blocked on something that doesn't exist", and both turned
+out to need less than that suggested:
 
-| Badge | What it needs |
-|---|---|
-| Team Player | `gamesApi.createGame` takes a `teamId`, but no screen passes one, so no round can be tied to a team. |
-| Quick Draw | `hunt_find` records no hole, so "before the back nine" has nothing to compare against. Timing it off `created_at` would be a guess dressed as a rule. |
+**Quick Draw** needed a hole on the find, so `hunt_find` gained a nullable
+`hole` column and the hunt screen sends it — derived from the round it already
+holds in state, so no new UI. Null is load-bearing: the venue-wide hunt has no
+round, an older client sends nothing, and a find can precede the first score.
+The rule therefore requires every verified find to carry a KNOWN hole ≤ 9, so
+an unknown hole is never read as an early one.
+
+**Team Player** was cut because no screen ties a round to a team
+(`createGame` accepts a `teamId` nothing passes). But the badge doesn't need a
+team picker — two members of the same team in one shared game *is* playing with
+your team, and the roster already knows it. Granted server-side off
+`shared_game_player` joined through `team_member`; no new UI at all.
+
+The general lesson, twice over this cycle: "the data isn't there" deserves a
+second look before it becomes a cut. Both times the data was one column or one
+join away.
 
 Two guards keep the shipped catalog honest: `arcade.test.ts` reads every
 `game="…"` prop out of `src/features/fun/` and fails if the roster drifts, and

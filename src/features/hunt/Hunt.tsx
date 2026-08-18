@@ -77,6 +77,24 @@ type ItemState =
 // HUNT_ALLOW_PHOTO_OF_PHOTO (see server/.env.example) for photo-of-photo checks.
 const ALLOW_UPLOAD = DEV_MODE;
 
+/**
+ * Which hole the group is up to: one past the furthest hole anyone has carded.
+ * Undefined when there's no round (the venue-wide hunt) or nothing is scored
+ * yet — the server treats that as "unknown" rather than hole zero.
+ */
+function currentHole(round: LocalRound | null): number | undefined {
+  if (!round) return undefined;
+  let furthest = 0;
+  for (const card of Object.values(round.scores)) {
+    if (!card) continue;
+    card.forEach((s, i) => {
+      if (s != null) furthest = Math.max(furthest, i + 1);
+    });
+  }
+  if (furthest === 0) return undefined;
+  return Math.min(18, furthest + 1);
+}
+
 export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
   const navigate = useNavigate();
   // Intelligent back: return to wherever the hunt was opened from (e.g. the
@@ -281,6 +299,9 @@ export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
         owner: group.owner,
         playerTag,
         roundClientId: group.key,
+        // Where the group is up to, for the "finished the hunt early" badge.
+        // Undefined in venue mode (no round) and before the first score.
+        hole: currentHole(round),
         imageBase64: base64,
         mediaType,
       });

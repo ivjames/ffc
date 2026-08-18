@@ -58,7 +58,7 @@ export function scoreAchievements(scoreRows, playerCount, pars) {
  * Hunt achievements for one synced round, from that round's hunt_find rows.
  *
  * `finds` is every submission tied to the round (verified and not), each:
- *   { tag, itemId, verified, confidence, flagged, countable, createdAt }
+ *   { tag, itemId, verified, confidence, flagged, countable, createdAt, hole }
  * `completedTags` is the set of tags that finished the course's hunt — the
  * Hunt Master condition, which several of these build on.
  *
@@ -117,6 +117,15 @@ export function huntAchievements(finds, { completedTags = new Set() } = {}) {
     if (completedTags.has(tag)) {
       if (!ordered.some((f) => f.flagged)) add("above_board");
       if (!ordered.some((f) => !f.verified)) add("naturalist");
+
+      // Finished the hunt before the back nine. `hole` is advisory (null on a
+      // venue hunt, an older client, or a find made before the first score), so
+      // this needs EVERY verified find to carry one — an unknown hole can't be
+      // assumed early, or a client that sends nothing would earn it for free.
+      const holes = verified.map((f) => f.hole);
+      if (holes.length > 0 && holes.every((h) => h != null && h <= 9)) {
+        add("quick_draw");
+      }
     }
   }
   return out;

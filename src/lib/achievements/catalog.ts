@@ -150,10 +150,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'above_board', label: 'Above Board', how: 'Finish a hunt with every photo above suspicion.', icon: 'state.done', category: 'hunt', local: false },
   { key: 'hoarder', label: 'Hoarder', how: 'Find ten of something there are many of.', icon: 'state.celebrate', category: 'hunt', local: false },
   { key: 'multitasker', label: 'Multitasker', how: 'Finish the hunt and beat par in the same round.', icon: 'award.trophy', category: 'hunt', local: false },
-  // NOT here: "finish the hunt before the back nine". hunt_find records no
-  // hole, so there is nothing to compare a find against — timing it off
-  // created_at would be a guess dressed as a rule. It needs a hole marker on
-  // the find first.
+  { key: 'quick_draw', label: 'Quick Draw', how: 'Finish the hunt before the back nine.', icon: 'state.timer', category: 'hunt', local: false },
   { key: 'grand_hunter', label: 'Grand Hunter', how: "Complete every course's hunt at one venue.", icon: 'nav.locations', category: 'hunt', local: false, reach: (c) => c.maxCoursesAtOneVenue >= 2 },
   { key: 'naturalist', label: 'Naturalist', how: 'Complete a hunt without a single rejected photo.', icon: 'award.medal', category: 'hunt', local: false },
 
@@ -203,9 +200,10 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'joiner', label: 'Crashed the Party', how: "Join someone else's shared game.", icon: 'state.teams', category: 'social', local: true },
   { key: 'squad_goals', label: 'Squad Goals', how: 'Fill all four seats of a shared game.', icon: 'state.teams', category: 'social', local: true },
   { key: 'rivalry', label: 'Rivalry', how: 'Play three rounds against the same opponent.', icon: 'action.leaderboard', category: 'social', local: true },
-  // NOT here: "play a round with a team". gamesApi.createGame takes a teamId,
-  // but nothing in the app passes one yet, so no round can be tied to a team
-  // and the badge would be permanently unearnable. It lands with the flow.
+  // Granted server-side off the shared game's roster (two members of one team
+  // in the same game), not from a team picker — the app has no screen that ties
+  // a round to a team, and playing alongside a teammate is the same thing.
+  { key: 'team_player', label: 'Team Player', how: 'Play a shared game alongside a teammate.', icon: 'state.teams', category: 'social', local: false },
 
   // ── Regulars ──────────────────────────────────────────────────────────────
   { key: 'home_screen_hero', label: 'Home Screen Hero', how: 'Install the app on your home screen.', icon: 'nav.install', category: 'habit', local: true },

@@ -84,6 +84,8 @@ export async function verifyFind(args: {
   owner: HuntOwner; // the hunt this item must belong to
   playerTag: string;
   roundClientId: string;
+  /** Hole the group is on (1..18), when there's a round to know it from. */
+  hole?: number;
   imageBase64: string;
   mediaType: string;
 }): Promise<VerifyResult> {

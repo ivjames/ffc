@@ -158,6 +158,13 @@ create table if not exists hunt_find (
 -- For databases created before `countable` existed: add it idempotently.
 alter table hunt_find add column if not exists countable boolean not null default false;
 
+-- Which hole the group was on when the find was submitted (1..18). Nullable by
+-- necessity, not by oversight: the venue-wide hunt has no round and therefore
+-- no hole, an older client sends nothing, and a find can be made before the
+-- first score is entered. Rules that read it must treat null as "unknown"
+-- rather than "hole 0" — see huntAchievements in lib/rewards.js.
+alter table hunt_find add column if not exists hole int;
+
 create index if not exists hunt_find_round_idx  on hunt_find (round_client_id);
 create index if not exists hunt_find_item_idx   on hunt_find (item_id);
 create index if not exists hunt_find_player_idx on hunt_find (player_tag);

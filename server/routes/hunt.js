@@ -476,7 +476,7 @@ router.get("/photo/:findId", async (req, res) => {
 });
 
 // --- POST /api/hunt/verify -------------------------------------------------
-// Body (JSON): { itemId, playerTag, roundClientId?, imageBase64, mediaType }
+// Body (JSON): { itemId, playerTag, roundClientId?, hole?, imageBase64, mediaType }
 // Uses its own larger body parser — base64 images blow past the global 256kb cap.
 router.post(
   "/verify",
@@ -493,7 +493,7 @@ router.post(
     }
 
     const body = req.body ?? {};
-    const { itemId, courseId, locationId, playerTag, roundClientId, imageBase64, mediaType } =
+    const { itemId, courseId, locationId, playerTag, roundClientId, hole, imageBase64, mediaType } =
       body;
 
     // itemId — must look like a uuid; existence checked below.
@@ -748,11 +748,17 @@ router.post(
       // are auto-'approved' by the vision pass; unsafe attempts are 'flagged'
       // events (no photo on disk) so the operator can see they happened.
       const moderation = unsafe ? "flagged" : verified ? "approved" : null;
+      // Which hole the group was on. Advisory and best-effort: the venue hunt
+      // has no round, older clients send nothing, and a find can precede the
+      // first score — all of which store null. Range-checked rather than
+      // trusted, since it comes from the device.
+      const holeNo =
+        Number.isInteger(hole) && hole >= 1 && hole <= 18 ? hole : null;
       const ins = await pool.query(
         `insert into hunt_find
            (round_client_id, player_tag, item_id, verified, confidence, reason, flagged, photo_path, countable,
-            moderation, moderation_reason, people_present, minors_present)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            moderation, moderation_reason, people_present, minors_present, hole)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          on conflict (round_client_id, player_tag, item_id) where verified and not countable
          do nothing
          returning id`,
@@ -770,6 +776,7 @@ router.post(
           unsafe ? verdict.unsafeReason || "unsafe content" : null,
           verdict.peoplePresent ?? null,
           verdict.minorsPresent ?? null,
+          holeNo,
         ]
       );
 

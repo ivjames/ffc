@@ -62,6 +62,7 @@ const find = (over = {}) => ({
   flagged: false,
   countable: false,
   createdAt: 1,
+  hole: null,
   ...over,
 });
 
@@ -137,6 +138,23 @@ test("the clean-hunt badges need the hunt finished, and are distinct", () => {
   const unfinished = keys([find()], new Set());
   assert.ok(!unfinished.includes("above_board"));
   assert.ok(!unfinished.includes("naturalist"));
+});
+
+test("quick draw needs every find on the front nine, and a KNOWN hole", () => {
+  const done = new Set(["AAA"]);
+  const keys = (rows) => huntAchievements(rows, { completedTags: done }).map((g) => g.achievement);
+  assert.ok(keys([find({ hole: 3 }), find({ hole: 9, itemId: "i2" })]).includes("quick_draw"));
+  assert.ok(!keys([find({ hole: 3 }), find({ hole: 10, itemId: "i2" })]).includes("quick_draw"));
+  // An unknown hole must not be read as an early one: the venue hunt has no
+  // round, and an older client sends nothing — either would earn it for free.
+  assert.ok(!keys([find({ hole: 3 }), find({ hole: null, itemId: "i2" })]).includes("quick_draw"));
+  assert.ok(!keys([find({ hole: undefined })]).includes("quick_draw"));
+  // And it still requires finishing the hunt at all.
+  assert.ok(
+    !huntAchievements([find({ hole: 2 })], { completedTags: new Set() })
+      .map((g) => g.achievement)
+      .includes("quick_draw")
+  );
 });
 
 test("each player's finds are judged separately", () => {

@@ -101,7 +101,7 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
   // rejections).
   const finds = await client.query(
     `select f.player_tag as tag, f.item_id as "itemId", f.verified,
-            f.confidence, f.flagged, f.countable,
+            f.confidence, f.flagged, f.countable, f.hole,
             extract(epoch from f.created_at) as "createdAt"
        from hunt_find f
        join hunt_item i on i.id = f.item_id
@@ -164,6 +164,35 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
           const playerIndex = slotOf(tag);
           if (playerIndex !== -1) grants.push({ playerIndex, achievement: "grand_hunter" });
         }
+      }
+    }
+  }
+
+  // Team Player — played a round alongside someone from one of your teams.
+  // Read off the shared game's roster rather than a team picker, because the
+  // app has no screen that ties a round to a team (createGame accepts a teamId
+  // that nothing passes). Two members of the same team in one game IS playing
+  // with your team, and it needs no new UI to be true.
+  if (clientId.startsWith("shared:")) {
+    const gameId = clientId.slice("shared:".length);
+    const mates = await client.query(
+      `select p.slot, p.tag
+         from shared_game_player p
+        where p.game_id = $1::uuid and p.app_user_id is not null
+          and exists (
+            select 1
+              from team_member me
+              join team_member them on them.team_id = me.team_id
+              join shared_game_player q on q.app_user_id = them.app_user_id
+             where me.app_user_id = p.app_user_id
+               and q.game_id = p.game_id
+               and q.app_user_id <> p.app_user_id
+          )`,
+      [gameId]
+    );
+    for (const { slot } of mates.rows) {
+      if (slot >= 0 && slot < playerTags.length) {
+        grants.push({ playerIndex: slot, achievement: "team_player" });
       }
     }
   }
