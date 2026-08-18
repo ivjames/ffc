@@ -132,6 +132,7 @@ type GS = {
   phase: Phase;
   dartNo: number; // 0-based, 0..8
   total: number;
+  bulls: number; // inner-bull (B50) darts this round — the Bullseye achievement
   visitTotal: number;
   lockX: number;
   land: { x: number; y: number } | null;
@@ -149,6 +150,7 @@ function freshGS(now: number): GS {
     phase: 'ready',
     dartNo: 0,
     total: 0,
+    bulls: 0,
     visitTotal: 0,
     lockX: CX,
     land: null,
@@ -623,6 +625,7 @@ export default function Darts() {
         const hit = gs.hit;
         const { x, y } = gs.land;
         gs.total += hit.points;
+        if (hit.ring === 'B50') gs.bulls += 1;
         gs.visitTotal += hit.points;
         gs.marks = [...gs.marks, { x, y, i: gs.dartNo % VISIT_SIZE }];
         gs.phase = 'scored';
@@ -760,6 +763,8 @@ export default function Darts() {
   }, []);
 
   if (phase === 'done') {
+    // Bull count lives in the canvas game state, not React state.
+    const gs = gsRef.current;
     const remark =
       total >= 200
         ? 'One-hundred-and-EIGHTY energy! 🎯'
@@ -780,7 +785,12 @@ export default function Darts() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 4 points, capped at 100). */}
-          <GameTicketAward game="darts" tickets={Math.min(100, Math.round(total / 4))} sessionId={sessionId} />
+          <GameTicketAward
+            game="darts"
+            tickets={Math.min(100, Math.round(total / 4))}
+            sessionId={sessionId}
+            feat={gs.bulls >= 1 ? 'bullseye' : undefined}
+          />
           <GameHighScore game="darts" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">

@@ -54,8 +54,6 @@ export default function JoinGame() {
       return;
     }
     void markActivity('social', 'join'); // achievements (device-local)
-    // The roster size at join time feeds the "all four seats" badge.
-    void markActivity('social', 'seats', res.snapshot.players.length);
     const clientId = `shared:${res.snapshot.game.id}`;
     // Rejoin on a device that already mirrors this game: keep the local state
     // (scores survive), just refresh the credentials.

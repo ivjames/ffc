@@ -169,6 +169,20 @@ describe('scoring', () => {
 describe('the field', () => {
   const loser = card(4);
 
+  test('squad goals reads the shared round, not a join-time tally', () => {
+    const shared = (players: number) =>
+      round(
+        Array.from({ length: players }, () => card(3)),
+        { shared: { gameId: 'g', participantToken: 't', slot: 0 } } as Partial<LocalRound>,
+      );
+    // Every device in the game sees the finished four-seat roster, so the host
+    // and the early joiners earn it too — not just whoever arrived last.
+    expect(has([shared(4)], 'squad_goals')).toBe(true);
+    expect(has([shared(3)], 'squad_goals')).toBe(false);
+    // Pass-and-play with four players is a Party of Four, not a shared game.
+    expect(has([round([card(3), card(3), card(3), card(3)])], 'squad_goals')).toBe(false);
+  });
+
   test('party of four and full house need four full cards', () => {
     expect(has([round([card(3), card(3), card(3), card(3)])], 'party_of_four')).toBe(true);
     expect(has([round([card(3), card(3), card(3)])], 'party_of_four')).toBe(false);
@@ -442,7 +456,16 @@ describe('arcade', () => {
     expect(earnWith([mark('feat', 'ticket-ceiling')]).has('maxed_out')).toBe(true);
     expect(earnWith([mark('feat', 'trivia-perfect')]).has('trivia_buff')).toBe(true);
     expect(earnWith([mark('feat', 'pinball-million')]).has('pinball_wizard')).toBe(true);
+    expect(earnWith([mark('feat', 'turkey')]).has('turkey')).toBe(true);
+    expect(earnWith([mark('feat', 'bullseye')]).has('bullseye')).toBe(true);
+    expect(earnWith([mark('feat', 'bell-ringer')]).has('bell_ringer')).toBe(true);
+    expect(earnWith([mark('feat', 'mole-streak')]).has('mole_patrol')).toBe(true);
+    expect(earnWith([mark('feat', 'gallery-perfect')]).has('sharpshooter_ii')).toBe(true);
+    // Playing a game is not the same as pulling off its feat.
     expect(earnWith([mark('game', 'pinball', 5)]).has('pinball_wizard')).toBe(false);
+    // The claw wants three winning rounds, not one.
+    expect(earnWith([mark('feat', 'claw-win', 2)]).has('claw_champ')).toBe(false);
+    expect(earnWith([mark('feat', 'claw-win', 3)]).has('claw_champ')).toBe(true);
   });
 });
 
@@ -451,9 +474,13 @@ describe('photo booth', () => {
     expect(earnWith([mark('booth', 'photo')]).has('say_cheese')).toBe(true);
     expect(earnWith([mark('booth', 'photo', 4)]).has('photogenic')).toBe(false);
     expect(earnWith([mark('booth', 'photo', 5)]).has('photogenic')).toBe(true);
-    // Ten stickers on ONE photo, not ten across five.
-    expect(earnWith([mark('booth', 'photo', 5, 3)]).has('sticker_bomb')).toBe(false);
-    expect(earnWith([mark('booth', 'photo', 1, 10)]).has('sticker_bomb')).toBe(true);
+    // Stickers are tallied under their OWN mark, which is what PhotoBooth
+    // writes — reading the high-water off `booth:photo` (which only counts
+    // saves) meant Sticker Bomb could never unlock.
+    expect(earnWith([mark('booth', 'photo', 5, 99)]).has('sticker_bomb')).toBe(false);
+    // Ten on ONE photo, not ten spread across several.
+    expect(earnWith([mark('booth', 'stickers', 5, 3)]).has('sticker_bomb')).toBe(false);
+    expect(earnWith([mark('booth', 'stickers', 1, 10)]).has('sticker_bomb')).toBe(true);
   });
 });
 
@@ -491,6 +518,34 @@ describe('the venue clock', () => {
     expect(clock(at('20:30')).has('night_owl')).toBe(false);
     // Closed-hours or unconfigured venues simply never award them.
     expect(detectEarned([roundAt(at('10:30'))], { catalog: CATALOG, venues: [] }).has('early_bird')).toBe(false);
+  });
+
+  test('they judge when the round STARTED, not when it ended', () => {
+    // A round begun just after opening and played for three hours is still an
+    // early one; judging it on completedAt would lose the badge and — worse —
+    // hand it a Night Owl for finishing near close.
+    const long = round([card(3)], {
+      createdAt: at('10:30'),
+      completedAt: at('21:30'),
+      courseId: 'c1',
+    });
+    const earned = detectEarned([long], { catalog: CATALOG, venues: VENUES });
+    expect(earned.has('early_bird')).toBe(true);
+    expect(earned.has('night_owl')).toBe(false);
+  });
+
+  test('The Grind reads the start too', () => {
+    const started9pm = round([card(3)], {
+      createdAt: new Date('2026-08-03T21:30:00').getTime(),
+      completedAt: new Date('2026-08-03T23:00:00').getTime(),
+    });
+    expect(has([started9pm], 'the_grind')).toBe(true);
+    // Begun at six, finished after nine — not a late round.
+    const startedEarly = round([card(3)], {
+      createdAt: new Date('2026-08-03T18:00:00').getTime(),
+      completedAt: new Date('2026-08-03T21:30:00').getTime(),
+    });
+    expect(has([startedEarly], 'the_grind')).toBe(false);
   });
 });
 

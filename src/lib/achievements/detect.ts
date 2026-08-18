@@ -51,6 +51,8 @@ export type PlayerRound = {
   field: (number | null)[][];
   /** Every slot's tag, positionally aligned with `field`. */
   fieldTags: string[];
+  /** True for a shared multi-device game (as opposed to pass-and-play). */
+  isShared: boolean;
   slot: number;
   /**
    * The 3-char player tag. Tags repeat by design, so this is a weak identity —
@@ -58,6 +60,8 @@ export type PlayerRound = {
    * again", and the career streaks below need one (see CAREER_RULES).
    */
   tag: string;
+  /** When the round was STARTED — what the time-of-day badges are about. */
+  createdAt: number;
   completedAt: number;
 };
 
@@ -137,8 +141,10 @@ export function playerRounds(
         strokes,
         field,
         fieldTags,
+        isShared: r.shared != null,
         slot,
         tag: r.playerTags[slot] ?? '',
+        createdAt: r.createdAt,
         completedAt: r.completedAt,
       });
     }
@@ -258,6 +264,10 @@ const ROUND_RULES: Record<string, (r: PlayerRound) => boolean> = {
 
   // ── The field ─────────────────────────────────────────────────────────────
   party_of_four: (r) => r.field.length === 4 && allFull(r),
+  // Read off the shared round itself, not off a join-time tally: the host and
+  // the early joiners see a half-empty roster when they arrive, so only the
+  // last person through the door would ever have recorded four.
+  squad_goals: (r) => r.isShared && r.field.length === 4,
   full_house: (r) =>
     r.field.length === 4 &&
     allFull(r) &&
@@ -607,8 +617,9 @@ const SECRET_RULES: Record<string, (r: PlayerRound) => boolean> = {
     return front.every((s, i) => s === back[8 - i]);
   },
   // Device-local wall clock, not the venue's: this is about the player's night,
-  // and a round can be started before the app knows which venue it's at.
-  the_grind: (r) => new Date(r.completedAt).getHours() >= 21,
+  // and a round can be started before the app knows which venue it's at. Keyed
+  // on the START — a round begun at eight and finished at ten isn't a late one.
+  the_grind: (r) => new Date(r.createdAt).getHours() >= 21,
 };
 
 // ── Activity rules ──────────────────────────────────────────────────────────
@@ -641,18 +652,24 @@ const ACTIVITY_RULES: Record<string, (m: Marks) => boolean> = {
   maxed_out: (m) => m.count('feat', 'ticket-ceiling') >= 1,
   trivia_buff: (m) => m.count('feat', 'trivia-perfect') >= 1,
   pinball_wizard: (m) => m.count('feat', 'pinball-million') >= 1,
+  turkey: (m) => m.count('feat', 'turkey') >= 1,
+  bullseye: (m) => m.count('feat', 'bullseye') >= 1,
+  bell_ringer: (m) => m.count('feat', 'bell-ringer') >= 1,
+  mole_patrol: (m) => m.count('feat', 'mole-streak') >= 1,
+  sharpshooter_ii: (m) => m.count('feat', 'gallery-perfect') >= 1,
+  // Three winning ROUNDS, not three prizes in one lucky round.
+  claw_champ: (m) => m.count('feat', 'claw-win') >= 3,
 
   // Photo booth
   say_cheese: (m) => m.count('booth', 'photo') >= 1,
   photogenic: (m) => m.count('booth', 'photo') >= 5,
-  sticker_bomb: (m) => m.best('booth', 'photo') >= 10,
+  sticker_bomb: (m) => m.best('booth', 'stickers') >= 10,
   framed: (m) => m.count('booth', 'frame') >= 1,
   directors_cut: (m) => m.count('booth', 'reedit') >= 1,
 
   // Playing together
   host: (m) => m.count('social', 'host') >= 1,
   joiner: (m) => m.count('social', 'join') >= 1,
-  squad_goals: (m) => m.best('social', 'seats') >= 4,
 
   // Regulars
   refueled: (m) => m.count('food', 'order') >= 1,
@@ -703,7 +720,10 @@ export function detectEarned(rounds: LocalRound[], ctx: DetectContext = {}): Set
     const hit = cards.some((c) => {
       const venue = c.locationId ? venueById.get(c.locationId) : undefined;
       if (!venue) return false;
-      const window = venueDayWindow(venue.hours, venue.tz, new Date(c.completedAt));
+      // The badges say "start a round", so they judge createdAt: a round begun
+      // just after opening still counts however long it ran, and one begun in
+      // the afternoon doesn't become a Night Owl by finishing late.
+      const window = venueDayWindow(venue.hours, venue.tz, new Date(c.createdAt));
       return window != null && rule(c, window);
     });
     if (hit) earned.add(key);

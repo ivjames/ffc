@@ -20,12 +20,28 @@ let close;
 let locationId;
 let courseId; // pars all 3 -> course par 54
 
-function postRound(body) {
+function postRound(body, cookie) {
   return fetch(`${baseUrl}/api/rounds`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { cookie } : {}),
+    },
     body: JSON.stringify(body),
   });
+}
+
+/** A signed-in player. Grand Hunter is scoped to the ACCOUNT that owns the
+ *  rounds — a 3-char tag is a display label, not a person — so the badge needs
+ *  a real session behind the syncs. */
+async function signedIn() {
+  const { createUserSession } = await import("../lib/userAuth.js");
+  const user = await testQuery(
+    `insert into app_user (email) values ($1) returning id`,
+    [`hunter-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`]
+  );
+  const { token } = await createUserSession(user.rows[0].id);
+  return `ffc_session=${token}`;
 }
 
 function admin(path, opts = {}) {
@@ -206,20 +222,24 @@ test("multitasker and grand hunter — the two composed in the grant path", asyn
   const itemA = await mkItem(courseA, `a-${stamp}`);
   const itemB = await mkItem(courseB, `b-${stamp}`);
 
+  const cookie = await signedIn();
   const playHunt = async (courseId, itemId, strokes) => {
     const clientId = `hunt-${courseId}-${stamp}`;
     await testQuery(
       `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'GHT', $2, true)`,
       [clientId, itemId]
     );
-    await postRound({
-      clientId,
-      courseId,
-      playerTags: ["GHT"],
-      createdAt: Date.now(),
-      completedAt: Date.now(),
-      scores: { 0: Array(18).fill(strokes) },
-    });
+    await postRound(
+      {
+        clientId,
+        courseId,
+        playerTags: ["GHT"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(strokes) },
+      },
+      cookie
+    );
     return (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json())
       .map((g) => g.achievement)
       .sort();
@@ -238,6 +258,68 @@ test("multitasker and grand hunter — the two composed in the grant path", asyn
   assert.ok(second.includes("grand_hunter"), "every course at the venue hunted");
   // Par is not under par, so this round is not a multitasker.
   assert.ok(!second.includes("multitasker"));
+});
+
+
+test("grand hunter is scoped to the account, not a reusable 3-char tag", async () => {
+  // Two venues' worth of setup, but the point is identity: a second guest who
+  // happens to pick the same tag must not inherit the first one's progress.
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Tag Venue ${stamp}`, `tag-${stamp}`]
+  );
+  const venue = loc.rows[0].id;
+  const mkCourse = async (n) =>
+    (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [`${n} ${stamp}`, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+  const courseA = await mkCourse("TA");
+  const courseB = await mkCourse("TB");
+  const mkItem = async (courseId, slug) =>
+    (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $3) returning id`,
+        [courseId, slug, slug]
+      )
+    ).rows[0].id;
+  const itemA = await mkItem(courseA, `ta-${stamp}`);
+  const itemB = await mkItem(courseB, `tb-${stamp}`);
+
+  const play = async (who, courseId, itemId, suffix) => {
+    const clientId = `tag-${courseId}-${suffix}-${stamp}`;
+    await testQuery(
+      `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'SAM', $2, true)`,
+      [clientId, itemId]
+    );
+    await postRound(
+      {
+        clientId,
+        courseId,
+        playerTags: ["SAM"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(3) },
+      },
+      who
+    );
+    return (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json())
+      .map((g) => g.achievement);
+  };
+
+  const alice = await signedIn();
+  const bob = await signedIn();
+  await play(alice, courseA, itemA, "alice");
+  // Bob shares the tag "SAM" and finishes the OTHER course. Under a tag-scoped
+  // rule he'd inherit Alice's course and take Grand Hunter on his first visit.
+  const bobsSecond = await play(bob, courseB, itemB, "bob");
+  assert.ok(!bobsSecond.includes("grand_hunter"), "another guest's history is not yours");
+  // Alice finishing the second course herself does earn it.
+  const alicesSecond = await play(alice, courseB, itemB, "alice2");
+  assert.ok(alicesSecond.includes("grand_hunter"));
 });
 
 

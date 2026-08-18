@@ -774,6 +774,7 @@ export default function HighStriker() {
             game="highstriker"
             tickets={Math.round(best / 2) + (best >= 100 ? 10 : 0)}
             sessionId={sessionId}
+            feat={best >= 100 ? 'bell-ringer' : undefined}
           />
           <GameHighScore game="highstriker" score={best} sessionId={sessionId} />
           <div className="mt-8">

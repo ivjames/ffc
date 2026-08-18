@@ -181,13 +181,14 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'maxed_out', label: 'Maxed Out', how: "Hit a game's top ticket payout in a single round.", icon: 'award.ticket', category: 'arcade', local: true },
   { key: 'regular_player', label: 'Frequent Flyer', how: 'Play fifty arcade rounds.', icon: 'state.timer', category: 'arcade', local: true },
   { key: 'trivia_buff', label: 'Trivia Buff', how: 'Answer every trivia question correctly.', icon: 'game.trivia', category: 'arcade', local: true },
-  // NOT here, deliberately: per-game skill feats (three strikes in a row, a
-  // darts bullseye, ringing the high striker, a claw win, a mole streak, a
-  // clean shooting gallery). Each needs an event only that game's engine knows
-  // — bowling, for one, keeps a flat roll list that has to be walked back into
-  // frames — and a badge nothing can ever unlock is worse than a shorter
-  // catalog. They are specified in ACHIEVEMENTS-BRAINSTORM.md and land when
-  // each game reports its own feat through GameTicketAward's `feat` prop.
+  // Per-game skill feats. Each game reports its own through GameTicketAward's
+  // `feat` prop, because only that game knows what the moment was.
+  { key: 'turkey', label: 'Turkey', how: 'Bowl three strikes in a row.', icon: 'game.bowling', category: 'arcade', local: true },
+  { key: 'bullseye', label: 'Bullseye', how: 'Land a dart in the inner bull.', icon: 'game.darts', category: 'arcade', local: true },
+  { key: 'bell_ringer', label: 'Bell Ringer', how: 'Ring the bell on the high striker.', icon: 'game.high-striker', category: 'arcade', local: true },
+  { key: 'claw_champ', label: 'Claw Champ', how: 'Win a prize from the claw machine three times.', icon: 'game.claw-machine', category: 'arcade', local: true },
+  { key: 'mole_patrol', label: 'Mole Patrol', how: 'Bop ten in a row without hitting a bomb.', icon: 'game.whack-a-mole', category: 'arcade', local: true },
+  { key: 'sharpshooter_ii', label: 'Dead Eye', how: 'Clear a shooting gallery round without missing a shot.', icon: 'game.shooting-gallery', category: 'arcade', local: true },
   { key: 'pinball_wizard', label: 'Pinball Wizard', how: 'Break a million on the pinball table.', icon: 'game.pinball', category: 'arcade', local: true },
 
   // ── Photo booth ───────────────────────────────────────────────────────────

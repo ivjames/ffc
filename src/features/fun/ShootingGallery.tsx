@@ -780,6 +780,9 @@ export default function ShootingGallery() {
   }, []);
 
   if (phase === 'done') {
+    // The round's shot/hit tallies live in the canvas game state, not React
+    // state — read them here for the "never missed" achievement.
+    const gs = gsRef.current;
     const remark =
       score >= 200
         ? 'Deadeye! 🎯'
@@ -806,6 +809,7 @@ export default function ShootingGallery() {
             game="shootinggallery"
             tickets={Math.min(100, Math.round(score / 4))}
             sessionId={sessionId}
+            feat={gs.shots > 0 && gs.hits === gs.shots ? 'gallery-perfect' : undefined}
           />
           <GameHighScore game="shootinggallery" score={score} sessionId={sessionId} />
           <div className="mt-8">

@@ -3,7 +3,7 @@
 Last updated: 2026-08-18. A candidate catalog for growing the app's
 achievements from the current three into a real badge wall.
 
-**Status: built.** 93 badges ship — 83 detected on-device in
+**Status: built.** 99 badges ship — 89 detected on-device in
 `src/lib/achievements/`, 10 granted server-side from the hunt. See
 [What's built](#whats-built) for what shipped, what was deliberately cut, and
 why. The premise underneath all of it: the ticket payout has been removed, in
@@ -407,9 +407,9 @@ label, how-to, icon, category, secret flag, reachability. `detect.ts` holds the
 on-device rules; `server/lib/rewards.js` holds the hunt rules. The wall and the
 round summary are both surfaces over the catalog, so they cannot drift.
 
-**93 badges**: scoring (22), the field (10), courses & venues (8), hunt (10),
-arcade (7), photo booth (5), playing together (4), regulars (11), wipeouts (8),
-secrets (8). 83 are detected on-device and work offline and signed-out.
+**99 badges**: scoring (22), the field (10), courses & venues (8), hunt (10),
+arcade (13), photo booth (5), playing together (4), regulars (11), wipeouts (8),
+secrets (8). 89 are detected on-device and work offline and signed-out.
 
 **Durability.** IndexedDB v4 adds an `achievements` store. The wall unions what
 the stored rounds prove with what was already banked, so a badge once earned
@@ -440,14 +440,30 @@ written at the existing shared call sites and never sent anywhere.
    `venueHours.ts`, not an endpoint.
 5. **Meta badges run last** over the resolved set, and never count each other.
 
+### Per-game feats
+
+Each arcade game reports its own moment through `<GameTicketAward feat="…">`,
+because only that game knows what happened. Five needed no engine change at all
+— the state was already there:
+
+| Badge | Source |
+|---|---|
+| Turkey | Walks the flat roll list `computeScore` already walks. |
+| Bell Ringer | `best >= 100`, the same condition the ticket bonus uses. |
+| Claw Champ | `gs.won`, already rendered on the end screen. Three winning ROUNDS, not three prizes in one. |
+| Dead Eye | `gs.hits === gs.shots`. |
+| Trivia Buff / Pinball Wizard | The round's own score. |
+
+Two needed a small counter: Darts gained `bulls` (incremented where a `B50` ring
+scores) and Whack-a-Mole gained `streak`/`bestStreak` (reset by a bomb).
+
 ### Cut rather than faked
 
-A badge nothing can ever unlock is worse than a shorter catalog. Eight were cut,
-and each is specified here for whoever wires it:
+A badge nothing can ever unlock is worse than a shorter catalog. Two remain cut,
+each blocked on something that doesn't exist yet:
 
 | Badge | What it needs |
 |---|---|
-| Turkey, Bullseye, Bell Ringer, Claw Champ, Mole Patrol, Dead Eye | An event only that game's engine knows. Bowling, for one, keeps a flat roll list that has to be walked back into frames. The hook exists — pass `feat` to `<GameTicketAward>`, as Trivia and Pinball now do. |
 | Team Player | `gamesApi.createGame` takes a `teamId`, but no screen passes one, so no round can be tied to a team. |
 | Quick Draw | `hunt_find` records no hole, so "before the back nine" has nothing to compare against. Timing it off `created_at` would be a guess dressed as a rule. |
 
@@ -467,3 +483,9 @@ declares local.
   mean exactly what Hunt Master already means. Both server rule and client
   `reach` predicate encode that; if a venue ever has one course and wants the
   badge, both move together.
+- **Grand Hunter needs an account.** It is the one badge judged across rounds
+  server-side, and a 3-char tag is a display label, not a person: matching on
+  one would hand a player a badge off a stranger's history, and lose their own
+  the moment they picked different letters. It is scoped to the account that
+  owns the rounds, so anonymous walk-up play cannot earn it. Every other hunt
+  badge is judged within a single round, where the tag is unambiguous.

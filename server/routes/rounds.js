@@ -68,7 +68,7 @@ function collectScoreRows(scores, playerCount) {
  * device round id — our clientId — because the hunt runs during play, before
  * the round exists server-side).
  */
-export async function grantRewards(client, { roundId, clientId, courseId, playerTags, scoreRows, pars }) {
+export async function grantRewards(client, { roundId, clientId, courseId, playerTags, scoreRows, pars, appUserId = null }) {
   const grants = scoreAchievements(scoreRows, playerTags.length, pars);
 
   const huntDone = await client.query(
@@ -126,10 +126,18 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
   }
 
   // Grand Hunter — Hunt Master on every course at this venue. Career-scoped, so
-  // it reads the grant history: the tag must hold a hunt_master grant on every
-  // course the venue has. This round's own grants aren't written yet, so the
-  // course just completed is unioned in explicitly.
-  if (completedTags.size > 0) {
+  // it reads the grant history, and that makes IDENTITY the hard part: a 3-char
+  // tag is a display label, not a person. Tags repeat by design, so matching on
+  // one would merge unrelated guests who happened to pick the same letters at
+  // the same venue — handing someone a badge off a stranger's history — and
+  // would equally lose a player's progress the moment they picked new letters.
+  //
+  // So this is scoped to the ACCOUNT that owns the rounds, and is granted only
+  // to signed-in players. Anonymous walk-up play has no identity that survives
+  // a round, and inventing one from a tag would be worse than not granting it.
+  // (Every other hunt badge is judged within a single round, where the tag IS
+  // unambiguous, so none of them need this.)
+  if (completedTags.size > 0 && appUserId) {
     const venueCourses = await client.query(
       `select c.id from course c
         where c.location_id = (select location_id from course where id = $1)`,
@@ -140,17 +148,19 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
     // it isn't an achievement there. Mirrors the client's `reach` predicate,
     // which hides the badge at such a venue rather than showing it unearnable.
     if (allCourseIds.length >= 2) {
-      for (const tag of completedTags) {
-        const prior = await client.query(
-          `select distinct r.course_id as id
-             from reward_grant g
-             join round r on r.id = g.round_id
-            where g.player_tag = $1 and g.achievement = 'hunt_master'
-              and r.course_id = any($2::uuid[])`,
-          [tag, allCourseIds]
-        );
-        const done = new Set([...prior.rows.map((r) => r.id), courseId]);
-        if (allCourseIds.every((id) => done.has(id))) {
+      const prior = await client.query(
+        `select distinct r.course_id as id
+           from reward_grant g
+           join round r on r.id = g.round_id
+          where r.app_user_id = $1 and g.achievement = 'hunt_master'
+            and r.course_id = any($2::uuid[])`,
+        [appUserId, allCourseIds]
+      );
+      const done = new Set([...prior.rows.map((r) => r.id), courseId]);
+      if (allCourseIds.every((id) => done.has(id))) {
+        // The account owns the round, so credit the seat(s) that finished the
+        // hunt on it — for a single-owner round that is the player themselves.
+        for (const tag of completedTags) {
           const playerIndex = slotOf(tag);
           if (playerIndex !== -1) grants.push({ playerIndex, achievement: "grand_hunter" });
         }
@@ -292,6 +302,7 @@ router.post("/", rateLimit, tenant(), async (req, res) => {
           playerTags,
           scoreRows: collected.rows,
           pars: course.pars,
+          appUserId,
         });
       }
     } else {
