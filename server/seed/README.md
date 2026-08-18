@@ -148,12 +148,13 @@ book says.
 one run of blanks replaced by ` & ` — so an entry can never move text, change
 a word, or put an ampersand anywhere upstream did not leave a gap.
 
-`node scripts/repair-trivia-pack.mjs` applies both committed overlays to the
-pack in place — the no-upstream-checkout path, byte-identical to a full rebuild
-and a no-op when re-run. Each overlay keys rows by the prompt as it stands when
-that overlay runs (apostrophe entries by the unrepaired prompt, typo entries by
-the apostrophe-repaired one), so a rebuild from upstream hits every entry again
-in the same order. A handful of rows remain unrepairable:
+`node scripts/repair-trivia-pack.mjs` applies all three committed overlays to
+the pack in place — the no-upstream-checkout path, byte-identical to a full
+rebuild and a no-op when re-run. Each overlay keys rows by the prompt as it
+stands when that overlay runs — apostrophe entries by the unrepaired prompt,
+typo entries by the apostrophe-repaired one, ampersand entries by the
+typo-repaired one — so a rebuild from upstream hits every entry again in the
+same order. A handful of rows remain unrepairable:
 two prompts sit at the validator's 300-character cap (an inserted apostrophe
 would break the length rule), and same-field text like "The dogs saw the dogs
 bone" is skipped as ambiguous by design.
