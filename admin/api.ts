@@ -91,10 +91,23 @@ export type Org = {
   status: string;
   sortOrder: number;
   archivedAt: string | null;
+  createdAt?: string;
+  /** List-only rollups (GET /orgs). Absent on the single-org GET. */
   locationCount?: number;
+  adminCount?: number;
   /** Stored branding overrides only (defaults NOT merged in). Optional while
    *  the multi-venue server rollout is in flight. */
   branding?: Branding;
+};
+
+/** A Master Control account. super_admin accounts are platform-wide (orgId
+ *  null); an org_admin is pinned to exactly one org and only ever sees it. */
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: 'super_admin' | 'org_admin';
+  orgId: string | null;
+  createdAt: string;
 };
 
 export type Location = {
@@ -617,6 +630,24 @@ export const api = {
   // sign-out event (the session is still perfectly valid).
   changePassword: (currentPassword: string, newPassword: string) =>
     req<{ ok: true }>('POST', '/me/password', { currentPassword, newPassword }, { quiet401: true }),
+
+  // Master Control accounts. super_admin only, server-side — every one of
+  // these 403s for an org_admin, so the callers gate on the role rather than
+  // rendering a panel that can only fail.
+  listUsers: () => req<AdminUser[]>('GET', '/users'),
+  // Password omitted on purpose: the server emails a set-password invite, so
+  // no operator ever knows (or has to transmit) someone else's password.
+  // `inviteSent: false` means the account exists but the mail failed —
+  // recoverable with "Forgot password", never a reason to retry the create.
+  inviteUser: (user: { email: string; role: AdminUser['role']; orgId: string | null }) =>
+    req<{ ok: true; user: AdminUser; inviteSent?: boolean; inviteLink?: string | null }>(
+      'POST',
+      '/users',
+      user
+    ),
+  updateUser: (id: string, fields: Partial<Pick<AdminUser, 'email' | 'role' | 'orgId'>>) =>
+    req<{ ok: true; user: AdminUser }>('PATCH', `/users/${id}`, fields),
+  deleteUser: (id: string) => req<{ ok: true }>('DELETE', `/users/${id}`),
 
   listOrgs: (archived = false) => req<Org[]>('GET', `/orgs${archived ? '?archived=1' : ''}`),
   getOrg: (id: string) => req<{ org: Org; locations: Location[] }>('GET', `/orgs/${id}`),

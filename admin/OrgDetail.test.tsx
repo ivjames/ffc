@@ -9,11 +9,16 @@ import * as appIcon from './appIcon';
 vi.mock('./api', () => ({
   api: {
     getOrg: vi.fn(),
+    saveOrg: vi.fn(),
     archiveOrg: vi.fn(),
     suspendOrg: vi.fn(),
     unsuspendOrg: vi.fn(),
     updateOrgBranding: vi.fn(),
     uploadBrandingAsset: vi.fn(),
+    listUsers: vi.fn(),
+    inviteUser: vi.fn(),
+    deleteUser: vi.fn(),
+    forgotPassword: vi.fn(),
   },
 }));
 
@@ -39,6 +44,11 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ ok: true, org: ORG });
   vi.mocked(api.uploadBrandingAsset).mockReset();
+  vi.mocked(api.saveOrg).mockReset().mockResolvedValue({ ok: true, org: ORG });
+  vi.mocked(api.listUsers).mockReset().mockResolvedValue([]);
+  vi.mocked(api.inviteUser).mockReset();
+  vi.mocked(api.deleteUser).mockReset();
+  vi.mocked(api.forgotPassword).mockReset().mockResolvedValue({ ok: true });
 });
 
 // The three logo fields share this placeholder (no platform default), so
@@ -46,22 +56,45 @@ beforeEach(() => {
 const NO_DEFAULT_PLACEHOLDER = 'No platform default — upload a file or paste a URL';
 const logoUrlInput = () => screen.getAllByPlaceholderText(NO_DEFAULT_PLACEHOLDER)[0];
 
-function renderOrgDetail(isSuperAdmin: boolean) {
+// Tabs are routes, so a test renders the tab it is about. Default is the
+// overview (the org page's index).
+function renderOrgDetail(isSuperAdmin: boolean, tab = '') {
   return render(
-    <MemoryRouter initialEntries={['/orgs/org-1']}>
+    <MemoryRouter initialEntries={[`/orgs/org-1${tab}`]}>
       <Routes>
-        <Route path="/orgs/:id" element={<OrgDetail isSuperAdmin={isSuperAdmin} />} />
+        <Route path="/orgs/:id/*" element={<OrgDetail isSuperAdmin={isSuperAdmin} />} />
       </Routes>
     </MemoryRouter>
   );
 }
 
+/** The branding form lives on its own tab now. */
+const renderBranding = (isSuperAdmin: boolean) => renderOrgDetail(isSuperAdmin, '/branding');
+
 describe('OrgDetail — super_admin', () => {
-  test('shows the Archive button, alongside + Location', async () => {
+  test('the header carries lifecycle only; + Location lives on the Venues tab', async () => {
     renderOrgDetail(true);
     expect(await screen.findByRole('heading', { name: 'Test Org' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Archive' })).toBeInTheDocument();
+    // Adding a venue belongs next to the list of venues, not in a header of
+    // otherwise-destructive lifecycle buttons.
+    expect(screen.queryByRole('button', { name: '+ Location' })).not.toBeInTheDocument();
+  });
+
+  test("the Venues tab lists the org's venues and offers + Location", async () => {
+    vi.mocked(api.getOrg).mockResolvedValue({
+      org: ORG,
+      locations: [{ id: 'loc-1', name: 'Riverside', slug: 'riverside', tzLabel: 'PT' } as never],
+    });
+    renderOrgDetail(true, '/venues');
+    expect(await screen.findByText('Riverside')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Location' })).toBeInTheDocument();
+  });
+
+  test('Team is a super-admin-only tab', async () => {
+    renderOrgDetail(true);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    expect(screen.getByRole('link', { name: 'Team' })).toBeInTheDocument();
   });
 
   test('clicking Archive calls api.archiveOrg(id, true)', async () => {
@@ -167,7 +200,7 @@ describe('OrgDetail — branding', () => {
       org: { ...ORG, branding: { appName: 'Putt Palace', themeColor: '#112233' } },
       locations: [],
     });
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     expect(screen.getByRole('heading', { name: 'Branding' })).toBeInTheDocument();
     // Stored overrides prefill their fields (the swatch mirrors the text
@@ -189,7 +222,7 @@ describe('OrgDetail — branding', () => {
 
   test('save submits ONLY the non-empty fields as the full replacement object', async () => {
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     await user.type(screen.getByPlaceholderText('Mini Golf Scorecard'), 'Putt Palace');
     await user.type(screen.getByPlaceholderText('#15803d'), '#123abc');
@@ -210,7 +243,7 @@ describe('OrgDetail — branding', () => {
       locations: [],
     });
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     await user.clear(screen.getByDisplayValue('Putt Palace'));
     await user.click(screen.getByRole('button', { name: 'Save branding' }));
@@ -222,7 +255,7 @@ describe('OrgDetail — branding', () => {
       new Error('themeColor must be a #rrggbb color')
     );
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     await user.type(screen.getByPlaceholderText('#15803d'), 'not-a-color');
     await user.click(screen.getByRole('button', { name: 'Save branding' }));
@@ -237,7 +270,7 @@ describe('OrgDetail — branding asset upload', () => {
     const url = '/api/brand-assets/org-1/logo-0123456789ab.png';
     vi.mocked(api.uploadBrandingAsset).mockResolvedValue({ ok: true, url });
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
 
     const file = new File(['png-bytes'], 'logo.png', { type: 'image/png' });
@@ -258,7 +291,7 @@ describe('OrgDetail — branding asset upload', () => {
       url: '/api/brand-assets/org-1/icon512-0123456789ab.png',
     });
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     const file = new File(['png-bytes'], 'icon.png', { type: 'image/png' });
     await user.upload(screen.getByLabelText('Icon 512×512 file'), file);
@@ -282,7 +315,7 @@ describe('OrgDetail — branding asset upload', () => {
       .mockResolvedValueOnce({ ok: true, url: '/api/brand-assets/org-1/icon512-bbbbbbbbbbbb.png' });
 
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
 
     // Nothing to derive from until a logo exists.
@@ -323,7 +356,7 @@ describe('OrgDetail — branding asset upload', () => {
       })
     );
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     await user.type(logoUrlInput(), '/api/brand-assets/org-1/logo-cccccccccccc.png');
 
@@ -343,7 +376,7 @@ describe('OrgDetail — branding asset upload', () => {
       new Error('That logo is hosted on another domain and cannot be read here.')
     );
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     await user.type(logoUrlInput(), 'https://cdn.example/logo.png');
     await user.click(screen.getByRole('button', { name: 'Use logo as app icon' }));
@@ -357,7 +390,7 @@ describe('OrgDetail — branding asset upload', () => {
       new Error('SVG rejected: contains <script>')
     );
     const user = userEvent.setup();
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     const file = new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' });
     await user.upload(screen.getByLabelText('Logo (full) file'), file);
@@ -369,7 +402,7 @@ describe('OrgDetail — branding asset upload', () => {
     // applyAccept off: the icon input's accept attr would otherwise filter the
     // wrong-type file before our own pre-check code ever runs.
     const user = userEvent.setup({ applyAccept: false });
-    renderOrgDetail(false);
+    renderBranding(false);
     await screen.findByRole('heading', { name: 'Test Org' });
 
     // Icon kinds are PNG-only.
@@ -387,11 +420,156 @@ describe('OrgDetail — branding asset upload', () => {
 });
 
 describe('OrgDetail — org_admin', () => {
-  test('hides the Archive button entirely, keeps + Location', async () => {
+  test('hides the Archive button entirely, keeps the Venues tab', async () => {
     renderOrgDetail(false);
     expect(await screen.findByRole('heading', { name: 'Test Org' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Unarchive' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ Location' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Venues (0)' })).toBeInTheDocument();
+  });
+
+  test('never asks for the accounts list (every /users route 403s for them)', async () => {
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    expect(api.listUsers).not.toHaveBeenCalled();
+    // …so Team isn't offered either.
+    expect(screen.queryByRole('link', { name: 'Team' })).not.toBeInTheDocument();
+  });
+
+  test('the rename form is super_admin only', async () => {
+    renderOrgDetail(false);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    expect(screen.queryByRole('button', { name: 'Save org' })).not.toBeInTheDocument();
+  });
+});
+
+// The org page's index: the facts that make an org a tenant, and what is still
+// missing before it is a finished one.
+describe('OrgDetail — overview', () => {
+  test("shows the org's address, status and setup gaps", async () => {
+    renderOrgDetail(true);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    // No admin.<domain> hostname under jsdom, so the host renders in its
+    // honest "we cannot derive the domain" form rather than a made-up URL.
+    expect(screen.getAllByText(/test-org\.<platform domain>/).length).toBeGreaterThan(0);
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    // Branding is {} and there are no locations: both call themselves out.
+    expect(screen.getByText(/still on the platform default look/)).toBeInTheDocument();
+    expect(screen.getByText(/none yet, so players see an empty catalog/)).toBeInTheDocument();
+  });
+
+  test('a super_admin with no accounts for the org is told nobody can sign in', async () => {
+    renderOrgDetail(true);
+    expect(await screen.findByText(/nobody at this org can sign in/)).toBeInTheDocument();
+  });
+
+  test('renaming posts the org WITHOUT branding, so the branding tab is never clobbered', async () => {
+    const user = userEvent.setup();
+    renderOrgDetail(true);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    const name = screen.getByDisplayValue('Test Org');
+    await user.clear(name);
+    await user.type(name, 'Renamed Org');
+    await user.click(screen.getByRole('button', { name: 'Save org' }));
+    await waitFor(() =>
+      expect(api.saveOrg).toHaveBeenCalledWith({
+        id: 'org-1',
+        name: 'Renamed Org',
+        slug: 'test-org',
+        sortOrder: 0,
+      })
+    );
+  });
+
+  test('changing the slug demands a confirm — it moves the subdomain', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const user = userEvent.setup();
+    renderOrgDetail(true);
+    await screen.findByRole('heading', { name: 'Test Org' });
+    const slug = screen.getByDisplayValue('test-org');
+    await user.clear(slug);
+    await user.type(slug, 'moved-org');
+    await user.click(screen.getByRole('button', { name: 'Save org' }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/stop reaching this org/));
+    expect(api.saveOrg).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+});
+
+// The accounts panel — /api/admin/users has been full CRUD all along with no
+// UI over it; these lock the wiring in.
+describe('OrgDetail — team tab', () => {
+  const MEMBER = {
+    id: 'user-1',
+    email: 'manager@example.com',
+    role: 'org_admin' as const,
+    orgId: 'org-1',
+    createdAt: '2026-01-01T00:00:00Z',
+  };
+
+  test("lists only this org's accounts", async () => {
+    vi.mocked(api.listUsers).mockResolvedValue([
+      MEMBER,
+      { ...MEMBER, id: 'user-2', email: 'other@example.com', orgId: 'org-2' },
+      { ...MEMBER, id: 'user-3', email: 'platform@example.com', role: 'super_admin', orgId: null },
+    ]);
+    renderOrgDetail(true, '/team');
+    expect(await screen.findByText('manager@example.com')).toBeInTheDocument();
+    expect(screen.queryByText('other@example.com')).not.toBeInTheDocument();
+    expect(screen.queryByText('platform@example.com')).not.toBeInTheDocument();
+  });
+
+  test('inviting sends email + role + org, and never a password', async () => {
+    vi.mocked(api.inviteUser).mockResolvedValue({ ok: true, user: MEMBER, inviteSent: true });
+    const user = userEvent.setup();
+    renderOrgDetail(true, '/team');
+    await screen.findByRole('heading', { name: 'Invite an org admin' });
+    await user.type(screen.getByPlaceholderText('manager@example.com'), 'new@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send invite' }));
+    await waitFor(() =>
+      expect(api.inviteUser).toHaveBeenCalledWith({
+        email: 'new@example.com',
+        role: 'org_admin',
+        orgId: 'org-1',
+      })
+    );
+  });
+
+  test('a returned invite link (no mail provider) is shown for relaying', async () => {
+    vi.mocked(api.inviteUser).mockResolvedValue({
+      ok: true,
+      user: MEMBER,
+      inviteSent: false,
+      inviteLink: 'https://admin.example/set-password?token=abc',
+    });
+    const user = userEvent.setup();
+    renderOrgDetail(true, '/team');
+    await screen.findByRole('heading', { name: 'Invite an org admin' });
+    await user.type(screen.getByPlaceholderText('manager@example.com'), 'new@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send invite' }));
+    expect(
+      await screen.findByText('https://admin.example/set-password?token=abc')
+    ).toBeInTheDocument();
+  });
+
+  test('removing an account confirms first', async () => {
+    vi.mocked(api.listUsers).mockResolvedValue([MEMBER]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const user = userEvent.setup();
+    renderOrgDetail(true, '/team');
+    await screen.findByText('manager@example.com');
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/lose Master Control access/));
+    expect(api.deleteUser).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  test('"Resend link" reuses the forgot-password mailer', async () => {
+    vi.mocked(api.listUsers).mockResolvedValue([MEMBER]);
+    const user = userEvent.setup();
+    renderOrgDetail(true, '/team');
+    await screen.findByText('manager@example.com');
+    await user.click(screen.getByRole('button', { name: 'Resend link' }));
+    await waitFor(() => expect(api.forgotPassword).toHaveBeenCalledWith('manager@example.com'));
   });
 });

@@ -1,0 +1,427 @@
+// The Branding card — Master Control's white-label editor for one org
+// (MULTI-VENUE.md §2). Split out of OrgDetail.tsx when the org page grew
+// tabs: this form is ~350 lines of field plumbing, and leaving it inline made
+// every other org-level concern read like an afterthought appended to it.
+import { useRef, useState } from 'react';
+import { api, type Branding, type BrandingAssetKind, type Org } from './api';
+import { Button, Card, Field, Input, Banner, useToast } from './ui';
+import { AppPreview, InstallPreview, ContrastNotes } from './OrgBrandingPreview';
+import { deriveAppIcons } from './appIcon';
+
+// The platform defaults from MULTI-VENUE.md §2 — shown as placeholders so an
+// empty field visibly means "use the platform default". The logo trio has NO
+// platform default (undefined here): absent means the player app shows no
+// logo anywhere until the org uploads one. The server holds the canonical
+// copy (server/lib/branding.js); this list only feeds placeholders and the
+// color-swatch fallback, so drift is cosmetic, not behavioral.
+export const BRANDING_DEFAULTS = {
+  appName: 'Mini Golf Scorecard',
+  shortName: 'MiniGolf',
+  themeColor: '#15803d',
+  backgroundColor: '#052e16',
+  accentColor: '#38bdf8',
+  logoUrl: undefined,
+  logoBadgeUrl: undefined,
+  logoWordmarkUrl: undefined,
+  icon192Url: '/icons/icon-192.png',
+  icon512Url: '/icons/icon-512.png',
+  shareFooter: 'Come beat this score',
+} satisfies Record<keyof Branding, string | undefined>;
+
+type BrandingKey = keyof Branding;
+const BRANDING_KEYS = Object.keys(BRANDING_DEFAULTS) as BrandingKey[];
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** Editor state → the full-replace PATCH body: only non-empty fields ship.
+ *  All-blank collapses to {} — valid, and means "all platform defaults". */
+export function buildBrandingPayload(values: Record<BrandingKey, string>): Branding {
+  const out: Branding = {};
+  for (const key of BRANDING_KEYS) {
+    const v = values[key].trim();
+    if (v !== '') out[key] = v;
+  }
+  return out;
+}
+
+function ColorField({
+  label,
+  value,
+  def,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  def: string;
+  onChange: (v: string) => void;
+}) {
+  // The native swatch needs a valid #rrggbb at all times — while the text is
+  // blank or mid-edit it previews the default instead.
+  const swatch = HEX_RE.test(value.trim()) ? value.trim() : def;
+  return (
+    <Field label={label} hint={`Blank = platform default (${def}).`}>
+      <div className="flex items-center gap-2">
+        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={def} />
+        <input
+          type="color"
+          aria-label={`${label} swatch`}
+          value={swatch}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-8 w-10 shrink-0 cursor-pointer rounded-md border border-slate-300 bg-white p-0.5"
+        />
+      </div>
+    </Field>
+  );
+}
+
+/** Tiny logo preview next to a URL field; disappears (rather than showing a
+ *  broken-image glyph) if the URL doesn't load. Note "/…" paths resolve
+ *  against the admin origin here, so a player-bundle path may not preview —
+ *  that's fine, the field is still valid. */
+function LogoPreview({ url }: { url: string }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  if (failedUrl === url) return null;
+  return (
+    <img
+      src={url}
+      alt=""
+      onError={() => setFailedUrl(url)}
+      className="h-8 w-8 shrink-0 rounded bg-slate-100 object-contain ring-1 ring-slate-200"
+    />
+  );
+}
+
+function UrlField({
+  label,
+  value,
+  def,
+  onChange,
+  accept,
+  onUpload,
+}: {
+  label: string;
+  value: string;
+  /** Platform default, or undefined for fields with none (the logo trio). */
+  def: string | undefined;
+  onChange: (v: string) => void;
+  /** File-picker filter for the Upload button (icons are PNG-only). */
+  accept: string;
+  /** Uploads the picked file; the parent fills the field / reports errors. */
+  onUpload: (file: File) => Promise<void>;
+}) {
+  // Per-field busy state: only THIS field's Upload button shows "Uploading…".
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const trimmed = value.trim();
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // let the same file be re-picked after a fix
+    if (!file) return;
+    setBusy(true);
+    try {
+      await onUpload(file);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Field
+      label={label}
+      hint={`"/path" or "https://…", or upload a file. Blank = ${def ?? 'no logo (no platform default)'}.`}
+    >
+      <div className="flex items-center gap-2">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={def ?? 'No platform default — upload a file or paste a URL'}
+          inputMode="url"
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept={accept}
+          className="hidden"
+          aria-label={`${label} file`}
+          onChange={(e) => void onFile(e)}
+        />
+        <Button variant="ghost" disabled={busy} onClick={() => fileRef.current?.click()}>
+          {busy ? 'Uploading…' : 'Upload'}
+        </Button>
+        {trimmed !== '' && <LogoPreview url={trimmed} />}
+      </div>
+    </Field>
+  );
+}
+
+// Branding URL field → the asset kind its Upload button posts.
+const ASSET_KIND_BY_FIELD = {
+  logoUrl: 'logo',
+  logoBadgeUrl: 'logoBadge',
+  logoWordmarkUrl: 'logoWordmark',
+  icon192Url: 'icon192',
+  icon512Url: 'icon512',
+} as const satisfies Partial<Record<BrandingKey, BrandingAssetKind>>;
+type AssetField = keyof typeof ASSET_KIND_BY_FIELD;
+
+// Client-side mirrors of the server caps (server/lib/brandAssets.js), so an
+// obviously-bad pick fails fast without a round trip. The server re-checks.
+const MAX_ASSET_BYTES = 1024 * 1024; // 1 MiB
+const ICON_SIDE: Partial<Record<BrandingAssetKind, number>> = { icon192: 192, icon512: 512 };
+
+/** A titled group of branding fields. The old form was one flat 12-input grid
+ *  where "app name" sat beside "icon 512 URL" — grouping is what makes it
+ *  possible to find the field you came for. */
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <h3 className="mb-2 border-b border-slate-200 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </h3>
+      <div className="grid grid-cols-2 gap-2">{children}</div>
+    </div>
+  );
+}
+
+export default function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
+  const [values, setValues] = useState<Record<BrandingKey, string>>(() => {
+    const stored = org.branding ?? {};
+    return Object.fromEntries(BRANDING_KEYS.map((k) => [k, stored[k] ?? ''])) as Record<
+      BrandingKey,
+      string
+    >;
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
+
+  const set = (key: BrandingKey) => (v: string) => setValues((cur) => ({ ...cur, [key]: v }));
+
+  // Upload handler for one URL field: pre-check (size; PNG-only for the icon
+  // kinds), post the file, then fill the text field with the returned
+  // /api/brand-assets/... URL. Saving is still the explicit Save button —
+  // the upload endpoint never touches org.branding.
+  const [uploading, setUploading] = useState(false);
+  const uploadFor = (key: AssetField) => async (file: File) => {
+    setErr(null);
+    const kind = ASSET_KIND_BY_FIELD[key];
+    const iconSide = ICON_SIDE[kind];
+    if (iconSide && !(file.type === 'image/png' || /\.png$/i.test(file.name))) {
+      setErr(`The ${iconSide} icon must be a PNG (exactly ${iconSide}×${iconSide}).`);
+      return;
+    }
+    if (file.size > MAX_ASSET_BYTES) {
+      setErr('That file is too large (max 1 MiB).');
+      return;
+    }
+    setUploading(true);
+    try {
+      const { url } = await api.uploadBrandingAsset(org.id, kind, file);
+      set(key)(url);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // "Use logo" — derive BOTH manifest icons from the logo this org already
+  // uploaded and push them through the same upload endpoint a hand-made file
+  // uses. The icon kinds demand PNG at exactly 192/512 (so the manifest cannot
+  // lie to the installer), which a logo never is; this does that conversion in
+  // the browser rather than teaching the server to resize images. See appIcon.ts.
+  //
+  // The fields are filled, not saved — Save branding stays the one explicit
+  // commit, exactly like a manual upload.
+  const [deriving, setDeriving] = useState(false);
+  async function useLogoAsIcon() {
+    setErr(null);
+    setDeriving(true);
+    try {
+      const background = values.backgroundColor.trim() || BRANDING_DEFAULTS.backgroundColor;
+      const derived = await deriveAppIcons(values.logoUrl.trim(), background);
+      for (const { kind, file } of derived) {
+        const { url } = await api.uploadBrandingAsset(org.id, kind, file);
+        set(kind === 'icon192' ? 'icon192Url' : 'icon512Url')(url);
+      }
+      toast('Icons generated from the logo — review them, then Save branding.');
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setDeriving(false);
+    }
+  }
+
+  async function save() {
+    setErr(null);
+    setBusy(true);
+    try {
+      await api.updateOrgBranding(org.id, buildBrandingPayload(values));
+      toast('Branding saved.');
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-sm font-semibold text-slate-700">Branding</h2>
+      <p className="mb-3 text-xs text-slate-500">
+        White-label overrides for this org's player app (name, colors, logos). Every field is
+        optional — blank means the platform default shown as the placeholder. The logo fields
+        have no platform default: left blank, the player app shows no logo.
+      </p>
+      {err && <Banner kind="error">{err}</Banner>}
+      {/* Two columns: the fields on the left, what they produce on the right.
+          Twelve text inputs alone are unevaluable — nobody can look at two hex
+          codes and say whether the result is legible, or tell from a URL
+          whether they uploaded the wordmark or the badge. */}
+      <div className="mt-3 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0">
+          <Section title="Identity">
+            <Field label="App name" hint="PWA install name and document title (1–80 chars).">
+              <Input
+                value={values.appName}
+                onChange={(e) => set('appName')(e.target.value)}
+                placeholder={BRANDING_DEFAULTS.appName}
+              />
+            </Field>
+            <Field label="Short name" hint="Home-screen label (1–30 chars). Phones clip around 12.">
+              <Input
+                value={values.shortName}
+                onChange={(e) => set('shortName')(e.target.value)}
+                placeholder={BRANDING_DEFAULTS.shortName}
+              />
+            </Field>
+            <Field label="Share footer" hint="Tagline on shared score images (1–120 chars).">
+              <Input
+                value={values.shareFooter}
+                onChange={(e) => set('shareFooter')(e.target.value)}
+                placeholder={BRANDING_DEFAULTS.shareFooter}
+              />
+            </Field>
+          </Section>
+
+          <Section title="Colors">
+            <ColorField
+              label="Theme color"
+              value={values.themeColor}
+              def={BRANDING_DEFAULTS.themeColor}
+              onChange={set('themeColor')}
+            />
+            <ColorField
+              label="Background color"
+              value={values.backgroundColor}
+              def={BRANDING_DEFAULTS.backgroundColor}
+              onChange={set('backgroundColor')}
+            />
+            <ColorField
+              label="Accent color"
+              value={values.accentColor}
+              def={BRANDING_DEFAULTS.accentColor}
+              onChange={set('accentColor')}
+            />
+            <div className="col-span-2">
+              <ContrastNotes values={values} />
+            </div>
+          </Section>
+
+          <Section title="Logos">
+            <div className="col-span-2 -mt-1 mb-1 text-xs text-slate-500">
+              No platform default: leave these blank and the player app shows no logo at all
+              (never another client's). PNG, JPEG, WebP or SVG, up to 1 MiB.
+            </div>
+            <UrlField
+              label="Logo (full)"
+              value={values.logoUrl}
+              def={BRANDING_DEFAULTS.logoUrl}
+              onChange={set('logoUrl')}
+              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+              onUpload={uploadFor('logoUrl')}
+            />
+            <UrlField
+              label="Logo badge (square)"
+              value={values.logoBadgeUrl}
+              def={BRANDING_DEFAULTS.logoBadgeUrl}
+              onChange={set('logoBadgeUrl')}
+              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+              onUpload={uploadFor('logoBadgeUrl')}
+            />
+            <UrlField
+              label="Logo wordmark (wide)"
+              value={values.logoWordmarkUrl}
+              def={BRANDING_DEFAULTS.logoWordmarkUrl}
+              onChange={set('logoWordmarkUrl')}
+              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+              onUpload={uploadFor('logoWordmarkUrl')}
+            />
+          </Section>
+
+          <Section title="App icons">
+            <div className="col-span-2 -mt-1 mb-1 text-xs text-slate-500">
+              PNG only, at exactly the stated size — the per-tenant PWA manifest declares these
+              dimensions, so a mismatch makes the install lie to the phone.
+            </div>
+            <UrlField
+              label="Icon 192×192"
+              value={values.icon192Url}
+              def={BRANDING_DEFAULTS.icon192Url}
+              onChange={set('icon192Url')}
+              accept=".png,image/png"
+              onUpload={uploadFor('icon192Url')}
+            />
+            <UrlField
+              label="Icon 512×512"
+              value={values.icon512Url}
+              def={BRANDING_DEFAULTS.icon512Url}
+              onChange={set('icon512Url')}
+              accept=".png,image/png"
+              onUpload={uploadFor('icon512Url')}
+            />
+          </Section>
+        </div>
+
+        {/* Sticky so the preview stays in view while the operator works down
+            a long form — the whole value is seeing the change as you make it. */}
+        <div className="lg:sticky lg:top-4 lg:self-start">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Live preview
+          </p>
+          <AppPreview values={values} />
+          <div className="mt-3">
+            <InstallPreview values={values} />
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Updates as you type. Nothing is live until you save.
+          </p>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <Button
+          variant="ghost"
+          onClick={useLogoAsIcon}
+          disabled={deriving || busy || uploading || values.logoUrl.trim() === ''}
+        >
+          {deriving ? 'Generating…' : 'Use logo as app icon'}
+        </Button>
+        <span className="text-xs text-slate-500">
+          {values.logoUrl.trim() === ''
+            ? 'Upload a logo first to generate the 192 and 512 icons from it.'
+            : 'Fills both icon fields with squares generated from the logo, on the background color.'}
+        </span>
+      </div>
+      <div className="mt-3">
+        {/* Gated on the asset work too, not just `busy`. Saving while an upload
+            or an icon generation is in flight would submit the OLD urls and
+            then unmount this card via onSaved() → reload, orphaning the
+            uploads and dropping their state updates — while the operator still
+            sees a success toast. */}
+        <Button onClick={save} disabled={busy || deriving || uploading}>
+          {busy ? 'Saving…' : 'Save branding'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
