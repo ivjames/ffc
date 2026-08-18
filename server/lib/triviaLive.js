@@ -8,6 +8,14 @@ export const MAX_QUESTIONS = 40;
 export const DEFAULT_QUESTIONS = 10;
 
 /** How long a question stays open, in seconds. */
+// How long the answer stays up before the next question, and how long the
+// lobby waits after the first player arrives. A room runs itself on these two
+// — the host's buttons only ever move it along EARLY.
+export const DEFAULT_REVEAL_SECONDS = 8;
+export const MIN_LOBBY_SECONDS = 10;
+export const MAX_LOBBY_SECONDS = 900;
+export const DEFAULT_LOBBY_SECONDS = 90;
+
 export const MIN_SECONDS = 5;
 export const MAX_SECONDS = 120;
 export const DEFAULT_SECONDS = 20;
@@ -65,16 +73,30 @@ export function normalizeConfig(input) {
   if (typeof speedBonus !== "boolean") return { error: "config.speedBonus must be a boolean" };
   const teams = input.teams ?? true;
   if (typeof teams !== "boolean") return { error: "config.teams must be a boolean" };
-  return { config: { questionSeconds, speedBonus, teams } };
+  const revealSeconds = input.revealSeconds ?? DEFAULT_REVEAL_SECONDS;
+  if (!Number.isInteger(revealSeconds) || revealSeconds < MIN_SECONDS || revealSeconds > MAX_SECONDS) {
+    return { error: `config.revealSeconds must be an integer ${MIN_SECONDS}..${MAX_SECONDS}` };
+  }
+  const lobbySeconds = input.lobbySeconds ?? DEFAULT_LOBBY_SECONDS;
+  if (!Number.isInteger(lobbySeconds) || lobbySeconds < MIN_LOBBY_SECONDS || lobbySeconds > MAX_LOBBY_SECONDS) {
+    return {
+      error: `config.lobbySeconds must be an integer ${MIN_LOBBY_SECONDS}..${MAX_LOBBY_SECONDS}`,
+    };
+  }
+  return { config: { questionSeconds, speedBonus, teams, revealSeconds, lobbySeconds } };
 }
 
 /**
- * The question as PLAYERS may see it — with the answer stripped.
+ * The question as anyone may see it while it is OPEN — with the answer
+ * stripped.
  *
- * This is the one projection that must never leak: the answer index travels to
- * the host's device and to the reveal, never to a phone that is still allowed
- * to answer. A single spread of the DB row into a player payload is the whole
- * exploit, so players go through this function and nothing else.
+ * This is the one projection that must never leak. Note "anyone", host
+ * included: the host used to be handed the answer from the moment the question
+ * opened, on the reasoning that an MC reads it out. They don't need it then —
+ * they announce it at the reveal, which is when everybody gets it — and that
+ * one unnecessary privilege was what made hosting a room worth stealing. A
+ * single spread of the DB row into a payload is the whole exploit, so every
+ * open question goes through this function and nothing else.
  */
 export function publicQuestion(row, index, total) {
   return {
@@ -86,7 +108,7 @@ export function publicQuestion(row, index, total) {
   };
 }
 
-/** The same question WITH the answer — host screens and the reveal only. */
+/** The same question WITH the answer — the reveal and the final board only. */
 export function revealedQuestion(row, index, total) {
   return { ...publicQuestion(row, index, total), answer: row.answer };
 }

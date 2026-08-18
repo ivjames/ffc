@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { useDeadline, formatCountdown } from './useDeadline';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
 import {
   joinSession,
@@ -405,6 +406,10 @@ function LiveBody({
     session.config.questionSeconds,
     session.status === 'question',
   );
+  // The room starts itself, so the lobby counts down rather than waiting on a
+  // host who may not exist — "waiting for the host" was a lie the moment the
+  // game learned to run unattended.
+  const startsIn = useDeadline(session.status === 'lobby' ? session.autoAt : null);
 
   if (session.status === 'lobby') {
     return (
@@ -412,8 +417,10 @@ function LiveBody({
         <div className="text-5xl">🎤</div>
         <h2 className="mt-3 text-xl font-black text-fairway-50">You're in!</h2>
         <p className="mt-1 text-sm text-fairway-100/70">
-          Waiting for the host to start · {entrantCount}{' '}
-          {entrantCount === 1 ? 'player' : 'players'} so far
+          {startsIn != null
+            ? `Starting in ${formatCountdown(startsIn)}`
+            : 'Waiting for more players'}{' '}
+          · {entrantCount} {entrantCount === 1 ? 'player' : 'players'} so far
         </p>
         <Board board={board} myEntrantId={myEntrantId} showScores={false} />
       </div>

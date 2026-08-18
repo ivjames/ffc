@@ -1256,6 +1256,12 @@ create index if not exists trivia_session_location_idx on trivia_session (locati
 -- forty phones could change under them between the ask and the reveal. A game
 -- deals its cards once.
 alter table trivia_session add column if not exists questions jsonb not null default '[]';
+-- When the CURRENT phase should move itself along. A room runs unattended off
+-- this: the lobby starts once it has waited for stragglers, a question closes
+-- when its time is up, and a reveal gives way to the next question. A host's
+-- buttons only ever bring that moment forward — nothing waits on a human, so
+-- a game whose host walks away still finishes and still shows a final board.
+alter table trivia_session add column if not exists auto_at timestamptz;
 
 -- The scoring unit: one solo player, or one table's team. Teams are why this
 -- is a separate table from the device list below — at a table, one person

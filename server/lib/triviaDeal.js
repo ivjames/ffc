@@ -1,12 +1,9 @@
 // Dealing a live-trivia session: pick the questions, mint the room.
 //
-// This lives apart from the routes because CREATING a game is a staff action
-// on the admin surface while everything after it — joining, answering,
-// advancing — is player-facing and driven by the capability tokens minted
-// here. The split is the point: hosting a room means seeing every correct
-// answer, so it cannot be something any signed-in player can do. Left on the
-// player API, a guest could open rooms of their own and read the answers out
-// of the host snapshot until they had learned the venue's whole bank.
+// Apart from the route because dealing is a self-contained job — pick from the
+// bank this venue can see, pin those questions so a later edit cannot change
+// them under the room, and allocate a join code. The route around it is all
+// authorization and shape-checking.
 import { pool } from "../db.js";
 import { generateJoinCode } from "./joinCode.js";
 import { MIN_QUESTIONS } from "./triviaLive.js";
@@ -14,20 +11,20 @@ import { MIN_QUESTIONS } from "./triviaLive.js";
 const SESSION_FIELDS = `id, join_code as "joinCode", location_id as "locationId",
                         status, question_ids as "questionIds", questions,
                         current_index as "currentIndex", asked_at as "askedAt",
+                        auto_at as "autoAt",
                         config, created_at as "createdAt", ended_at as "endedAt"`;
 
 /**
  * Deal a session for an ALREADY-AUTHORIZED location.
  *
- * The caller resolves and authorizes `loc` (it needs `id` and `org_id`),
- * because the two surfaces answer that question differently — the admin route
- * by org scope, anything else by tenant. This function only deals the cards.
+ * The caller resolves and authorizes `loc` (it needs `id` and `org_id`); this
+ * only deals the cards.
  *
  * Returns `{ session, hostToken, requested, dealt }`, or `{ error, status }`.
  * `session` never carries the dealt `questions` — those hold the answers and
  * are the server's working copy.
  */
-export async function dealSession(loc, { count, category, config }) {
+export async function dealSession(loc, { count, category, config, createdBy = null }) {
   // The bank this venue can draw on: the platform pack (org_id null) plus this
   // org's own questions, plus any written specifically for this venue. A
   // question belonging to another client is never in scope.
@@ -55,12 +52,13 @@ export async function dealSession(loc, { count, category, config }) {
     try {
       const inserted = await pool.query(
         `insert into trivia_session
-           (location_id, join_code, question_ids, questions, config)
-         values ($1, $2, $3::uuid[], $4::jsonb, $5::jsonb)
+           (location_id, join_code, created_by, question_ids, questions, config)
+         values ($1, $2, $3, $4::uuid[], $5::jsonb, $6::jsonb)
          returning ${SESSION_FIELDS}, host_token as "hostToken"`,
         [
           loc.id,
           generateJoinCode(),
+          createdBy,
           questionIds,
           JSON.stringify(bank.rows),
           JSON.stringify(config),

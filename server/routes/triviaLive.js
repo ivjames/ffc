@@ -26,15 +26,24 @@
 // client-supplied elapsed time is just a score the client chose for itself.
 import { Router } from "express";
 import { pool } from "../db.js";
+import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
-import { locationModuleLive } from "../lib/modules.js";
+import { moduleLive, locationModuleLive } from "../lib/modules.js";
+import { dealSession } from "../lib/triviaDeal.js";
 import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import {
+  MIN_QUESTIONS,
+  MAX_QUESTIONS,
+  DEFAULT_QUESTIONS,
+  DEFAULT_SECONDS,
+  DEFAULT_REVEAL_SECONDS,
+  DEFAULT_LOBBY_SECONDS,
   MAX_ENTRANTS,
   MAX_ENTRANT_NAME,
+  normalizeConfig,
   normalizeEntrantName,
   publicQuestion,
   revealedQuestion,
@@ -52,6 +61,15 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 // own latency; short enough that it can't be played as extra thinking time.
 const ANSWER_GRACE_MS = 1500;
 
+// Anyone may open a room, so the brake is here rather than on a staff role:
+// enough for a venue's evening, nowhere near enough to enumerate the bank by
+// dealing rooms — and dealing one tells you nothing anyway.
+const createLimit = makeRateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyFn: (req) => req.user?.id ?? null,
+  name: "trivia create limit",
+});
 const joinLimit = makeRateLimit({ windowMs: 60_000, max: 60, name: "trivia join limit" });
 const answerLimit = makeRateLimit({
   windowMs: 60_000,
@@ -61,6 +79,7 @@ const answerLimit = makeRateLimit({
 });
 
 export function resetTriviaRateLimits() {
+  createLimit.reset();
   joinLimit.reset();
   answerLimit.reset();
 }
@@ -73,6 +92,7 @@ export function resetTriviaRateLimits() {
 const SESSION_FIELDS = `id, join_code as "joinCode", location_id as "locationId",
                         status, question_ids as "questionIds", questions,
                         current_index as "currentIndex", asked_at as "askedAt",
+                        auto_at as "autoAt",
                         config, created_at as "createdAt", ended_at as "endedAt"`;
 const SESSION_COLS = SESSION_FIELDS.replace(/(^|,)(\s*)(\w+)/g, "$1$2s.$3");
 
@@ -158,17 +178,20 @@ async function currentQuestionRow(session, q = pool) {
 }
 
 /**
- * Build the snapshot for one audience. `forHost` decides whether the answer is
- * included — the single place that decision is made.
+ * Build the snapshot. `entrantId` personalizes `myAnswer` and nothing else —
+ * there is no longer a host/player split to make, because the answer's
+ * visibility is decided by the game's PHASE rather than by who is asking.
  */
-async function buildSnapshot(session, { forHost, entrantId = null }) {
+async function buildSnapshot(session, { entrantId = null } = {}) {
   const total = session.questionIds.length;
   const row = await currentQuestionRow(session);
   const board = await loadBoard(session.id);
 
-  // The answer is visible to the host at all times (they read it out), and to
-  // everyone once the question has closed. Never to a player mid-question.
-  const revealed = forHost || session.status === "reveal" || session.status === "final";
+  // The answer is visible once the question has CLOSED, and to nobody before
+  // then — the host included. Handing it to the host early was the one thing
+  // that made a room worth stealing, and it bought nothing: an MC announces
+  // the answer at the reveal, which is exactly when this releases it.
+  const revealed = session.status === "reveal" || session.status === "final";
   let question = null;
   if (row && (session.status === "question" || session.status === "reveal")) {
     question = revealed
@@ -209,6 +232,10 @@ async function buildSnapshot(session, { forHost, entrantId = null }) {
       currentIndex: session.currentIndex,
       total,
       askedAt: session.askedAt,
+      // When this phase moves itself along. The room needs it to render the
+      // "starts in 0:42" the lobby runs on — without it a self-running game
+      // looks like a stuck one.
+      autoAt: session.autoAt ?? null,
       config: session.config,
     },
     question,
@@ -220,29 +247,23 @@ async function buildSnapshot(session, { forHost, entrantId = null }) {
 }
 
 /**
- * SSE channel for one audience of one session.
+ * SSE channel for one session — ONE channel now, carrying one frame.
  *
- * The two audiences are SEPARATE CHANNELS, not one channel carrying both
- * payloads. That distinction is the whole answer-secrecy guarantee on the
- * stream: lib/gameBus.js fans a published frame out to every subscriber on the
- * channel, so a single `{player, host}` frame would put the correct answer on
- * the wire to every phone in the room. The client selecting `payload.player`
- * is a rendering choice, not a security boundary — anyone can open devtools
- * and read the frame.
+ * This used to be two, split by audience, because the host frame carried the
+ * correct answer and lib/gameBus.js fans a published frame out to every
+ * subscriber on its channel: a single combined frame would have put the answer
+ * on the wire to every phone in the room. Nothing carries the answer early any
+ * more, so there is no second payload to keep apart — and one frame per change
+ * means the host's screen and the players' cannot disagree about the room.
  */
-function channelFor(sessionId, forHost) {
-  return `trivia:${sessionId}:${forHost ? "host" : "player"}`;
+function channelFor(sessionId) {
+  return `trivia:${sessionId}`;
 }
 
-/** Push the new state to every connected device, each audience on its own
- *  channel so a player connection never receives the host payload. */
+/** Push the new state to every connected device. The frame is viewer-neutral
+ *  (no `myAnswer`); each phone folds its own answer in client-side. */
 async function broadcast(session) {
-  const [playerView, hostView] = await Promise.all([
-    buildSnapshot(session, { forHost: false }),
-    buildSnapshot(session, { forHost: true }),
-  ]);
-  publish(channelFor(session.id, false), "state", { player: playerView });
-  publish(channelFor(session.id, true), "state", { host: hostView });
+  publish(channelFor(session.id), "state", await buildSnapshot(session));
 }
 
 /** Re-read a session and push its CURRENT state to the room. For the paths
@@ -257,12 +278,51 @@ async function broadcastById(sessionId) {
 }
 
 // --- Create -----------------------------------------------------------------
-// Creating a room is a STAFF action and lives on the admin surface
-// (POST /api/admin/trivia/sessions, lib/triviaDeal.js). It is not here because
-// the host capability it mints can read every correct answer: on the player
-// API, any signed-in guest could open rooms of their own and read the bank out
-// of the host snapshot until they had learned the lot. Everything below runs
-// on the tokens that call hands out.
+//
+// Open to any signed-in player, and that is now a safe thing to say. A room
+// confers no informational advantage over the people in it: the answer is
+// released by the game's PHASE, so the host token that comes back can pace the
+// room and nothing else. Hosting briefly lived behind the Master Control gate,
+// back when the host payload carried answers — the gate was the wrong fix for
+// a privilege that should never have existed.
+router.post("/sessions", requireUser, tenant(), createLimit, async (req, res) => {
+  const { locationId, questionCount, category, config: rawConfig } = req.body ?? {};
+  if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
+    return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
+  }
+  const count = questionCount ?? DEFAULT_QUESTIONS;
+  if (!Number.isInteger(count) || count < MIN_QUESTIONS || count > MAX_QUESTIONS) {
+    return res
+      .status(400)
+      .json({ ok: false, error: `questionCount must be ${MIN_QUESTIONS}..${MAX_QUESTIONS}` });
+  }
+  const configCheck = normalizeConfig(rawConfig);
+  if (configCheck.error) return res.status(400).json({ ok: false, error: configCheck.error });
+
+  try {
+    const loc = await findTenantLocation(locationId, req.tenant, {
+      cols: "id, org_id, pos, modules",
+    });
+    if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
+    // The venue's plan has to include the arcade before we record arcade work
+    // for it (lib/modules.js). The client route guard keeps players out of the
+    // UI; this keeps a hand-rolled request out of the data.
+    if (!moduleLive(loc, "arcade")) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
+    const dealt = await dealSession(loc, {
+      count,
+      category,
+      config: configCheck.config,
+      createdBy: req.user.id,
+    });
+    if (dealt.error) return res.status(dealt.status).json({ ok: false, error: dealt.error });
+    return res.json({ ok: true, ...dealt });
+  } catch (err) {
+    console.error("[trivia] create error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
 
 // --- Join -------------------------------------------------------------------
 
@@ -394,11 +454,28 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
        values ($1, $2, $3) returning id`,
       [session.id, entrant.id, req.user?.id ?? null]
     );
+
+    // The lobby's clock starts when the FIRST person walks in, not when the
+    // room was made: a code read out ten minutes before anyone arrives should
+    // not burn the whole wait, and a room nobody joins should never start.
+    // Only ever set once — later arrivals don't push the start back, or a busy
+    // room would never get going.
+    let fresh = session;
+    if (session.status === "lobby" && !session.autoAt) {
+      const started = await client.query(
+        `update trivia_session
+            set auto_at = now() + make_interval(secs => $2::int)
+          where id = $1 and status = 'lobby' and auto_at is null
+          returning ${SESSION_FIELDS}`,
+        [session.id, session.config?.lobbySeconds ?? DEFAULT_LOBBY_SECONDS]
+      );
+      if (started.rows[0]) fresh = started.rows[0];
+    }
     await client.query("commit");
 
-    const snapshot = await buildSnapshot(session, { forHost: false, entrantId: entrant.id });
+    const snapshot = await buildSnapshot(fresh, { entrantId: entrant.id });
     // The roster changed — everyone's lobby list updates.
-    await broadcast(session);
+    await broadcast(fresh);
     return res.json({
       ok: true,
       participantToken: participant.rows[0].id,
@@ -428,17 +505,20 @@ router.get("/sessions/:id", async (req, res) => {
       const session = await loadHostSession(id, hostToken);
       if (!session) return res.status(404).json({ ok: false, error: "unknown session" });
       const status = await expireIfStale(session);
-      const effective = { ...session, status };
-      return res.json({ ok: true, ...(await buildSnapshot(effective, { forHost: true })) });
+      // A phone reconnecting to a room nobody has touched should see where the
+      // CLOCK says the game is, not where it was parked — same lazy treatment
+      // the TTL gets, and it keeps a room correct even if the ticker is down.
+      const effective = (await autoAdvanceIfDue({ ...session, status })) ?? { ...session, status };
+      return res.json({ ok: true, ...(await buildSnapshot(effective)) });
     }
     const ctx = await loadParticipant(id, req.query.participant);
     if (!ctx) return res.status(404).json({ ok: false, error: "unknown session" });
     const status = await expireIfStale(ctx);
-    const effective = { ...ctx, status };
+    const effective = (await autoAdvanceIfDue({ ...ctx, status })) ?? { ...ctx, status };
     return res.json({
       ok: true,
       entrant: { id: ctx.entrantId, name: ctx.entrantName },
-      ...(await buildSnapshot(effective, { forHost: false, entrantId: ctx.entrantId })),
+      ...(await buildSnapshot(effective, { entrantId: ctx.entrantId })),
     });
   } catch (err) {
     console.error("[trivia] snapshot error:", err);
@@ -453,11 +533,9 @@ router.get("/sessions/:id/events", async (req, res) => {
   const hostToken = typeof req.query.host === "string" ? req.query.host : null;
   let session = null;
   let entrantId = null;
-  let forHost = false;
   try {
     if (hostToken) {
       session = await loadHostSession(id, hostToken);
-      forHost = true;
     } else {
       const ctx = await loadParticipant(id, req.query.participant);
       if (ctx) {
@@ -481,16 +559,16 @@ router.get("/sessions/:id/events", async (req, res) => {
   });
   res.flushHeaders?.();
 
-  // Subscribe to THIS audience's channel only — a player connection is never
-  // on the host channel, so the answer cannot reach it even as unread bytes.
-  const unsubscribe = subscribe(channelFor(id, forHost), res);
+  // One channel for the room: the frame is the same for everyone on it,
+  // because nothing in it depends on who is reading.
+  const unsubscribe = subscribe(channelFor(id), res);
   req.on("close", unsubscribe);
 
   // Open with the current state so a device that connects mid-question isn't
-  // staring at a blank screen until the host advances.
+  // staring at a blank screen until the game moves on.
   try {
-    const snapshot = await buildSnapshot(session, { forHost, entrantId });
-    sseSend(res, "state", forHost ? { host: snapshot } : { player: snapshot });
+    const now = (await autoAdvanceIfDue(session)) ?? session;
+    sseSend(res, "state", await buildSnapshot(now, { entrantId }));
   } catch (err) {
     console.error("[trivia] stream open error:", err);
   }
@@ -634,6 +712,122 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
  *   question -> reveal   (answers close, correctness lands)
  *   reveal   -> question (next) | final (that was the last one)
  */
+/**
+ * Where the game goes next from `session`, and when that next phase should
+ * move itself along.
+ *
+ * Pure, so the host's tap and the autopilot's tick cannot disagree about what
+ * "next" means — the only difference between them is what makes the call.
+ */
+function nextPhase(session) {
+  const cfg = session.config ?? {};
+  const after = (seconds) => new Date(Date.now() + seconds * 1000);
+  if (session.status === "lobby") {
+    return {
+      status: "question",
+      currentIndex: 0,
+      askedAt: new Date(),
+      autoAt: after(cfg.questionSeconds ?? DEFAULT_SECONDS),
+    };
+  }
+  if (session.status === "question") {
+    return {
+      status: "reveal",
+      currentIndex: session.currentIndex,
+      askedAt: session.askedAt,
+      autoAt: after(cfg.revealSeconds ?? DEFAULT_REVEAL_SECONDS),
+    };
+  }
+  const following = session.currentIndex + 1;
+  // The last reveal ends the game rather than dealing a question that isn't
+  // there — and a final board waits for nobody, so it has no deadline.
+  return following >= session.questionIds.length
+    ? { status: "final", currentIndex: session.currentIndex, askedAt: null, autoAt: null }
+    : {
+        status: "question",
+        currentIndex: following,
+        askedAt: new Date(),
+        autoAt: after(cfg.questionSeconds ?? DEFAULT_SECONDS),
+      };
+}
+
+/**
+ * Apply one transition, predicated on the status it was computed FROM.
+ *
+ * That predicate is what makes the host and the autopilot safe to run against
+ * each other: a host tapping "reveal" at the same instant the clock closes the
+ * question means two transitions computed from the same state, and only the
+ * first can land. The loser sees rowCount 0 and reports where the game
+ * actually is instead of writing a stale next-state over it.
+ */
+async function applyPhase(session, next) {
+  const updated = await pool.query(
+    `update trivia_session
+        set status = $1, current_index = $2, asked_at = $3, auto_at = $4,
+            ended_at = case when $1 = 'final' then now() else ended_at end
+      where id = $5 and status = $6
+      returning ${SESSION_FIELDS}`,
+    [next.status, next.currentIndex, next.askedAt, next.autoAt, session.id, session.status]
+  );
+  return updated.rows[0] ?? null;
+}
+
+/**
+ * Move a session on if its phase has outlived its deadline. Returns the fresh
+ * row when it moved, else null.
+ *
+ * Called from the read paths as well as the ticker, in the same lazy style as
+ * expireIfStale: a phone that reconnects to a room nobody has touched should
+ * see where the clock says the game is, not where it was parked.
+ */
+export async function autoAdvanceIfDue(session) {
+  if (!session?.autoAt) return null;
+  if (session.status === "final" || session.status === "abandoned") return null;
+  if (new Date(session.autoAt).getTime() > Date.now()) return null;
+  const fresh = await applyPhase(session, nextPhase(session));
+  if (fresh) await broadcast(fresh);
+  return fresh;
+}
+
+/**
+ * The clock that lets a room run unattended.
+ *
+ * Not started by importing this module — app.js is imported by every
+ * integration test, and a timer firing under a test suite would advance games
+ * out from under assertions. index.js starts it for the real server; tests
+ * drive autoAdvanceIfDue directly.
+ */
+let autopilot = null;
+export function startTriviaAutopilot({ intervalMs = 1000 } = {}) {
+  if (autopilot) return autopilot;
+  autopilot = setInterval(() => {
+    void tickAutopilot().catch((err) => console.error("[trivia] autopilot:", err));
+  }, intervalMs);
+  autopilot.unref?.();
+  return autopilot;
+}
+
+export function stopTriviaAutopilot() {
+  if (autopilot) clearInterval(autopilot);
+  autopilot = null;
+}
+
+/** One sweep: advance every live session whose phase is out of time. */
+export async function tickAutopilot() {
+  const due = await pool.query(
+    `select ${SESSION_COLS} from trivia_session s
+      where s.status in ('lobby','question','reveal')
+        and s.auto_at is not null and s.auto_at <= now()
+      limit 50`
+  );
+  for (const session of due.rows) {
+    await autoAdvanceIfDue(session).catch((err) =>
+      console.error("[trivia] autopilot advance failed:", err)
+    );
+  }
+  return due.rowCount;
+}
+
 router.post("/sessions/:id/advance", async (req, res) => {
   const session = await loadHostSession(req.params.id, req.body?.host).catch(() => null);
   if (!session) return res.status(404).json({ ok: false, error: "unknown session" });
@@ -652,46 +846,24 @@ router.post("/sessions/:id/advance", async (req, res) => {
     if (!(await locationModuleLive(pool, session.locationId, "arcade"))) {
       return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
     }
-    let next;
-    if (session.status === "lobby") {
-      next = { status: "question", currentIndex: 0, askedAt: new Date() };
-    } else if (session.status === "question") {
-      next = { status: "reveal", currentIndex: session.currentIndex, askedAt: session.askedAt };
-    } else {
-      const following = session.currentIndex + 1;
-      next =
-        following >= session.questionIds.length
-          ? { status: "final", currentIndex: session.currentIndex, askedAt: null }
-          : { status: "question", currentIndex: following, askedAt: new Date() };
-    }
-
-    // Predicated on the status this transition was computed FROM. A host who
-    // taps "End early" while an advance is still in flight would otherwise have
-    // the slower advance write its stale next-state over 'final' and resurrect
-    // a room they just closed — the transition is only valid if nothing else
-    // moved the session in the meantime.
-    const updated = await pool.query(
-      `update trivia_session
-          set status = $1, current_index = $2, asked_at = $3,
-              ended_at = case when $1 = 'final' then now() else ended_at end
-        where id = $4 and status = $5
-        returning ${SESSION_FIELDS}`,
-      [next.status, next.currentIndex, next.askedAt, session.id, session.status]
-    );
-    if (updated.rowCount === 0) {
-      // Someone else moved it. Answer with where the game actually IS rather
-      // than an error the host can do nothing about.
+    // The host's button is a SHORTCUT, not the engine: the same transition the
+    // clock would have made, made early. Sharing nextPhase/applyPhase with the
+    // autopilot is what stops the two from ever disagreeing about "next".
+    const fresh = await applyPhase(session, nextPhase(session));
+    if (!fresh) {
+      // The autopilot got there first, or the host ended the game from another
+      // tab. Answer with where it actually IS rather than an error they can do
+      // nothing about — from the host's side the tap simply had no work left.
       const current = await pool.query(
         `select ${SESSION_COLS} from trivia_session s where s.id = $1`,
         [session.id]
       );
       const now = current.rows[0];
       if (!now) return res.status(404).json({ ok: false, error: "unknown session" });
-      return res.json({ ok: true, ...(await buildSnapshot(now, { forHost: true })) });
+      return res.json({ ok: true, ...(await buildSnapshot(now)) });
     }
-    const fresh = updated.rows[0];
     await broadcast(fresh);
-    return res.json({ ok: true, ...(await buildSnapshot(fresh, { forHost: true })) });
+    return res.json({ ok: true, ...(await buildSnapshot(fresh)) });
   } catch (err) {
     console.error("[trivia] advance error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
@@ -703,13 +875,13 @@ router.post("/sessions/:id/end", async (req, res) => {
   if (!session) return res.status(404).json({ ok: false, error: "unknown session" });
   try {
     const updated = await pool.query(
-      `update trivia_session set status = 'final', ended_at = now()
+      `update trivia_session set status = 'final', ended_at = now(), auto_at = null
         where id = $1 returning ${SESSION_FIELDS}`,
       [session.id]
     );
     const fresh = updated.rows[0];
     await broadcast(fresh);
-    return res.json({ ok: true, ...(await buildSnapshot(fresh, { forHost: true })) });
+    return res.json({ ok: true, ...(await buildSnapshot(fresh)) });
   } catch (err) {
     console.error("[trivia] end error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });

@@ -35,7 +35,15 @@ export type TriviaSnapshot = {
     currentIndex: number;
     total: number;
     askedAt: string | null;
-    config: { questionSeconds: number; speedBonus: boolean; teams: boolean };
+    /** When this phase advances itself — the countdown every screen shows. */
+    autoAt: string | null;
+    config: {
+      questionSeconds: number;
+      speedBonus: boolean;
+      teams: boolean;
+      revealSeconds: number;
+      lobbySeconds: number;
+    };
   };
   question: TriviaQuestionView | null;
   board: TriviaEntrant[];
@@ -152,17 +160,18 @@ export function createSession(input: {
   locationId: string;
   questionCount?: number;
   category?: string | null;
-  config?: { questionSeconds?: number; speedBonus?: boolean; teams?: boolean };
+  config?: {
+    questionSeconds?: number;
+    speedBonus?: boolean;
+    teams?: boolean;
+    revealSeconds?: number;
+    lobbySeconds?: number;
+  };
 }) {
-  // Creating a room is the one STAFF step: it mints the host capability, which
-  // can read every correct answer, so it lives on the admin surface behind a
-  // Master Control login rather than on /api/trivia where any signed-in guest
-  // could call it. Everything after this runs on the tokens it returns.
-  //
   // `dealt` can be under `requested` when the chosen category holds fewer
   // questions than the host asked for — the game still starts, but the host is
   // told rather than finding out at the last question.
-  return adminCall<{
+  return call<{
     session: TriviaSnapshot['session'];
     hostToken: string;
     requested: number;
@@ -173,32 +182,6 @@ export function createSession(input: {
   });
 }
 
-/** Same shape as `call`, against /api/admin/trivia. The admin session cookie
- *  is scoped to /api/admin on purpose, so it reaches this path and no other. */
-async function adminCall<T>(path: string, init?: RequestInit): Promise<Result<T>> {
-  let res: Response;
-  try {
-    res = await fetch(apiUrl(`/api/admin/trivia${path}`), {
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      ...init,
-    });
-  } catch {
-    return { ok: false, error: 'offline', status: 0 };
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    return {
-      ok: false,
-      status: res.status,
-      error:
-        res.status === 401
-          ? 'Hosting needs a staff sign-in — open Master Control on this device, then come back.'
-          : (data.error ?? `HTTP ${res.status}`),
-    };
-  }
-  return { ok: true, ...data };
-}
 
 export function joinSession(input: {
   joinCode: string;
@@ -261,12 +244,13 @@ export function subscribeSession(
 ): () => void {
   const q = new URLSearchParams(auth as Record<string, string>);
   const source = new EventSource(apiUrl(`/api/trivia/sessions/${id}/events?${q}`));
-  const wantHost = Boolean(auth.host);
   source.addEventListener('state', (e) => {
     try {
-      const payload = JSON.parse((e as MessageEvent).data);
-      const snapshot = wantHost ? payload.host : payload.player;
-      if (snapshot) onState(snapshot);
+      // One frame serves the whole room. It used to be two — a host payload
+      // carrying the answer and a player payload without — and the split is
+      // gone because nothing carries the answer early any more.
+      const snapshot = JSON.parse((e as MessageEvent).data) as TriviaSnapshot;
+      if (snapshot?.session) onState(snapshot);
     } catch {
       // A malformed frame is not worth tearing the stream down for — the next
       // one will carry the same state.

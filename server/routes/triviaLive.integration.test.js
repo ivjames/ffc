@@ -13,11 +13,10 @@ import assert from "node:assert/strict";
 import { TEST_DATABASE_URL, ensureSchema, testQuery, listenEphemeral } from "../test-support/testDb.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
-process.env.APP_TOKEN = "trivia-live-test-token";
 
 const { app } = await import("../app.js");
 const { createUserSession } = await import("../lib/userAuth.js");
-const { resetTriviaRateLimits } = await import("./triviaLive.js");
+const { resetTriviaRateLimits, tickAutopilot } = await import("./triviaLive.js");
 const { BASE_POINTS, MAX_SPEED_BONUS } = await import("../lib/triviaLive.js");
 
 let baseUrl, close;
@@ -38,14 +37,6 @@ function post(path, body, cookie) {
   });
 }
 
-function postAdmin(path, body) {
-  return fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-app-token": process.env.APP_TOKEN },
-    body: JSON.stringify(body),
-  });
-}
-
 let userSeq = 0;
 async function player() {
   const email = `trivia-${stamp}-${userSeq++}@example.com`;
@@ -58,16 +49,13 @@ async function player() {
   return `ffc_session=${token}`;
 }
 
-/** Create a session and return { id, hostToken, joinCode }.
- *
- * Dealing a room is a STAFF action on the admin surface — APP_TOKEN stands in
- * for a Master Control session here, as it does across the admin tests. */
+/** Create a session and return { id, hostToken, joinCode }. */
 async function createSession(overrides = {}) {
-  const res = await postAdmin("/api/admin/trivia/sessions", {
-    locationId,
-    questionCount: 3,
-    ...overrides,
-  });
+  const res = await post(
+    "/api/trivia/sessions",
+    { locationId, questionCount: 3, ...overrides },
+    hostCookie
+  );
   assert.equal(res.status, 200, `create failed: ${await res.clone().text()}`);
   const body = await json(res);
   sessionIds.push(body.session.id);
@@ -82,16 +70,16 @@ async function join(joinCode, name, extra = {}) {
 
 const advance = (id, hostToken) => post(`/api/trivia/sessions/${id}/advance`, { host: hostToken });
 
-/** The current question's correct index, read straight from the DB (the host
- *  API would also serve it, but the DB keeps the test independent of that). */
+/** The current question's correct index, read from the session's own PINNED
+ *  copy — which is what the server scores against, and what makes this
+ *  independent of anything an admin does to the bank mid-game. */
 async function correctChoice(sessionId) {
   const s = await testQuery(
-    `select question_ids, current_index from trivia_session where id = $1`,
+    `select questions, current_index from trivia_session where id = $1`,
     [sessionId]
   );
-  const { question_ids: ids, current_index: idx } = s.rows[0];
-  const q = await testQuery(`select answer from trivia_question where id = $1`, [ids[idx]]);
-  return q.rows[0].answer;
+  const { questions, current_index: idx } = s.rows[0];
+  return questions[idx].answer;
 }
 
 before(async () => {
@@ -123,19 +111,9 @@ test("the platform question pack is seeded, so a venue can run a game immediatel
   assert.ok(total >= 3, `expected a seeded bank, got ${total} questions`);
 });
 
-test("creating needs STAFF; joining needs nothing at all", async () => {
-  // The host capability minted at create can read every correct answer, so
-  // hosting is not something a signed-in guest may do — otherwise anyone could
-  // open rooms of their own and read the venue's bank out of the host
-  // snapshot before trivia night.
-  const anon = await post("/api/admin/trivia/sessions", { locationId, questionCount: 3 });
+test("creating needs an account; joining does not", async () => {
+  const anon = await post("/api/trivia/sessions", { locationId, questionCount: 3 });
   assert.equal(anon.status, 401);
-  const asPlayer = await post(
-    "/api/admin/trivia/sessions",
-    { locationId, questionCount: 3 },
-    hostCookie // an ordinary player session — not a staff credential
-  );
-  assert.equal(asPlayer.status, 401, "a player session is not a staff session");
 
   const { joinCode } = await createSession();
   // A walk-up guest with no account can still play — that's the point of a
@@ -144,7 +122,12 @@ test("creating needs STAFF; joining needs nothing at all", async () => {
   assert.ok(joined.participantToken);
 });
 
-test("a player mid-question never receives the answer; the host always does", async () => {
+test("NOBODY receives the answer mid-question, the host included", async () => {
+  // The host used to be handed the answer from the moment the question opened,
+  // on the reasoning that an MC reads it out. They don't need it then — they
+  // announce it at the reveal — and that one privilege was the only thing that
+  // made a room worth opening for its own sake, which is what forced hosting
+  // behind a staff gate it never really needed.
   const { id, hostToken, joinCode } = await createSession();
   const { participantToken } = await join(joinCode, "Sneaky");
   await advance(id, hostToken); // lobby -> question
@@ -166,7 +149,19 @@ test("a player mid-question never receives the answer; the host always does", as
   const hostView = await json(
     await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`)
   );
-  assert.equal(typeof hostView.question.answer, "number", "the host reads it out");
+  assert.equal(
+    hostView.question.answer,
+    undefined,
+    "the host is holding the room's only early copy of the answer — so don't give them one"
+  );
+  assert.ok(!JSON.stringify(hostView).includes('"answer"'));
+
+  // And at the reveal it reaches everyone at once.
+  await advance(id, hostToken);
+  const revealed = await json(
+    await fetch(`${baseUrl}/api/trivia/sessions/${id}?participant=${participantToken}`)
+  );
+  assert.equal(typeof revealed.question.answer, "number", "the reveal is for the whole room");
 });
 
 test("the answer is absent from the player's SSE FRAME, not just their render", async () => {
@@ -205,8 +200,7 @@ test("the answer is absent from the player's SSE FRAME, not just their render", 
 
   const wire = frames.join("");
   assert.ok(wire.includes('"prompt"'), `expected the question on the wire, got: ${wire.slice(0, 300)}`);
-  assert.ok(!wire.includes('"answer"'), "the answer index must never reach a player's stream");
-  assert.ok(!wire.includes('"host"'), "and neither must the host payload");
+  assert.ok(!wire.includes('"answer"'), "the answer index must never reach an open question's stream");
 });
 
 test("the answer appears to players only once the question closes", async () => {
@@ -305,6 +299,7 @@ test("an edit to the bank cannot change a question already in play", async () =>
   const asked = await json(
     await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`)
   );
+  const dealtAnswer = await correctChoice(id);
   const dealtId = (
     await testQuery(`select question_ids, current_index from trivia_session where id = $1`, [id])
   ).rows[0];
@@ -328,12 +323,13 @@ test("an edit to the bank cannot change a question already in play", async () =>
       asked.question.prompt,
       "the room keeps the question it was asked"
     );
-    assert.equal(after.question.answer, asked.question.answer);
+    assert.deepEqual(after.question.choices, asked.question.choices);
+    assert.equal(await correctChoice(id), dealtAnswer, "and the answer it was dealt");
 
     // And the scoring agrees with what the players were shown, not the edit.
     const correct = await post(`/api/trivia/sessions/${id}/answer`, {
       participant: participantToken,
-      choice: asked.question.answer,
+      choice: dealtAnswer,
     });
     assert.equal(correct.status, 200);
     const board = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
@@ -668,4 +664,94 @@ test("a venue cannot deal another client's questions", async () => {
     await testQuery(`delete from trivia_question where org_id = $1`, [orgId]);
     await testQuery(`delete from org where id = $1`, [orgId]);
   }
+});
+
+// --- Running unattended -----------------------------------------------------
+//
+// A host is a pacing convenience, not a dependency: the lobby starts once it
+// has waited for stragglers, questions close when their time is up, and
+// reveals give way to the next question. A game whose host walks off still
+// reaches a final board rather than stranding a room.
+
+/** Drag a session's current deadline into the past. */
+const expireDeadline = (id) =>
+  testQuery(`update trivia_session set auto_at = now() - interval '1 second' where id = $1`, [id]);
+
+test("the lobby's clock starts when the first player joins, not when the room is made", async () => {
+  const { id, joinCode } = await createSession({ config: { lobbySeconds: 60 } });
+  const before = await testQuery(`select auto_at from trivia_session where id = $1`, [id]);
+  assert.equal(before.rows[0].auto_at, null, "a room nobody joins never starts itself");
+
+  await join(joinCode, "First");
+  const after = await testQuery(`select auto_at from trivia_session where id = $1`, [id]);
+  assert.ok(after.rows[0].auto_at, "the wait begins with the first arrival");
+
+  // A later arrival must not push the start back, or a busy room never begins.
+  await join(joinCode, "Second");
+  const later = await testQuery(`select auto_at from trivia_session where id = $1`, [id]);
+  assert.deepEqual(later.rows[0].auto_at, after.rows[0].auto_at);
+});
+
+test("a room with no host still runs itself to a final board", async () => {
+  const { id, joinCode } = await createSession({
+    questionCount: 3,
+    config: { questionSeconds: 5, revealSeconds: 5, lobbySeconds: 10, speedBonus: false },
+  });
+  const { participantToken } = await join(joinCode, "Alone");
+
+  const phase = async () => {
+    const view = await json(
+      await fetch(`${baseUrl}/api/trivia/sessions/${id}?participant=${participantToken}`)
+    );
+    return view.session.status;
+  };
+  assert.equal(await phase(), "lobby");
+
+  // Nobody taps anything — the clock does all of it.
+  const seen = [];
+  for (let i = 0; i < 12; i++) {
+    await expireDeadline(id);
+    await tickAutopilot();
+    const now = await phase();
+    seen.push(now);
+    if (now === "final") break;
+  }
+  assert.equal(seen.at(-1), "final", `never finished, walked: ${seen.join(" -> ")}`);
+  assert.ok(seen.includes("question"), "and it dealt questions on the way");
+  assert.ok(seen.includes("reveal"), "and revealed them");
+});
+
+test("a phase past its deadline advances on read, even with the ticker down", async () => {
+  // The lazy check is the belt to the ticker's braces: a phone reconnecting to
+  // a room nobody has touched sees where the CLOCK says the game is, rather
+  // than where it was parked.
+  const { id, joinCode } = await createSession({
+    config: { questionSeconds: 5, revealSeconds: 5, lobbySeconds: 10 },
+  });
+  const { participantToken } = await join(joinCode, "Reconnecting");
+  await expireDeadline(id);
+
+  const view = await json(
+    await fetch(`${baseUrl}/api/trivia/sessions/${id}?participant=${participantToken}`)
+  );
+  assert.equal(view.session.status, "question", "the read moved it along");
+  assert.ok(view.question, "and dealt the first question");
+});
+
+test("the host's button and the clock cannot both move the same question", async () => {
+  // The host tap is the same transition made early, predicated on the status
+  // it was computed from — so whichever lands first wins and the other reports
+  // where the game actually is, rather than writing a stale next-state.
+  const { id, hostToken, joinCode } = await createSession({
+    config: { questionSeconds: 5, revealSeconds: 5, lobbySeconds: 10 },
+  });
+  await join(joinCode, "Racer");
+  await advance(id, hostToken); // -> question
+  await expireDeadline(id);
+
+  const [tapped] = await Promise.all([advance(id, hostToken), tickAutopilot()]);
+  assert.equal(tapped.status, 200);
+  const body = await json(tapped);
+  assert.equal(body.session.status, "reveal", "one transition, not two");
+  assert.equal(body.session.currentIndex, 0, "and the room did not skip a question");
 });

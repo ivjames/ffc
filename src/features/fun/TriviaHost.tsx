@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useCurrentLocationId } from '../../lib/location';
+import { useSession } from '../../lib/session';
+import { useDeadline, formatCountdown } from './useDeadline';
 import { playClick } from '../../lib/sound';
 import {
   createSession,
@@ -16,13 +18,22 @@ import {
 // /arcade/trivia/host — the staff-facing controller for a live trivia game.
 //
 // Designed to be read across a room and driven one-handed with a mic in the
-// other: the join code is the biggest thing on the lobby screen, the answer is
-// always visible to the host (they read it out), and there is exactly ONE
-// primary button whose label says what the next tap will do.
+// other: the join code is the biggest thing on the lobby screen, and there is
+// exactly ONE primary button whose label says what the next tap will do.
 //
-// The host token is minted at create and kept in sessionStorage. It is the
-// capability that advances the game, so it lives on this device only — a
-// player who got hold of it could drive the room.
+// That button is OPTIONAL. The game runs on its own clock — the lobby starts
+// once it has waited for stragglers, questions close when their time is up,
+// reveals give way to the next question — so a host is a pacing convenience,
+// not a dependency. A game whose host walks off still reaches a final board.
+//
+// The host sees the answer at the reveal, the same moment the room does. It
+// used to be visible from the moment the question opened, on the reasoning
+// that an MC reads it out; they don't need it then, and that one privilege was
+// the only reason a room was worth stealing.
+//
+// The host token is minted at create and kept in sessionStorage. It paces the
+// room and grants nothing else — worth keeping to this device, but no longer
+// something a player could learn anything from.
 
 const HOST_KEY = 'ffc.trivia.host';
 
@@ -64,6 +75,7 @@ export default function TriviaHost() {
   const [speedBonus, setSpeedBonus] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const signedIn = useSession().user != null;
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -163,6 +175,20 @@ export default function TriviaHost() {
     setSnapshot(null);
   }
 
+  if (!signedIn) {
+    return (
+      <Screen>
+        <TopBar title="Host Trivia" back="/arcade" />
+        <Content>
+          <p className="text-sm text-fairway-100/80">
+            Setting up a game needs an account — that's just so the room has an
+            owner. Anyone can run one.
+          </p>
+        </Content>
+      </Screen>
+    );
+  }
+
   // --- Setup ----------------------------------------------------------------
   if (!host) {
     const bankTotal = categories.reduce((n, c) => n + c.n, 0);
@@ -174,13 +200,7 @@ export default function TriviaHost() {
             Set up a game, then read the code out to the room. Everyone plays from their own
             phone — solo or as a table.
           </p>
-          {/* Staff-only, and enforced server-side rather than here: creating a
-              room mints the capability that can read every correct answer, so
-              it needs a Master Control session on this device. A guest who
-              wanders in can fill the form; the create call is what refuses. */}
-          <p className="mb-4 text-xs text-fairway-400">
-            Hosting needs a staff sign-in on this device.
-          </p>
+
           {error && (
             <p className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
               {error}
@@ -249,6 +269,7 @@ export default function TriviaHost() {
   }
 
   const { session, question, board, answeredCount, entrantCount } = snapshot;
+  const startsIn = useDeadline(session.status === 'lobby' ? session.autoAt : null);
   const done = session.status === 'final';
 
   return (
@@ -266,6 +287,13 @@ export default function TriviaHost() {
             <p className="text-sm text-fairway-100/70">
               {entrantCount} {entrantCount === 1 ? 'player' : 'players'} in
             </p>
+            {/* The lobby's clock starts when the first player joins, so this
+                is blank until somebody is actually waiting. */}
+            {startsIn != null && (
+              <p className="mt-1 text-sm font-bold text-fairway-300">
+                Starts on its own in {formatCountdown(startsIn)}
+              </p>
+            )}
           </div>
         )}
 
