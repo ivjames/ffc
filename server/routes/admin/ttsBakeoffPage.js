@@ -142,8 +142,11 @@ $("plan").onclick = async () => {
   say("Pricing…");
   $("run").disabled = true;
   try {
-    planned = await api("/plan", { method: "POST", body: JSON.stringify({
-      locationId: $("venue").value, questions: Number($("count").value) }) });
+    // Remember WHAT was priced, not just the price. The run below submits
+    // these rather than re-reading the selects, so the operator can only ever
+    // spend on the configuration they saw a number for.
+    const asked = { locationId: $("venue").value, questions: Number($("count").value) };
+    planned = Object.assign(await api("/plan", { method: "POST", body: JSON.stringify(asked) }), { asked });
     $("burn").hidden = false;
     $("burn").innerHTML =
       "<div>Would synthesize <strong>" + planned.clips + " clips</strong> — " +
@@ -160,12 +163,12 @@ $("plan").onclick = async () => {
 };
 
 $("run").onclick = async () => {
+  if (!planned) return say("Price it first.", true);
   $("run").disabled = true;
   $("plan").disabled = true;
   say("Synthesizing… (a few seconds)");
   try {
-    const { run } = await api("/run", { method: "POST", body: JSON.stringify({
-      locationId: $("venue").value, questions: Number($("count").value) }) });
+    const { run } = await api("/run", { method: "POST", body: JSON.stringify(planned.asked) });
     await showRun(run);
     await loadRuns();
     // "Done." over 42 failed clips is how a bench lies to you. Say what
@@ -178,6 +181,17 @@ $("run").onclick = async () => {
   $("plan").disabled = false;
   $("run").disabled = false;
 };
+
+function invalidatePlan() {
+  if (!planned) return;
+  planned = null;
+  $("run").disabled = true;
+  $("burn").hidden = true;
+  $("out").innerHTML = "";
+  say("Selection changed — price it again.");
+}
+$("venue").onchange = invalidatePlan;
+$("count").onchange = invalidatePlan;
 
 $("runs").onchange = async () => {
   const id = $("runs").value;
