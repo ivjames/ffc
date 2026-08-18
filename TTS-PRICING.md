@@ -117,9 +117,8 @@ bench now offers both engines side by side:
 
 ## Auditioning
 
-**Master Control → Overview → "Voice bench"**, or `/api/admin/tts-bakeoff/ui`
-directly: pick a venue, price the run, synthesize, and play the clips in the
-page. That is the one that matters — the clips have to be judged on the tablet
+**Master Control → Ops → Voice bench** (`admin/VoiceBench.tsx`): pick a venue,
+see the price, synthesize, and play the clips. That is the one that matters — the clips have to be judged on the tablet
 you host from, through the speaker the room hears, and files written to a
 directory on the droplet are not listenable.
 

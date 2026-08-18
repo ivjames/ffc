@@ -4,6 +4,7 @@ import { setToken, clearToken, api, AuthError, ApiError, type CurrentUser } from
 import { BrandMark, Button, Card, Field, Input, Banner, ToastProvider, ADMIN_TZ_LABEL } from './ui';
 import SetPassword from './SetPassword';
 import Overview from './Overview';
+import VoiceBench from './VoiceBench';
 import Orgs from './Orgs';
 import OrgDetail from './OrgDetail';
 import LocationWizard from './LocationWizard';
@@ -159,12 +160,19 @@ type NavItem = {
   icon: IconName;
   /** Custom active predicate; default is exact match or prefix + '/'. */
   isActive?: (pathname: string) => boolean;
+  /** Set for a destination outside the SPA — today the vision bench, which is
+   *  still a server-rendered page. Rendered as a plain <a> (same tab, so the
+   *  admin session goes with it) rather than a router Link, which would only
+   *  push a path the router has no route for. */
+  external?: boolean;
 };
 
 type NavSection = { label?: string; items: NavItem[] };
 
-// The Hunt section also contains the vision bench (image vetting) link, so
-// the bench has no nav entry of its own.
+// Benches live in Ops alongside the other tools. The voice bench is a real
+// route; the vision bench is still a server-rendered page and is marked
+// `external` until it gets the same treatment — either way, both are in the
+// menu, because a tool nobody can find is a tool nobody uses.
 const NAV_SECTIONS: NavSection[] = [
   {
     items: [{ to: '/', label: 'Overview', icon: 'overview', isActive: (p) => p === '/' }],
@@ -216,6 +224,13 @@ const NAV_SECTIONS: NavSection[] = [
 
 // Load/soak bot — a platform tool, so super_admin only.
 const SYNTHETIC_ITEM: NavItem = { to: '/synthetic', label: 'Synthetic', icon: 'synthetic' };
+const VOICE_BENCH_ITEM: NavItem = { to: '/voice-bench', label: 'Voice bench', icon: 'usage' };
+const VISION_BENCH_ITEM: NavItem = {
+  to: '/api/admin/vision-bakeoff/ui',
+  label: 'Vision bench',
+  icon: 'photos',
+  external: true,
+};
 // One-shot site provisioning — creates orgs, so super_admin only.
 const PROVISION_ITEM: NavItem = { to: '/provision', label: 'Provision site', icon: 'provision' };
 // Landing-page launch signups — a platform-level list, so super_admin only.
@@ -224,7 +239,7 @@ const SIGNUPS_ITEM: NavItem = { to: '/signups', label: 'Signups', icon: 'signups
 // Extra nav items appended per section for super_admins only.
 const SUPER_ADMIN_EXTRAS: Record<string, NavItem[]> = {
   Venues: [PROVISION_ITEM],
-  Ops: [SIGNUPS_ITEM, SYNTHETIC_ITEM],
+  Ops: [SIGNUPS_ITEM, SYNTHETIC_ITEM, VOICE_BENCH_ITEM, VISION_BENCH_ITEM],
 };
 
 function itemActive(item: NavItem, pathname: string): boolean {
@@ -470,6 +485,19 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const active = itemActive(item, pathname);
+                  const className = `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
+                    active
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`;
+                  if (item.external) {
+                    return (
+                      <a key={item.to} href={item.to} className={className}>
+                        <NavIcon name={item.icon} />
+                        {item.label}
+                      </a>
+                    );
+                  }
                   return (
                     <Link
                       key={item.to}
@@ -554,7 +582,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             Times shown in {ADMIN_TZ_LABEL}
           </div>
           <Routes>
-            <Route path="/" element={<Overview isSuperAdmin={isSuperAdmin} />} />
+            <Route path="/" element={<Overview />} />
             <Route path="/orgs" element={<Orgs isSuperAdmin={isSuperAdmin} />} />
             <Route path="/orgs/:id" element={<OrgDetail isSuperAdmin={isSuperAdmin} />} />
             <Route
@@ -575,8 +603,9 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
             {isSuperAdmin && <Route path="/signups" element={<Signups />} />}
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
+            {isSuperAdmin && <Route path="/voice-bench" element={<VoiceBench />} />}
             {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}
-            <Route path="*" element={<Overview isSuperAdmin={isSuperAdmin} />} />
+            <Route path="*" element={<Overview />} />
           </Routes>
         </main>
       </div>
