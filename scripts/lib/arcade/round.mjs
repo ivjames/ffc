@@ -9,8 +9,12 @@ import { ArcadeDriver } from './driver.mjs';
 
 /** Every mini-game's end card renders its headline number in `.text-5xl`. */
 const SCORE_SEL = '.text-5xl';
-/** ...and offers this button, which is the reliable "round is over" signal. */
-const AGAIN = 'Play again';
+/**
+ * ...and offers this button, which is the reliable "round is over" signal.
+ * Go-Karts says "Race again" instead, so a game can name its own; everything
+ * else shares the default.
+ */
+const AGAIN = /^(Play|Race) again$/;
 
 export class RoundError extends Error {}
 
@@ -23,6 +27,9 @@ export async function playRound(page, game, { rng, skill, baseUrl, timeoutMs = 1
   await page.goto(`${baseUrl}${game.route}`, { waitUntil: 'domcontentloaded' });
 
   const d = new ArcadeDriver(page, game.field);
+  // Some games open on a menu with no playfield canvas yet (Go-Karts shows a
+  // circuit catalogue), so they get to advance past it before we look for one.
+  if (game.beforeAttach) await game.beforeAttach(page);
   // Trivia is pure DOM — waiting for a canvas that never mounts would hang.
   if (!game.domOnly) await d.attach();
 
@@ -44,9 +51,9 @@ export async function playRound(page, game, { rng, skill, baseUrl, timeoutMs = 1
   await game.play(d, { rng, skill });
 
   // The policy paces itself, but the last shot still has to resolve.
-  const again = page.getByRole('button', { name: AGAIN });
+  const again = page.getByRole('button', { name: game.againLabel ?? AGAIN });
   await again.waitFor({ state: 'visible', timeout: timeoutMs }).catch(() => {
-    throw new RoundError(`${game.key}: round did not finish (no "${AGAIN}")`);
+    throw new RoundError(`${game.key}: round did not finish (no again button)`);
   });
 
   // Most end cards put the headline number in `.text-5xl`; a game whose card

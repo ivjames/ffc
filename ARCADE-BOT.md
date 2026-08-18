@@ -67,7 +67,7 @@ the guide isn't drawn at all.
 Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`, `axethrow`,
 `darts`, `whackamole`, `bowling`, `shootinggallery`, `clawmachine`,
 `battingcages`, `watergunrace`, `trivia`, `milkbottle`, `airhockey`, `pinball`,
-`bumpercars`, `bumperboats` — 18 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
+`bumpercars`, `bumperboats`, `gokarts` — **all 19** games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
 usefully, for *why* each unsupported game isn't in it.
 
 The gap is narrowing rather than fixed. Whack-a-Mole was the first REACTIVE
@@ -77,8 +77,12 @@ are a known 3×3 grid, so nothing has to be tracked frame to frame; games with
 genuinely moving entities (a duck on a rail, a puck, a pinball) need the
 position recovered from pixels and predicted forward, which is the next step up.
 
-Still out: go-karts — the only game left, and the only one needing a racing
-line rather than a target to chase.
+Every game in the server's earning registry now has a policy. Go-Karts is the
+weakest of them: it completes races but its lap times are dominated by barrier
+scraping and the opening wrong-way stall rather than by the skill knob, so its
+expert/beginner ordering is **not** established (78s vs 55–86s). A best lap of
+~6.5s is achievable against the ~25s it turns, so a centred racing line is the
+open work there.
 
 Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
@@ -102,6 +106,7 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | Pinball | 8010 mean | 6800 mean | — (high variance) |
 | Bumper Cars | 24–30 | 16–22 | (30s clock) |
 | Bumper Boats | 19–31 | 15–17 | (30s clock) |
+| Go-Karts | 78s | 55–86s | (time — lower is better) |
 
 Two honest caveats:
 
