@@ -8,7 +8,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { validateTags, isValidTag } from "../lib/sanitize.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
-import { scoreAchievements } from "../lib/rewards.js";
+import { huntAchievements, scoreAchievements } from "../lib/rewards.js";
 import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
 import { resolveSynthetic, syntheticMintsRewards } from "../lib/syntheticConfig.js";
 import { tenant, findTenantCourse } from "../lib/tenant.js";
@@ -85,11 +85,77 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
         and count(distinct i.id) > 0`,
     [clientId, courseId]
   );
+  // Hunt finds are keyed by tag, not roster position — credit the first roster
+  // slot with that tag (duplicate tags can't be told apart anyway).
+  const slotOf = (tag) => playerTags.indexOf(tag);
+  const completedTags = new Set();
   for (const { tag } of huntDone.rows) {
-    // Hunt finds are keyed by tag, not roster position — credit the first
-    // roster slot with that tag (duplicate tags can't be told apart anyway).
-    const playerIndex = playerTags.indexOf(tag);
+    completedTags.add(tag);
+    const playerIndex = slotOf(tag);
     if (playerIndex !== -1) grants.push({ playerIndex, achievement: "hunt_master" });
+  }
+
+  // The rest of the hunt badges, from this round's submissions. Rules live in
+  // lib/rewards.js so they're unit-testable without a DB; this only supplies
+  // the rows (every submission, verified or not — several rules are about the
+  // rejections).
+  const finds = await client.query(
+    `select f.player_tag as tag, f.item_id as "itemId", f.verified,
+            f.confidence, f.flagged, f.countable,
+            extract(epoch from f.created_at) as "createdAt"
+       from hunt_find f
+       join hunt_item i on i.id = f.item_id
+      where f.round_client_id = $1 and i.course_id = $2`,
+    [clientId, courseId]
+  );
+  for (const { tag, achievement } of huntAchievements(finds.rows, { completedTags })) {
+    const playerIndex = slotOf(tag);
+    if (playerIndex !== -1) grants.push({ playerIndex, achievement });
+  }
+
+  // Multitasker — finished the hunt AND beat the course, same round. Composed
+  // here because it straddles the two rule sets.
+  const underPar = new Set(
+    grants.filter((g) => g.achievement === "under_par").map((g) => g.playerIndex)
+  );
+  for (const tag of completedTags) {
+    const playerIndex = slotOf(tag);
+    if (playerIndex !== -1 && underPar.has(playerIndex)) {
+      grants.push({ playerIndex, achievement: "multitasker" });
+    }
+  }
+
+  // Grand Hunter — Hunt Master on every course at this venue. Career-scoped, so
+  // it reads the grant history: the tag must hold a hunt_master grant on every
+  // course the venue has. This round's own grants aren't written yet, so the
+  // course just completed is unioned in explicitly.
+  if (completedTags.size > 0) {
+    const venueCourses = await client.query(
+      `select c.id from course c
+        where c.location_id = (select location_id from course where id = $1)`,
+      [courseId]
+    );
+    const allCourseIds = venueCourses.rows.map((r) => r.id);
+    // A one-course venue would grant this for the same work as Hunt Master, so
+    // it isn't an achievement there. Mirrors the client's `reach` predicate,
+    // which hides the badge at such a venue rather than showing it unearnable.
+    if (allCourseIds.length >= 2) {
+      for (const tag of completedTags) {
+        const prior = await client.query(
+          `select distinct r.course_id as id
+             from reward_grant g
+             join round r on r.id = g.round_id
+            where g.player_tag = $1 and g.achievement = 'hunt_master'
+              and r.course_id = any($2::uuid[])`,
+          [tag, allCourseIds]
+        );
+        const done = new Set([...prior.rows.map((r) => r.id), courseId]);
+        if (allCourseIds.every((id) => done.has(id))) {
+          const playerIndex = slotOf(tag);
+          if (playerIndex !== -1) grants.push({ playerIndex, achievement: "grand_hunter" });
+        }
+      }
+    }
   }
 
   for (const grant of grants) {

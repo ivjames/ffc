@@ -3,29 +3,27 @@
 Last updated: 2026-08-18. A candidate catalog for growing the app's
 achievements from the current three into a real badge wall.
 
-**Status: the first slate is built.** 48 locally-detected badges ship in
-`src/lib/achievements/` (catalog + rules) behind a grouped wall — see
-[What's built](#whats-built). The rest of this document is the menu the
-remainder still comes from. The premise underneath all of it: the ticket payout
-has been removed, in code, and achievements now pay nothing.
+**Status: built.** 93 badges ship — 83 detected on-device in
+`src/lib/achievements/`, 10 granted server-side from the hunt. See
+[What's built](#whats-built) for what shipped, what was deliberately cut, and
+why. The premise underneath all of it: the ticket payout has been removed, in
+code, and achievements now pay nothing.
 
 Companion docs: [`post-meeting-punchlist.md`](./post-meeting-punchlist.md) (#8,
 the rewards/ticket tie-in these came out of — now retired) and
 [`HUNT-PRICING.md`](./HUNT-PRICING.md).
 
-## Where we are today
+## Where this started
 
 Three achievements — `hole_in_one`, `under_par`, `hunt_master` — granted
-server-side when a completed round first syncs (`server/routes/rounds.js` →
-`server/lib/rewards.js`), one `reward_grant` row per
-`(round, player_index, achievement)`. They are **badges: they pay nothing.**
-The round summary lists them, and the player-facing wall is
-`src/features/me/Achievements.tsx`, which re-derives earned state from
-locally-stored rounds so it works offline and signed-out.
+server-side when a completed round first synced, paying 100 / 50 / 75 tickets
+onto a loyalty card. The wall showed those three and nothing else.
 
-They used to pay 100 / 50 / 75 tickets onto a loyalty card. That lane is gone —
-the reasoning is [below](#the-golf-payout--removed), and it's what frees the
-rest of this document.
+The payout is gone (the reasoning is [below](#the-golf-payout--removed)), and
+removing it is what freed everything after it: with nothing minted, a badge is a
+product decision rather than a venue-economics one. The sections that follow are
+the catalog that came out of that, in the order it was argued; [What's
+built](#whats-built) at the end records what actually shipped.
 
 ---
 
@@ -406,50 +404,66 @@ and it costs nothing to be playful here.
 
 `src/lib/achievements/catalog.ts` is the single definition of every badge — key,
 label, how-to, icon, category, secret flag, reachability. `detect.ts` holds the
-rules; `Achievements.tsx` is only a surface over the two. The round summary
-renders achievement names from the same catalog, so the two screens cannot
-drift.
+on-device rules; `server/lib/rewards.js` holds the hunt rules. The wall and the
+round summary are both surfaces over the catalog, so they cannot drift.
 
-Shipped: the scoring (22), field (10), course/venue (8) and wipeout (8)
-categories, plus the server-granted hunt badge — **49 entries, 48 of them
-detected on-device** from stored rounds, four of those secret. All of it works
-offline and signed-out, with no new endpoint, no schema change, and no trust
-surface.
+**93 badges**: scoring (22), the field (10), courses & venues (8), hunt (10),
+arcade (7), photo booth (5), playing together (4), regulars (11), wipeouts (8),
+secrets (8). 83 are detected on-device and work offline and signed-out.
 
-Three decisions worth recording, because none were obvious from the catalog:
+**Durability.** IndexedDB v4 adds an `achievements` store. The wall unions what
+the stored rounds prove with what was already banked, so a badge once earned
+stays earned — clearing site data or aging a round out can no longer take one
+back. A second store holds small device-local tallies for things the round
+record can't see (arcade rounds, booth photos, food orders, shared games),
+written at the existing shared call sites and never sent anywhere.
 
-1. **Whose round is it.** A pass-and-play round is one phone holding a whole
-   group, so every seat counts toward that device's wall. A shared multi-device
-   game is the opposite: each player has their own phone and their own wall, and
-   every device fetches the same roster — so only this device's seat counts, or
-   one player's ace would unlock the badge on all four phones. This is the same
-   distinction the retired ticket-claim path drew, for the same reason; the
-   payout went away, the question of whose round it was did not.
-2. **What a career rule counts.** Flattening history into one list per seat
-   makes a four-player afternoon look like four rounds — "two rounds in a day"
-   would fire on a single foursome, and one player's win would break another's
-   losing streak. So each career rule declares its unit: *by round* for
-   device-scoped facts (five visits to a venue), *by player tag* for anything
-   needing continuity (beating your own best, losing three in a row). Tags
-   repeat by design and are a weak identity, but across one device's history
-   they are the only handle on "the same person again".
+### Decisions worth recording
+
+1. **Whose round is it.** Pass-and-play is one phone holding a whole group, so
+   every seat counts toward that device's wall. A shared multi-device game is
+   the opposite — only this device's seat counts, or one player's ace would
+   unlock the badge on all four phones. Same distinction the retired
+   ticket-claim path drew, for the same reason.
+2. **What a career rule counts.** Flattening history per seat makes a
+   four-player afternoon look like four rounds: "two rounds in a day" fired on a
+   single foursome, and one player's win broke another's losing streak. Each
+   career rule declares its unit — *by round* for device-scoped facts, *by
+   player tag* for anything needing continuity.
 3. **Icons reuse the existing set.** The icon system is hand-drawn and curated,
-   one idea per icon, and `DrawnIcon` only accepts names that have art — so 45
-   bespoke drawings would be a large art commitment made badly and at speed.
-   Each badge instead points at the semantically closest existing icon
-   (`score.birdie`, `state.win`, `award.trophy`). Bespoke badge art is a design
-   pass worth doing deliberately, later, and the catalog is where it would land.
+   and `DrawnIcon` only accepts names that have art, so bespoke drawings for
+   ninety badges would be a large art commitment made badly and at speed. Each
+   badge points at the closest existing icon. Bespoke badge art is a deliberate
+   design pass for later, and the catalog is where it lands.
+4. **The venue clock turned out to be local.** `LocationSeed` already carries
+   `hours` and `tz`, so Early Bird and Night Owl needed a helper in
+   `venueHours.ts`, not an endpoint.
+5. **Meta badges run last** over the resolved set, and never count each other.
 
-### Still to build
+### Cut rather than faked
 
-- **The hunt badges** (11) — server-side but nearly free: `hunt_find` already
-  stores `confidence`, `flagged`, and `countable`.
-- **The fun zone** (13), **photo booth** (5), **social** (6), **habit** (9) —
-  each needs a small device-local counter that does not exist yet.
-- **Secret & meta** (8) — the meta ones ("earn twenty other badges") need only
-  the catalog, so they are the cheapest remaining group.
-- **Earned-state durability.** Detection re-derives from stored rounds on every
-  visit, so clearing site data silently empties the wall. Persisting an
-  earned-set — and syncing it to the account for signed-in players, so the wall
-  follows them across devices — is the one piece of new persistence worth
-  building, and it should land before the catalog grows much further.
+A badge nothing can ever unlock is worse than a shorter catalog. Eight were cut,
+and each is specified here for whoever wires it:
+
+| Badge | What it needs |
+|---|---|
+| Turkey, Bullseye, Bell Ringer, Claw Champ, Mole Patrol, Dead Eye | An event only that game's engine knows. Bowling, for one, keeps a flat roll list that has to be walked back into frames. The hook exists — pass `feat` to `<GameTicketAward>`, as Trivia and Pinball now do. |
+| Team Player | `gamesApi.createGame` takes a `teamId`, but no screen passes one, so no round can be tied to a team. |
+| Quick Draw | `hunt_find` records no hole, so "before the back nine" has nothing to compare against. Timing it off `created_at` would be a guess dressed as a rule. |
+
+Two guards keep the shipped catalog honest: `arcade.test.ts` reads every
+`game="…"` prop out of `src/features/fun/` and fails if the roster drifts, and
+`detect.test.ts` asserts that detection only ever reports keys the catalog
+declares local.
+
+### Still open
+
+- **Bespoke badge art** (decision 3).
+- **Account-synced earned state.** Badges now survive a cleared cache on the
+  same device, but not a move to a new one. Syncing the earned set to the
+  account is the natural next step, and the store it would sync is already
+  there.
+- **Grand Hunter at a one-course venue** is deliberately not granted — it would
+  mean exactly what Hunt Master already means. Both server rule and client
+  `reach` predicate encode that; if a venue ever has one course and wants the
+  badge, both move together.

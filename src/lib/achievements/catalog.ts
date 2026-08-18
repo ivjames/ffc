@@ -150,8 +150,11 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'above_board', label: 'Above Board', how: 'Finish a hunt with every photo above suspicion.', icon: 'state.done', category: 'hunt', local: false },
   { key: 'hoarder', label: 'Hoarder', how: 'Find ten of something there are many of.', icon: 'state.celebrate', category: 'hunt', local: false },
   { key: 'multitasker', label: 'Multitasker', how: 'Finish the hunt and beat par in the same round.', icon: 'award.trophy', category: 'hunt', local: false },
-  { key: 'quick_draw', label: 'Quick Draw', how: 'Finish the hunt before the back nine.', icon: 'state.timer', category: 'hunt', local: false },
-  { key: 'grand_hunter', label: 'Grand Hunter', how: "Complete every course's hunt at one venue.", icon: 'nav.locations', category: 'hunt', local: false },
+  // NOT here: "finish the hunt before the back nine". hunt_find records no
+  // hole, so there is nothing to compare a find against — timing it off
+  // created_at would be a guess dressed as a rule. It needs a hole marker on
+  // the find first.
+  { key: 'grand_hunter', label: 'Grand Hunter', how: "Complete every course's hunt at one venue.", icon: 'nav.locations', category: 'hunt', local: false, reach: (c) => c.maxCoursesAtOneVenue >= 2 },
   { key: 'naturalist', label: 'Naturalist', how: 'Complete a hunt without a single rejected photo.', icon: 'award.medal', category: 'hunt', local: false },
 
   // ── Wipeouts ──────────────────────────────────────────────────────────────

@@ -164,10 +164,80 @@ test("hunt master: verified finds covering the course's full list earn the grant
   }
   await postRound(body);
   const grants = await (await fetch(`${baseUrl}/api/rewards?clientId=${body.clientId}`)).json();
-  assert.deepEqual(
-    grants.map((g) => [g.playerTag, g.achievement]),
-    [["HNT", "hunt_master"]]
+  const mine = grants.filter((g) => g.playerTag === "HNT").map((g) => g.achievement).sort();
+  // Covering the list earns Hunt Master, and the badges that ride on a clean
+  // completed hunt: nothing was rejected (naturalist) and nothing was flagged
+  // by anti-cheat (above_board), plus the first verified find.
+  assert.deepEqual(mine, ["above_board", "first_find", "hunt_master", "naturalist"]);
+  // NOP found only one of the two items — no hunt_master, and none of the
+  // badges that require a completed hunt.
+  const theirs = grants.filter((g) => g.playerTag === "NOP").map((g) => g.achievement).sort();
+  assert.deepEqual(theirs, ["first_find"]);
+  // Grand Hunter is NOT granted: this venue has a single course, where it would
+  // mean exactly what Hunt Master already means.
+  assert.ok(!grants.some((g) => g.achievement === "grand_hunter"));
+});
+
+
+test("multitasker and grand hunter — the two composed in the grant path", async () => {
+  // A venue with TWO courses, so "every course's hunt" is a real bar.
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Hunt Venue ${stamp}`, `hunt-${stamp}`]
   );
+  const venue = loc.rows[0].id;
+  const mkCourse = async (name) =>
+    (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [name, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+  const courseA = await mkCourse(`A ${stamp}`);
+  const courseB = await mkCourse(`B ${stamp}`);
+  const mkItem = async (courseId, slug) =>
+    (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $3) returning id`,
+        [courseId, slug, slug]
+      )
+    ).rows[0].id;
+  const itemA = await mkItem(courseA, `a-${stamp}`);
+  const itemB = await mkItem(courseB, `b-${stamp}`);
+
+  const playHunt = async (courseId, itemId, strokes) => {
+    const clientId = `hunt-${courseId}-${stamp}`;
+    await testQuery(
+      `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'GHT', $2, true)`,
+      [clientId, itemId]
+    );
+    await postRound({
+      clientId,
+      courseId,
+      playerTags: ["GHT"],
+      createdAt: Date.now(),
+      completedAt: Date.now(),
+      scores: { 0: Array(18).fill(strokes) },
+    });
+    return (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json())
+      .map((g) => g.achievement)
+      .sort();
+  };
+
+  // Course A, carding 2s: under par (36 < 54) AND the hunt done — multitasker.
+  const first = await playHunt(courseA, itemA, 2);
+  assert.ok(first.includes("hunt_master"));
+  assert.ok(first.includes("under_par"));
+  assert.ok(first.includes("multitasker"), "hunt + under par in one round");
+  // Only one of the venue's two courses is done, so not yet Grand Hunter.
+  assert.ok(!first.includes("grand_hunter"));
+
+  // Course B at par: the venue is now complete.
+  const second = await playHunt(courseB, itemB, 3);
+  assert.ok(second.includes("grand_hunter"), "every course at the venue hunted");
+  // Par is not under par, so this round is not a multitasker.
+  assert.ok(!second.includes("multitasker"));
 });
 
 

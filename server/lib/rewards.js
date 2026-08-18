@@ -53,3 +53,71 @@ export function scoreAchievements(scoreRows, playerCount, pars) {
   }
   return grants;
 }
+
+/**
+ * Hunt achievements for one synced round, from that round's hunt_find rows.
+ *
+ * `finds` is every submission tied to the round (verified and not), each:
+ *   { tag, itemId, verified, confidence, flagged, countable, createdAt }
+ * `completedTags` is the set of tags that finished the course's hunt — the
+ * Hunt Master condition, which several of these build on.
+ *
+ * Pure so the rules are unit-testable without a DB; the route supplies the
+ * rows. Returns [{ tag, achievement }].
+ */
+export function huntAchievements(finds, { completedTags = new Set() } = {}) {
+  const byTag = new Map();
+  for (const f of finds) {
+    const list = byTag.get(f.tag) ?? [];
+    list.push(f);
+    byTag.set(f.tag, list);
+  }
+
+  const out = [];
+  for (const [tag, rows] of byTag) {
+    const ordered = [...rows].sort((a, b) => a.createdAt - b.createdAt);
+    const verified = ordered.filter((f) => f.verified);
+    const add = (achievement) => out.push({ tag, achievement });
+
+    if (verified.length > 0) add("first_find");
+    if (verified.some((f) => (f.confidence ?? 0) >= 0.95)) add("eagle_eye");
+
+    // Five verified in a row with no rejection in between — a rejected
+    // submission resets the run, which is what "without a rejection" means.
+    let run = 0;
+    let streak = false;
+    for (const f of ordered) {
+      if (f.verified) {
+        if (++run >= 5) streak = true;
+      } else run = 0;
+    }
+    if (streak) add("sharpshooter");
+
+    // Three failed attempts at one item, then landing it.
+    const perItem = new Map();
+    for (const f of ordered) {
+      const st = perItem.get(f.itemId) ?? { fails: 0, wonAfter3: false };
+      if (f.verified) {
+        if (st.fails >= 3) st.wonAfter3 = true;
+      } else st.fails += 1;
+      perItem.set(f.itemId, st);
+    }
+    if ([...perItem.values()].some((st) => st.wonAfter3)) add("persistence");
+
+    // Ten of a single countable item — the "find as many as you can" ones.
+    const countable = new Map();
+    for (const f of verified) {
+      if (!f.countable) continue;
+      countable.set(f.itemId, (countable.get(f.itemId) ?? 0) + 1);
+    }
+    if ([...countable.values()].some((n) => n >= 10)) add("hoarder");
+
+    // The two "clean hunt" badges are distinct on purpose: one is about the
+    // anti-cheat verdict, the other about ever being told no.
+    if (completedTags.has(tag)) {
+      if (!ordered.some((f) => f.flagged)) add("above_board");
+      if (!ordered.some((f) => !f.verified)) add("naturalist");
+    }
+  }
+  return out;
+}
