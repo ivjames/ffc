@@ -136,6 +136,54 @@ test("an org_admin lists their own questions plus the read-only platform pack", 
   assert.ok(!questions.some((q) => q.orgId === orgB), "never a rival's");
 });
 
+// The bulk importer (server/importTriviaPack.js) can put ~48,000 rows in the
+// platform pack, and an org_admin's list includes the pack. Unpaged, that is
+// a multi-megabyte response on every screen load.
+test("the list is paged and reports the full match count", async () => {
+  const first = await (await call("GET", "/trivia/questions?limit=1", null, { cookie: adminACookie })).json();
+  assert.equal(first.limit, 1);
+  assert.equal(first.offset, 0);
+  assert.equal(first.questions.length, 1);
+  assert.ok(first.total > 1, "total counts every match, not just this page");
+
+  const second = await (
+    await call("GET", "/trivia/questions?limit=1&offset=1", null, { cookie: adminACookie })
+  ).json();
+  assert.equal(second.offset, 1);
+  assert.notEqual(second.questions[0].id, first.questions[0].id, "offset moves the window");
+
+  // A bulk import writes every row in one transaction, so created_at ties are
+  // the normal case rather than the exception — without a tiebreaker in the
+  // ORDER BY, paging would show and skip rows at random.
+  const all = await (await call("GET", "/trivia/questions?limit=1000", null, { cookie: adminACookie })).json();
+  const again = await (await call("GET", "/trivia/questions?limit=1000", null, { cookie: adminACookie })).json();
+  assert.deepEqual(all.questions.map((q) => q.id), again.questions.map((q) => q.id), "stable order");
+});
+
+test("the list can be narrowed to one category", async () => {
+  const res = await call("GET", "/trivia/questions?category=House%20Pack", null, { cookie: adminACookie });
+  const { questions, total } = await res.json();
+  assert.ok(total > 0, "the seeded House Pack is there");
+  assert.ok(questions.every((q) => q.category === "House Pack"));
+  assert.ok(!questions.some((q) => q.orgId === orgA), "and Org A's own questions are not House Pack");
+});
+
+test("a nonsense limit is refused rather than silently ignored", async () => {
+  for (const qs of ["limit=-1", "limit=abc", "offset=-5"]) {
+    const res = await call("GET", `/trivia/questions?${qs}`, null, { cookie: adminACookie });
+    assert.equal(res.status, 400, qs);
+    assert.match((await res.json()).error, /non-negative integers/);
+  }
+});
+
+test("hand-written questions carry no source, so the imported pack stays distinguishable", async () => {
+  const res = await call("GET", "/trivia/questions", null, { cookie: adminACookie });
+  const { questions } = await res.json();
+  const mine = questions.find((q) => q.orgId === orgA);
+  assert.ok(mine, "Org A wrote one earlier in this file");
+  assert.equal(mine.source, null);
+});
+
 test("a super_admin can write the platform pack", async () => {
   const res = await call(
     "POST",

@@ -42,6 +42,13 @@ export default function MeHome() {
         </button>
 
         <div className="space-y-2">
+          {/* Open to everyone: badges are earned by playing, not by signing up,
+              and most of them are detected on this device from its own stored
+              rounds. A guest who just carded a hole-in-one has one, and hiding
+              the wall until they register would be hiding their own trophy. */}
+          <Button variant="ghost" onClick={() => navigate('/me/achievements')}>
+            <Icon name="award.medal" /> Achievements
+          </Button>
           {/* Account-only rows. Signed out these used to sit here looking
               tappable — "My teams" implying teams you don't have, a rewards
               card that isn't yours — and only revealed the requirement after
@@ -49,9 +56,6 @@ export default function MeHome() {
               there's an account behind them. */}
           {me && (
             <>
-              <Button variant="ghost" onClick={() => navigate('/me/achievements')}>
-                <Icon name="award.medal" /> Achievements
-              </Button>
               <Button variant="ghost" onClick={() => navigate('/me/teams')}>
                 <Icon name="state.teams" /> My teams
               </Button>

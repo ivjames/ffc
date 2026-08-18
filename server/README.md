@@ -735,6 +735,58 @@ set headers (game ids were already bearer capabilities here, cf.
 
 Open games auto-abandon after 24 h (checked lazily), retiring their join code.
 
+## The live-trivia question bank
+
+`trivia_question` holds three scopes in one table, and the narrowest a venue
+can see wins when a host deals a game (`lib/triviaDeal.js`):
+
+| `org_id` | `location_id` | Who sees it |
+|---|---|---|
+| null | null | the platform pack — every client |
+| set | null | that client's own questions |
+| set | set | house questions for one venue |
+
+`source` records where a row came from. Null means a person wrote it — by hand
+in Master Control, or in the House Pack seed in `schema.sql`. A value names the
+bulk import that produced it, which is what makes such an import reversible and
+what keeps the licence attribution attached to the rows it covers.
+
+### Importing the OpenTriviaQA pack
+
+`npm run migrate` seeds a 57-question House Pack so a venue that switches
+trivia on has something to deal the same night. For a real bank there is a
+committed pack of **47,710** questions built from
+[OpenTriviaQA](https://github.com/uberspot/OpenTriviaQA) (CC BY-SA 4.0):
+
+```sh
+npm run import:trivia -- --dry-run   # report only, rolls the transaction back
+npm run import:trivia                # ~2s for 47.7k rows
+npm run import:trivia -- --archive   # retire every row the import created
+npm run import:trivia -- --unarchive # put them back
+npm run import:trivia -- --prune     # also retire rows a rebuilt pack dropped
+```
+
+`--prune` matters whenever the pack's content filter is tightened: inserting is
+idempotent but never takes anything back, so without it a question dropped for
+safety would keep being dealt to a bank that already imported. A plain run says
+how many such rows it found and tells you to re-run with the flag.
+
+Deliberately **not** wired into `npm run migrate` — forty-eight thousand
+donated questions are an editorial decision an operator makes once, on purpose,
+not something that happens during a deploy. The import is re-runnable (rows are
+matched on the prompt) and runs in one transaction, and it only ever writes the
+platform scope: a client's own question that happens to share a prompt is left
+untouched.
+
+Attribution is a licence condition, not a nicety — see `seed/README.md` for
+what the credit has to say and where. Rebuilding the pack from upstream is
+`scripts/build-trivia-pack.mjs`; the build is deterministic, so an unchanged
+corpus rebuilds to a byte-identical file.
+
+A full pack makes the admin list endpoint a paged one: `GET
+/api/admin/trivia/questions` takes `limit` (default 200, max 1000), `offset`
+and `category`, and returns `{ questions, total, limit, offset }`.
+
 ## Testing
 
 ```sh
@@ -845,6 +897,13 @@ nothing assumes one global zone.
   per-course hunt seed (ensures the four courses exist so the hunt FK resolves on a
   fresh migrate).
 - `migrate.js` — applies `schema.sql`.
+- `importTriviaPack.js` — `npm run import:trivia`: loads
+  `seed/open-trivia-pack.ndjson.gz` into the platform question bank, with
+  `--dry-run`, `--archive` and `--unarchive`. See "The live-trivia question
+  bank" above.
+- `seed/open-trivia-pack.ndjson.gz` — 47,710 OpenTriviaQA questions (CC BY-SA
+  4.0), built by `scripts/build-trivia-pack.mjs`. `seed/README.md` carries the
+  attribution terms and the tally of what the build drops and why.
 - `lib/sanitize.js` — tag validation + offensive-word blocklist (`isValidTag`,
   `validateTags`, `BLOCKLIST`). Mirrors the client's rules exactly.
 - `lib/timezone.js` — venue timezone contract (`tzFromCoords`, `isValidTz`,
