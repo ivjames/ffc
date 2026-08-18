@@ -60,6 +60,12 @@ function collectScoreRows(scores, playerCount) {
 }
 
 // --- Rewards ---------------------------------------------------------------
+
+/** Advisory-lock namespace for the per-account Grand Hunter check (see below).
+ *  Arbitrary; it only has to be distinct from the other advisory locks this app
+ *  takes (lib/diskBudget.js, lib/dailyTickets.js). The hex spells "hunt". */
+const GRAND_HUNTER_LOCK = 0x68756e74;
+
 /**
  * Grant achievements for a freshly-synced completed round (same transaction).
  * Score-based ones (hole-in-one, under par) come from lib/rewards.js; Hunt
@@ -182,6 +188,23 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
       // so it isn't an achievement there. Mirrors the client's `reach`
       // predicate, which hides the badge rather than showing it unearnable.
       if (allCourseIds.length >= 2) {
+        // Serialize the check per account before reading anyone's history.
+        // One player with two phones can sync the last two courses at the same
+        // moment: each transaction reads the other's `hunt_master` before it
+        // commits, so neither sees a finished venue — and because a duplicate
+        // re-sync returns early, nothing ever reconsiders it. The badge is
+        // lost permanently, from a race the player can't even observe.
+        //
+        // Holding this until commit makes the second transaction read the
+        // first's grant. Owners are locked in a fixed order so two shared games
+        // with overlapping rosters can't deadlock against each other.
+        const owners = [...new Set(finishers.map(({ slot }) => seatOwners.get(slot)))].sort();
+        for (const owner of owners) {
+          await client.query(`select pg_advisory_xact_lock($1, hashtext($2::text))`, [
+            GRAND_HUNTER_LOCK,
+            owner,
+          ]);
+        }
         for (const { slot } of finishers) {
           const owner = seatOwners.get(slot);
           // Courses this ACCOUNT has hunted, counting only rounds where its

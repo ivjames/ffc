@@ -53,7 +53,14 @@ export default function JoinGame() {
       );
       return;
     }
-    void markActivity('social', 'join'); // achievements (device-local)
+    // Crashed the Party is about joining SOMEONE ELSE's game. The host typing
+    // their own code is a rejoin — /api/games/join hands a signed-in creator
+    // their existing seat back — so gate on the slot: seat 0 is the creator's
+    // by construction (createGame inserts it), and every joiner lands above it.
+    // A guest host whose tag is reclaimed by a stranger is the one case this
+    // reads wrong, and it errs toward not granting, which is the right way to
+    // be wrong about a badge.
+    if (res.slot !== 0) void markActivity('social', 'join'); // achievements (device-local)
     const clientId = `shared:${res.snapshot.game.id}`;
     // Rejoin on a device that already mirrors this game: keep the local state
     // (scores survive), just refresh the credentials.

@@ -536,3 +536,82 @@ test("admin summary rolls up achievement issuance per venue + achievement", asyn
   }
 });
 
+
+// The badge is judged ACROSS rounds, which makes it the one grant that can be
+// lost to a race: one player with two phones can sync their last two courses at
+// the same moment, each transaction reading the other's hunt_master before it
+// commits. Neither would see a finished venue — and a duplicate re-sync returns
+// early, so nothing ever reconsiders it. A per-account advisory lock in
+// grantRewards (routes/rounds.js) makes the second sync wait for the first.
+test("grand hunter survives two devices syncing the last courses at once", async () => {
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Race Venue ${stamp}`, `race-${stamp}`]
+  );
+  const venue = loc.rows[0].id;
+  const mk = async (name) => {
+    const course = (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [name, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+    const item = (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $3) returning id`,
+        [course, `${name}-${stamp}`, name]
+      )
+    ).rows[0].id;
+    const clientId = `race-${name}-${stamp}`;
+    await testQuery(
+      `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'RCE', $2, true)`,
+      [clientId, item]
+    );
+    return { course, clientId };
+  };
+  const a = await mk(`RA${stamp.slice(-4)}`);
+  const b = await mk(`RB${stamp.slice(-4)}`);
+
+  const cookie = await signedIn();
+  const sync = ({ course, clientId }) =>
+    postRound(
+      {
+        clientId,
+        courseId: course,
+        playerTags: ["RCE"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(3) },
+      },
+      cookie
+    );
+
+  // Both at once — whichever commits second must see the other's hunt_master.
+  await Promise.all([sync(a), sync(b)]);
+
+  const granted = async (clientId) =>
+    (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json()).map(
+      (g) => g.achievement
+    );
+  const all = [...(await granted(a.clientId)), ...(await granted(b.clientId))];
+  assert.equal(
+    all.filter((x) => x === "hunt_master").length,
+    2,
+    "both hunts completed"
+  );
+  assert.equal(
+    all.filter((x) => x === "grand_hunter").length,
+    1,
+    "the later sync completes the venue — exactly once, never zero"
+  );
+
+  await testQuery(`delete from round where course_id in ($1, $2)`, [a.course, b.course]);
+  await testQuery(`delete from hunt_find where round_client_id in ($1, $2)`, [
+    a.clientId,
+    b.clientId,
+  ]);
+  await testQuery(`delete from hunt_item where course_id in ($1, $2)`, [a.course, b.course]);
+  await testQuery(`delete from course where id in ($1, $2)`, [a.course, b.course]);
+  await testQuery(`delete from location where id = $1`, [venue]);
+});
