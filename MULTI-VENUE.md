@@ -100,6 +100,13 @@ place client-side (`src/lib/branding.ts`). Validation rejects unknown keys.
   already picked by location; rows must additionally be limited to the
   tenant's locations (global rows, `location_id IS NULL`, still show
   everywhere).
+- **`GET /api/synthetic/catalog`** — the one deliberate NON-tenant-scoped read:
+  live courses + venue tz/hours across every live org (suspended/archived orgs
+  excluded), gated on `x-synthetic-key`. The synthetic load bot is a platform
+  tool that reaches the API over loopback, so it has no Host header to name a
+  tenant with and would otherwise only ever see the default org's venues. For
+  the same reason an **authorised** synthetic `POST /api/rounds` resolves its
+  course platform-wide; real rounds stay tenant-scoped.
 - **`PATCH /api/admin/orgs/:id/branding`** — body is the full branding object
   (replace, not merge). Allowed for `super_admin`, or an `org_admin` on their
   own org (branding is cosmetic; org create/rename/archive stays

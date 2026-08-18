@@ -93,9 +93,13 @@ export default function SyntheticBot() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payloadKey]);
 
+  // Venue picker options. A super_admin's course list spans every org, so the
+  // label carries the org — two clients can both have a "Riverside".
   const venues = useMemo(() => {
     const m = new Map<string, string>();
-    for (const c of status?.courses ?? []) m.set(c.locationId, c.locationName);
+    for (const c of status?.courses ?? []) {
+      m.set(c.locationId, c.orgName ? `${c.orgName} — ${c.locationName}` : c.locationName);
+    }
     return [...m.entries()].map(([id, name]) => ({ id, name }));
   }, [status]);
 
@@ -331,7 +335,10 @@ export default function SyntheticBot() {
           <tbody>
             {courses.map((c) => (
               <tr key={c.courseId}>
-                <Td>{c.locationName}</Td>
+                <Td>
+                  {c.locationName}
+                  {c.orgName && <div className="text-xs text-slate-500">{c.orgName}</div>}
+                </Td>
                 <Td>{c.courseName}</Td>
                 <Td>{c.openNow ? <Pill tone="amber">open</Pill> : <Pill>closed</Pill>}</Td>
                 <Td>

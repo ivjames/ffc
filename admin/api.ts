@@ -413,6 +413,9 @@ export type SyntheticCourse = {
   courseName: string;
   locationId: string;
   locationName: string;
+  // Owning org — a super_admin's list spans every client, and venue names are
+  // not unique across them. Null for an org-less legacy venue.
+  orgName: string | null;
   tz: string | null;
   hours: VenueHours | null;
   parsKnown: boolean;

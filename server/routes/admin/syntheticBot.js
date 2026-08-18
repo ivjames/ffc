@@ -30,14 +30,19 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // straight from the DB rather than the public content feed.
 async function loadCourses(scope, locationId, now = new Date()) {
   const res = await pool.query(
+    // The org name rides along because a super_admin's list spans every client
+    // and venue names are not unique across them — "Riverside" alone doesn't
+    // say whose. Org-less legacy venues come back null.
     `select c.id as course_id, c.name as course_name, c.pars,
-            l.id as location_id, l.name as location_name, l.tz, l.hours
+            l.id as location_id, l.name as location_name, l.tz, l.hours,
+            o.name as org_name
        from course c
        join location l on l.id = c.location_id
+       left join org o on o.id = l.org_id
       where c.archived_at is null and l.archived_at is null
         and ($1::uuid is null or l.org_id = $1)
         and ($2::uuid is null or l.id = $2)
-      order by l.name, c.sort_order, c.name`,
+      order by o.name nulls first, l.name, c.sort_order, c.name`,
     [scope, locationId ?? null]
   );
   return res.rows.map((r) => ({
@@ -45,6 +50,7 @@ async function loadCourses(scope, locationId, now = new Date()) {
     courseName: r.course_name,
     locationId: r.location_id,
     locationName: r.location_name,
+    orgName: r.org_name ?? null,
     tz: r.tz,
     hours: r.hours,
     parsKnown: Array.isArray(r.pars) && r.pars.length > 0,

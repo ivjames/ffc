@@ -29,6 +29,8 @@
 //     no synthetic rounds — and a bypassed client can't flag its own rounds to
 //     dodge a board (which would matter the moment COUNT_ON_BOARD is off).
 
+import { timingSafeEqual } from "node:crypto";
+
 // Parse a boolean env var with an explicit default. Only "false"/"0"/"no"/"off"
 // (case-insensitive) turn a defaulted-true flag off; anything else keeps it on.
 function envBool(raw, dflt) {
@@ -58,6 +60,26 @@ export function boardSyntheticFilter(alias = "r", env = process.env) {
 }
 
 /**
+ * The x-synthetic-key gate on its own: `{ ok: true }` when the feature is
+ * enabled AND the provided header matches, `{ ok: false, error }` otherwise.
+ * Shared by resolveSynthetic (POST /api/rounds) and the bot's cross-tenant
+ * discovery feed (routes/synthetic.js), so both speak the same policy.
+ * Compared in constant time — length is not secret, the bytes are.
+ */
+export function syntheticKeyOk(providedKey, env = process.env) {
+  const expected = env.SYNTHETIC_BOT_KEY;
+  if (!expected) {
+    return { ok: false, error: "synthetic rounds are not enabled (SYNTHETIC_BOT_KEY unset)" };
+  }
+  const bad = { ok: false, error: "invalid or missing x-synthetic-key for synthetic round" };
+  if (typeof providedKey !== "string") return bad;
+  const a = Buffer.from(providedKey);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return bad;
+  return { ok: true };
+}
+
+/**
  * Decide whether an inbound request may mark its round synthetic.
  *   { ok: true,  synthetic: false } — not requested; a normal real round.
  *   { ok: true,  synthetic: true  } — requested and authorised.
@@ -66,12 +88,7 @@ export function boardSyntheticFilter(alias = "r", env = process.env) {
  */
 export function resolveSynthetic(requested, providedKey, env = process.env) {
   if (requested !== true) return { ok: true, synthetic: false };
-  const expected = env.SYNTHETIC_BOT_KEY;
-  if (!expected) {
-    return { ok: false, error: "synthetic rounds are not enabled (SYNTHETIC_BOT_KEY unset)" };
-  }
-  if (providedKey !== expected) {
-    return { ok: false, error: "invalid or missing x-synthetic-key for synthetic round" };
-  }
+  const gate = syntheticKeyOk(providedKey, env);
+  if (!gate.ok) return gate;
   return { ok: true, synthetic: true };
 }
