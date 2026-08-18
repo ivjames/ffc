@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import { QuestionCredit } from '../shared/Credits';
 import { useCurrentLocationId } from '../../lib/location';
 import { useSession } from '../../lib/session';
 import { useDeadline, formatCountdown } from './useDeadline';
@@ -259,6 +260,7 @@ export default function TriviaHost() {
             Setting up a game needs an account — that's just so the room has an
             owner. Anyone can run one.
           </p>
+          <QuestionCredit />
         </Content>
       </Screen>
     );
@@ -346,6 +348,7 @@ export default function TriviaHost() {
           <Button onClick={start} disabled={busy || !locationId}>
             {busy ? 'Setting up…' : 'Create the game'}
           </Button>
+          <QuestionCredit />
         </Content>
       </Screen>
     );
@@ -357,6 +360,7 @@ export default function TriviaHost() {
         <TopBar title="Host Trivia" back="/arcade" />
         <Content>
           <p className="text-sm text-fairway-100/70">Loading the game…</p>
+          <QuestionCredit />
         </Content>
       </Screen>
     );
@@ -517,6 +521,7 @@ export default function TriviaHost() {
             End early
           </button>
         )}
+        <QuestionCredit />
       </Content>
     </Screen>
   );

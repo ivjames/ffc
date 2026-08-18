@@ -15,19 +15,29 @@ built from the **OpenTriviaQA** corpus.
 
 ### Attribution
 
-CC BY-SA 4.0 requires that the source be credited wherever these questions are
-used, and that adaptations of the collection carry the same license. The pack's
-header line records the source, license and the exact upstream commit it was
-built from, and every imported row carries `source = 'opentriviaqa'` — so the
-credit survives in the database, not just in this file. **Any player- or
-host-facing surface that deals from the platform pack should carry a visible
-credit line**, e.g.:
+CC BY-SA 4.0 makes credit a condition of **use**, not just of redistribution:
+its definition of "Share" covers public display and public performance, so a
+venue putting these questions on a screen is inside the license's scope even
+though nobody ever hands out the database.
 
-> Trivia questions from OpenTriviaQA, CC BY-SA 4.0.
+Section 3(a)(2) allows the notice to be carried by a hyperlink, so the app does
+not repeat it under every question:
 
-Note that ShareAlike attaches to the *collection*, not to the facts in it, and
-that questions written in Master Control are the operator's own work — the
-`source` column is what keeps the two apart.
+- **`src/features/shared/Credits.tsx`** — the `/credits` page, which carries
+  the four required elements: the source, the license named and linked, a link
+  back to the material, and the statement that we modified it (§3(a)(1)(B),
+  the element people forget).
+- **`<QuestionCredit />`**, exported from the same file, is the one-line credit
+  linking to it. It renders on `TriviaLive` and `TriviaHost` — every branch of
+  both, enforced by `src/features/shared/Credits.test.tsx` — and deliberately
+  **not** on the single-player game at `/arcade/trivia`, which deals the
+  house's own bundled deck.
+- The pack header and the `source` column keep the credit attached to the data
+  itself, so a row's provenance survives outside the UI.
+
+ShareAlike attaches to the *collection*, not to the facts in it, and not to
+this application's code. Questions written in Master Control are the operator's
+own work — the `source` column is what keeps the two apart.
 
 ### Format
 
