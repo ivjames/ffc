@@ -16,7 +16,8 @@ process.env.DATABASE_URL = TEST_DATABASE_URL;
 
 const { app } = await import("../app.js");
 const { createUserSession } = await import("../lib/userAuth.js");
-const { resetTriviaRateLimits, tickAutopilot } = await import("./triviaLive.js");
+const { resetTriviaRateLimits, tickAutopilot, autoAdvanceIfDue, SESSION_FIELDS } =
+  await import("./triviaLive.js");
 const { BASE_POINTS, MAX_SPEED_BONUS } = await import("../lib/triviaLive.js");
 
 let baseUrl, close;
@@ -739,21 +740,86 @@ test("a phase past its deadline advances on read, even with the ticker down", as
 });
 
 test("the host's button and the clock cannot both move the same question", async () => {
-  // The host tap is the same transition made early, predicated on the status
-  // it was computed from — so whichever lands first wins and the other reports
-  // where the game actually is, rather than writing a stale next-state.
+  // The host tap is the same transition made early, predicated on the phase it
+  // was computed from — so whichever lands first wins and the loser finds
+  // nothing to apply, rather than writing a stale next-state.
+  //
+  // This used to fire both actors through `Promise.all` and assert the room
+  // sat on the reveal. That starts them together but does NOT make them
+  // compute from the same phase: the route re-reads the session, so on a
+  // loaded machine the clock's write can commit BEFORE the request's own
+  // SELECT, and the tap then legitimately computes the next transition
+  // (reveal -> question 1) instead of a duplicate reveal. It failed in the
+  // deploy gate on code that was behaving correctly. Both orderings are pinned
+  // explicitly now — see the sibling test for the clock-first half.
   const { id, hostToken, joinCode } = await createSession({
+    questionCount: 3,
     config: { questionSeconds: 5, revealSeconds: 5, lobbySeconds: 10 },
   });
   await join(joinCode, "Racer");
-  await advance(id, hostToken); // -> question
+  await advance(id, hostToken); // -> question 0
   await expireDeadline(id);
 
-  const [tapped] = await Promise.all([advance(id, hostToken), tickAutopilot()]);
+  // The row the clock is holding when it wakes to find this room overdue —
+  // read the way the ticker reads it, so the transition below is the real one.
+  const clockHeld = (
+    await testQuery(`select ${SESSION_FIELDS} from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.equal(clockHeld.status, "question");
+  assert.equal(clockHeld.currentIndex, 0);
+
+  // The host's tap lands first and makes the transition.
+  const tapped = await advance(id, hostToken);
   assert.equal(tapped.status, 200);
   const body = await json(tapped);
-  assert.equal(body.session.status, "reveal", "one transition, not two");
+  assert.equal(body.session.status, "reveal", "the tap made the transition");
   assert.equal(body.session.currentIndex, 0, "and the room did not skip a question");
+
+  // Now the clock's transition lands, still holding the phase it read before
+  // the tap. Driven through autoAdvanceIfDue — the function the ticker calls
+  // per due row — rather than a hand-written UPDATE: re-stating the predicate
+  // here would only test this file's SQL, and would stay green if applyPhase
+  // ever stopped predicating on the phase it was computed from.
+  const late = await autoAdvanceIfDue(clockHeld);
+  assert.equal(late, null, "one transition, not two");
+
+  const now = (
+    await testQuery(`select status, current_index from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.equal(now.status, "reveal", "the room is where the host's tap left it");
+  assert.equal(now.current_index, 0);
+});
+
+test("a host tap that lands after the clock moves the room on, not twice", async () => {
+  // The other ordering, pinned rather than left to chance: the clock reveals,
+  // and the tap arrives after. The button is a shortcut for the NEXT
+  // transition, computed from the phase the request actually finds — so it
+  // opens question 1. What it must never do is re-apply the reveal, skip a
+  // question, or land on a phase the room never passed through.
+  //
+  // Worth knowing: a tap this close behind the clock performs "next question"
+  // while the host's screen still reads "Close answers & reveal", so the room
+  // sees the answer only for as long as the round trip took. Making the tap
+  // carry the phase the HOST saw would close that gap; today the server reads
+  // its own.
+  const { id, hostToken, joinCode } = await createSession({
+    questionCount: 3,
+    config: { questionSeconds: 5, revealSeconds: 5, lobbySeconds: 10 },
+  });
+  await join(joinCode, "Latecomer");
+  await advance(id, hostToken); // -> question 0
+  await expireDeadline(id);
+
+  await tickAutopilot(); // the clock reveals question 0
+  const revealed = (
+    await testQuery(`select status, current_index from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.equal(revealed.status, "reveal");
+  assert.equal(revealed.current_index, 0);
+
+  const body = await json(await advance(id, hostToken));
+  assert.equal(body.session.status, "question", "the tap made the next transition");
+  assert.equal(body.session.currentIndex, 1, "exactly one step past the reveal");
 });
 
 test("a stalled actor cannot drag the room back a question", async () => {

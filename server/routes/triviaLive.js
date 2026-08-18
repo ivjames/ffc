@@ -89,7 +89,11 @@ export function resetTriviaRateLimits() {
 // twice on purpose — deriving one from the other by string surgery is the kind
 // of cleverness that breaks silently the first time a column name contains the
 // prefix being stripped.
-const SESSION_FIELDS = `id, join_code as "joinCode", location_id as "locationId",
+// Exported for the integration test, which builds the row the TICKER holds —
+// a session read before the host's tap landed — so it can drive a genuinely
+// stale transition through autoAdvanceIfDue rather than re-implementing the
+// predicate that rejects it.
+export const SESSION_FIELDS = `id, join_code as "joinCode", location_id as "locationId",
                         status, question_ids as "questionIds", questions,
                         current_index as "currentIndex", asked_at as "askedAt",
                         auto_at as "autoAt",
