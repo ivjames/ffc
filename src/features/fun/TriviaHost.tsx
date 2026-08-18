@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useCurrentLocationId } from '../../lib/location';
-import { useSession } from '../../lib/session';
 import { playClick } from '../../lib/sound';
 import {
   createSession,
@@ -56,7 +55,6 @@ function nextAction(status: string, index: number, total: number): string {
 
 export default function TriviaHost() {
   const locationId = useCurrentLocationId();
-  const signedIn = useSession().user != null;
   const [host, setHost] = useState<StoredHost | null>(loadHost);
   const [snapshot, setSnapshot] = useState<TriviaSnapshot | null>(null);
   const [categories, setCategories] = useState<{ category: string; n: number }[]>([]);
@@ -165,19 +163,6 @@ export default function TriviaHost() {
     setSnapshot(null);
   }
 
-  if (!signedIn) {
-    return (
-      <Screen>
-        <TopBar title="Host Trivia" back="/arcade" />
-        <Content>
-          <p className="text-sm text-fairway-100/80">
-            Hosting a game needs a staff account — sign in first.
-          </p>
-        </Content>
-      </Screen>
-    );
-  }
-
   // --- Setup ----------------------------------------------------------------
   if (!host) {
     const bankTotal = categories.reduce((n, c) => n + c.n, 0);
@@ -188,6 +173,13 @@ export default function TriviaHost() {
           <p className="mb-4 text-sm text-fairway-100/70">
             Set up a game, then read the code out to the room. Everyone plays from their own
             phone — solo or as a table.
+          </p>
+          {/* Staff-only, and enforced server-side rather than here: creating a
+              room mints the capability that can read every correct answer, so
+              it needs a Master Control session on this device. A guest who
+              wanders in can fill the form; the create call is what refuses. */}
+          <p className="mb-4 text-xs text-fairway-400">
+            Hosting needs a staff sign-in on this device.
           </p>
           {error && (
             <p className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">

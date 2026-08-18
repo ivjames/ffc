@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { TEST_DATABASE_URL, ensureSchema, testQuery, listenEphemeral } from "../test-support/testDb.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
+process.env.APP_TOKEN = "trivia-live-test-token";
 
 const { app } = await import("../app.js");
 const { createUserSession } = await import("../lib/userAuth.js");
@@ -37,6 +38,14 @@ function post(path, body, cookie) {
   });
 }
 
+function postAdmin(path, body) {
+  return fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-app-token": process.env.APP_TOKEN },
+    body: JSON.stringify(body),
+  });
+}
+
 let userSeq = 0;
 async function player() {
   const email = `trivia-${stamp}-${userSeq++}@example.com`;
@@ -49,13 +58,16 @@ async function player() {
   return `ffc_session=${token}`;
 }
 
-/** Create a session and return { id, hostToken, joinCode }. */
+/** Create a session and return { id, hostToken, joinCode }.
+ *
+ * Dealing a room is a STAFF action on the admin surface — APP_TOKEN stands in
+ * for a Master Control session here, as it does across the admin tests. */
 async function createSession(overrides = {}) {
-  const res = await post(
-    "/api/trivia/sessions",
-    { locationId, questionCount: 3, ...overrides },
-    hostCookie
-  );
+  const res = await postAdmin("/api/admin/trivia/sessions", {
+    locationId,
+    questionCount: 3,
+    ...overrides,
+  });
   assert.equal(res.status, 200, `create failed: ${await res.clone().text()}`);
   const body = await json(res);
   sessionIds.push(body.session.id);
@@ -111,9 +123,19 @@ test("the platform question pack is seeded, so a venue can run a game immediatel
   assert.ok(total >= 3, `expected a seeded bank, got ${total} questions`);
 });
 
-test("creating needs an account; joining does not", async () => {
-  const anon = await post("/api/trivia/sessions", { locationId, questionCount: 3 });
+test("creating needs STAFF; joining needs nothing at all", async () => {
+  // The host capability minted at create can read every correct answer, so
+  // hosting is not something a signed-in guest may do — otherwise anyone could
+  // open rooms of their own and read the venue's bank out of the host
+  // snapshot before trivia night.
+  const anon = await post("/api/admin/trivia/sessions", { locationId, questionCount: 3 });
   assert.equal(anon.status, 401);
+  const asPlayer = await post(
+    "/api/admin/trivia/sessions",
+    { locationId, questionCount: 3 },
+    hostCookie // an ordinary player session — not a staff credential
+  );
+  assert.equal(asPlayer.status, 401, "a player session is not a staff session");
 
   const { joinCode } = await createSession();
   // A walk-up guest with no account can still play — that's the point of a

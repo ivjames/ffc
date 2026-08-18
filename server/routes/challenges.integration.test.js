@@ -244,6 +244,66 @@ test("an expired challenge cannot be joined or played", async () => {
   assert.equal(play.status, 409);
 });
 
+test("retrying a submit whose response was lost returns the round, not a refusal", async () => {
+  // The client keeps its marker armed through a transient failure — losing a
+  // round to a dropped response would be worse than a duplicate. So the retry
+  // arrives with the SAME session id, and answering it with the same 409 that
+  // means "you already played" turns the retry into the thing that loses the
+  // round: the marker clears on a definitive-looking refusal and the result
+  // never appears.
+  const a = await player("RTA");
+  const b = await player("RTB");
+  const challenge = await create(a.cookie);
+  await call("POST", "/join", { inviteCode: challenge.inviteCode }, b.cookie);
+
+  const round = sid();
+  const first = await call("POST", `/${challenge.id}/play`, { score: 42, sessionId: round }, a.cookie);
+  assert.equal(first.status, 200);
+
+  const retry = await call("POST", `/${challenge.id}/play`, { score: 42, sessionId: round }, a.cookie);
+  assert.equal(retry.status, 200, "the same round replayed is the same outcome");
+  const view = await retry.json();
+  assert.equal(view.challenger.score, 42);
+
+  // A genuinely different round is still refused — this is the one-round rule,
+  // and it is the whole reason the endpoint is not simply an upsert.
+  const second = await call("POST", `/${challenge.id}/play`, { score: 99, sessionId: sid() }, a.cookie);
+  assert.equal(second.status, 409);
+  assert.match((await second.json()).error, /already played/);
+
+  // And the score stands at what was actually played.
+  const after = await (await call("GET", `/${challenge.id}`, null, a.cookie)).json();
+  assert.equal(after.challenger.score, 42);
+});
+
+test("a replayed round cannot move a settled challenge's completion", async () => {
+  const a = await player("RPA");
+  const b = await player("RPB");
+  const challenge = await create(a.cookie);
+  await call("POST", "/join", { inviteCode: challenge.inviteCode }, b.cookie);
+
+  const round = sid();
+  await call("POST", `/${challenge.id}/play`, { score: 10, sessionId: round }, a.cookie);
+  await call("POST", `/${challenge.id}/play`, { score: 20, sessionId: sid() }, b.cookie);
+
+  const settled = await testQuery(`select status, completed_at from challenge where id = $1`, [
+    challenge.id,
+  ]);
+  assert.equal(settled.rows[0].status, "complete");
+
+  const replay = await call("POST", `/${challenge.id}/play`, { score: 10, sessionId: round }, a.cookie);
+  assert.equal(replay.status, 200);
+  const again = await testQuery(`select status, completed_at from challenge where id = $1`, [
+    challenge.id,
+  ]);
+  assert.equal(again.rows[0].status, "complete");
+  assert.deepEqual(
+    again.rows[0].completed_at,
+    settled.rows[0].completed_at,
+    "the settled time is when it settled, not when someone's phone retried"
+  );
+});
+
 test("the list expires stale challenges instead of offering a round that will be refused", async () => {
   // The TTL is applied lazily, and /mine was the one read that never applied
   // it — so a week-old challenge kept its stored 'open' status, sorted into
