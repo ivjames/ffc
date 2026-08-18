@@ -12,6 +12,9 @@
 // anything it rejects is dropped with a counted reason rather than patched
 // into the bank. The pack can only ever contain questions an operator could
 // have typed into Master Control by hand.
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { normalizeQuestion } from "../../server/lib/triviaLive.js";
 
 /**
@@ -399,4 +402,93 @@ export function toPackRow(raw, { category, seen }) {
 /** The key two questions must share to count as the same question. */
 export function dedupeKey(prompt) {
   return prompt.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
+ * Judgment repairs: apostrophes `repairApostrophes` cannot restore by rule.
+ *
+ * "dogs ears", "the worlds largest", "Lets", "Ill" — whether each needs an
+ * apostrophe depends on the sentence, so these were adjudicated one at a time
+ * (a model sweep over the whole pack, each accepted fix independently
+ * verified) and committed as data. Each NDJSON line is one fix:
+ *
+ *   {"q": <exact prompt of the row>, "f": "p"|0..3, "b": <substring as it
+ *    stands>, "a": <the same substring with apostrophes inserted>}
+ *
+ * `q` keys the row by its pre-repair prompt, so a rebuild from upstream hits
+ * every entry, while re-running the repair over an already-patched pack
+ * matches nothing and is a no-op. `f` is "p" for the prompt or a choice
+ * position in the built (post-shuffle) row.
+ */
+export const REPAIRS_PATH = join(dirname(fileURLToPath(import.meta.url)), "trivia-pack-repairs.ndjson");
+
+export function loadPackRepairs(path = REPAIRS_PATH) {
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return [];
+  }
+  return text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+}
+
+/** True when `after` is exactly `before` with one or more apostrophes added. */
+export function isApostropheInsertion(before, after) {
+  let i = 0;
+  let inserted = 0;
+  for (const ch of after) {
+    if (ch === before[i]) i++;
+    else if (ch === "'") inserted++;
+    else return false;
+  }
+  return i === before.length && inserted > 0;
+}
+
+/**
+ * Apply the committed judgment repairs to built rows, mutating in place.
+ *
+ * Every entry is re-checked here rather than trusted: the replacement must be
+ * a pure apostrophe insertion, must occur exactly once in its field, must not
+ * collide with another row's dedupe key, and the repaired row must still pass
+ * the admin validator. Anything that fails is skipped with a reason — a
+ * repair pass must never be the thing that corrupts the pack.
+ */
+export function applyPackRepairs(rows, entries) {
+  const byPrompt = new Map(rows.map((r) => [r.prompt, r]));
+  const byKey = new Map(rows.map((r) => [dedupeKey(r.prompt), r]));
+  const skipped = [];
+  let applied = 0;
+
+  for (const e of entries) {
+    const skip = (reason) => skipped.push({ entry: e, reason });
+    const row = byPrompt.get(e.q);
+    if (!row) { skip("no-such-prompt"); continue; }
+    if (!isApostropheInsertion(e.b, e.a)) { skip("not-insertion-only"); continue; }
+
+    const isPrompt = e.f === "p";
+    const field = isPrompt ? row.prompt : row.choices[e.f];
+    if (typeof field !== "string") { skip("no-such-field"); continue; }
+    const at = field.indexOf(e.b);
+    if (at === -1) { skip("before-not-found"); continue; }
+    if (field.indexOf(e.b, at + 1) !== -1) { skip("ambiguous-match"); continue; }
+    const fixed = field.slice(0, at) + e.a + field.slice(at + e.b.length);
+
+    const candidate = isPrompt
+      ? { ...row, prompt: fixed }
+      : { ...row, choices: row.choices.map((c, i) => (i === e.f ? fixed : c)) };
+    if (isPrompt) {
+      const oldKey = dedupeKey(row.prompt);
+      const newKey = dedupeKey(fixed);
+      if (newKey !== oldKey && byKey.has(newKey)) { skip("dedupe-collision"); continue; }
+      if (normalizeQuestion(candidate).error) { skip("fails-validator"); continue; }
+      byKey.delete(oldKey);
+      byKey.set(newKey, row);
+      row.prompt = fixed;
+    } else {
+      if (normalizeQuestion(candidate).error) { skip("fails-validator"); continue; }
+      row.choices[e.f] = fixed;
+    }
+    applied++;
+  }
+  return { applied, skipped };
 }

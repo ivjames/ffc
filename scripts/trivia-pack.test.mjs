@@ -16,9 +16,12 @@ import { describe, expect, test } from 'vitest';
 import { normalizeQuestion } from '../server/lib/triviaLive.js';
 import {
   CATEGORY_LABELS,
+  applyPackRepairs,
   decodeMixedUtf8,
   dedupeKey,
+  isApostropheInsertion,
   isFamilySafe,
+  loadPackRepairs,
   parseCategoryFile,
   repairApostrophes,
   shuffleChoices,
@@ -80,6 +83,102 @@ describe('repairApostrophes', () => {
     expect(repairApostrophes('The Slim Shady LP')).toBe('The Slim Shady LP');
     // Lowercase "im"/"ive" hide inside names; only the capitalised forms match.
     expect(repairApostrophes('Kim and Ivelisse')).toBe('Kim and Ivelisse');
+  });
+});
+
+describe('isApostropheInsertion', () => {
+  test('accepts pure apostrophe insertions', () => {
+    expect(isApostropheInsertion('dogs ears', "dog's ears")).toBe(true);
+    expect(isApostropheInsertion('students union', "students' union")).toBe(true);
+    expect(isApostropheInsertion('Ill see you', "I'll see you")).toBe(true);
+  });
+
+  test('rejects anything that is not purely an insertion', () => {
+    expect(isApostropheInsertion('dogs ears', 'dogs ears')).toBe(false); // no-op
+    expect(isApostropheInsertion('dogs ears', "dog's ear")).toBe(false); // deletion
+    expect(isApostropheInsertion('dogs ears', "Dog's ears")).toBe(false); // case change
+    expect(isApostropheInsertion('dogs ears', "dog's, ears")).toBe(false); // other punctuation
+  });
+});
+
+describe('applyPackRepairs', () => {
+  const mkRows = () => [
+    {
+      prompt: 'A Chinese Crested dogs ears are not cropped.',
+      choices: ['True', 'False'],
+      answer: 0,
+      category: 'Animals',
+      difficulty: 2,
+      active: true,
+    },
+    {
+      prompt: 'What is the worlds largest desert?',
+      choices: ['Sahara', 'Gobi', 'Arabian', 'Kalahari'],
+      answer: 0,
+      category: 'Geography',
+      difficulty: 2,
+      active: true,
+    },
+  ];
+
+  test('applies prompt and choice fixes, keyed by the unrepaired prompt', () => {
+    const rows = mkRows();
+    const { applied, skipped } = applyPackRepairs(rows, [
+      { q: 'A Chinese Crested dogs ears are not cropped.', f: 'p', b: 'dogs ears', a: "dog's ears" },
+      { q: 'What is the worlds largest desert?', f: 'p', b: 'worlds largest', a: "world's largest" },
+    ]);
+    expect(applied).toBe(2);
+    expect(skipped).toEqual([]);
+    expect(rows[0].prompt).toBe("A Chinese Crested dog's ears are not cropped.");
+    expect(rows[1].prompt).toBe("What is the world's largest desert?");
+  });
+
+  test('a second pass over the repaired rows is a no-op', () => {
+    const rows = mkRows();
+    const entries = [{ q: 'What is the worlds largest desert?', f: 'p', b: 'worlds', a: "world's" }];
+    applyPackRepairs(rows, entries);
+    const again = applyPackRepairs(rows, entries);
+    expect(again.applied).toBe(0);
+    expect(again.skipped).toEqual([{ entry: entries[0], reason: 'no-such-prompt' }]);
+  });
+
+  test('refuses an edit that is not a pure apostrophe insertion', () => {
+    const rows = mkRows();
+    const { applied, skipped } = applyPackRepairs(rows, [
+      { q: 'What is the worlds largest desert?', f: 'p', b: 'worlds', a: 'worlds biggest' },
+    ]);
+    expect(applied).toBe(0);
+    expect(skipped[0].reason).toBe('not-insertion-only');
+  });
+
+  test('refuses a substring that matches more than once', () => {
+    const rows = [{ ...mkRows()[0], prompt: 'The dogs saw the dogs bone.' }];
+    const { skipped } = applyPackRepairs(rows, [
+      { q: 'The dogs saw the dogs bone.', f: 'p', b: 'dogs', a: "dog's" },
+    ]);
+    expect(skipped[0].reason).toBe('ambiguous-match');
+  });
+
+  test('refuses a fix whose result would collide with another prompt', () => {
+    const rows = [
+      { ...mkRows()[1] },
+      { ...mkRows()[1], prompt: "What is the world's largest desert?" },
+    ];
+    const { applied, skipped } = applyPackRepairs(rows, [
+      { q: 'What is the worlds largest desert?', f: 'p', b: 'worlds', a: "world's" },
+    ]);
+    expect(applied).toBe(0);
+    expect(skipped[0].reason).toBe('dedupe-collision');
+  });
+
+  test('fixes a choice by its position without touching the answer index', () => {
+    const rows = mkRows();
+    const { applied } = applyPackRepairs(rows, [
+      { q: 'What is the worlds largest desert?', f: 1, b: 'Gobi', a: "Gob'i" },
+    ]);
+    expect(applied).toBe(1);
+    expect(rows[1].choices[1]).toBe("Gob'i");
+    expect(rows[1].answer).toBe(0);
   });
 });
 
@@ -355,6 +454,18 @@ describe('the committed pack', () => {
     const { rows } = await pack;
     const broken = rows.filter((r) => /\b(dont|cant|didnt|wasnt|youre|thats|arent)\b/i.test(r.prompt));
     expect(broken.map((r) => r.prompt)).toEqual([]);
+  });
+
+  test('every committed judgment repair is a pure apostrophe insertion', () => {
+    for (const e of loadPackRepairs()) {
+      expect(isApostropheInsertion(e.b, e.a), JSON.stringify(e)).toBe(true);
+    }
+  });
+
+  test('the committed judgment repairs are already applied — re-applying is a no-op', async () => {
+    const { rows } = await pack;
+    const cloned = rows.map((r) => ({ ...r, choices: [...r.choices] }));
+    expect(applyPackRepairs(cloned, loadPackRepairs()).applied).toBe(0);
   });
 
   test('no replacement characters — the encoding repair reached every file', async () => {

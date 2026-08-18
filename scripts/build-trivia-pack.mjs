@@ -25,7 +25,9 @@ import { fileURLToPath } from "node:url";
 import {
   CATEGORY_LABELS,
   REJECT_REASONS,
+  applyPackRepairs,
   decodeMixedUtf8,
+  loadPackRepairs,
   parseCategoryFile,
   toPackRow,
 } from "./lib/trivia-pack.mjs";
@@ -109,6 +111,14 @@ async function main() {
   // question moving between upstream files does not reshuffle the whole file.
   rows.sort((a, b) => (a.category === b.category ? cmp(a.prompt, b.prompt) : cmp(a.category, b.category)));
 
+  // Judgment repairs go on last, after the sort and the shuffle, both of which
+  // are seeded on the unrepaired prompt — so patching the committed pack in
+  // place (scripts/repair-trivia-pack.mjs) and rebuilding from upstream land
+  // on the identical artifact.
+  const repairs = applyPackRepairs(rows, loadPackRepairs());
+  const skippedByReason = new Map();
+  for (const s of repairs.skipped) skippedByReason.set(s.reason, (skippedByReason.get(s.reason) ?? 0) + 1);
+
   const header = {
     pack: "opentriviaqa",
     source: UPSTREAM,
@@ -126,6 +136,10 @@ async function main() {
   console.log(`[build-trivia-pack] encoding: ${repairedBytes} bytes repaired via CP1252, ${droppedBytes} dropped`);
   for (const reason of REJECT_REASONS) {
     console.log(`[build-trivia-pack]   dropped ${String(rejects[reason]).padStart(5)}  ${reason}`);
+  }
+  console.log(`[build-trivia-pack] judgment repairs: ${repairs.applied} applied, ${repairs.skipped.length} skipped`);
+  for (const [reason, n] of skippedByReason) {
+    console.log(`[build-trivia-pack]   skipped ${String(n).padStart(5)}  ${reason}`);
   }
   console.log(`[build-trivia-pack] kept ${rows.length} questions across ${perCategory.size} categories`);
   for (const [category, n] of [...perCategory].sort((a, b) => b[1] - a[1])) {
