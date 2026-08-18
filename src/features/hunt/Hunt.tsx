@@ -77,33 +77,6 @@ type ItemState =
 // HUNT_ALLOW_PHOTO_OF_PHOTO (see server/.env.example) for photo-of-photo checks.
 const ALLOW_UPLOAD = DEV_MODE;
 
-/**
- * Which hole the group is on.
- *
- * Prefers the scorecard's OWN selected hole, which it persists as it goes.
- * Inferring this from the scored holes can't be right at the turn in either
- * direction: the ninth is carded whether the group is still standing on it or
- * already walking to the tenth, so guessing forward costs a player the badge at
- * exactly the moment it's meant to be earned, and guessing back hands it to
- * someone who has already started the back nine.
- *
- * The inference stays as a fallback for rounds started before the scorecard
- * recorded this. Undefined when there's no round (the venue-wide hunt) or
- * nothing is scored yet — the server treats that as "unknown", not hole zero.
- */
-function currentHole(round: LocalRound | null): number | undefined {
-  if (!round) return undefined;
-  if (round.currentHole != null) return Math.min(18, Math.max(1, round.currentHole));
-  let furthest = 0;
-  for (const card of Object.values(round.scores)) {
-    if (!card) continue;
-    card.forEach((s, i) => {
-      if (s != null) furthest = Math.max(furthest, i + 1);
-    });
-  }
-  return furthest === 0 ? undefined : Math.min(18, furthest);
-}
-
 export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
   const navigate = useNavigate();
   // Intelligent back: return to wherever the hunt was opened from (e.g. the
@@ -308,9 +281,6 @@ export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {
         owner: group.owner,
         playerTag,
         roundClientId: group.key,
-        // Where the group is up to, for the "finished the hunt early" badge.
-        // Undefined in venue mode (no round) and before the first score.
-        hole: currentHole(round),
         imageBase64: base64,
         mediaType,
       });

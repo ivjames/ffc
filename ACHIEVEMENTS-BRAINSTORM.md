@@ -3,8 +3,8 @@
 Last updated: 2026-08-18. A candidate catalog for growing the app's
 achievements from the current three into a real badge wall.
 
-**Status: built — the whole catalog.** 101 badges ship: 89 detected on-device
-in `src/lib/achievements/`, 12 granted server-side. Nothing is cut. See
+**Status: built.** 100 badges ship: 89 detected on-device in
+`src/lib/achievements/`, 11 granted server-side. See
 [What's built](#whats-built) for what shipped, what was deliberately cut, and
 why. The premise underneath all of it: the ticket payout has been removed, in
 code, and achievements now pay nothing.
@@ -407,7 +407,7 @@ label, how-to, icon, category, secret flag, reachability. `detect.ts` holds the
 on-device rules; `server/lib/rewards.js` holds the hunt rules. The wall and the
 round summary are both surfaces over the catalog, so they cannot drift.
 
-**101 badges**: scoring (22), the field (10), courses & venues (8), hunt (11),
+**100 badges**: scoring (22), the field (10), courses & venues (8), hunt (10),
 arcade (13), photo booth (5), playing together (5), regulars (11), wipeouts (8),
 secrets (8). 89 are detected on-device and work offline and signed-out.
 
@@ -462,12 +462,15 @@ scores) and Whack-a-Mole gained `streak`/`bestStreak` (reset by a bomb).
 Both were cut once as "blocked on something that doesn't exist", and both turned
 out to need less than that suggested:
 
-**Quick Draw** needed a hole on the find, so `hunt_find` gained a nullable
-`hole` column and the hunt screen sends it — derived from the round it already
-holds in state, so no new UI. Null is load-bearing: the venue-wide hunt has no
-round, an older client sends nothing, and a find can precede the first score.
-The rule therefore requires every verified find to carry a KNOWN hole ≤ 9, so
-an unknown hole is never read as an early one.
+**Quick Draw was cut** — for a real reason, not a technical one. It was built:
+`hunt_find` gained a `hole`, the hunt sent it, and the rule survived three
+review rounds of boundary bugs at the turn. Then the venue point settled it —
+the hunt list is spread across all eighteen holes, so **completing it on the
+front nine isn't possible**. A badge that cannot be earned is worse than one
+that doesn't exist, so the badge, the column, and every piece of plumbing added
+to serve it came back out. Worth remembering as the cheapest lesson in the
+batch: three rounds of careful edge-case work on a rule that should never have
+existed. "Can this fire at all?" is a question to ask before "is this correct?".
 
 **Team Player** was cut because no screen ties a round to a team
 (`createGame` accepts a `teamId` nothing passes). But the badge doesn't need a

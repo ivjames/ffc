@@ -8,8 +8,14 @@ import { ARCADE_GAME_KEYS } from './arcade';
 // can never complete) or falsely earnable (a game is removed).
 describe('arcade roster', () => {
   test('matches the game keys the fun-zone screens report', () => {
-    const dir = new URL('../../features/fun/', import.meta.url);
+    // Both homes: the fun-zone screens, and Arcade Putt, which lives under
+    // features/putt because it predates the arcade section.
+    const dirs = [
+      new URL('../../features/fun/', import.meta.url),
+      new URL('../../features/putt/', import.meta.url),
+    ];
     const keys = new Set<string>();
+    for (const dir of dirs)
     for (const file of readdirSync(dir)) {
       if (!file.endsWith('.tsx') || file.endsWith('.test.tsx')) continue;
       const src = readFileSync(new URL(file, dir), 'utf8');

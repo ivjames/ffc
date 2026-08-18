@@ -3,6 +3,7 @@
 // guarded upsert (server/lib/lww.js) — keep in sync — so every device and the
 // server converge on the same grid no matter what order writes arrive in.
 import type { CellMeta, LocalRound, SharedInfo } from '../types';
+import { courseById } from '../data/courses';
 import { HOLE_COUNT } from './scoring';
 
 export type RemoteCell = {
@@ -21,6 +22,8 @@ export type GameSnapshot = {
     teamId: string | null;
     status: string;
     roundId: string | null;
+    /** When the GAME was created, server-side — not when this device joined. */
+    createdAt?: string;
   };
   players: { slot: number; tag: string; userId: string | null; displayName: string | null }[];
   scores: RemoteCell[];
@@ -186,12 +189,24 @@ export function createSharedLocalRound(
     status: 'open',
     cellMeta: {},
   };
+  // The game's own start time, not this device's arrival: a player joining an
+  // eight o'clock game at half nine did not start a round at half nine, and the
+  // time-of-day badges would say otherwise. Falls back to now for a server that
+  // predates the field.
+  const startedAt = snapshot.game.createdAt
+    ? new Date(snapshot.game.createdAt).getTime()
+    : Date.now();
   const base: LocalRound = {
     clientId: `shared:${snapshot.game.id}`,
     courseId: snapshot.game.courseId,
     playerTags: [],
     scores: {},
-    createdAt: Date.now(),
+    createdAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+    // Snapshot the pars, like a pass-and-play round: the live catalog can lose
+    // this course to archiving, and a shared round is no less worth keeping.
+    ...(courseById(snapshot.game.courseId)?.pars
+      ? { pars: courseById(snapshot.game.courseId)!.pars }
+      : {}),
     completedAt: null,
     syncState: 'active',
     shared,

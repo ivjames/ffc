@@ -34,7 +34,6 @@ export const ACHIEVEMENTS = {
   above_board: "Above Board",
   naturalist: "Naturalist",
   hoarder: "Hoarder",
-  quick_draw: "Quick Draw",
   multitasker: "Multitasker",
   grand_hunter: "Grand Hunter",
   team_player: "Team Player",
@@ -74,7 +73,7 @@ export function scoreAchievements(scoreRows, playerCount, pars) {
  * Hunt achievements for one synced round, from that round's hunt_find rows.
  *
  * `finds` is every submission tied to the round (verified and not), each:
- *   { tag, itemId, verified, confidence, flagged, countable, active, createdAt, hole }
+ *   { tag, itemId, verified, confidence, flagged, countable, createdAt }
  * `completedTags` is the set of tags that finished the course's hunt — the
  * Hunt Master condition, which several of these build on.
  *
@@ -133,26 +132,6 @@ export function huntAchievements(finds, { completedTags = new Set() } = {}) {
     if (completedTags.has(tag)) {
       if (!ordered.some((f) => f.flagged)) add("above_board");
       if (!ordered.some((f) => !f.verified)) add("naturalist");
-
-      // Finished the hunt before the back nine.
-      //
-      // Judged on the REQUIRED items only — the non-countable ones that define
-      // completion, exactly as hunt_master does. Countable items are the "find
-      // as many as you can" kind and keep being submitted all round, so
-      // counting them would punish a player for carrying on collecting after
-      // they had already finished.
-      //
-      // `hole` is advisory (null on a venue hunt, an older client, or a find
-      // made before the first score), so every required find must carry a KNOWN
-      // hole of 9 or lower: an unknown hole can't be assumed early, or a client
-      // that sends nothing would earn this for free.
-      // Active items only, matching the completion query exactly: an item the
-      // venue has since deactivated no longer counts toward finishing the hunt,
-      // so a find for it must not count against finishing early either.
-      const required = verified.filter((f) => !f.countable && f.active !== false);
-      if (required.length > 0 && required.every((f) => f.hole != null && f.hole <= 9)) {
-        add("quick_draw");
-      }
     }
   }
   return out;

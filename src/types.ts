@@ -42,11 +42,6 @@ export type LocalRound = {
   // rounds created before this existed don't have it; those fall back to the
   // catalog, and are simply lost if their course is gone.
   pars?: number[];
-  // The hole the scorecard is showing, 1-based. Persisted so other screens —
-  // the hunt, which asks "where is the group up to?" — can read the group's
-  // real position rather than inferring it from which holes are scored, which
-  // is ambiguous in both directions at the turn.
-  currentHole?: number;
   // Present only on shared multi-device rounds. Shared rounds never enter the
   // 'pending' push queue — the server finalizes them at completion instead.
   shared?: SharedInfo;

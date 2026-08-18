@@ -90,21 +90,6 @@ export default function Scorecard() {
     });
   }, [clientId]);
 
-  // Persist which hole is on screen, so screens that leave the scorecard can
-  // ask where the group actually is. The hunt needs this: inferring it from the
-  // scored holes is ambiguous at the turn in both directions — the ninth is
-  // carded whether the group is still standing on it or already walking to the
-  // tenth. Best-effort and debounced by React's own batching; a lost write just
-  // falls back to the inference.
-  useEffect(() => {
-    if (!round || round.completedAt != null) return;
-    const oneBased = hole + 1;
-    if (round.currentHole === oneBased) return;
-    const next = { ...round, currentHole: oneBased };
-    setRound(next);
-    void putRound(next);
-  }, [hole, round]);
-
   // Arriving from the setup screen's auto-play button carries a mode in the
   // navigation state; kick off the same walk here so the test runs straight
   // through from character creation to the final hole. Fires once, and only

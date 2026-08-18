@@ -101,7 +101,7 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
   // rejections).
   const finds = await client.query(
     `select f.player_tag as tag, f.item_id as "itemId", f.verified,
-            f.confidence, f.flagged, f.countable, f.hole, i.active,
+            f.confidence, f.flagged, f.countable, i.active,
             extract(epoch from f.created_at) as "createdAt"
        from hunt_find f
        join hunt_item i on i.id = f.item_id

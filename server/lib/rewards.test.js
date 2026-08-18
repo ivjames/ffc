@@ -25,7 +25,6 @@ test("the catalog labels every achievement this server can grant", () => {
     "multitasker",
     "naturalist",
     "persistence",
-    "quick_draw",
     "sharpshooter",
     "team_player",
     "under_par",
@@ -75,7 +74,6 @@ const find = (over = {}) => ({
   flagged: false,
   countable: false,
   createdAt: 1,
-  hole: null,
   ...over,
 });
 
@@ -151,60 +149,6 @@ test("the clean-hunt badges need the hunt finished, and are distinct", () => {
   const unfinished = keys([find()], new Set());
   assert.ok(!unfinished.includes("above_board"));
   assert.ok(!unfinished.includes("naturalist"));
-});
-
-test("quick draw needs every find on the front nine, and a KNOWN hole", () => {
-  const done = new Set(["AAA"]);
-  const keys = (rows) => huntAchievements(rows, { completedTags: done }).map((g) => g.achievement);
-  assert.ok(keys([find({ hole: 3 }), find({ hole: 9, itemId: "i2" })]).includes("quick_draw"));
-  assert.ok(!keys([find({ hole: 3 }), find({ hole: 10, itemId: "i2" })]).includes("quick_draw"));
-  // An unknown hole must not be read as an early one: the venue hunt has no
-  // round, and an older client sends nothing — either would earn it for free.
-  assert.ok(!keys([find({ hole: 3 }), find({ hole: null, itemId: "i2" })]).includes("quick_draw"));
-  assert.ok(!keys([find({ hole: undefined })]).includes("quick_draw"));
-  // And it still requires finishing the hunt at all.
-  assert.ok(
-    !huntAchievements([find({ hole: 2 })], { completedTags: new Set() })
-      .map((g) => g.achievement)
-      .includes("quick_draw")
-  );
-});
-
-test("quick draw ignores optional countable finds made later", () => {
-  const done = new Set(["AAA"]);
-  const keys = (rows) => huntAchievements(rows, { completedTags: done }).map((g) => g.achievement);
-  // The required list was finished on the front nine; the player then carried
-  // on collecting a countable item into the back nine. Still a quick draw.
-  assert.ok(
-    keys([
-      find({ hole: 4 }),
-      find({ hole: 8, itemId: "i2" }),
-      find({ hole: 14, itemId: "many", countable: true, createdAt: 5 }),
-    ]).includes("quick_draw")
-  );
-  // A REQUIRED item found on the back nine is not.
-  assert.ok(
-    !keys([find({ hole: 4 }), find({ hole: 12, itemId: "i2" })]).includes("quick_draw")
-  );
-  // Countable finds alone can't earn it — there are no required finds to judge.
-  assert.ok(
-    !keys([find({ hole: 3, itemId: "many", countable: true })]).includes("quick_draw")
-  );
-});
-
-test("quick draw ignores finds for items the venue deactivated", () => {
-  const done = new Set(["AAA"]);
-  const keys = (rows) => huntAchievements(rows, { completedTags: done }).map((g) => g.achievement);
-  // The active list was finished on the front nine. A later find for an item
-  // that no longer counts toward completion must not count against it either.
-  assert.ok(
-    keys([
-      find({ hole: 5, active: true }),
-      find({ hole: 13, itemId: "gone", active: false, createdAt: 6 }),
-    ]).includes("quick_draw")
-  );
-  // Rows without the flag at all are treated as active (older callers).
-  assert.ok(!keys([find({ hole: 13 })]).includes("quick_draw"));
 });
 
 test("each player's finds are judged separately", () => {
