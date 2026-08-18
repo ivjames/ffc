@@ -66,7 +66,8 @@ the guide isn't drawn at all.
 
 Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`, `axethrow`,
 `darts`, `whackamole`, `bowling`, `shootinggallery`, `clawmachine`,
-`battingcages`, `watergunrace`, `trivia`, `milkbottle`, `airhockey` — 15 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
+`battingcages`, `watergunrace`, `trivia`, `milkbottle`, `airhockey`, `pinball`
+— 16 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
 usefully, for *why* each unsupported game isn't in it.
 
 The gap is narrowing rather than fixed. Whack-a-Mole was the first REACTIVE
@@ -76,7 +77,8 @@ are a known 3×3 grid, so nothing has to be tracked frame to frame; games with
 genuinely moving entities (a duck on a rail, a puck, a pinball) need the
 position recovered from pixels and predicted forward, which is the next step up.
 
-Still out: pinball and the three driving games.
+Still out: the three driving games (go-karts, bumper cars, bumper boats), which
+need continuous steering.
 
 Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
@@ -97,6 +99,7 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | Trivia | 10/10 | 3/10 | 10 |
 | Milk Bottle | 27–33 | 21–27 | 33 |
 | Air Hockey | 7 (wins) | 0–1 | 7 goals |
+| Pinball | 8010 mean | 6800 mean | — (high variance) |
 
 Two honest caveats:
 

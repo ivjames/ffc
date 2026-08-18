@@ -99,6 +99,7 @@ const SKILL_FLOOR = {
   trivia: 8,
   milkbottle: 12,
   airhockey: 4,
+  pinball: 1200,
 };
 
 const pct = (xs, p) => {

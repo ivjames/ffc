@@ -201,12 +201,18 @@ export class ArcadeDriver {
    *
    * @param {{x0:number,y0:number,x1:number,y1:number}} region logical bounds
    * @param {{rMin?:number,rMax?:number,gMin?:number,gMax?:number,bMin?:number,bMax?:number}} spec
-   * @param {{step?:number}} opts step samples every Nth pixel (default 2)
+   * `largest` returns the biggest CONNECTED component instead of the centroid
+   * of every match, which is what you want whenever the target's colour also
+   * appears in scenery: pinball's bumpers carry white "100" labels, and
+   * averaging those in put the "ball" in the middle of the bumper cluster,
+   * motionless, forever. A solid ball is one fat blob; text is many thin ones.
+   *
+   * @param {{step?:number, largest?:boolean}} opts step samples every Nth pixel
    * @returns {Promise<{t:number, x:number, y:number, n:number}|null>} null if unseen
    */
-  async findBlob(region, spec, { step = 2 } = {}) {
+  async findBlob(region, spec, { step = 2, largest = false } = {}) {
     return this.page.evaluate(
-      ({ region, spec, step, W, H }) => {
+      ({ region, spec, step, largest, W, H }) => {
         const c = document.querySelector('canvas');
         if (!c) return null;
         const ctx = c.getContext('2d');
@@ -221,19 +227,57 @@ export class ArcadeDriver {
         const rMin = spec.rMin ?? 0, rMax = spec.rMax ?? 255;
         const gMin = spec.gMin ?? 0, gMax = spec.gMax ?? 255;
         const bMin = spec.bMin ?? 0, bMax = spec.bMax ?? 255;
+        // Build a match mask on the sampled lattice.
+        const cols = Math.ceil(bw / step);
+        const rows = Math.ceil(bh / step);
+        const mask = new Uint8Array(cols * rows);
         let n = 0, sumX = 0, sumY = 0;
-        for (let py = 0; py < bh; py += step) {
-          for (let px = 0; px < bw; px += step) {
+        for (let ry = 0; ry < rows; ry++) {
+          for (let rx = 0; rx < cols; rx++) {
+            const px = rx * step, py = ry * step;
             const i = (py * bw + px) * 4;
             if (d[i + 3] < 60) continue;
             const r = d[i], g = d[i + 1], b = d[i + 2];
             if (r < rMin || r > rMax || g < gMin || g > gMax || b < bMin || b > bMax) continue;
+            mask[ry * cols + rx] = 1;
             n++;
             sumX += px;
             sumY += py;
           }
         }
         if (n === 0) return null;
+
+        if (largest) {
+          // Flood fill the mask; keep the fattest component.
+          const seen = new Uint8Array(cols * rows);
+          let best = null;
+          const stack = [];
+          for (let s0 = 0; s0 < mask.length; s0++) {
+            if (!mask[s0] || seen[s0]) continue;
+            stack.length = 0;
+            stack.push(s0);
+            seen[s0] = 1;
+            let cn = 0, cx = 0, cy = 0;
+            while (stack.length) {
+              const idx = stack.pop();
+              const rx = idx % cols, ry = (idx - rx) / cols;
+              cn++; cx += rx; cy += ry;
+              if (rx > 0 && mask[idx - 1] && !seen[idx - 1]) { seen[idx - 1] = 1; stack.push(idx - 1); }
+              if (rx < cols - 1 && mask[idx + 1] && !seen[idx + 1]) { seen[idx + 1] = 1; stack.push(idx + 1); }
+              if (ry > 0 && mask[idx - cols] && !seen[idx - cols]) { seen[idx - cols] = 1; stack.push(idx - cols); }
+              if (ry < rows - 1 && mask[idx + cols] && !seen[idx + cols]) { seen[idx + cols] = 1; stack.push(idx + cols); }
+            }
+            if (!best || cn > best.cn) best = { cn, cx, cy };
+          }
+          if (!best) return null;
+          return {
+            t: performance.now(),
+            x: region.x0 + ((best.cx / best.cn) * step) / sx,
+            y: region.y0 + ((best.cy / best.cn) * step) / sy,
+            n: best.cn,
+          };
+        }
+
         return {
           t: performance.now(),
           x: region.x0 + (sumX / n) / sx,
@@ -241,7 +285,7 @@ export class ArcadeDriver {
           n,
         };
       },
-      { region, spec, step, W: this.W, H: this.H },
+      { region, spec, step, largest, W: this.W, H: this.H },
     );
   }
 
