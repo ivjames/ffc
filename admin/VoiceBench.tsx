@@ -27,6 +27,12 @@ import {
 // primary button that explains nothing is how the first version wasted an
 // afternoon.
 
+/** A priced plan, plus the EXACT request that produced it. Carrying only the
+ *  venue was a spend bug: with a reprice still in flight, Synthesize paired the
+ *  old plan's venue with the live question count and billed five questions
+ *  against a one-question estimate. */
+type PricedPlan = TtsPlan & { asked: { locationId: string; questions: number } };
+
 /** One clip's player. The bytes need the admin auth header, which an
  *  <audio src> cannot carry — same constraint as the photo thumbnails. */
 function ClipPlayer({ runId, file }: { runId: string; file: string }) {
@@ -108,7 +114,7 @@ export default function VoiceBench() {
   const [venueId, setVenueId] = useState('');
   const [questions, setQuestions] = useState(3);
   const [runs, setRuns] = useState<TtsRunSummary[]>([]);
-  const [plan, setPlan] = useState<TtsPlan | null>(null);
+  const [plan, setPlan] = useState<PricedPlan | null>(null);
   const [run, setRun] = useState<TtsRun | null>(null);
   const [openLine, setOpenLine] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -146,9 +152,10 @@ export default function VoiceBench() {
     setError(null);
     setStatus('Pricing…');
     try {
-      const priced = await api.ttsPlan({ locationId, questions: count });
+      const asked = { locationId, questions: count };
+      const priced = await api.ttsPlan(asked);
       if (seq !== planSeq.current) return; // superseded by a newer selection
-      setPlan(priced);
+      setPlan({ ...priced, asked });
       setStatus('Nothing spent yet — Synthesize bills the amount above.');
     } catch (e) {
       if (seq !== planSeq.current) return;
@@ -169,8 +176,9 @@ export default function VoiceBench() {
     setError(null);
     setStatus('Synthesizing… (a few seconds)');
     try {
-      // Submit what was PRICED, not what the selects say now.
-      const res = await api.ttsRun({ locationId: plan.venue.id, questions });
+      // Submit what was PRICED — the whole request, not just its venue. The
+      // selects may already have moved on with a reprice still in flight.
+      const res = await api.ttsRun(plan.asked);
       setRun(res.run);
       setOpenLine(res.run.clips[0]?.lineLabel ?? null);
       setRuns((await api.ttsRuns().catch(() => ({ runs }))).runs);
