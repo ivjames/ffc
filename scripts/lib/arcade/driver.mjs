@@ -188,6 +188,107 @@ export class ArcadeDriver {
     );
   }
 
+  /**
+   * Centroid of every pixel matching an RGB box inside a region — computed
+   * IN-PAGE from a single getImageData, returning only the answer.
+   *
+   * This is the primitive for the ball games. Locating a puck or a pinball
+   * means searching two dimensions, and the naive versions are both hopeless:
+   * a lattice of probePoints costs one getImageData per point, and a stack of
+   * probeRow scans costs a CDP round trip per row. Doing the whole search
+   * inside one evaluate keeps a full-table find at roughly the cost of a
+   * single row probe, which is what makes chasing an 800px/s puck viable.
+   *
+   * @param {{x0:number,y0:number,x1:number,y1:number}} region logical bounds
+   * @param {{rMin?:number,rMax?:number,gMin?:number,gMax?:number,bMin?:number,bMax?:number}} spec
+   * `largest` returns the biggest CONNECTED component instead of the centroid
+   * of every match, which is what you want whenever the target's colour also
+   * appears in scenery: pinball's bumpers carry white "100" labels, and
+   * averaging those in put the "ball" in the middle of the bumper cluster,
+   * motionless, forever. A solid ball is one fat blob; text is many thin ones.
+   *
+   * @param {{step?:number, largest?:boolean}} opts step samples every Nth pixel
+   * @returns {Promise<{t:number, x:number, y:number, n:number}|null>} null if unseen
+   */
+  async findBlob(region, spec, { step = 2, largest = false } = {}) {
+    return this.page.evaluate(
+      ({ region, spec, step, largest, W, H }) => {
+        const c = document.querySelector('canvas');
+        if (!c) return null;
+        const ctx = c.getContext('2d');
+        const sx = c.width / W;
+        const sy = c.height / H;
+        const bx = Math.max(0, Math.round(region.x0 * sx));
+        const by = Math.max(0, Math.round(region.y0 * sy));
+        const bw = Math.min(c.width - bx, Math.round((region.x1 - region.x0) * sx));
+        const bh = Math.min(c.height - by, Math.round((region.y1 - region.y0) * sy));
+        if (bw <= 0 || bh <= 0) return null;
+        const d = ctx.getImageData(bx, by, bw, bh).data;
+        const rMin = spec.rMin ?? 0, rMax = spec.rMax ?? 255;
+        const gMin = spec.gMin ?? 0, gMax = spec.gMax ?? 255;
+        const bMin = spec.bMin ?? 0, bMax = spec.bMax ?? 255;
+        // Build a match mask on the sampled lattice.
+        const cols = Math.ceil(bw / step);
+        const rows = Math.ceil(bh / step);
+        const mask = new Uint8Array(cols * rows);
+        let n = 0, sumX = 0, sumY = 0;
+        for (let ry = 0; ry < rows; ry++) {
+          for (let rx = 0; rx < cols; rx++) {
+            const px = rx * step, py = ry * step;
+            const i = (py * bw + px) * 4;
+            if (d[i + 3] < 60) continue;
+            const r = d[i], g = d[i + 1], b = d[i + 2];
+            if (r < rMin || r > rMax || g < gMin || g > gMax || b < bMin || b > bMax) continue;
+            mask[ry * cols + rx] = 1;
+            n++;
+            sumX += px;
+            sumY += py;
+          }
+        }
+        if (n === 0) return null;
+
+        if (largest) {
+          // Flood fill the mask; keep the fattest component.
+          const seen = new Uint8Array(cols * rows);
+          let best = null;
+          const stack = [];
+          for (let s0 = 0; s0 < mask.length; s0++) {
+            if (!mask[s0] || seen[s0]) continue;
+            stack.length = 0;
+            stack.push(s0);
+            seen[s0] = 1;
+            let cn = 0, cx = 0, cy = 0;
+            while (stack.length) {
+              const idx = stack.pop();
+              const rx = idx % cols, ry = (idx - rx) / cols;
+              cn++; cx += rx; cy += ry;
+              if (rx > 0 && mask[idx - 1] && !seen[idx - 1]) { seen[idx - 1] = 1; stack.push(idx - 1); }
+              if (rx < cols - 1 && mask[idx + 1] && !seen[idx + 1]) { seen[idx + 1] = 1; stack.push(idx + 1); }
+              if (ry > 0 && mask[idx - cols] && !seen[idx - cols]) { seen[idx - cols] = 1; stack.push(idx - cols); }
+              if (ry < rows - 1 && mask[idx + cols] && !seen[idx + cols]) { seen[idx + cols] = 1; stack.push(idx + cols); }
+            }
+            if (!best || cn > best.cn) best = { cn, cx, cy };
+          }
+          if (!best) return null;
+          return {
+            t: performance.now(),
+            x: region.x0 + ((best.cx / best.cn) * step) / sx,
+            y: region.y0 + ((best.cy / best.cn) * step) / sy,
+            n: best.cn,
+          };
+        }
+
+        return {
+          t: performance.now(),
+          x: region.x0 + (sumX / n) / sx,
+          y: region.y0 + (sumY / n) / sy,
+          n,
+        };
+      },
+      { region, spec, step, largest, W: this.W, H: this.H },
+    );
+  }
+
   /** As probeRow, but a vertical run at logical x. */
   async probeCol(x, { y0 = 0, y1 = null } = {}) {
     const yEnd = y1 ?? this.H;

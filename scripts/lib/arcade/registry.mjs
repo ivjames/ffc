@@ -21,20 +21,20 @@ import shootinggallery from './games/shootinggallery.mjs';
 import clawmachine from './games/clawmachine.mjs';
 import battingcages from './games/battingcages.mjs';
 import watergunrace from './games/watergunrace.mjs';
+import trivia from './games/trivia.mjs';
+import milkbottle from './games/milkbottle.mjs';
+import airhockey from './games/airhockey.mjs';
+import pinball from './games/pinball.mjs';
 
-export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine, battingcages, watergunrace];
+export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts, whackamole, bowling, shootinggallery, clawmachine, battingcages, watergunrace, trivia, milkbottle, airhockey, pinball];
 
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
 /** Server-registry games with no policy yet, and why. */
 export const UNSUPPORTED = [
-  ['airhockey', 'reactive — tracks a live puck'],
   ['bumperboats', 'reactive — continuous steering'],
   ['bumpercars', 'reactive — continuous steering'],
   ['gokarts', 'reactive — continuous steering'],
-  ['milkbottle', 'physics — topple cascade is a sim, so no closed-form aim'],
-  ['pinball', 'reactive — flipper timing on a live ball'],
-  ['trivia', 'knowledge — answers are bundled content, not a gesture'],
 ];
 
 export function resolve(keys) {
