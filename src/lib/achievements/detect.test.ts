@@ -411,6 +411,7 @@ describe('reachability', () => {
       maxCoursesAtOneVenue: 2,
       hasParFourHole: true,
       modules: ALL_MODULES,
+      courseHuntVenue: true,
     });
   });
 
@@ -436,6 +437,16 @@ describe('reachability', () => {
       reachContext([], { arcade: true, ordering: true, hunt: true }),
     ).map((a) => a.category);
     expect(noCourses).not.toContain('hunt');
+  });
+
+  test('the hunt needs golf and the hunt at the SAME venue', () => {
+    // Two globals can be satisfied by different venues: one with the golf and
+    // no hunt, one with the hunt and no golf. Neither can grant a hunt badge,
+    // because every one of them is granted against a round's course.
+    const ctx = reachContext(CATALOG, ALL_MODULES);
+    expect(ctx.courseHuntVenue).toBe(true);
+    const split = { ...ctx, courseHuntVenue: false };
+    expect(reachableAchievements(split).map((a) => a.category)).not.toContain('hunt');
 
     // Food badges live in a mixed category, so they're gated individually.
     const noFood = reachableAchievements(

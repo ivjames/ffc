@@ -161,13 +161,20 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
       .filter(({ slot }) => slot !== -1 && seatOwners.has(slot));
 
     if (finishers.length > 0) {
-      // Live courses only. An archived course is gone from /api/content and
-      // can't be picked, so counting it would make "every course at this venue"
-      // permanently unreachable for anyone without a historical grant on it.
+      // Live courses that actually HAVE a hunt. Two exclusions, same reason:
+      // requiring a course nobody can complete makes "every course at this
+      // venue" permanently unreachable. An archived course is gone from
+      // /api/content and can't be picked at all; a course with no active
+      // non-countable items can be played but can never produce hunt_master,
+      // because completion is defined over exactly those items.
       const venueCourses = await client.query(
         `select c.id from course c
           where c.location_id = (select location_id from course where id = $1)
-            and c.archived_at is null`,
+            and c.archived_at is null
+            and exists (
+              select 1 from hunt_item i
+               where i.course_id = c.id and i.active and not i.countable
+            )`,
         [courseId]
       );
       const allCourseIds = venueCourses.rows.map((r) => r.id);

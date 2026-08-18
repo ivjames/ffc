@@ -609,7 +609,23 @@ export function reachContext(
     maxCoursesAtOneVenue: venues.reduce((m, v) => Math.max(m, v.courseIds.length), 0),
     hasParFourHole: catalog.some((c) => c.pars.includes(4)),
     modules,
+    // Per venue, not two globals: the hunt has to be switched on at a venue
+    // that also has courses, because a hunt badge is granted against a round.
+    courseHuntVenue: venues.some(
+      (v) => v.courseIds.length > 0 && venueHunt(v.locationId, modules.hunt),
+    ),
   };
+}
+
+/**
+ * Is the hunt live at this specific venue? Falls back to the deployment-wide
+ * answer when the venue isn't in the catalog (tests, or a course whose location
+ * hasn't hydrated), so a missing venue never silently hides the category.
+ */
+function venueHunt(locationId: string, fallback: boolean): boolean {
+  return LOCATIONS.some((l) => l.id === locationId)
+    ? modulesFor(locationId).hunt
+    : fallback;
 }
 
 /**

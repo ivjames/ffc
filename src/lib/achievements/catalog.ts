@@ -51,6 +51,16 @@ export type ReachContext = {
    * badge describes. Whole categories drop out on this.
    */
   modules: { arcade: boolean; ordering: boolean; hunt: boolean };
+  /**
+   * Some ONE venue has both courses and the hunt switched on.
+   *
+   * Not `modules.hunt && there are courses somewhere` — those are two global
+   * aggregates that can come from different venues. A deployment where venue A
+   * has the golf but not the hunt, and venue B the hunt but no golf, satisfies
+   * both and can still never grant a hunt badge: every one of them is granted
+   * against a round's course, and neither venue can produce such a round.
+   */
+  courseHuntVenue: boolean;
 };
 
 export type Achievement = {
@@ -108,7 +118,7 @@ const MODULE_GATED: Partial<Record<AchievementCategory, (c: ReachContext) => boo
   // never earn one, however enabled the module is. Granting them from venue
   // sessions is real work and a real feature; until then, don't advertise a
   // category this deployment cannot reach.
-  hunt: (c) => c.modules.hunt && c.maxCoursesAtOneVenue >= 1,
+  hunt: (c) => c.courseHuntVenue,
 };
 
 export const ACHIEVEMENTS: Achievement[] = [
