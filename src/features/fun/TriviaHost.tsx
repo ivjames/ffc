@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import JoinQr from '../shared/JoinQr';
 import { useCurrentLocationId } from '../../lib/location';
 import { useSession } from '../../lib/session';
 import { useDeadline, formatCountdown } from './useDeadline';
@@ -364,6 +365,9 @@ export default function TriviaHost() {
 
   const { session, question, board, answeredCount, entrantCount } = snapshot;
   const done = session.status === 'final';
+  // Prefilled join link: TriviaLive reads `?code=` straight into its code
+  // field, so a scan lands on the join form with only a name left to type.
+  const joinUrl = `${window.location.origin}/arcade/trivia/live?code=${session.joinCode}`;
 
   return (
     <Screen>
@@ -377,7 +381,25 @@ export default function TriviaHost() {
             <p className="my-2 text-5xl font-black tracking-[0.2em] text-fairway-50">
               {session.joinCode}
             </p>
-            <p className="text-sm text-fairway-100/70">
+            {/* Typing six characters heard across a loud room is the step that
+                actually loses players: the alphabet already drops the letters
+                people misread (I, L, O, U) and the server maps the rest onto
+                what they saw, but B/8, S/5 and Z/2 are all legal on both
+                sides, so a mis-keyed one is a valid code for no game — "no
+                live game with that code", which reads like the game is
+                broken. Scanning skips the transcription entirely. The code
+                stays the headline: it is what the host reads out, and it's
+                the fallback for a phone whose camera won't play along.
+                Same pattern as the mini-golf lobby (features/shared/Lobby). */}
+            <div className="mt-4 flex justify-center">
+              <JoinQr url={joinUrl} />
+            </div>
+            <p className="mt-3 text-xs text-fairway-100/70">
+              Scan to join, or open{' '}
+              <span className="font-semibold">{window.location.host}/arcade/trivia/live</span> and
+              type the code.
+            </p>
+            <p className="mt-3 text-sm text-fairway-100/70">
               {entrantCount} {entrantCount === 1 ? 'player' : 'players'} in
             </p>
             {/* The lobby's clock starts when the first player joins, so this
