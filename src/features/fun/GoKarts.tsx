@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
+import { recordLap } from './lapBest';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
@@ -243,7 +246,10 @@ type GS = {
   raceTime: number; // ms of active racing
   lapStart: number;
   laps: number; // completed laps
-  best: number; // best lap ms (Infinity until first)
+  // This race's best lap, and the screen's best on this track. Two different
+  // figures on purpose — see lapBest.ts; only `best` is ever submitted.
+  best: number;
+  pb: number;
   lastLap: number;
   prevF: number;
   halfway: boolean;
@@ -266,6 +272,7 @@ function freshGS(now: number, track: Track): GS {
     lapStart: 0,
     laps: 0,
     best: Infinity,
+    pb: Infinity,
     lastLap: 0,
     prevF: 0,
     halfway: false,
@@ -702,6 +709,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, now: number, fx: FX) {
     ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
 }
 
 const fmt = (ms: number) => (ms / 1000).toFixed(2);
@@ -752,19 +762,23 @@ export default function GoKarts() {
   const [best, setBest] = useState<number>(Infinity);
   // One id per played round — the ticket award's idempotency key.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  // A head-to-head challenge names the circuit — the boards are per track, so
+  // a round driven on any other one could not be submitted for it.
+  const [searchParams] = useSearchParams();
+  const challengeTrack = TRACKS.find((t) => t.id === searchParams.get('variant')) ?? null;
 
   const racing = phase === 'countdown' || phase === 'race';
   useFitCanvas(canvasRef, W, H, racing);
 
   const startRace = useCallback((track: Track) => {
     const gs = freshGS(performance.now(), track);
-    gs.best = bestsRef.current[track.id] ?? Infinity;
+    gs.pb = bestsRef.current[track.id] ?? Infinity;
     gsRef.current = gs;
     fxRef.current = freshFX();
     setPhase('countdown');
     setLap(0);
     setRaceTime(0);
-    setBest(gs.best);
+    setBest(gs.best); // Infinity — this race has not set a lap yet
     setSessionId(crypto.randomUUID());
   }, []);
 
@@ -824,13 +838,11 @@ export default function GoKarts() {
           const lapped = step(gs);
           if (lapped) {
             const lapMs = gs.raceTime - gs.lapStart;
-            const isBest = lapMs < gs.best; // read before gs.best mutates (FX only)
+            const lap = recordLap(gs, lapMs);
+            const isBest = lap.personalBest; // FX only
             gs.lastLap = lapMs;
-            if (lapMs < gs.best) {
-              gs.best = lapMs;
-              bestsRef.current[gs.track.id] = lapMs;
-              setBest(lapMs);
-            }
+            if (lap.raceBest) setBest(lapMs);
+            if (lap.personalBest) bestsRef.current[gs.track.id] = lapMs;
             gs.lapStart = gs.raceTime;
             // —— juice (rendering only): flash + spark burst on every lap, a
             // brighter one on a personal best ——
@@ -913,6 +925,13 @@ export default function GoKarts() {
   }, []);
 
   // —— Track picker —————————————————————————————————————————————————————————
+  // Arrived from a head-to-head challenge on a specific circuit: start that
+  // one instead of offering the picker, so the round can actually count.
+  if (phase === 'select' && challengeTrack) {
+    startRace(challengeTrack);
+    return null;
+  }
+
   if (phase === 'select') {
     return (
       <Screen>
@@ -984,6 +1003,20 @@ export default function GoKarts() {
             tickets={pace <= 1.5 ? 40 : pace <= 2 ? 25 : pace <= 2.75 ? 15 : 8}
             sessionId={sessionId}
           />
+          {/* Ranked on BEST LAP, per track. Two guards: `best` stays Infinity
+              if no lap was ever completed (a retire), which isn't a lap time;
+              and the board is per track, because the circuits differ in length
+              on purpose — Boomerang is the longest lap in the set, so one
+              merged board would rank the track choice, not the driving. */}
+          {best !== Infinity && (
+            <GameHighScore
+              game="gokarts"
+              variant={track.id}
+              score={Math.round(best)}
+              detail={{ totalMs: Math.round(total), laps: LAPS }}
+              sessionId={sessionId}
+            />
+          )}
           <div className="mt-8 flex flex-col gap-3">
             <Button onClick={() => startRace(track)} sound="none">
               Race again
@@ -1020,7 +1053,7 @@ export default function GoKarts() {
           onPointerMove={onMove}
           onPointerUp={onUp}
           onPointerCancel={onUp}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="block touch-none rounded-2xl arcade-screen"
         />
       </div>
 

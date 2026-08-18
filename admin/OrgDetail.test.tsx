@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 
 // The three logo fields share this placeholder (no platform default), so
-// individual fields are picked by DOM order — Logo URL renders first.
+// individual fields are picked by DOM order — Logo (full) renders first.
 const NO_DEFAULT_PLACEHOLDER = 'No platform default — upload a file or paste a URL';
 const logoUrlInput = () => screen.getAllByPlaceholderText(NO_DEFAULT_PLACEHOLDER)[0];
 
@@ -241,7 +241,7 @@ describe('OrgDetail — branding asset upload', () => {
     await screen.findByRole('heading', { name: 'Test Org' });
 
     const file = new File(['png-bytes'], 'logo.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText('Logo URL file'), file);
+    await user.upload(screen.getByLabelText('Logo (full) file'), file);
 
     await waitFor(() => expect(api.uploadBrandingAsset).toHaveBeenCalledWith('org-1', 'logo', file));
     // The returned served URL lands in the text field (the img preview keys
@@ -261,7 +261,7 @@ describe('OrgDetail — branding asset upload', () => {
     renderOrgDetail(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     const file = new File(['png-bytes'], 'icon.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText('Icon 512 URL file'), file);
+    await user.upload(screen.getByLabelText('Icon 512×512 file'), file);
     await waitFor(() =>
       expect(api.uploadBrandingAsset).toHaveBeenCalledWith('org-1', 'icon512', file)
     );
@@ -360,7 +360,7 @@ describe('OrgDetail — branding asset upload', () => {
     renderOrgDetail(false);
     await screen.findByRole('heading', { name: 'Test Org' });
     const file = new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' });
-    await user.upload(screen.getByLabelText('Logo URL file'), file);
+    await user.upload(screen.getByLabelText('Logo (full) file'), file);
     expect(await screen.findByText('SVG rejected: contains <script>')).toBeInTheDocument();
     expect(logoUrlInput()).toHaveValue('');
   });
@@ -374,12 +374,12 @@ describe('OrgDetail — branding asset upload', () => {
 
     // Icon kinds are PNG-only.
     const jpeg = new File(['jpg-bytes'], 'icon.jpg', { type: 'image/jpeg' });
-    await user.upload(screen.getByLabelText('Icon 192 URL file'), jpeg);
+    await user.upload(screen.getByLabelText('Icon 192×192 file'), jpeg);
     expect(await screen.findByText(/must be a PNG \(exactly 192×192\)/)).toBeInTheDocument();
 
     // Over the 1 MiB cap (mirrors the server's decode-size limit).
     const big = new File([new Uint8Array(1024 * 1024 + 1)], 'big.png', { type: 'image/png' });
-    await user.upload(screen.getByLabelText('Logo URL file'), big);
+    await user.upload(screen.getByLabelText('Logo (full) file'), big);
     expect(await screen.findByText(/too large \(max 1 MiB\)/)).toBeInTheDocument();
 
     expect(api.uploadBrandingAsset).not.toHaveBeenCalled();

@@ -1130,3 +1130,304 @@ create table if not exists user_card_link (
   unique (app_user_id, location_id)
 );
 create index if not exists user_card_link_card_idx on user_card_link (location_id, card_player_id);
+
+-- Arcade high scores. The arcade used to persist NOTHING — a round's score
+-- lived in React state and died with the end screen, and game_ticket_award
+-- recorded only what a round PAID, never what it scored. This is the score
+-- record the boards, the "new personal best" celebration, and (later)
+-- head-to-head challenges all read.
+--
+-- Account-bound by design (the account-required model, PR #200): a board that
+-- ranked 3-char tags would be unownable and trivially spoofable, so a score
+-- belongs to an app_user or it isn't recorded at all. Venue-scoped through
+-- location_id, which is also how tenant isolation reaches these rows — a board
+-- query joins location and filters on org_id exactly like /api/leaderboard.
+--
+-- `score` is an INTEGER in the game's base unit (ms for time games), never a
+-- float, so ordering is exact; lib/gameScores.js owns which direction wins and
+-- how the client renders it. `detail` carries per-game extras the board may
+-- show but never ranks on (lap splits, frame-by-frame, correct/total).
+create table if not exists game_score (
+  id          uuid primary key default gen_random_uuid(),
+  location_id uuid not null references location(id) on delete cascade,
+  game        text not null,                      -- lib/gameScores.js key
+  -- Sub-board within a game, '' when the game has only one. Some games are not
+  -- comparable to themselves: a go-kart lap on the Boomerang (deliberately the
+  -- longest circuit in the set) means nothing against one on the Speedway, and
+  -- an endless Arcade Putt run has no fixed hole count to score against a
+  -- course round. Those games declare their variants in lib/gameScores.js and
+  -- rank WITHIN one, so the board compares like with like.
+  variant     text not null default '',
+  app_user_id uuid not null references app_user(id) on delete cascade,
+  score       bigint not null,
+  detail      jsonb  not null default '{}',
+  session_id  text   not null,                    -- one round; idempotency key
+  synthetic   boolean not null default false,     -- arcade-bot rounds (round.synthetic precedent)
+  created_at  timestamptz not null default now()
+);
+-- Idempotency: an end screen that re-mounts (or a retried fetch) must not
+-- stack duplicate scores for one round, exactly like game_ticket_award's
+-- per-session key. Scoped by game so two games can't collide on a shared id.
+create unique index if not exists game_score_session_idx on game_score (game, session_id);
+-- The board read path: one venue, one game+variant, newest-first within a period.
+create index if not exists game_score_board_idx
+  on game_score (location_id, game, variant, created_at desc);
+-- The personal-best read path (a player's own history for one board).
+create index if not exists game_score_user_idx on game_score (app_user_id, game, variant);
+-- Partial index over the bot rows only — cleanup and board exclusion both
+-- filter on `synthetic = true`, and the default (synthetic-included) board
+-- query never touches it. Mirrors round_synthetic_idx.
+create index if not exists game_score_synthetic_idx on game_score (synthetic) where synthetic;
+
+-- À la carte module entitlements (lib/modules.js). Separates WHAT A VENUE
+-- BOUGHT from the vendor wiring that makes it work: until now the only way to
+-- switch the rewards surface off was to delete the POS credentials, and the
+-- separately-sellable line items (F&B ordering, rewards card, game tickets)
+-- were invisible as such.
+--
+-- SPARSE and back-compatible: '{}' — the value every existing venue gets —
+-- means "derive from the venue's existing config exactly as before", so this
+-- column changes nothing until an operator sets a module explicitly. A module
+-- is live only when it is entitled here AND its vendor block is configured.
+alter table location add column if not exists modules jsonb not null default '{}';
+
+-- ---------------------------------------------------------------------------
+-- Live trivia (bar-trivia mode). The bundled Trivia mini-game is one player
+-- against a shuffled deck on their own phone; this is the room version — a
+-- host running a synchronized game that everyone in the bar plays at once,
+-- solo or at tables, off the phones already in their pockets.
+--
+-- Built on the same primitives as shared golf games: a join code, a per-device
+-- bearer participant token, and SSE fan-out (lib/gameBus.js) so a question
+-- appearing on the host's screen appears on forty phones at the same instant.
+-- ---------------------------------------------------------------------------
+
+-- The question bank. org_id null = the platform pack, readable by every org;
+-- a row with an org_id belongs to that client and is visible only to them.
+-- location_id narrows a question further to one venue (house questions).
+create table if not exists trivia_question (
+  id          uuid primary key default gen_random_uuid(),
+  org_id      uuid references org(id) on delete cascade,
+  location_id uuid references location(id) on delete cascade,
+  category    text not null default 'General',
+  prompt      text not null,
+  choices     jsonb not null,                 -- array of 2..6 strings
+  answer      int  not null,                  -- index into choices
+  difficulty  int  not null default 2,        -- 1 easy .. 3 hard
+  active      boolean not null default true,
+  archived_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists trivia_question_pack_idx
+  on trivia_question (org_id, category) where archived_at is null and active;
+
+-- One live game. `question_ids` is fixed at start so the running order can't
+-- shift underneath a game in progress (an admin editing the bank mid-round
+-- must not change what the room is looking at). `status` is the state machine
+-- the host advances: lobby -> question -> reveal -> (question|final).
+create table if not exists trivia_session (
+  id             uuid primary key default gen_random_uuid(),
+  location_id    uuid not null references location(id) on delete cascade,
+  join_code      text not null,
+  host_token     uuid not null default gen_random_uuid(),  -- the host's bearer capability
+  created_by     uuid references app_user(id),
+  status         text not null default 'lobby',  -- lobby|question|reveal|final|abandoned
+  question_ids   uuid[] not null default '{}',
+  current_index  int not null default 0,         -- 0-based into question_ids
+  -- When the current question opened, for the speed bonus. Server clock only:
+  -- a client-supplied elapsed time is a score the client chose for itself.
+  asked_at       timestamptz,
+  config         jsonb not null default '{}',    -- {questionSeconds, speedBonus, teams}
+  created_at     timestamptz not null default now(),
+  ended_at       timestamptz
+);
+-- Codes are unique among LIVE sessions only, like shared_game — a finished
+-- game retires its code back into the pool.
+create unique index if not exists trivia_session_code_live_idx
+  on trivia_session (join_code) where status <> 'final' and status <> 'abandoned';
+create index if not exists trivia_session_location_idx on trivia_session (location_id);
+-- The dealt questions, COPIED rather than referenced: [{id, category, prompt,
+-- choices, answer}, ...] parallel to question_ids.
+--
+-- A session is a live event that lasts an evening, and the question bank is
+-- editable by admins the whole time. Reading the bank per request meant an
+-- edit could land mid-round: two players answering the same question a second
+-- apart could be scored against different correct choices, and the prompt on
+-- forty phones could change under them between the ask and the reveal. A game
+-- deals its cards once.
+alter table trivia_session add column if not exists questions jsonb not null default '[]';
+-- When the CURRENT phase should move itself along. A room runs unattended off
+-- this: the lobby starts once it has waited for stragglers, a question closes
+-- when its time is up, and a reveal gives way to the next question. A host's
+-- buttons only ever bring that moment forward — nothing waits on a human, so
+-- a game whose host walks away still finishes and still shows a final board.
+alter table trivia_session add column if not exists auto_at timestamptz;
+
+-- The scoring unit: one solo player, or one table's team. Teams are why this
+-- is a separate table from the device list below — at a table, one person
+-- answers for everybody, and the score belongs to the table.
+create table if not exists trivia_entrant (
+  id         uuid primary key default gen_random_uuid(),
+  session_id uuid not null references trivia_session(id) on delete cascade,
+  name       text not null,                  -- team or player name, 1..32
+  is_team    boolean not null default false,
+  score      int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (session_id, name)
+);
+create index if not exists trivia_entrant_session_idx on trivia_entrant (session_id, score desc);
+
+-- One row per DEVICE in the session; `id` is that device's bearer token (it
+-- rides the SSE query string, same as shared_game_participant, because
+-- EventSource cannot set headers). Several devices map to one entrant when a
+-- table plays as a team.
+create table if not exists trivia_participant (
+  id           uuid primary key default gen_random_uuid(),
+  session_id   uuid not null references trivia_session(id) on delete cascade,
+  entrant_id   uuid not null references trivia_entrant(id) on delete cascade,
+  app_user_id  uuid references app_user(id),   -- null = guest device
+  joined_at    timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+create index if not exists trivia_participant_session_idx on trivia_participant (session_id);
+
+-- One answer per entrant per question — the primary key IS the rule. At a
+-- table where three people all tap, the first answer stands and the rest are
+-- refused; without that, a team could brute-force every choice.
+create table if not exists trivia_answer (
+  session_id     uuid not null references trivia_session(id) on delete cascade,
+  entrant_id     uuid not null references trivia_entrant(id) on delete cascade,
+  question_index int  not null,
+  choice         int  not null,
+  correct        boolean not null,
+  points         int  not null default 0,
+  ms_elapsed     int  not null,               -- server-measured, for the speed bonus
+  answered_by    uuid references trivia_participant(id) on delete set null,
+  answered_at    timestamptz not null default now(),
+  primary key (session_id, entrant_id, question_index)
+);
+
+-- The platform question pack (org_id null): every client's live trivia can
+-- draw on it, so a venue can run a game the day it switches the module on
+-- instead of writing forty questions first. Same content as the single-player
+-- mini-game's bundled deck (src/data/funContent.ts), promoted to the server so
+-- the live game has a bank to deal from.
+--
+-- Seeded once and keyed on the prompt: re-running migrate must not duplicate
+-- the pack, and an operator who edits or retires one of these rows must not
+-- have their change undone by the next deploy.
+insert into trivia_question (org_id, location_id, category, prompt, choices, answer)
+select null, null, 'House Pack', v.prompt, v.choices, v.answer
+  from (values
+  ('In golf, what do you call a score of one stroke under par on a hole?', '["Birdie", "Eagle", "Bogey", "Ace"]'::jsonb, 0),
+  ('How many pins are set up at the end of a bowling lane?', '["9", "10", "12", "15"]'::jsonb, 1),
+  ('What do three strikes in a row in bowling get called?', '["A hat trick", "A turkey", "A triple", "A hot streak"]'::jsonb, 1),
+  ('In air hockey, what is the puck-blocking paddle usually called?', '["A mallet", "A racket", "A bat", "A stick"]'::jsonb, 0),
+  ('What everyday machine engine powered the very first go-karts?', '["A motorcycle engine", "A lawnmower engine", "A jet engine", "A boat engine"]'::jsonb, 1),
+  ('A hole-in-one in mini golf means you sank the ball in how many strokes?', '["Zero", "One", "Two", "Under par"]'::jsonb, 1),
+  ('What gas is used to make party balloons float?', '["Oxygen", "Hydrogen", "Helium", "Carbon dioxide"]'::jsonb, 2),
+  ('In Skee-Ball, which ring is usually worth the most points?', '["The biggest outer ring", "The middle ring", "The small corner holes", "They are all equal"]'::jsonb, 2),
+  ('Bumper cars were first marketed under what catchy name?', '["Crash-Ems", "Dodgem", "Bump-a-lots", "Smash Karts"]'::jsonb, 1),
+  ('What makes a popcorn kernel actually pop?', '["Melting sugar", "Trapped water turning to steam", "Static electricity", "Air pumped inside"]'::jsonb, 1),
+  ('How many colored dots (holes) does a standard bullseye have in its very center?', '["One", "Two", "Three", "Four"]'::jsonb, 0),
+  ('Which of these games is played on a frictionless cushion of air?', '["Foosball", "Air hockey", "Skee-Ball", "Pinball"]'::jsonb, 1),
+  ('What is the highest possible score in a single game of ten-pin bowling?', '["100", "200", "300", "500"]'::jsonb, 2),
+  ('In golf, what is a score of two strokes under par on a hole called?', '["Birdie", "Eagle", "Albatross", "Bogey"]'::jsonb, 1),
+  ('How many holes are on a standard full-size golf course?', '["9", "12", "18", "24"]'::jsonb, 2),
+  ('What shape is the hero of the classic arcade game Pac-Man?', '["A ghost", "A pizza with a slice missing", "A star", "A coin"]'::jsonb, 1),
+  ('Which falling-block puzzle game was created in 1984 by Alexey Pajitnov?', '["Tetris", "Bejeweled", "Candy Crush", "Dr. Mario"]'::jsonb, 0),
+  ('What was the character Mario originally called in the game Donkey Kong?', '["Super Mario", "Jumpman", "Luigi", "Mr. Video"]'::jsonb, 1),
+  ('In darts, what is the highest score you can get with a single dart?', '["50", "60", "100", "180"]'::jsonb, 1),
+  ('What flavor treat is made by spinning heated sugar into fine fluffy threads?', '["Cotton candy", "Caramel", "Taffy", "Marshmallow"]'::jsonb, 0),
+  ('What gas gives most soda and slushies their fizzy bubbles?', '["Oxygen", "Helium", "Carbon dioxide", "Nitrogen"]'::jsonb, 2),
+  ('What is the puck in air hockey floating on while it slides across the table?', '["Water", "A cushion of air", "Ice", "Oil"]'::jsonb, 1),
+  ('Roughly how many balls are used in a standard game of pool, not counting the cue ball?', '["10", "13", "15", "20"]'::jsonb, 2),
+  ('The Rubik''s Cube was invented in which decade?', '["The 1950s", "The 1970s", "The 1990s", "The 2000s"]'::jsonb, 1),
+  ('What playground favorite did George Nissen help invent in 1936?', '["The trampoline", "The seesaw", "The swing set", "The slide"]'::jsonb, 0),
+  ('Which arcade game challenges you to bonk pop-up critters with a soft mallet?', '["Skee-Ball", "Whac-A-Mole", "Pinball", "Air hockey"]'::jsonb, 1),
+  ('What is the sudden headache from eating something cold too fast commonly called?', '["Sugar rush", "Brain freeze", "Cold snap", "Ice ache"]'::jsonb, 1),
+  ('What color are modern tennis balls, a change made to help them show up on TV?', '["White", "Orange", "Fluorescent yellow", "Red"]'::jsonb, 2),
+  ('A giant spinning wheel ride with seats around the rim is named after which engineer?', '["George Ferris", "Walt Disney", "Henry Ford", "Thomas Edison"]'::jsonb, 0),
+  ('What snack pops when the water trapped inside its kernel turns to steam?', '["Pretzels", "Popcorn", "Chips", "Crackers"]'::jsonb, 1),
+  ('How many cards are in a standard deck of playing cards?', '["48", "50", "52", "54"]'::jsonb, 2),
+  ('Which classic mini-golf obstacle has spinning blades you must putt past?', '["A drawbridge", "A windmill", "A loop", "A tunnel"]'::jsonb, 1),
+  ('What food did Ignacio "Nacho" Anaya famously invent in 1943?', '["Tacos", "Nachos", "Quesadillas", "Burritos"]'::jsonb, 1),
+  ('What does the Japanese word "karaoke" roughly translate to?', '["Loud singing", "Empty orchestra", "Happy voice", "Music box"]'::jsonb, 1),
+  ('Which team game is played on a table with rows of spinning rods and little figures?', '["Foosball", "Shuffleboard", "Billiards", "Ping pong"]'::jsonb, 0),
+  ('What is the standard maximum weight of a ten-pin bowling ball?', '["12 pounds", "14 pounds", "16 pounds", "20 pounds"]'::jsonb, 2),
+  ('Which of these treats was originally made from the root sap of a real plant?', '["Gummy bears", "Marshmallows", "Licorice", "Jelly beans"]'::jsonb, 1),
+  ('In bowling, what is a single roll that knocks down all the pins called?', '["A spare", "A strike", "A split", "A frame"]'::jsonb, 1),
+  ('When you knock down all remaining pins on your second roll, what is that called?', '["A strike", "A spare", "A turkey", "A gutter"]'::jsonb, 1),
+  ('What is the very first balloon animal most people learn to twist?', '["A cat", "A dog", "A giraffe", "A snake"]'::jsonb, 1),
+  ('A ball rolled into the channel beside a bowling lane goes into the what?', '["Gutter", "Pocket", "Alley", "Pit"]'::jsonb, 0),
+  ('Which arcade shooter from 1978 featured rows of aliens marching down the screen?', '["Asteroids", "Space Invaders", "Galaga", "Centipede"]'::jsonb, 1),
+  ('What lightweight gas is used to fill balloons that float upward?', '["Helium", "Carbon dioxide", "Steam", "Oxygen"]'::jsonb, 0),
+  ('What glowing gas is famous for making bright red-orange signs?', '["Argon", "Neon", "Xenon", "Krypton"]'::jsonb, 1),
+  ('Which frozen dessert was popularized at the 1904 World''s Fair in a rolled-up waffle?', '["The milkshake", "The ice cream cone", "The sundae", "The popsicle"]'::jsonb, 1),
+  ('In go-kart racing, where do you sit compared to a normal car?', '["Much higher up", "Just inches off the ground", "The same height", "Facing backward"]'::jsonb, 1),
+  ('What everyday small object weighs about the same as a table-tennis ball?', '["A golf ball", "A U.S. penny", "A baseball", "A brick"]'::jsonb, 1),
+  ('Which of these is a classic arcade game where you roll balls up a ramp into rings?', '["Skee-Ball", "Foosball", "Pinball", "Pac-Man"]'::jsonb, 0),
+  ('What is the name for the little scoring flippers you control in a game of pinball?', '["Paddles", "Flippers", "Mallets", "Bumpers"]'::jsonb, 1),
+  ('The traditional twisted shape of a pretzel is said to look like what?', '["A pair of folded arms", "A knot in a rope", "A figure eight", "A crown"]'::jsonb, 0),
+  ('Which classic ride features hand-painted horses that go up and down as it spins?', '["The bumper cars", "The carousel", "The Ferris wheel", "The teacups"]'::jsonb, 1),
+  ('What color is bubble gum traditionally, thanks to the dye its inventor happened to have?', '["Blue", "Green", "Pink", "Yellow"]'::jsonb, 2),
+  ('In laser tag, players usually score points by tagging what on their opponents?', '["Their shoes", "Sensors on their vest", "Their helmet only", "The floor"]'::jsonb, 1),
+  ('What is the maximum weight, in grams, closest to a regulation table-tennis ball?', '["Less than 3 grams", "About 10 grams", "About 25 grams", "About 50 grams"]'::jsonb, 0),
+  ('Which game asks you to slide weighted discs down a long smooth table toward a scoring zone?', '["Shuffleboard", "Foosball", "Air hockey", "Skee-Ball"]'::jsonb, 0),
+  ('What do you call it in mini golf when your ball goes in on the very first stroke?', '["A birdie", "A hole-in-one", "A par", "A gimme"]'::jsonb, 1),
+  ('Which puzzle toy has more than 43 quintillion possible arrangements but only one solved state?', '["A jigsaw", "The Rubik''s Cube", "A maze", "Dominoes"]'::jsonb, 1)
+  ) as v(prompt, choices, answer)
+ where not exists (
+   select 1 from trivia_question t
+    where t.org_id is null and t.prompt = v.prompt
+ );
+
+-- ---------------------------------------------------------------------------
+-- Head-to-head challenges. Two players, one arcade game, scores compared.
+--
+-- One record serves both modes the ask calls for, because they differ only in
+-- WHEN the two rounds happen, never in what is stored:
+--   async — A plays, sends the code, B plays tomorrow. The challenge sits open.
+--   sync  — both join, both play now, and the SSE stream (lib/gameBus.js) makes
+--           each side's progress visible to the other as it happens.
+-- Ranking is NOT re-derived here: the winner comes from the same per-game
+-- direction that ranks the boards (lib/gameScores.js), so a go-kart challenge
+-- is won by the FASTER lap while a skee-ball challenge is won by the higher
+-- total, without this table knowing anything about either game.
+-- ---------------------------------------------------------------------------
+create table if not exists challenge (
+  id           uuid primary key default gen_random_uuid(),
+  location_id  uuid not null references location(id) on delete cascade,
+  game         text not null,                    -- lib/gameScores.js key
+  variant      text not null default '',         -- sub-board, as on game_score
+  invite_code  text not null,
+  created_by   uuid not null references app_user(id) on delete cascade,
+  -- Null until someone claims it: a challenge is issued to whoever has the
+  -- code, which is what makes "send it to a friend" work without a friend
+  -- graph, an address book, or an invite that can only ever go to one person.
+  opponent_id  uuid references app_user(id) on delete cascade,
+  status       text not null default 'open',     -- open | complete | expired
+  expires_at   timestamptz not null,
+  created_at   timestamptz not null default now(),
+  completed_at timestamptz
+);
+-- Invite codes need to be unique only among LIVE challenges, like every other
+-- join code here; a finished one retires its code back into the pool.
+create unique index if not exists challenge_code_live_idx
+  on challenge (invite_code) where status = 'open';
+create index if not exists challenge_creator_idx on challenge (created_by, status);
+create index if not exists challenge_opponent_idx on challenge (opponent_id, status);
+
+-- One round per player per challenge. The primary key is the rule: a player
+-- gets ONE attempt, so a challenge can't be won by replaying until the score
+-- is good enough. (Both sides' rounds also land on the venue's high score
+-- board — a challenge round is a real round.)
+create table if not exists challenge_entry (
+  challenge_id uuid not null references challenge(id) on delete cascade,
+  app_user_id  uuid not null references app_user(id) on delete cascade,
+  score        bigint not null,
+  detail       jsonb  not null default '{}',
+  session_id   text   not null,
+  played_at    timestamptz not null default now(),
+  primary key (challenge_id, app_user_id)
+);

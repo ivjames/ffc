@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playUndo, playFanfare } from '../../lib/sound';
@@ -408,6 +409,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.fillText(gs.outcome.label, W / 2, H / 2);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
 }
 
 export default function BattingCages() {
@@ -614,6 +618,7 @@ export default function BattingCages() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (2 tickets per run — a home run pays 8). */}
           <GameTicketAward game="battingcages" tickets={total * 2} sessionId={sessionId} />
+          <GameHighScore game="battingcages" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={restart} sound="none">
               Play again
@@ -650,7 +655,7 @@ export default function BattingCages() {
           onPointerDown={onPress}
           onPointerUp={onRelease}
           onPointerCancel={onRelease}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="block touch-none rounded-2xl arcade-screen"
         />
       </div>
 

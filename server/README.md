@@ -43,7 +43,7 @@ cd /var/www/<dir> && npm ci && npm run migrate && pm2 start index.js --name ffc-
 | `RESEND_API_KEY`    | API key when `MAIL_PROVIDER=resend`. The sending domain must be verified (SPF/DKIM) in Resend first — see DEPLOY.md. |
 | `SMTP_URL`          | SMTP connection URL when `MAIL_PROVIDER=smtp`, e.g. `smtps://user:pass@smtp.example.com`. |
 | `MAIL_DAILY_CAP`    | Max outbound emails per rolling 24 h across all kinds, metered in the `mail_send` table (the `hunt_scan` spend-cap precedent applied to email). Rows older than 24 h are pruned on every send — `mail_send` is a rate-limit ledger, not a permanent log of recipient addresses. Default `500`. Read per send. |
-| `PUBLIC_APP_URL`    | Public origin of the player PWA, used as the base for magic-link redirects and team-invite links. Default `http://localhost:5173`. |
+| `PUBLIC_APP_URL`    | **Fallback** origin for emailed links (magic links, team invites). Links are normally built from the host the request arrived on, so each venue's players get links to their own subdomain — the session cookie is host-only, so a link to another venue's host signs a player in *there* and leaves them signed out at their own. This value is used when the request's host isn't a recognised one (`PLATFORM_FQDN` and its subdomains, or this URL's own host); an unrecognised `Host` never appears in an outbound link, which is what stops the sign-in form being usable as a phishing relay. Default `http://localhost:5173`. See `lib/appOrigin.js`. |
 
 ## Endpoints
 

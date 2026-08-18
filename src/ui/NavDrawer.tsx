@@ -4,6 +4,7 @@ import { closeNav, useNavDrawer } from '../lib/navDrawer';
 import { useCurrentLocationId } from '../lib/location';
 import { locationById } from '../data/courses';
 import { usePos } from '../lib/pos';
+import { useModules } from '../lib/modules';
 import { useSession } from '../lib/session';
 import { isStandalone } from '../lib/pwaInstall';
 import { playClick } from '../lib/sound';
@@ -31,6 +32,7 @@ type Item = {
 
 function useSectionRows(): { primary: Item[]; secondary: Item[] } {
   const pos = usePos();
+  const modules = useModules();
   // The rewards card belongs to an account, so it only appears once there is
   // one — advertising it to a signed-out visitor sent them to a gate.
   const signedIn = useSession().user != null;
@@ -42,7 +44,11 @@ function useSectionRows(): { primary: Item[]; secondary: Item[] } {
   const primary: Item[] = [
     { to: '/', icon: 'nav.home', label: 'Home', match: '/' },
     { to: '/golf', icon: 'nav.golf', label: 'Mini Golf', match: '/golf' },
-    { to: '/arcade', icon: 'nav.arcade', label: 'Arcade', match: '/arcade' },
+    // The arcade is an à la carte module too — a venue that didn't buy it
+    // shouldn't have it in the drawer (src/lib/modules.ts).
+    ...(modules.arcade
+      ? [{ to: '/arcade', icon: 'nav.arcade', label: 'Arcade', match: '/arcade' } as Item]
+      : []),
     ...(hasFood ? [{ to: '/food', icon: 'nav.food', label: 'Food & Drink', match: '/food' } as Item] : []),
     { to: '/me', icon: 'nav.me', label: 'Me', match: '/me' },
   ];

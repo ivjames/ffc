@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { useFitCanvas } from '../fun/useFitCanvas';
+import GameHighScore from '../fun/GameHighScore';
 import {
   W,
   H,
@@ -472,6 +474,10 @@ export default function PuttGolf() {
   });
 
   const [mode, setMode] = useState<Mode | null>(null);
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  // Challenges are always on the fixed course; endless has no comparable score.
+  const [searchParams] = useSearchParams();
+  const challengeMode = searchParams.get('variant');
   const [phase, setPhase] = useState<Phase>('aim');
   const [holeIndex, setHoleIndex] = useState(0);
   const [strokes, setStrokes] = useState(0);
@@ -512,6 +518,10 @@ export default function PuttGolf() {
       setScores([]);
       setHoles(gs.holes);
       setMode(m);
+      // One id per round — the high-score board's idempotency key, so a
+      // re-mounted summary can't stack duplicate rows. Minted here rather than
+      // at mount because "a round" is what gets scored, not "a visit".
+      setSessionId(crypto.randomUUID());
       startHole(0);
     },
     [startHole],
@@ -747,6 +757,14 @@ export default function PuttGolf() {
             : '';
 
   // Mode picker — the entry screen.
+  // A challenge is always on the fixed course (endless has no comparable
+  // score), so skip the mode picker rather than letting the player choose a
+  // mode their round can't be submitted under.
+  if (mode === null && challengeMode === 'course') {
+    beginRound('course');
+    return null;
+  }
+
   if (mode === null) {
     return (
       <Screen>
@@ -802,7 +820,7 @@ export default function PuttGolf() {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            className="block touch-none rounded-2xl border border-fairway-800"
+            className="block touch-none rounded-2xl arcade-screen"
           />
         </div>
 
@@ -874,6 +892,19 @@ export default function PuttGolf() {
                   );
                 })}
               </div>
+            )}
+
+            {/* Only the fixed course is ranked. An endless run deals holes for
+                as long as you keep playing, so its stroke total measures
+                stamina, not putting — there is no fair board to put it on. */}
+            {!isEndless && (
+              <GameHighScore
+                game="arcadeputt"
+                variant="course"
+                score={totalStrokes}
+                detail={{ par: totalPar, holes: playedHoles.length }}
+                sessionId={sessionId}
+              />
             )}
 
             <div className="mt-4 space-y-2">

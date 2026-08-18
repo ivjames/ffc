@@ -1,6 +1,7 @@
 import { locationById, useContentRevision } from '../../data/courses';
 import { useCurrentLocationId } from '../location';
 import { DEV_MODE } from '../flags';
+import { modulesFor } from '../modules';
 import { createCenterEdgeAdapter } from './centeredge';
 import type { OrderingApi, PosAdapter, PosCapabilityConfig, PosConfig } from './types';
 
@@ -67,13 +68,20 @@ export type PosCapabilities = {
 
 export function posFor(locationId: string): PosCapabilities {
   const config = posConfigFor(locationId);
-  const ordering = config?.ordering ? (adapterFor(config.ordering)?.ordering ?? null) : null;
+  // Two independent gates, and BOTH must pass. The vendor config answers "can
+  // we reach a system for this?"; the module entitlement answers "is this
+  // venue's plan supposed to include it?" (src/lib/modules.ts). Keeping them
+  // separate is what lets a venue switch the rewards surface off without
+  // deleting the POS credentials it will want back next month.
+  const modules = modulesFor(locationId);
+  const ordering =
+    modules.ordering && config?.ordering ? (adapterFor(config.ordering)?.ordering ?? null) : null;
   // Loyalty needs no client adapter — only whether the venue named a vendor.
-  const loyalty = config?.loyalty != null;
+  const loyalty = modules.rewards && config?.loyalty != null;
   return {
     ordering,
     loyalty,
-    gameRewards: (config?.loyalty?.gameRewards ?? false) && loyalty,
+    gameRewards: modules.gameTickets && (config?.loyalty?.gameRewards ?? false) && loyalty,
   };
 }
 

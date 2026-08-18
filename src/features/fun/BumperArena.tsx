@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playBump, playWaterBump, playScore, playTick, playFanfare } from '../../lib/sound';
@@ -721,6 +722,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, theme: BumperTheme, now: nu
     ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
 }
 
 export default function BumperArena({ theme }: { theme: BumperTheme }) {
@@ -890,6 +894,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
             tickets={Math.min(score * 2, 100)}
             sessionId={sessionId}
           />
+          <GameHighScore game={theme.kind === 'car' ? 'bumpercars' : 'bumperboats'} score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
@@ -915,7 +920,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl arcade-screen"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">

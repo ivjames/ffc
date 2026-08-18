@@ -3,6 +3,7 @@ import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components'
 import { TRIVIA, type TriviaQuestion } from '../../data/funContent';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import Icon from '../../ui/Icon';
 
 // Tickets per correct answer, for venues with the gameRewards POS add-on.
@@ -108,6 +109,7 @@ export default function Trivia() {
             tickets={score * TICKETS_PER_CORRECT}
             sessionId={sessionId}
           />
+          <GameHighScore game="trivia" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={restart} sound="none">
               Play again

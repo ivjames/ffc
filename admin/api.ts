@@ -110,10 +110,38 @@ export type Location = {
   menuUrl: string | null;
   orderingUrl: string | null;
   pos: PosConfig | null;
+  /** À la carte module entitlements (server/lib/modules.js). SPARSE and
+   *  replace-not-merge, like pos/hours/branding: only the modules an operator
+   *  set explicitly appear, and an absent key keeps deriving from the venue's
+   *  existing config rather than being pinned to a value nobody chose. */
+  modules: Record<string, boolean> | null;
   hours: VenueHours | null;
   hunt: HuntConfig | null;
   orgId: string | null;
   archivedAt: string | null;
+};
+
+/** One module's computed state for a venue (server/lib/modules.js
+ *  moduleStatus). Not just on/off but WHY: an operator looking at a module
+ *  that isn't live needs to know whether it's unsold or unwired, because those
+ *  have completely different next steps. */
+export type ModuleStatus = {
+  key: string;
+  label: string;
+  blurb: string;
+  /** The answer every player-facing surface reads. */
+  live: boolean;
+  /** Bought/switched on — before wiring and dependencies are considered. */
+  entitled: boolean;
+  /** This module's POS vendor block is configured (always true when it needs none). */
+  wired: boolean;
+  needsVendor: 'ordering' | 'loyalty' | null;
+  requires: string | null;
+  /** Why it isn't live: 'not-enabled' | 'not-wired' | 'requires', else null. */
+  blockedBy: string | null;
+  /** True when this venue has no explicit setting, so the value shown is the
+   *  derived legacy default rather than a decision anyone made. */
+  inherited: boolean;
 };
 
 /** Per-venue hunt config (location.hunt jsonb — mirrors
@@ -618,7 +646,11 @@ export const api = {
     const s = q.toString();
     return req<Location[]>('GET', `/locations${s ? `?${s}` : ''}`);
   },
-  getLocation: (id: string) => req<{ location: Location; courses: Course[] }>('GET', `/locations/${id}`),
+  getLocation: (id: string) =>
+    req<{ location: Location; modules: ModuleStatus[]; courses: Course[] }>(
+      'GET',
+      `/locations/${id}`
+    ),
   // archived=1 returns live + archived; callers filter to the archived ones.
   listLocationCourses: (id: string, archived = false) =>
     req<Course[]>('GET', `/locations/${id}/courses${archived ? '?archived=1' : ''}`),

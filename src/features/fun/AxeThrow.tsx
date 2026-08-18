@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
@@ -457,6 +458,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
 }
 
 export default function AxeThrow() {
@@ -672,6 +676,7 @@ export default function AxeThrow() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (2 tickets per point — a perfect 5 clutches pays 70). */}
           <GameTicketAward game="axethrow" tickets={total * 2} sessionId={sessionId} />
+          <GameHighScore game="axethrow" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
@@ -714,7 +719,7 @@ export default function AxeThrow() {
         <canvas
           ref={canvasRef}
           onPointerDown={onTap}
-          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl arcade-screen"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">

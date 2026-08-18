@@ -5,6 +5,7 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { TEST_DATABASE_URL, ensureSchema, testQuery, listenEphemeral } from "../test-support/testDb.js";
+import { hostRequest } from "../test-support/hostRequest.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 delete process.env.MAIL_PROVIDER; // console mailer — codes land in stdout
@@ -32,7 +33,10 @@ function lastMail() {
   return mailLog[mailLog.length - 1] ?? "";
 }
 function lastCode() {
-  const m = lastMail().match(/sign-in code is: ([0-9]{6})/);
+  // The sign-in email is link-first, so the code is the fallback line rather
+  // than the opener. Matched loosely (any "…: 123456") so a copy edit doesn't
+  // break the suite again — what matters is that a 6-digit code is in there.
+  const m = lastMail().match(/code[^:]*: ([0-9]{6})/);
   return m?.[1];
 }
 function lastMagicToken() {
@@ -59,11 +63,11 @@ beforeEach(() => {
   captureMail();
 });
 
-async function requestCode(email, profile) {
+async function requestCode(email, profile, next) {
   return fetch(`${baseUrl}/api/auth/request-code`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, profile }),
+    body: JSON.stringify({ email, profile, next }),
   });
 }
 
@@ -145,6 +149,89 @@ test("expired codes are rejected", async () => {
   await testQuery(`update auth_code set expires_at = now() - interval '1 minute' where email = $1`, [email]);
   const res = await verify(email, code);
   assert.equal(res.status, 401);
+});
+
+test("the sign-in email leads with the link and still carries the code", async () => {
+  // "Links preferred": one tap beats reading six digits off one screen and
+  // typing them into another. But the code must never be dropped — the link
+  // opens in whatever browser the mail app hands it to, which is often not the
+  // one the player started in, and then the code is the only way to finish on
+  // the original device.
+  await requestCode(`player-${stamp}-shape@example.com`);
+  const mail = lastMail();
+  const linkAt = mail.indexOf("/api/auth/magic?token=");
+  const codeAt = mail.search(/code[^:]*: [0-9]{6}/);
+  assert.ok(linkAt > -1, "the email carries a magic link");
+  assert.ok(codeAt > -1, "the email still carries a typeable code");
+  assert.ok(linkAt < codeAt, "the link comes first");
+});
+
+test("a magic link carries ?next= through to the post-sign-in redirect", async () => {
+  const email = `player-${stamp}-next@example.com`;
+  await requestCode(email, undefined, "/arcade/scores");
+  const token = lastMagicToken();
+
+  const res = await fetch(`${baseUrl}/api/auth/magic?token=${token}&next=/arcade/scores`, {
+    redirect: "manual",
+  });
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get("location"), /\/arcade\/scores$/);
+  assert.ok(sessionCookie(res), "and still signs the player in");
+});
+
+test("a magic link cannot be used to bounce the player off-site", async () => {
+  // An open redirect that fires immediately AFTER establishing a session is
+  // worth more to an attacker than a plain one, so `next` is path-only.
+  const email = `player-${stamp}-openredirect@example.com`;
+  await requestCode(email);
+  const token = lastMagicToken();
+
+  const res = await fetch(
+    `${baseUrl}/api/auth/magic?token=${token}&next=${encodeURIComponent("https://evil.example")}`,
+    { redirect: "manual" }
+  );
+  assert.equal(res.status, 302);
+  const location = res.headers.get("location");
+  assert.ok(!location.includes("evil.example"), `must not redirect off-site, got ${location}`);
+});
+
+test("an emailed link points at the host the request came from, not a global constant", async () => {
+  // The session cookie is host-only, so a link built from a single global
+  // PUBLIC_APP_URL signs a venue's player in on some OTHER venue's host and
+  // leaves them signed out on their own (lib/appOrigin.js).
+  //
+  // hostRequest, not fetch: undici forbids setting the Host header, and Host
+  // is the entire subject of this test.
+  const prevPlatform = process.env.PLATFORM_FQDN;
+  const prevPublic = process.env.PUBLIC_APP_URL;
+  process.env.PLATFORM_FQDN = "ffc.example";
+  process.env.PUBLIC_APP_URL = "https://bullwinkles.ffc.example";
+  try {
+    await hostRequest(app, {
+      method: "POST",
+      path: "/api/auth/request-code",
+      host: "tukwila.ffc.example",
+      body: { email: `player-${stamp}-host@example.com` },
+    });
+    assert.match(lastMail(), /tukwila\.ffc\.example\/api\/auth\/magic/);
+
+    // And a Host we don't recognise must fall back, never mint a link to
+    // itself — otherwise this endpoint is a phishing generator: send
+    // `Host: evil.example` and OUR mail server delivers a link there.
+    await hostRequest(app, {
+      method: "POST",
+      path: "/api/auth/request-code",
+      host: "evil.example",
+      body: { email: `player-${stamp}-evil@example.com` },
+    });
+    assert.ok(!lastMail().includes("evil.example"), "never build a link to an unknown host");
+    assert.match(lastMail(), /bullwinkles\.ffc\.example/);
+  } finally {
+    if (prevPlatform === undefined) delete process.env.PLATFORM_FQDN;
+    else process.env.PLATFORM_FQDN = prevPlatform;
+    if (prevPublic === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = prevPublic;
+  }
 });
 
 test("magic link signs in via redirect and is single-use", async () => {

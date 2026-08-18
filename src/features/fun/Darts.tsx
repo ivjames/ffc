@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
-import { drawLogo } from './logo';
+import { drawLogo, logoReady } from './logo';
 import { playStroke, playPinClack, playCup, playDing, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Floater, Vec as FxVec } from './fx';
 import Icon from '../../ui/Icon';
 import {
   TWO_PI,
-  withAlpha,
   neonLine,
   spawnBurst,
   stepParticles,
@@ -19,6 +19,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
+  drawGlow,
+  makeCachedLayer,
 } from './fx';
 
 // §12 Darts — a nine-dart high-score mini-game. The same two-tap timing aim as
@@ -168,10 +170,23 @@ type FX = {
   shake: number; // impact shake magnitude (px), decays to 0
   flash: number; // big-hit flash 0..1, decays to 0
   flashColor: string;
+  hitGlow: number; // the struck bed staying lit 0..1, decays to 0
+  hitAt: FxVec; // where it's lit
+  hitColor: string;
 };
 
 function freshFX(): FX {
-  return { trail: [], particles: [], floaters: [], shake: 0, flash: 0, flashColor: '#fbbf24' };
+  return {
+    trail: [],
+    particles: [],
+    floaters: [],
+    shake: 0,
+    flash: 0,
+    flashColor: '#fbbf24',
+    hitGlow: 0,
+    hitAt: { x: CX, y: CY },
+    hitColor: '#fbbf24',
+  };
 }
 
 /** Advance the visual-only effects by `dt` ms (framerate-correct). */
@@ -180,6 +195,9 @@ function updateFX(fx: FX, dt: number) {
   fx.floaters = stepFloaters(fx.floaters, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
   fx.flash = decay(fx.flash, dt, 0.0022);
+  // Outlasts the flash: the frame goes bright for an instant, but the bed the
+  // dart is buried in stays lit while the score reads out.
+  fx.hitGlow = decay(fx.hitGlow, dt, 0.0013);
 }
 
 // —— drawing —————————————————————————————————————————————————————————————————
@@ -297,11 +315,29 @@ function drawBoard(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = RING_RED;
   ctx.fill();
 
-  // Faint top-to-bottom falloff so the face reads matte, top-lit.
+  // Sisal grain. A board is compressed hemp fibre stood on end, so the tooth
+  // runs radially out from the centre — that direction is what stops the beds
+  // reading as flat vector wedges. ~520 hairlines is far too much for a frame,
+  // which is exactly why this whole board is built once and blitted.
   ctx.save();
   ctx.beginPath();
   ctx.arc(CX, CY, R_DOUBLE_OUT, 0, TWO_PI);
   ctx.clip();
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 520; i++) {
+    // Golden-angle stepping spreads the fibres evenly without clumping into
+    // spokes the way a plain modulo would.
+    const a = i * 2.39996;
+    const r0 = R_BULL + ((i * 37) % (R_DOUBLE_OUT - R_BULL));
+    const len = 4 + ((i * 13) % 11);
+    const r1 = Math.min(r0 + len, R_DOUBLE_OUT);
+    ctx.strokeStyle = i % 2 ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.07)';
+    ctx.beginPath();
+    ctx.moveTo(CX + Math.cos(a) * r0, CY + Math.sin(a) * r0);
+    ctx.lineTo(CX + Math.cos(a) * r1, CY + Math.sin(a) * r1);
+    ctx.stroke();
+  }
+  // Faint top-to-bottom falloff so the face reads matte, top-lit.
   const lit = ctx.createLinearGradient(0, CY - R_DOUBLE_OUT, 0, CY + R_DOUBLE_OUT);
   lit.addColorStop(0, 'rgba(255,255,255,0.07)');
   lit.addColorStop(1, 'rgba(0,0,0,0.16)');
@@ -309,21 +345,29 @@ function drawBoard(ctx: CanvasRenderingContext2D) {
   ctx.fillRect(CX - R_DOUBLE_OUT, CY - R_DOUBLE_OUT, R_DOUBLE_OUT * 2, R_DOUBLE_OUT * 2);
   ctx.restore();
 
-  // Spider wire: ring circles + radial sector boundaries.
-  ctx.strokeStyle = 'rgba(203,213,225,0.55)';
-  ctx.lineWidth = 1;
-  for (const r of [R_DOUBLE_OUT, R_DOUBLE_IN, R_TREBLE_OUT, R_TREBLE_IN, R_BULL, R_BULL_IN]) {
-    ctx.beginPath();
-    ctx.arc(CX, CY, r, 0, TWO_PI);
-    ctx.stroke();
-  }
-  for (let i = 0; i < 20; i++) {
-    const a = -Math.PI / 2 + i * SEG - SEG / 2;
-    ctx.beginPath();
-    ctx.moveTo(CX + Math.cos(a) * R_BULL, CY + Math.sin(a) * R_BULL);
-    ctx.lineTo(CX + Math.cos(a) * R_DOUBLE_OUT, CY + Math.sin(a) * R_DOUBLE_OUT);
-    ctx.stroke();
-  }
+  // Spider wire. Real spider is round steel standing proud of the beds, so it
+  // carries a shadow on one side and a highlight on the other — a single flat
+  // grey stroke is what makes a drawn board look printed. Offsetting the dark
+  // pass down-right puts the light up-left, matching the wall spot above.
+  const spider = (dx: number, dy: number, color: string, width: number) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    for (const r of [R_DOUBLE_OUT, R_DOUBLE_IN, R_TREBLE_OUT, R_TREBLE_IN, R_BULL, R_BULL_IN]) {
+      ctx.beginPath();
+      ctx.arc(CX + dx, CY + dy, r, 0, TWO_PI);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 20; i++) {
+      const a = -Math.PI / 2 + i * SEG - SEG / 2;
+      ctx.beginPath();
+      ctx.moveTo(CX + dx + Math.cos(a) * R_BULL, CY + dy + Math.sin(a) * R_BULL);
+      ctx.lineTo(CX + dx + Math.cos(a) * R_DOUBLE_OUT, CY + dy + Math.sin(a) * R_DOUBLE_OUT);
+      ctx.stroke();
+    }
+  };
+  spider(0.7, 0.7, 'rgba(0,0,0,0.45)', 1.6);
+  spider(0, 0, 'rgba(226,232,240,0.7)', 1);
+  spider(-0.35, -0.35, 'rgba(255,255,255,0.35)', 0.6);
 
   // Numbers around the rim, clockwise from 20 at the top.
   ctx.save();
@@ -338,9 +382,11 @@ function drawBoard(ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
-  ctx.clearRect(0, 0, W, H);
-
+// The wall, the board and the pub sign never change — and the board alone is 60
+// wedge fills, 520 grain hairlines, three spider passes and 20 numbers. Painting
+// that every frame was by far the most expensive thing in this game; built once
+// and blitted, it costs a single drawImage and pays for the lighting below.
+function paintScene(ctx: CanvasRenderingContext2D) {
   drawWall(ctx);
 
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
@@ -356,12 +402,30 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   // after the vignette so it keeps its color at the wall's edge-darkened
   // bottom half instead of being muddied by it.
   drawLogo(ctx, CX, 420, { variant: 'wordmark', width: 150, tint: '#c8a06a', alpha: 0.5 });
+}
+
+const sceneLayer = makeCachedLayer(W, H, paintScene);
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Keyed on the sign so the scene rebuilds once the mark decodes; a null layer
+  // means no DOM / no 2D context, so fall back to painting the frame directly.
+  const scene = sceneLayer(logoReady('wordmark'));
+  if (scene) ctx.drawImage(scene, 0, 0, W, H);
+  else paintScene(ctx);
 
   // —— Dynamic layer (shaken on impact) ——
   ctx.save();
   if (fx.shake > 0.05) {
     const s = shakeOffset(fx.shake);
     ctx.translate(s.x, s.y);
+  }
+
+  // The bed a dart just went into stays lit while the score reads out.
+  // Nothing breathes at rest.
+  if (fx.hitGlow > 0.02) {
+    drawGlow(ctx, fx.hitAt.x, fx.hitAt.y, 26 + fx.hitGlow * 24, fx.hitColor, fx.hitGlow * 0.5);
   }
 
   // Motion streak behind the flying dart.
@@ -423,12 +487,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
-  // —— Big-hit flash overlay ——
-  if (fx.flash > 0) {
-    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
-    ctx.fillRect(0, 0, W, H);
-  }
-
   // Visit-total beat while the darts are pulled from the board.
   if (gs.phase === 'visit') {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -466,6 +524,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
     ctx.fillText(n > 3 ? '3' : n <= 0 ? 'GO!' : String(n), W / 2, H / 2);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
 }
 
 export default function Darts() {
@@ -583,6 +644,13 @@ export default function Darts() {
           big ? '#fde68a' : v > 0 ? HIT_COLOR[hit.ring] : '#94a3b8',
         );
         fx.shake = v === 0 ? 1.5 : 2 + Math.min(6, v * 0.12);
+        // Light the bed the dart went into, scaled by what it was worth — the
+        // same treatment a scored Skee-Ball cup gets.
+        if (v > 0) {
+          fx.hitGlow = big ? 1 : 0.55;
+          fx.hitAt = { x, y };
+          fx.hitColor = big ? '#fde68a' : HIT_COLOR[hit.ring];
+        }
         if (big) {
           fx.flash = 1;
           fx.flashColor = hit.ring === 'B50' ? '#fbbf24' : '#4ade80';
@@ -713,6 +781,7 @@ export default function Darts() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 4 points, capped at 100). */}
           <GameTicketAward game="darts" tickets={Math.min(100, Math.round(total / 4))} sessionId={sessionId} />
+          <GameHighScore game="darts" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
@@ -758,7 +827,7 @@ export default function Darts() {
         <canvas
           ref={canvasRef}
           onPointerDown={onTap}
-          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl arcade-screen"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">

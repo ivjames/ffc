@@ -1150,3 +1150,53 @@ button {
   border-color: transparent;
   transform: none;
 }
+
+/* ---------------------------------------------------------------------------
+   Arcade cabinet screen
+   ---------------------------------------------------------------------------
+   Every mini-game draws into a fixed-aspect <canvas> that, until now, sat on
+   the page as a plain rounded rectangle with a 1px border. The playfields
+   themselves are drawn well; what was missing was the CABINET around them —
+   the thing that makes a screen in an arcade read as a machine rather than a
+   picture of one.
+
+   Deliberately applied to the canvas ELEMENT, not a wrapper. Several games
+   stack HUD overlays on the canvas through a CSS grid (`col-start-1
+   row-start-1`), and inserting a wrapper would break that positioning in
+   fifteen files at once. Everything here is therefore an outside-the-box
+   effect — layered shadows and a filter — which needs no new DOM and cannot
+   disturb pointer mapping (useFitCanvas's rect math is untouched).
+
+   The layers, outermost first:
+     1. a soft colored bloom, as if the screen lit the surface behind it
+     2. the bezel: two tight rings, light above and dark below, so the frame
+        reads as a moulded plastic edge catching room light rather than a
+        stroke
+     3. a black seat shadow that lifts the whole unit off the page
+   The filter adds the slight saturation/contrast push a real CRT gives, which
+   is what stops flat canvas fills reading as flat.
+
+   `--screen-glow` lets a game tint its own bloom to its playfield (the axe
+   lane's amber, the air-hockey rink's cyan) by setting the variable inline;
+   the default is the app's accent. */
+.arcade-screen {
+  border: 0;
+  background-color: #05070a;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
+/* The games draw their own surfaces; this class only supplies the dark ground
+   behind the canvas and a hairline edge. Deliberately no bloom, bezel or
+   saturation push — a scoring element lighting up should be the brightest
+   thing on screen, and a glowing frame competes with it.
+
+/* Marquee: the lit strip above a cabinet's screen carrying the game's name.
+   Used by the arcade game HUDs. */
+.arcade-marquee {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 24%, #0a0c10), #0a0c10);
+  border-radius: 0.75rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+

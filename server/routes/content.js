@@ -24,6 +24,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { tenant } from "../lib/tenant.js";
 import { BRANDING_KEYS } from "../lib/branding.js";
+import { resolveModules } from "../lib/modules.js";
 
 export const router = Router();
 
@@ -79,7 +80,7 @@ router.get("/", tenant(), async (req, res) => {
         `select l.id, l.name, l.slug, l.lat, l.lng, l.geofence_km as "geofenceKm",
                 l.tz, l.sort_order as "sortOrder",
                 l.menu_url as "menuUrl", l.ordering_url as "orderingUrl",
-                l.pos, l.hours, l.org_id as "orgId",
+                l.pos, l.modules, l.hours, l.org_id as "orgId",
                 (coalesce((l.hunt ->> 'venueMode')::boolean, false)
                  and exists (select 1 from hunt_item hi
                               where hi.location_id = l.id and hi.active)) as "venueHunt"
@@ -115,7 +116,11 @@ router.get("/", tenant(), async (req, res) => {
             branding: sparseBranding(t.org.branding),
           }
         : null,
-      locations: locations.rows,
+      // `modules` ships RESOLVED, not raw: the client gets the final on/off per
+      // module (entitlement AND vendor wiring AND dependencies already folded
+      // in) rather than a sparse object it would have to re-derive against
+      // rules that live on the server. One decision, made once.
+      locations: locations.rows.map((row) => ({ ...row, modules: resolveModules(row) })),
       courses: courses.rows,
     });
   } catch (err) {

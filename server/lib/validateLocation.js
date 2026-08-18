@@ -9,6 +9,7 @@ import {
   MAX_DAILY_PER_CARD,
 } from "./gameRewards.js";
 import { ADOPTION_BONUS_KINDS, MAX_ADOPTION_BONUS } from "./adoptionBonus.js";
+import { normalizeModules } from "./modules.js";
 
 export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,7 +25,7 @@ function isFiniteNum(n) {
 // list SELECT so both responses have the same shape.
 export const LOCATION_RETURN_COLS = `id, name, slug, lat, lng,
   geofence_km as "geofenceKm", tz, sort_order as "sortOrder",
-  menu_url as "menuUrl", ordering_url as "orderingUrl", pos, hours, hunt,
+  menu_url as "menuUrl", ordering_url as "orderingUrl", pos, modules, hours, hunt,
   org_id as "orgId", archived_at as "archivedAt"`;
 
 // POS vendors the platform has an adapter for. Onboarding a new vendor means
@@ -339,6 +340,12 @@ export function normalizeLocation(body) {
   const pos = normalizePos(body.pos);
   if (pos.error) return { error: pos.error, status: 400 };
 
+  // À la carte module entitlements (lib/modules.js) — WHAT the venue bought,
+  // as opposed to the vendor wiring above that makes it work. Sparse: an
+  // absent key keeps deriving from the venue's existing config.
+  const modules = normalizeModules(body.modules);
+  if (modules.error) return { error: modules.error, status: 400 };
+
   // Business hours (see lib/venueHours.js). Omitted/null clears it.
   const hours = normalizeHours(body.hours);
   if (hours.error) return { error: hours.error, status: 400 };
@@ -382,6 +389,7 @@ export function normalizeLocation(body) {
       menuUrl: menuUrl.value,
       orderingUrl: orderingUrl.value,
       pos: pos.value,
+      modules: modules.value,
       hours: hours.value,
       hunt: hunt.value,
       orgId: orgId ?? null,

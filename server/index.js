@@ -6,6 +6,7 @@ import { warnIfNoToken } from "./lib/adminAuth.js";
 import { warnIfConsoleMailer } from "./lib/mailer.js";
 import { startHuntPhotoRetention } from "./lib/photoRetention.js";
 import { startBoothPhotoRetention } from "./lib/boothPhotoRetention.js";
+import { startTriviaAutopilot } from "./routes/triviaLive.js";
 
 const port = process.env.PORT || 8060;
 app.listen(port, () => {
@@ -18,4 +19,10 @@ app.listen(port, () => {
   // Same policy for photo-booth pictures (PHOTO_BOOTH_RETENTION_DAYS,
   // default 30) — lib/boothPhotoRetention.js.
   startBoothPhotoRetention();
+  // A live trivia room runs on its own clock: questions close when their time
+  // is up and reveals give way to the next question, with or without anybody
+  // driving. Started here rather than in the route module because app.js is
+  // imported by every integration test, and a timer firing under a suite would
+  // advance games out from under its assertions.
+  startTriviaAutopilot();
 });

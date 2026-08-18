@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
-import { drawLogo } from './logo';
+import { drawLogo, logoReady } from './logo';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
 import Icon from '../../ui/Icon';
 import {
   TWO_PI,
-  withAlpha,
   roundRectPath,
   drawShadow,
   drawSphere,
@@ -22,6 +22,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
+  drawGlow,
+  makeCachedLayer,
 } from './fx';
 
 // §12 Air Hockey — the second attraction mini-game. Drag your mallet in the
@@ -250,10 +252,11 @@ type FX = {
   shake: number; // camera shake magnitude (px), decays to 0
   flash: number; // goal flash 0..1, decays to 0
   flashColor: string;
+  goalGlow: [number, number]; // per-goal-mouth lighting 0..1 — [CPU end, your end]
 };
 
 function freshFX(): FX {
-  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#ffffff', floaters: [] };
+  return { trail: [], particles: [], shake: 0, flash: 0, flashColor: '#ffffff', floaters: [], goalGlow: [0, 0] };
 }
 
 /** Advance the visual-only effects by `dt` ms (framerate-correct). */
@@ -263,6 +266,10 @@ function updateFX(fx: FX, gs: GS, dt: number) {
   fx.floaters = stepFloaters(fx.floaters, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
   fx.flash = decay(fx.flash, dt, 0.0022);
+  // Outlasts the flash: the mouth that was just scored on stays lit after the
+  // frame has gone back to normal.
+  fx.goalGlow[0] = decay(fx.goalGlow[0], dt, 0.0013);
+  fx.goalGlow[1] = decay(fx.goalGlow[1], dt, 0.0013);
 }
 
 // —— drawing —————————————————————————————————————————————————————————————————
@@ -284,9 +291,11 @@ function drawPuck(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.stroke();
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
-  ctx.clearRect(0, 0, W, H);
-
+// —— Cached static layer ——
+// Surface, rails, markings, centre badge and goal mouths are all fixed, and
+// between the centre line and the two neonLine goals they carried three
+// shadowBlur passes per frame. Built once and blitted (see fx.makeLayer).
+function paintTable(ctx: CanvasRenderingContext2D) {
   // —— Table surface: a polished icy rink, top-lit ——
   const surf = ctx.createLinearGradient(0, 0, 0, H);
   surf.addColorStop(0, '#12233b');
@@ -301,6 +310,26 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   sheen.addColorStop(1, 'rgba(120,170,220,0)');
   ctx.fillStyle = sheen;
   ctx.fillRect(0, 0, W, H);
+
+  // Air holes. This is the one detail that says "air hockey table" and nothing
+  // else — a slick laminate bed drilled on a regular grid. Each is a dark pin
+  // with a lit lower lip, so it reads as drilled into the surface rather than
+  // printed on it. ~570 of them, which is only affordable because this layer is
+  // built once; per frame it would be the most expensive thing in the game.
+  for (let y = 22; y < H - 18; y += 20) {
+    for (let x = 20; x < W - 16; x += 20) {
+      ctx.beginPath();
+      ctx.arc(x, y, 1.15, 0, TWO_PI);
+      ctx.fillStyle = 'rgba(4,9,17,0.5)';
+      ctx.fill();
+      // The overhead light catches the far rim of the bore.
+      ctx.beginPath();
+      ctx.arc(x, y + 0.7, 1.15, 0.15 * Math.PI, 0.85 * Math.PI);
+      ctx.strokeStyle = 'rgba(170,215,255,0.14)';
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+    }
+  }
 
   // Corner vignette for depth.
   const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
@@ -351,6 +380,29 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   // —— Goals: glowing neon mouths (cyan = CPU end, green = your end) ——
   neonLine(ctx, GOAL_X0, 4, GOAL_X1, 4, '#38bdf8', 5, 16);
   neonLine(ctx, GOAL_X0, H - 4, GOAL_X1, H - 4, '#22c55e', 5, 16);
+}
+
+const tableLayer = makeCachedLayer(W, H, paintTable);
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Keyed on the centre badge so the table rebuilds once the mark decodes; a
+  // null layer means no DOM / no 2D context, so paint the frame directly.
+  const table = tableLayer(logoReady('badge'));
+  if (table) ctx.drawImage(table, 0, 0, W, H);
+  else paintTable(ctx);
+
+  // The mouth that was just scored on stays lit for a beat. Neither end
+  // glows while the table is idle.
+  const ends: Array<[number, string, number]> = [
+    [4, '#38bdf8', fx.goalGlow[0]],
+    [H - 4, '#22c55e', fx.goalGlow[1]],
+  ];
+  for (const [y, color, hit] of ends) {
+    if (hit < 0.02) continue;
+    drawGlow(ctx, W / 2, y, GOAL_W * (0.5 + hit * 0.3), color, hit * 0.5);
+  }
 
   // —— Dynamic layer (shaken on goals) ——
   ctx.save();
@@ -377,12 +429,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
-  // —— Goal flash overlay ——
-  if (fx.flash > 0) {
-    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.25);
-    ctx.fillRect(0, 0, W, H);
-  }
-
   // "Get ready" flash on serve.
   if (gs.phase === 'serve') {
     ctx.save();
@@ -395,6 +441,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.fillText('Get ready…', W / 2, MID - 80);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
 }
 
 export default function AirHockey() {
@@ -488,6 +537,7 @@ export default function AirHockey() {
           gs.you += 1;
           gs.serveDir = -1; // serve away toward the CPU next
           fx.flashColor = '#38bdf8';
+          fx.goalGlow[0] = 1; // you scored into the CPU's mouth
           spawnBurst(fx.particles, W / 2, 12, 28, 320, '#7dd3fc');
           spawnFloater(fx.floaters, W / 2, 70, 'GOAL!', '#7dd3fc', { size: 28, life: 900 });
           setYou(gs.you);
@@ -496,6 +546,7 @@ export default function AirHockey() {
           gs.cpu += 1;
           gs.serveDir = 1;
           fx.flashColor = '#ef4444';
+          fx.goalGlow[1] = 1; // the CPU scored into yours
           spawnBurst(fx.particles, W / 2, H - 12, 28, 320, '#fca5a5');
           spawnFloater(fx.floaters, W / 2, H - 60, 'CPU SCORES', '#fca5a5', { size: 22, life: 900 });
           setCpu(gs.cpu);
@@ -581,6 +632,7 @@ export default function AirHockey() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (5 tickets per goal + 15 for the win). */}
           <GameTicketAward game="airhockey" tickets={you * 5 + (won ? 15 : 0)} sessionId={sessionId} />
+          <GameHighScore game="airhockey" score={you - cpu} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
@@ -607,7 +659,7 @@ export default function AirHockey() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl arcade-screen"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">

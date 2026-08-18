@@ -267,3 +267,138 @@ export function decay(v: number, dt: number, perMs: number): number {
 export function shakeOffset(mag: number): Vec {
   return { x: (fxRandom() * 2 - 1) * mag, y: (fxRandom() * 2 - 1) * mag };
 }
+
+// --- Cached static layers ---------------------------------------------------
+// Most of these games repaint a completely static backdrop every frame — a
+// dartboard is 60 wedge fills, 20 numbers and a spider wire that are identical
+// on frame 1 and frame 10,000. Painting it once into an offscreen canvas and
+// blitting it costs one drawImage instead, which is what buys the per-frame
+// budget for the lighting work layered on top.
+//
+// Same idea as PuttGolf's cached hazard layer, generalised: build once, keep it
+// in a module-level slot, blit forever.
+
+/** Supersample factor for cached layers. Two matches the DPR cap the games
+ *  render at, so a blit is pixel-exact on a phone rather than resampled soft. */
+export const LAYER_SS = 2;
+
+/**
+ * Build a static layer: `paint` runs ONCE into an offscreen canvas sized for
+ * `w`×`h` logical units (already scaled, so paint in plain game coordinates).
+ * Blit it with `ctx.drawImage(layer, 0, 0, w, h)`.
+ *
+ * Returns null when there's no DOM or no 2D context; callers fall back to
+ * painting directly so a layer that can't be built is never a blank screen.
+ */
+export function makeLayer(
+  w: number,
+  h: number,
+  paint: (c: CanvasRenderingContext2D) => void,
+): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+  const cv = document.createElement('canvas');
+  cv.width = w * LAYER_SS;
+  cv.height = h * LAYER_SS;
+  const c = cv.getContext('2d');
+  if (!c) return null;
+  c.scale(LAYER_SS, LAYER_SS);
+  paint(c);
+  return cv;
+}
+
+/**
+ * A static layer that builds on first use and REBUILDS when `key` changes.
+ *
+ * The key matters more than it looks. Every one of these backdrops paints the
+ * venue logo, and `drawLogo` no-ops until the mark has decoded — which happens
+ * after the first frames, because branding hydrates from /api/content. A layer
+ * built naively on frame one would latch the logo-less version forever. Passing
+ * `logoReady(variant)` as the key rebuilds it exactly once, when the mark
+ * actually becomes drawable (and again if a branding swap changes it).
+ *
+ * Call at module scope; the returned getter is what the draw loop calls.
+ */
+export function makeCachedLayer(
+  w: number,
+  h: number,
+  paint: (c: CanvasRenderingContext2D) => void,
+): (key?: unknown) => HTMLCanvasElement | null {
+  let layer: HTMLCanvasElement | null = null;
+  let built = false;
+  let lastKey: unknown;
+  return (key?: unknown) => {
+    if (!built || key !== lastKey) {
+      layer = makeLayer(w, h, paint);
+      built = true;
+      lastKey = key;
+    }
+    return layer;
+  };
+}
+
+/**
+ * Deterministic anisotropic streaks — the directional grain that separates
+ * brushed metal from a flat grey fill. Paint it INTO a cached layer (it's a few
+ * hundred hairline strokes, far too much for a frame) over an existing fill,
+ * clipped by the caller.
+ *
+ * Index-derived, never fxRandom(): a cached layer is built once, so a random
+ * grain would differ between a rebuild and look like the surface changed.
+ */
+export function brushedStreaks(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  count = 90,
+  alpha = 0.05,
+): void {
+  ctx.save();
+  ctx.lineWidth = 1;
+  for (let i = 0; i < count; i++) {
+    // Two coprime strides keep successive streaks from stacking into bands.
+    const sx = x + ((i * 71) % w);
+    const sy = y + ((i * 137) % h);
+    const len = 18 + ((i * 29) % 46);
+    const light = i % 3 === 0;
+    ctx.strokeStyle = light
+      ? `rgba(255,255,255,${alpha})`
+      : `rgba(0,0,0,${alpha * 1.4})`;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx, Math.min(sy + len, y + h));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * A soft glow behind a bright element — the halo a real light throws on the
+ * glass in front of it. Draw BEFORE the element itself.
+ *
+ * Uses a radial gradient rather than ctx.shadowBlur: shadowBlur is the single
+ * most expensive thing you can put in a per-frame canvas loop, and at the
+ * radii that read as "glow" it costs more than the rest of the frame.
+ */
+export function drawGlow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  color: string,
+  alpha = 0.5,
+): void {
+  if (radius <= 0 || alpha <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+  grad.addColorStop(0, withAlpha(color, alpha));
+  grad.addColorStop(0.5, withAlpha(color, alpha * 0.35));
+  grad.addColorStop(1, withAlpha(color, 0));
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, TWO_PI);
+  ctx.fill();
+  ctx.restore();
+}

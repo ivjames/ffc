@@ -1,10 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import type { CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { Screen, TopBar, Content } from '../../ui/components';
 import Icon from '../../ui/Icon';
 import type { DrawnIcon } from '../../ui/icons/registry';
 import { playClick } from '../../lib/sound';
 import { usePos } from '../../lib/pos';
+import { clearActiveChallenge } from '../../lib/activeChallenge';
 
 // The Arcade section (formerly "While You Wait") — the venue's whole roster of
 // offline line-entertainment: ~24 attraction mini-games plus fun facts, trivia,
@@ -47,6 +48,16 @@ const TILES: Tile[] = [
     blurb: 'Ten quick questions — how many can you get?',
     accent: '#3b82f6',
     earns: true,
+  },
+  {
+    to: '/arcade/trivia/live',
+    // Not game.trivia: that is the solo game's icon, and reusing it here would
+    // recreate exactly the collision the icon set was built to pull apart.
+    // What distinguishes Live Trivia is that it's the one you play together.
+    icon: 'action.play-together',
+    title: 'Live Trivia',
+    blurb: 'Join the room game — solo or as a table.',
+    accent: '#8b5cf6',
   },
   {
     to: '/arcade/putt',
@@ -207,6 +218,14 @@ export default function FunZone() {
   // this location doesn't sell game rewards, no game pays out, so show nothing.
   const { gameRewards } = usePos();
 
+  // Landing back on the hub means the player left whatever game they were in.
+  // If they had armed a challenge round and backed out, disarm it here: a
+  // challenge allows ONE round each, so a marker left lying around would spend
+  // that attempt on the next casual game they happened to open.
+  useEffect(() => {
+    clearActiveChallenge();
+  }, []);
+
   return (
     <Screen>
       <TopBar title="Arcade" back="/" />
@@ -216,6 +235,57 @@ export default function FunZone() {
           <br />
           Pass the time between attractions.
         </p>
+
+        {/* Full-width, above the grid rather than a tile inside it: the boards
+            are ABOUT the games, not another one of them, and burying that in
+            slot 27 of a 2-column grid would hide the reason to play twice. */}
+        <button
+          onClick={() => {
+            playClick();
+            navigate('/arcade/scores');
+          }}
+          className="surface-1 mb-3 flex w-full items-center gap-2.5 rounded-xl border border-fairway-800/60 px-3 py-2.5 text-left transition-transform active:translate-y-px"
+        >
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl"
+            style={{ background: '#fbbf2422', border: '1px solid #fbbf2455' }}
+          >
+            🏆
+          </span>
+          <span className="block min-w-0 flex-1">
+            <span className="block text-sm font-bold leading-tight text-fairway-50">
+              High Scores
+            </span>
+            <span className="block text-xs leading-tight text-fairway-100/70">
+              Every game's top ten at this venue.
+            </span>
+          </span>
+          <span className="shrink-0 text-sm font-semibold text-fairway-400">→</span>
+        </button>
+
+        <button
+          onClick={() => {
+            playClick();
+            navigate('/arcade/challenges');
+          }}
+          className="surface-1 mb-3 flex w-full items-center gap-2.5 rounded-xl border border-fairway-800/60 px-3 py-2.5 text-left transition-transform active:translate-y-px"
+        >
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl"
+            style={{ background: '#38bdf822', border: '1px solid #38bdf855' }}
+          >
+            ⚔️
+          </span>
+          <span className="block min-w-0 flex-1">
+            <span className="block text-sm font-bold leading-tight text-fairway-50">
+              Head to Head
+            </span>
+            <span className="block text-xs leading-tight text-fairway-100/70">
+              Challenge a friend — together or whenever.
+            </span>
+          </span>
+          <span className="shrink-0 text-sm font-semibold text-fairway-400">→</span>
+        </button>
 
         <div className="grid grid-cols-2 gap-2">
           {TILES.map((t, i) => (

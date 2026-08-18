@@ -21,6 +21,7 @@ import { Router } from "express";
 import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
+import { moduleLive } from "../lib/modules.js";
 import { fetchPlayer, fetchPlayerTransactions } from "../lib/posLoyalty.js";
 import { linkedCardFor, linkCard, unlinkCard } from "../lib/cardLink.js";
 
@@ -36,13 +37,21 @@ async function loyaltyVenue(locationId, req, res) {
   }
   // Same tenant gate as the award routes: a foreign org's location id 404s
   // exactly like a nonexistent one.
-  const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, pos" });
+  const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, pos, modules" });
   if (!loc) {
     res.status(404).json({ ok: false, error: "unknown location" });
     return null;
   }
   const loyalty = loc.pos?.loyalty ?? null;
   if (!loyalty) {
+    res.status(403).json({ ok: false, error: "rewards cards are not enabled for this venue" });
+    return null;
+  }
+  // Wiring is not entitlement. A venue that switched the rewards module off
+  // keeps its POS credentials on purpose (lib/modules.js), so checking only
+  // pos.loyalty would leave every card read and link working for a module the
+  // venue no longer has — the same gap the award and hunt paths had.
+  if (!moduleLive(loc, "rewards")) {
     res.status(403).json({ ok: false, error: "rewards cards are not enabled for this venue" });
     return null;
   }

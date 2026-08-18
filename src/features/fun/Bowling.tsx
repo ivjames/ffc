@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
-import { drawLogo } from './logo';
+import { drawLogo, logoReady } from './logo';
 import { playStroke, playCup, playUndo, playPinClack, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec, Floater } from './fx';
 import Icon from '../../ui/Icon';
@@ -21,6 +22,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
+  drawGlow,
+  makeCachedLayer,
 } from './fx';
 
 // §12 Bowling — the sixth attraction mini-game. Swipe up the lane to roll (aim
@@ -491,9 +494,12 @@ function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number) {
   drawSphere(ctx, q.x, q.y - r * 0.45, r, PURPLE_LIGHT, PURPLE, PURPLE_DEEP, { rim: true });
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
-  ctx.clearRect(0, 0, W, H);
-
+// —— Cached static layer ——
+// The whole alley — back wall, pit, gutters, lane, boards, arrows, foul line,
+// vignette — is fixed geometry projected through a pure function, so it is
+// pixel-identical on every frame. Built once and blitted (see fx.makeLayer),
+// which is what pays for the oil sheen and the deck lighting below.
+function paintAlley(ctx: CanvasRenderingContext2D) {
   const nearL = project(LANE_L, H);
   const nearR = project(LANE_R, H);
   const farL = project(LANE_L, 0);
@@ -561,6 +567,27 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   wood.addColorStop(1, '#6b5330');
   ctx.fillStyle = wood;
   ctx.fill();
+  // Board-to-board tonal variation. A lane is forty-odd individual maple boards
+  // and no two are quite the same shade — that variation, not more grain lines,
+  // is what stops evenly ruled seams from reading as graph paper. Index-derived
+  // so the lane is identical on every rebuild.
+  for (let i = 0, x = LANE_L; x < LANE_R; i++, x += 20) {
+    const x1 = Math.min(x + 20, LANE_R);
+    const a = project(x, H);
+    const b = project(x1, H);
+    const c = project(x1, 0);
+    const d = project(x, 0);
+    const t = ((i * 53) % 7) / 7; // stable per board
+    ctx.fillStyle =
+      i % 3 === 0 ? `rgba(255,226,170,${0.03 + t * 0.05})` : `rgba(52,34,12,${0.03 + t * 0.06})`;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.lineTo(d.x, d.y);
+    ctx.closePath();
+    ctx.fill();
+  }
   // Lengthwise gloss pooling down the middle boards.
   const gloss = ctx.createLinearGradient(nearL.x, 0, nearR.x, 0);
   gloss.addColorStop(0, 'rgba(0,0,0,0.25)');
@@ -618,6 +645,34 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   vig.addColorStop(1, 'rgba(0,0,0,0.5)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, W, H);
+}
+
+const alleyLayer = makeCachedLayer(W, H, paintAlley);
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Keyed on the masking-unit mark so the alley rebuilds once it decodes; a null
+  // layer means no DOM / no 2D context, so paint the frame directly.
+  const alley = alleyLayer(logoReady('wordmark'));
+  if (alley) ctx.drawImage(alley, 0, 0, W, H);
+  else paintAlley(ctx);
+
+  const deck = project(W / 2, HEAD_Y);
+
+  // Lane oil. A dressed lane is wet down the middle and dry at the edges, and
+  // the head of it mirrors the pin-deck lighting back at the bowler. Static —
+  // a dressing pattern is a property of the surface, not an animation.
+  const oilY = deck.y + 115;
+  const oil = ctx.createRadialGradient(W / 2, oilY, 6, W / 2, oilY, 130);
+  oil.addColorStop(0, withAlpha(PURPLE_LIGHT, 0.09));
+  oil.addColorStop(0.5, withAlpha(PURPLE, 0.04));
+  oil.addColorStop(1, withAlpha(PURPLE, 0));
+  ctx.fillStyle = oil;
+  ctx.fillRect(0, deck.y, W, H - deck.y);
+
+  // The pin deck flares when the rack goes over; it is dark otherwise.
+  if (fx.flash > 0.02) drawGlow(ctx, W / 2, deck.y - 10, 90, PURPLE_LIGHT, fx.flash * 0.55);
 
   // —— Dynamic layer (shaken on strikes/spares) ——
   ctx.save();
@@ -677,12 +732,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
-  // —— Strike/spare flash overlay ——
-  if (fx.flash > 0) {
-    ctx.fillStyle = withAlpha(PURPLE, fx.flash * 0.22);
-    ctx.fillRect(0, 0, W, H);
-  }
-
   // —— On-canvas STRIKE! / SPARE! banner, softly lit ——
   if (gs.phase === 'sweep' && (gs.note.includes('Strike') || gs.note.includes('Spare'))) {
     const strike = gs.note.includes('Strike');
@@ -696,6 +745,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.fillText(strike ? 'STRIKE!' : 'SPARE!', W / 2, 330);
     ctx.restore();
   }
+
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
 }
 
 /** The classic ten-frame score strip: ball marks up top, cumulative score
@@ -990,6 +1042,7 @@ export default function Bowling() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 3 points — a perfect 300 pays 100). */}
           <GameTicketAward game="bowling" tickets={Math.round(score / 3)} sessionId={sessionId} />
+          <GameHighScore game="bowling" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={restart} sound="none">
               Play again
@@ -1024,7 +1077,7 @@ export default function Bowling() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block touch-none rounded-2xl border border-fairway-800"
+          className="block touch-none rounded-2xl arcade-screen"
         />
       </div>
 

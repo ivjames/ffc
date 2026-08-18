@@ -16,6 +16,7 @@ import {
 import { playClick, playCup } from '../../lib/sound';
 import { useSession } from '../../lib/session';
 import { usePos } from '../../lib/pos';
+import { useModules } from '../../lib/modules';
 import ActiveOrdersCard from '../food/ActiveOrdersCard';
 import AdoptionNudge from '../../ui/AdoptionNudge';
 import AdoptionBonusToast from '../../ui/AdoptionBonusToast';
@@ -109,7 +110,10 @@ export default function Home() {
   // The course-free scavenger hunt, when this venue runs one. Derived
   // server-side (/api/content) from venueMode + a non-empty active list, so
   // the tile never opens an empty hunt.
-  const hasVenueHunt = location?.venueHunt === true;
+  // Both halves must hold: the venue runs a course-free hunt AND the hunt
+  // module is part of its plan (src/lib/modules.ts).
+  const modules = useModules();
+  const hasVenueHunt = location?.venueHunt === true && modules.hunt;
   const pos = usePos();
 
   useEffect(() => {
@@ -150,7 +154,9 @@ export default function Home() {
     ...(hasVenueHunt
       ? [{ to: '/hunt', icon: 'nav.hunt', title: 'Scavenger Hunt', accent: '#0ea5e9' } as SectionTile]
       : []),
-    { to: '/arcade', icon: 'nav.arcade', title: 'Arcade', accent: '#a855f7' },
+    ...(modules.arcade
+      ? [{ to: '/arcade', icon: 'nav.arcade', title: 'Arcade', accent: '#a855f7' } as SectionTile]
+      : []),
     { to: '/photos', icon: 'nav.photos', title: 'Photo Booth', accent: '#ec4899' },
     ...(pos.ordering
       ? [{ to: '/food', icon: 'nav.food', title: 'Food & Drink', accent: '#ef4444' } as SectionTile]

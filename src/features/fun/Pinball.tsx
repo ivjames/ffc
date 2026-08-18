@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
+import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
-import { drawLogo } from './logo';
+import { drawLogo, logoReady } from './logo';
 import {
   playStroke,
   playCup,
@@ -32,6 +33,8 @@ import {
   pushTrail,
   decay,
   shakeOffset,
+  drawGlow,
+  makeCachedLayer,
 } from './fx';
 
 import {
@@ -197,11 +200,12 @@ function drawSlingShape(ctx: CanvasRenderingContext2D, s: Sling, glow: number) {
   ctx.strokeStyle = 'rgba(10,7,25,0.8)';
   ctx.lineWidth = 2;
   ctx.stroke();
-  // The curved kicking face, lit hotter while it fires.
+  // The curved kicking face, lit hotter while it fires. The halo is a gradient
+  // rather than shadowBlur — this runs every frame for both slings, which is
+  // exactly where shadowBlur stops being affordable.
+  if (glow > 0.02) drawGlow(ctx, s.m.x, s.m.y, 22 + glow * 26, '#fbbf24', glow * 0.5);
   ctx.save();
   ctx.strokeStyle = withAlpha('#fbbf24', 0.7 + glow * 0.3);
-  ctx.shadowColor = '#fbbf24';
-  ctx.shadowBlur = 6 + glow * 16;
   ctx.lineWidth = 3 + glow * 2;
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -216,6 +220,9 @@ function drawBumper(
   b: { x: number; y: number; r: number },
   glow: number,
 ) {
+  // A bumper throws light onto the deck when it FIRES, not while it sits
+  // there — the light is the hit, not the table's mood.
+  if (glow > 0.02) drawGlow(ctx, b.x, b.y, b.r * (2.5 + glow * 1.8), '#f0abfc', glow * 0.6);
   drawShadow(ctx, b.x, b.y + 4, b.r * 0.95, b.r * 0.4, 0.35);
   if (glow > 0.02) {
     // Expanding hit ring.
@@ -289,9 +296,15 @@ function drawPlunger(ctx: CanvasRenderingContext2D, t: number, pop: number) {
   ctx.stroke();
 }
 
-function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
-  ctx.clearRect(0, 0, W, H);
-
+// —— Cached static layers ——
+// The deck and the wall rails are fixed geometry. The rails especially: two
+// shadowBlur'd passes over ~40 segments, every frame, which was the single most
+// expensive thing in this draw loop. Both are painted once and blitted.
+//
+// They're separate layers because the deck sits OUTSIDE the shake transform and
+// the rails inside it, so an impact still rattles the walls.
+/** The printed-and-clearcoated deck: everything under the playfield hardware. */
+function paintDeck(ctx: CanvasRenderingContext2D) {
   // —— Playfield: dark glossy deck with a soft overhead sheen ——
   const bg = ctx.createLinearGradient(0, 0, 0, H);
   bg.addColorStop(0, '#181239');
@@ -303,6 +316,20 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   sheen.addColorStop(0, 'rgba(147,120,255,0.12)');
   sheen.addColorStop(1, 'rgba(147,120,255,0)');
   ctx.fillStyle = sheen;
+  ctx.fillRect(0, 0, W, H);
+
+  // Clearcoat. A playfield is screen-printed wood under a thick pour of
+  // lacquer, and what sells that is one broad highlight raking across the whole
+  // deck — a uniform gloss just reads as a lighter fill. Diagonal, so it reads
+  // as a reflection of something off-screen rather than another vignette. Drawn
+  // before the cabinet mask so the mask trims it to the playfield.
+  const coat = ctx.createLinearGradient(0, H, W, 0);
+  coat.addColorStop(0, 'rgba(255,255,255,0)');
+  coat.addColorStop(0.4, 'rgba(200,214,255,0.06)');
+  coat.addColorStop(0.55, 'rgba(226,236,255,0.13)');
+  coat.addColorStop(0.7, 'rgba(200,214,255,0.035)');
+  coat.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = coat;
   ctx.fillRect(0, 0, W, H);
 
   // Cabinet mask outside the walls (sides + above the arch).
@@ -362,14 +389,11 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   vig.addColorStop(1, 'rgba(0,0,0,0.5)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, W, H);
+}
 
-  // —— Dynamic layer (shaken on bumper hits) ——
-  ctx.save();
-  if (fx.shake > 0.05) {
-    const s = shakeOffset(fx.shake);
-    ctx.translate(s.x, s.y);
-  }
-
+/** Wall rails + the one-way gate wire, on transparent so they can be blitted
+ *  inside the shake transform and still rattle with an impact. */
+function paintRails(ctx: CanvasRenderingContext2D) {
   rails(ctx, traceOutline);
   rails(ctx, traceInnerWalls);
 
@@ -383,24 +407,41 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   ctx.lineTo(PF_R, 166);
   ctx.stroke();
   ctx.restore();
+}
+
+const deckLayer = makeCachedLayer(W, H, paintDeck);
+const railsLayer = makeCachedLayer(W, H, paintRails);
+
+function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Keyed on the playfield art so the deck rebuilds once the mark decodes; a
+  // null layer means no DOM / no 2D context, so paint the frame directly.
+  const deck = deckLayer(logoReady('badge'));
+  const railArt = railsLayer();
+  if (deck) ctx.drawImage(deck, 0, 0, W, H);
+  else paintDeck(ctx);
+
+  // —— Dynamic layer (shaken on bumper hits) ——
+  ctx.save();
+  if (fx.shake > 0.05) {
+    const s = shakeOffset(fx.shake);
+    ctx.translate(s.x, s.y);
+  }
+
+  if (railArt) ctx.drawImage(railArt, 0, 0, W, H);
+  else paintRails(ctx);
 
   // Rollover lamps (pulse while lit).
   for (let i = 0; i < LAMPS.length; i++) {
     const L = LAMPS[i];
     if (gs.lamps[i]) {
       const pulse = 0.65 + 0.35 * Math.sin(now / 150 + i);
-      ctx.beginPath();
-      ctx.arc(L.x, L.y, 11, 0, TWO_PI);
-      ctx.fillStyle = withAlpha('#fde68a', 0.25 * pulse);
-      ctx.fill();
-      ctx.save();
-      ctx.shadowColor = '#fde68a';
-      ctx.shadowBlur = 10;
+      drawGlow(ctx, L.x, L.y, 20, '#fde68a', 0.3 * pulse);
       ctx.beginPath();
       ctx.arc(L.x, L.y, 6, 0, TWO_PI);
       ctx.fillStyle = '#fde68a';
       ctx.fill();
-      ctx.restore();
     } else {
       ctx.beginPath();
       ctx.arc(L.x, L.y, 6, 0, TWO_PI);
@@ -430,7 +471,22 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
         ctx.stroke();
         ctx.restore();
       } else {
-        neonLine(ctx, t.ax, t.ay, t.bx, t.by, '#fde047', 4, 10);
+        // A standing target is a lit scoring element, so it gets the same
+        // treatment as a bumper or a Skee-Ball cup: light that lands on the
+        // deck around it, then the bright face on top. Cheaper than neonLine
+        // too, which would be six shadowBlur strokes a frame across both banks.
+        const mx = (t.ax + t.bx) / 2;
+        const my = (t.ay + t.by) / 2;
+        drawGlow(ctx, mx, my, 22, '#fde047', 0.3);
+        ctx.save();
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(t.ax, t.ay);
+        ctx.lineTo(t.bx, t.by);
+        ctx.stroke();
+        ctx.restore();
       }
     }
   }
@@ -473,11 +529,8 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
   drawFloaters(ctx, fx.floaters);
   ctx.restore();
 
-  // —— LANES-bonus flash overlay ——
-  if (fx.flash > 0) {
-    ctx.fillStyle = withAlpha(fx.flashColor, fx.flash * 0.22);
-    ctx.fillRect(0, 0, W, H);
-  }
+  // Cabinet finish, last of all: scanlines + a tube vignette over the
+  // finished frame. The bezel and bloom around the screen are CSS
 }
 
 export default function Pinball() {
@@ -733,6 +786,7 @@ export default function Pinball() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 200 points, capped at 100). */}
           <GameTicketAward game="pinball" tickets={Math.min(100, Math.round(score / 200))} sessionId={sessionId} />
+          <GameHighScore game="pinball" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">
               Play again
@@ -770,7 +824,7 @@ export default function Pinball() {
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="col-start-1 row-start-1 block touch-none rounded-2xl border border-fairway-800"
+          className="col-start-1 row-start-1 block touch-none rounded-2xl arcade-screen"
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">

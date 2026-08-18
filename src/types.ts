@@ -88,6 +88,12 @@ export type LocationSeed = {
   // or false = the venue has no course-free hunt (every venue, until one
   // opts in).
   venueHunt?: boolean;
+  // Resolved à la carte module entitlements (server/lib/modules.js): the final
+  // on/off per module, vendor wiring and dependencies already folded in. Unset
+  // on payloads and caches written before the modules column existed — read it
+  // through src/lib/modules.ts, which falls back to the pre-modules behavior
+  // rather than treating "absent" as "everything off".
+  modules?: Record<string, boolean>;
 };
 
 // §4 Course seed (bundled JSON for v1).
