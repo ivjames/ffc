@@ -35,6 +35,18 @@ export type LocalRound = {
   createdAt: number;
   completedAt: number | null;
   syncState: SyncState;
+  // The course's pars, copied at creation. The venue catalog is LIVE — a course
+  // archived in Master Control disappears from /api/content — and without this
+  // a round played on it becomes unjudgeable, taking even par-independent
+  // badges (a hole-in-one is a hole-in-one) down with it. Optional because
+  // rounds created before this existed don't have it; those fall back to the
+  // catalog, and are simply lost if their course is gone.
+  pars?: number[];
+  // The hole the scorecard is showing, 1-based. Persisted so other screens —
+  // the hunt, which asks "where is the group up to?" — can read the group's
+  // real position rather than inferring it from which holes are scored, which
+  // is ambiguous in both directions at the turn.
+  currentHole?: number;
   // Present only on shared multi-device rounds. Shared rounds never enter the
   // 'pending' push queue — the server finalizes them at completion instead.
   shared?: SharedInfo;

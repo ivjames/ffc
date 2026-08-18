@@ -78,21 +78,22 @@ type ItemState =
 const ALLOW_UPLOAD = DEV_MODE;
 
 /**
- * The furthest hole anyone in the group has carded — where the group is
- * standing, not where it's headed.
+ * Which hole the group is on.
  *
- * Deliberately NOT `furthest + 1`. Between carding the ninth and starting the
- * tenth a group is still on the ninth, and guessing forward there would report
- * hole 10 for a photo taken at the turn — costing a player a badge for
- * finishing the hunt exactly when the badge says to. Reporting the hole just
- * played resolves that boundary in the player's favour, and once the tenth is
- * carded it reads 10 correctly.
+ * Prefers the scorecard's OWN selected hole, which it persists as it goes.
+ * Inferring this from the scored holes can't be right at the turn in either
+ * direction: the ninth is carded whether the group is still standing on it or
+ * already walking to the tenth, so guessing forward costs a player the badge at
+ * exactly the moment it's meant to be earned, and guessing back hands it to
+ * someone who has already started the back nine.
  *
- * Undefined when there's no round (the venue-wide hunt) or nothing is scored
- * yet — the server treats that as "unknown" rather than hole zero.
+ * The inference stays as a fallback for rounds started before the scorecard
+ * recorded this. Undefined when there's no round (the venue-wide hunt) or
+ * nothing is scored yet — the server treats that as "unknown", not hole zero.
  */
 function currentHole(round: LocalRound | null): number | undefined {
   if (!round) return undefined;
+  if (round.currentHole != null) return Math.min(18, Math.max(1, round.currentHole));
   let furthest = 0;
   for (const card of Object.values(round.scores)) {
     if (!card) continue;

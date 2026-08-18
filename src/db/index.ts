@@ -123,6 +123,7 @@ export function createLocalRound(
   courseId: string,
   playerTags: string[],
   groupTag: string | null = null,
+  pars?: number[],
 ): LocalRound {
   const scores: Record<number, (number | null)[]> = {};
   for (let p = 0; p < playerTags.length; p++) {
@@ -137,6 +138,8 @@ export function createLocalRound(
     createdAt: Date.now(),
     completedAt: null,
     syncState: 'active',
+    // Snapshot: the live catalog can lose this course (see LocalRound.pars).
+    ...(pars ? { pars } : {}),
   };
 }
 

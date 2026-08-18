@@ -57,6 +57,22 @@ describe('playerRounds', () => {
     expect(playerRounds([round([card(3)], { courseId: 'nope' })], CATALOG)).toEqual([]);
   });
 
+  test('a round survives its course being archived out of the catalog', () => {
+    // The venue catalog is live: archiving a course removes it. A round that
+    // snapshotted its pars stays judgeable — a hole-in-one is a hole-in-one
+    // whether or not the course still exists.
+    const withSnapshot = round([withHoles(3, { 4: 1 })], {
+      courseId: 'gone',
+      pars: PARS,
+    } as Partial<LocalRound>);
+    expect(detectEarned([withSnapshot], { catalog: CATALOG, venues: [] }).has('hole_in_one')).toBe(
+      true,
+    );
+    // Without a snapshot AND without a catalog entry there is nothing to judge.
+    const orphan = round([withHoles(3, { 4: 1 })], { courseId: 'gone' });
+    expect(detectEarned([orphan], { catalog: CATALOG, venues: [] }).has('hole_in_one')).toBe(false);
+  });
+
   test('pass-and-play counts every seat; a shared game counts only this device', () => {
     const cards = [card(3), card(2)];
     expect(playerRounds([round(cards)], CATALOG)).toHaveLength(2);
@@ -387,23 +403,52 @@ describe('career', () => {
 });
 
 describe('reachability', () => {
+  const ALL_MODULES = { arcade: true, ordering: true, hunt: true };
+
   test('reads the deployment catalog', () => {
-    expect(reachContext(CATALOG)).toEqual({
+    expect(reachContext(CATALOG, ALL_MODULES)).toEqual({
       venueCount: 3,
       maxCoursesAtOneVenue: 2,
       hasParFourHole: true,
+      modules: ALL_MODULES,
     });
+  });
+
+  test('drops whole categories for modules no venue has', () => {
+    // A module off at every venue means those routes are gated out of the app,
+    // so the badges describing them can never be earned. Showing them would
+    // also make Legend — which counts every other badge — unattainable.
+    const noArcade = reachableAchievements(
+      reachContext(CATALOG, { arcade: false, ordering: true, hunt: true }),
+    ).map((a) => a.category);
+    expect(noArcade).not.toContain('arcade');
+    expect(noArcade).toContain('scoring');
+
+    const noHunt = reachableAchievements(
+      reachContext(CATALOG, { arcade: true, ordering: true, hunt: false }),
+    ).map((a) => a.category);
+    expect(noHunt).not.toContain('hunt');
+
+    // Food badges live in a mixed category, so they're gated individually.
+    const noFood = reachableAchievements(
+      reachContext(CATALOG, { arcade: true, ordering: false, hunt: true }),
+    ).map((a) => a.key);
+    expect(noFood).not.toContain('refueled');
+    expect(noFood).not.toContain('turn_snack');
+    expect(noFood).toContain('century_club'); // same category, not food
   });
 
   test('drops badges a deployment cannot reach', () => {
     const oneVenue: CourseInfo[] = [{ id: 'c1', locationId: 'v1', pars: PARS }];
-    const keys = reachableAchievements(reachContext(oneVenue)).map((a) => a.key);
+    const keys = reachableAchievements(reachContext(oneVenue, ALL_MODULES)).map((a) => a.key);
     expect(keys).not.toContain('road_trip'); // needs three venues
     expect(keys).not.toContain('course_collector'); // needs a venue with two courses
     expect(keys).not.toContain('threading_it'); // no par-4 anywhere
     expect(keys).toContain('hole_in_one');
     // The full catalog is reachable on a deployment shaped like ours.
-    expect(reachableAchievements(reachContext(CATALOG))).toHaveLength(ACHIEVEMENTS.length);
+    expect(reachableAchievements(reachContext(CATALOG, ALL_MODULES))).toHaveLength(
+      ACHIEVEMENTS.length,
+    );
   });
 });
 

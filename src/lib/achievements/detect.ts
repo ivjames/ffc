@@ -1,11 +1,13 @@
 import type { ActivityMark, LocalRound } from '../../types';
 import { COURSES, LOCATIONS } from '../../data/courses';
+import { modulesFor } from '../modules';
 import { STROKE_CAP } from '../scoring';
 import { venueDayWindow, type VenueHours } from '../venueHours';
 import { ARCADE_GAME_COUNT } from './arcade';
 import {
   ACHIEVEMENTS,
   CATEGORY_ORDER,
+  isReachable,
   type Achievement,
   type ReachContext,
 } from './catalog';
@@ -124,7 +126,11 @@ export function playerRounds(
   for (const r of rounds) {
     if (r.completedAt == null) continue;
     const course = byId.get(r.courseId);
-    if (!course) continue;
+    // The round's own snapshot wins over the live catalog, which can lose a
+    // course to archiving. Only a round with neither — played before snapshots
+    // existed, on a course since retired — is genuinely unjudgeable.
+    const pars = r.pars ?? course?.pars;
+    if (!pars) continue;
     const slots = r.playerTags.map((_, i) => i);
     const field = slots.map((i) => r.scores[i] ?? []);
     const fieldTags = slots.map((i) => r.playerTags[i] ?? '');
@@ -136,8 +142,8 @@ export function playerRounds(
       out.push({
         roundId: r.clientId,
         courseId: r.courseId,
-        locationId: course.locationId,
-        pars: course.pars,
+        locationId: course?.locationId ?? null,
+        pars,
         strokes,
         field,
         fieldTags,
@@ -593,18 +599,41 @@ function venuesWithCourses(catalog: CourseInfo[]): { locationId: string; courseI
 }
 
 /** What this deployment's catalog can support — drives `Achievement.reach`. */
-export function reachContext(catalog: CourseInfo[] = liveCatalog()): ReachContext {
+export function reachContext(
+  catalog: CourseInfo[] = liveCatalog(),
+  modules: ReachContext['modules'] = liveModules(),
+): ReachContext {
   const venues = venuesWithCourses(catalog);
   return {
     venueCount: new Set(catalog.map((c) => c.locationId).filter(Boolean)).size,
     maxCoursesAtOneVenue: venues.reduce((m, v) => Math.max(m, v.courseIds.length), 0),
     hasParFourHole: catalog.some((c) => c.pars.includes(4)),
+    modules,
+  };
+}
+
+/**
+ * Which modules are live at ANY venue in this deployment. A module switched off
+ * everywhere means those routes are gated out of the app entirely, so badges
+ * describing them can never be earned — that isn't a locked badge, it's a
+ * section that doesn't exist. Defaults to everything live when there are no
+ * venues yet (the pre-hydrate state), so a badge is never hidden on the
+ * strength of an empty catalog.
+ */
+export function liveModules(): ReachContext['modules'] {
+  if (LOCATIONS.length === 0) return { arcade: true, ordering: true, hunt: true };
+  const anyVenue = (key: 'arcade' | 'ordering' | 'hunt') =>
+    LOCATIONS.some((l) => modulesFor(l.id)[key]);
+  return {
+    arcade: anyVenue('arcade'),
+    ordering: anyVenue('ordering'),
+    hunt: anyVenue('hunt'),
   };
 }
 
 /** The badges worth showing here — see the reachability note in catalog.ts. */
 export function reachableAchievements(ctx = reachContext()): Achievement[] {
-  return ACHIEVEMENTS.filter((a) => a.reach == null || a.reach(ctx));
+  return ACHIEVEMENTS.filter((a) => isReachable(a, ctx));
 }
 
 // ── Secret round rules ──────────────────────────────────────────────────────

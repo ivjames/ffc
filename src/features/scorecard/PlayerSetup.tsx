@@ -86,7 +86,12 @@ export default function PlayerSetup() {
       return;
     }
     setSubmitting(true);
-    const round = createLocalRound(courseId, activeTags, teamTag.length === TAG_LENGTH ? teamTag : null);
+    const round = createLocalRound(
+      courseId,
+      activeTags,
+      teamTag.length === TAG_LENGTH ? teamTag : null,
+      courseById(courseId)?.pars,
+    );
     await putRound(round);
     navigate(`/golf/play/${round.clientId}`, { replace: true });
   }
@@ -132,7 +137,7 @@ export default function PlayerSetup() {
     const n = 1 + Math.floor(Math.random() * 4); // 1..4 players
     const roster = Array.from({ length: n }, () => randomTag());
     setSubmitting(true);
-    const round = createLocalRound(courseId, roster);
+    const round = createLocalRound(courseId, roster, null, courseById(courseId)?.pars);
     await putRound(round);
     navigate(`/golf/play/${round.clientId}`, { replace: true, state: { autoPlay: mode } });
   }

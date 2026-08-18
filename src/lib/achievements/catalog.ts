@@ -44,6 +44,13 @@ export type ReachContext = {
   /** Most courses any single venue has — 1 means "collect them all" is trivial. */
   maxCoursesAtOneVenue: number;
   hasParFourHole: boolean;
+  /**
+   * Modules live at ANY venue in the deployment. A capability switched off
+   * everywhere isn't a locked badge, it's a section of the app that doesn't
+   * exist — the routes are gated, so the player can never reach the thing the
+   * badge describes. Whole categories drop out on this.
+   */
+  modules: { arcade: boolean; ordering: boolean; hunt: boolean };
 };
 
 export type Achievement = {
@@ -91,6 +98,12 @@ export const CATEGORY_ORDER: AchievementCategory[] = [
   'wipeouts',
   'secret',
 ];
+
+/** Categories that only exist where a venue module is live. */
+const MODULE_GATED: Partial<Record<AchievementCategory, (c: ReachContext) => boolean>> = {
+  arcade: (c) => c.modules.arcade,
+  hunt: (c) => c.modules.hunt,
+};
 
 export const ACHIEVEMENTS: Achievement[] = [
   // ── Scoring & skill ───────────────────────────────────────────────────────
@@ -219,8 +232,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'weekend_warrior', label: 'Weekend Warrior', how: 'Play on both days of the same weekend.', icon: 'state.celebrate', category: 'habit', local: true },
   { key: 'century_club', label: 'Century Club', how: 'Play a hundred holes.', icon: 'award.medal', category: 'habit', local: true },
   { key: 'anniversary', label: 'Anniversary', how: 'Play a round a year after your first.', icon: 'state.celebrate', category: 'habit', local: true },
-  { key: 'refueled', label: 'Refueled', how: 'Order food from the app.', icon: 'nav.food', category: 'habit', local: true },
-  { key: 'turn_snack', label: 'Turn Snack', how: 'Order food in the middle of a round.', icon: 'order.cart', category: 'habit', local: true },
+  { key: 'refueled', label: 'Refueled', how: 'Order food from the app.', icon: 'nav.food', category: 'habit', local: true, reach: (c) => c.modules.ordering },
+  { key: 'turn_snack', label: 'Turn Snack', how: 'Order food in the middle of a round.', icon: 'order.cart', category: 'habit', local: true, reach: (c) => c.modules.ordering },
   { key: 'night_owl', label: 'Night Owl', how: 'Start a round in the last hour before close.', icon: 'control.theme-dark', category: 'habit', local: true },
   { key: 'early_bird', label: 'Early Bird', how: 'Start a round in the first hour after opening.', icon: 'control.theme-light', category: 'habit', local: true },
 
@@ -237,3 +250,14 @@ export const ACHIEVEMENTS: Achievement[] = [
 ];
 
 export const ACHIEVEMENTS_BY_KEY = new Map(ACHIEVEMENTS.map((a) => [a.key, a]));
+
+/**
+ * Is this badge worth showing in this deployment? Its own `reach` predicate,
+ * plus the module gate its category sits behind. Kept here rather than in each
+ * entry so a new arcade badge inherits the gate without anyone remembering to.
+ */
+export function isReachable(a: Achievement, ctx: ReachContext): boolean {
+  const gate = MODULE_GATED[a.category];
+  if (gate && !gate(ctx)) return false;
+  return a.reach == null || a.reach(ctx);
+}
