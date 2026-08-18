@@ -156,6 +156,38 @@ export class ArcadeDriver {
     );
   }
 
+  /**
+   * Sample an arbitrary set of logical points in ONE round trip.
+   *
+   * This is the primitive the reactive games need. A game with entities moving
+   * between fixed places (whack-a-mole's nine holes, a shooting gallery's
+   * shelves) is played by re-reading those places every cycle and acting on
+   * what is there — and that only works if the whole read is one evaluate().
+   * Nine separate probes would cost nine CDP round trips per cycle, which is
+   * slower than the thing being reacted to.
+   *
+   * @param {Array<{x:number,y:number}>} pts logical coordinates
+   * @returns {Promise<{ t: number, px: Array<[number,number,number,number]> }>}
+   */
+  async probePoints(pts) {
+    return this.page.evaluate(
+      ({ pts, W, H }) => {
+        const c = document.querySelector('canvas');
+        const ctx = c.getContext('2d');
+        const sx = c.width / W;
+        const sy = c.height / H;
+        const px = pts.map((p) => {
+          const bx = Math.min(c.width - 1, Math.max(0, Math.round(p.x * sx)));
+          const by = Math.min(c.height - 1, Math.max(0, Math.round(p.y * sy)));
+          const d = ctx.getImageData(bx, by, 1, 1).data;
+          return [d[0], d[1], d[2], d[3]];
+        });
+        return { t: performance.now(), px };
+      },
+      { pts, W: this.W, H: this.H },
+    );
+  }
+
   /** As probeRow, but a vertical run at logical x. */
   async probeCol(x, { y0 = 0, y1 = null } = {}) {
     const yEnd = y1 ?? this.H;
