@@ -83,7 +83,13 @@ export function normalizeConfig(input) {
       error: `config.lobbySeconds must be an integer ${MIN_LOBBY_SECONDS}..${MAX_LOBBY_SECONDS}`,
     };
   }
-  return { config: { questionSeconds, speedBonus, teams, revealSeconds, lobbySeconds } };
+  // An OPEN game is listed for the whole venue to walk into (join code
+  // included); the default is a private room that only the code can find.
+  // Room discovery, not gameplay — but it lives in config because that is the
+  // one bag of creator choices every snapshot already carries.
+  const open = input.open ?? false;
+  if (typeof open !== "boolean") return { error: "config.open must be a boolean" };
+  return { config: { questionSeconds, speedBonus, teams, revealSeconds, lobbySeconds, open } };
 }
 
 /**

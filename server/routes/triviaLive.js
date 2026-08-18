@@ -2,6 +2,7 @@
 //
 //   POST /api/trivia/sessions                 create (signed-in) -> hostToken
 //   POST /api/trivia/sessions/join            {joinCode, name, entrantId?}
+//   GET  /api/trivia/sessions/open            live games marked open, per venue
 //   GET  /api/trivia/sessions/:id             snapshot (?participant= or ?host=)
 //   GET  /api/trivia/sessions/:id/events      SSE stream
 //   POST /api/trivia/sessions/:id/answer      {participant, choice}
@@ -60,6 +61,13 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 // round trip on venue wifi, so a tap that landed in time isn't rejected by its
 // own latency; short enough that it can't be played as extra thinking time.
 const ANSWER_GRACE_MS = 1500;
+
+// Once EVERY entrant has answered, the question has nothing left to wait for —
+// in a hostless room the remaining clock is pure dead air (a host would tap
+// "reveal"; nobody can). The deadline is pulled forward to one short beat
+// instead of zero so the last tap's "locked in" lands on its own screen before
+// the reveal replaces it.
+const ALL_ANSWERED_CLOSE_MS = 1500;
 
 // Anyone may open a room, so the brake is here rather than on a staff role:
 // enough for a venue's evening, nowhere near enough to enumerate the bank by
@@ -369,6 +377,10 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
     }
 
     let entrant;
+    // Whether this join put a NEW name on the board, as opposed to a device
+    // sitting down at a seat that already existed — the deadline restore
+    // below turns on it.
+    let newEntrant = false;
     if (typeof entrantId === "string" && UUID_RE.test(entrantId)) {
       // TEAMS ONLY, and that clause is a security boundary rather than a
       // nicety. Every phone in the room is sent the full board, entrant ids
@@ -450,6 +462,7 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
           [session.id, candidate, wantsTeam]
         );
         entrant = created.rows[0];
+        newEntrant = true;
       }
     }
 
@@ -459,12 +472,35 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
       [session.id, entrant.id, req.user?.id ?? null]
     );
 
+    // A NEW entrant arriving mid-question un-fulfills "everyone has answered":
+    // if the fast-forward pulled the deadline in on that basis, put it back to
+    // the question's natural close (asked_at + length + grace) — which is the
+    // countdown the newcomer's screen is already showing, and never an
+    // extension, because only the fast-forward ever moves auto_at earlier.
+    // Recomputing unconditionally is idempotent when nothing was shortened. A
+    // device sitting down at an EXISTING seat changes nothing: that seat has
+    // answered or it hasn't, and the count the fast-forward compared holds.
+    let fresh = session;
+    if (newEntrant && session.status === "question" && session.askedAt) {
+      const restored = await client.query(
+        `update trivia_session
+            set auto_at = asked_at + make_interval(secs => $2)
+          where id = $1 and status = 'question' and current_index = $3
+          returning ${SESSION_FIELDS}`,
+        [
+          session.id,
+          (session.config?.questionSeconds ?? DEFAULT_SECONDS) + ANSWER_GRACE_MS / 1000,
+          session.currentIndex,
+        ]
+      );
+      if (restored.rows[0]) fresh = restored.rows[0];
+    }
+
     // The lobby's clock starts when the FIRST person walks in, not when the
     // room was made: a code read out ten minutes before anyone arrives should
     // not burn the whole wait, and a room nobody joins should never start.
     // Only ever set once — later arrivals don't push the start back, or a busy
     // room would never get going.
-    let fresh = session;
     if (session.status === "lobby" && !session.autoAt) {
       const started = await client.query(
         `update trivia_session
@@ -492,6 +528,51 @@ router.post("/sessions/join", joinLimit, async (req, res) => {
     return res.status(500).json({ ok: false, error: "internal error" });
   } finally {
     client.release();
+  }
+});
+
+// --- Open games -------------------------------------------------------------
+//
+// The chalkboard by the bar: every live game whose creator marked it OPEN,
+// join codes included — handing out the code is exactly what "open" means.
+// Private games (the default) are never listed; the code shared between
+// friends is the only way in. Declared before /sessions/:id, which would
+// otherwise capture the literal path segment "open" as an id.
+
+router.get("/sessions/open", tenant(), async (req, res) => {
+  const locationId = typeof req.query.locationId === "string" ? req.query.locationId : null;
+  if (!locationId || !UUID_RE.test(locationId)) {
+    return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
+  }
+  try {
+    const loc = await findTenantLocation(locationId, req.tenant, { cols: "id, org_id" });
+    if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
+    // A listing that hands out join codes is a join surface, so it takes the
+    // same module gate the join itself does.
+    if (!(await locationModuleLive(pool, locationId, "arcade"))) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
+    const result = await pool.query(
+      `select s.id, s.join_code as "joinCode", s.status,
+              s.current_index as "currentIndex",
+              coalesce(array_length(s.question_ids, 1), 0) as "totalQuestions",
+              (s.config->>'questionSeconds')::int as "questionSeconds",
+              s.auto_at as "autoAt", s.created_at as "createdAt",
+              (select count(*)::int from trivia_entrant e where e.session_id = s.id)
+                as "entrantCount"
+         from trivia_session s
+        where s.location_id = $1
+          and s.status in ('lobby','question','reveal')
+          and (s.config->>'open')::boolean is true
+          and s.created_at > now() - make_interval(secs => $2)
+        order by s.created_at desc
+        limit 20`,
+      [locationId, SESSION_TTL_MS / 1000]
+    );
+    return res.json({ ok: true, sessions: result.rows });
+  } catch (err) {
+    console.error("[trivia] open list error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
   }
 });
 
@@ -679,6 +760,29 @@ router.post("/sessions/:id/answer", answerLimit, async (req, res) => {
         points,
         ctx.entrantId,
       ]);
+    }
+
+    // Everyone in? Close the question early rather than running out the clock
+    // — with no host to tap "reveal", the wait between the last answer and the
+    // deadline is dead air in every hostless room. Done under the same row
+    // lock as the answer, so a simultaneous advance serializes against it;
+    // least() only ever SHORTENS the deadline, and the ticker (or any read)
+    // makes the actual transition. Counts are computed here, inside the
+    // transaction, so a joiner landing mid-answer either raises the entrant
+    // count before this reads it or waits on the lock until after.
+    const counts = await client.query(
+      `select (select count(*)::int from trivia_answer
+                where session_id = $1 and question_index = $2) as answered,
+              (select count(*)::int from trivia_entrant where session_id = $1) as entrants`,
+      [session.id, session.currentIndex]
+    );
+    if (counts.rows[0].answered >= counts.rows[0].entrants) {
+      await client.query(
+        `update trivia_session
+            set auto_at = least(auto_at, now() + make_interval(secs => $3))
+          where id = $1 and status = 'question' and current_index = $2`,
+        [session.id, session.currentIndex, ALL_ANSWERED_CLOSE_MS / 1000]
+      );
     }
     await client.query("commit");
 
