@@ -75,11 +75,21 @@ export default {
   route: '/arcade/karts',
   label: 'Go-Karts',
   field: { W, H },
-  // Pace-tiered against the flat-out ideal (GoKarts.tsx): 1.5x -> 40, 2x -> 25,
-  // 2.75x -> 15, slower -> 8. The bot cannot see `idealMs`, so this mirrors the
-  // tiers off measured totals instead: a clean bot lap set lands in the middle
-  // tiers, and a scrappy one in the last.
-  ticketsFor: (seconds) => (seconds <= 42 ? 40 : seconds <= 56 ? 25 : seconds <= 78 ? 15 : 8),
+  // Go-Karts' award is TRACK-RELATIVE and cannot be derived here: GoKarts.tsx
+  // computes `idealMs` from the selected circuit's length and tiers on the
+  // ratio (1.5x -> 40, 2x -> 25, 2.75x -> 15, slower -> 8). A policy can only
+  // see the clock, and a fixed set of seconds is wrong on every track — for
+  // Speedway the real boundaries land near 18.3/24.4/33.5s, so time tiers
+  // guessed from the bot's own pace would have recorded 40 where the game pays
+  // 8, and arcade-traffic.mjs posts the profile's ticket value straight to the
+  // award API.
+  //
+  // So this returns the FLOOR tier. The bot turns ~78s rounds, which is the
+  // slowest tier on every catalogue track, and under-reporting is the safe
+  // direction: a replay that pays too little is a dull profile, one that pays
+  // too much is inflated traffic. Where the venue has the gameRewards add-on,
+  // round.mjs reads the award the game itself renders and this is not used.
+  ticketsFor: () => 8,
   // LOWER IS BETTER — the score is a time. The harness needs to know, or the
   // floor check has its comparison backwards.
   lowerIsBetter: true,

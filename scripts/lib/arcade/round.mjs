@@ -19,6 +19,19 @@ const AGAIN = /^(Play|Race) again$/;
 export class RoundError extends Error {}
 
 /**
+ * The award banner's own ticket count, or null when it isn't rendered.
+ * GameTicketAward shows the figure whether or not a card is linked, so this
+ * works on a plain dev venue with the add-on enabled.
+ */
+async function readShownTickets(page) {
+  const text = await page.locator('body').innerText().catch(() => '');
+  const m = /earn\s+([\d,]+)\s+tickets|([\d,]+)\s+tickets\b/i.exec(text);
+  if (!m) return null;
+  const n = Number((m[1] ?? m[2]).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Play one round of `game` on `page`.
  * @returns {Promise<{ score: number, tickets: number, ms: number, skill: number }>}
  */
@@ -63,11 +76,30 @@ export async function playRound(page, game, { rng, skill, baseUrl, timeoutMs = 1
     : ((await page.locator(SCORE_SEL).first().textContent()) ?? '');
   // Take the FIRST number as it appears, without stripping separators first:
   // some cards render a fraction ("10 / 10" on Trivia) and flattening that to
-  // digits yields 1010.
-  const score = Number(String(raw).match(/-?\d+/)?.[0] ?? NaN);
+  // digits yields 1010. Decimals are kept — Go-Karts reports a finish time to
+  // hundredths ("62.47s"), and an integer-only match would silently truncate
+  // every measured time in its profile.
+  const score = Number(String(raw).match(/-?\d+(?:\.\d+)?/)?.[0] ?? NaN);
   if (!Number.isFinite(score)) {
     throw new RoundError(`${game.key}: unreadable score ${JSON.stringify(raw)}`);
   }
 
-  return { score, tickets: game.ticketsFor(score), ms: Date.now() - t0, skill };
+  // TICKETS COME FROM THE GAME WHEN IT WILL SAY. Every end card renders its
+  // own award ("...earn 68 tickets..."), which is the number the server will
+  // actually be asked for. Reading it beats mirroring each game's formula here:
+  // a mirror silently drifts from the game, and Go-Karts proved it — its award
+  // is track-relative (pace against the selected circuit's `idealMs`), so the
+  // fixed time tiers a policy can write down are wrong on every track, and
+  // arcade-traffic.mjs posts the profile's ticket value directly.
+  //
+  // ticketsFor() stays as the fallback for when the banner is absent, which is
+  // the norm in development: GameTicketAward self-gates on the venue's
+  // gameRewards add-on, so a plain dev server renders no award at all and every
+  // capture takes this path. Policies must therefore keep a ticket formula that
+  // is safe on its own — see gokarts.mjs, whose award cannot be derived from
+  // the clock and so reports the floor tier rather than risk inflating it.
+  const shown = await readShownTickets(page);
+  const tickets = shown ?? game.ticketsFor(score);
+
+  return { score, tickets, ms: Date.now() - t0, skill };
 }
