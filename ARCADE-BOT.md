@@ -66,7 +66,7 @@ the guide isn't drawn at all.
 
 Supported: `skeeball`, `ringtoss`, `popashot`, `highstriker`, `axethrow`,
 `darts`, `whackamole`, `bowling`, `shootinggallery`, `clawmachine`,
-`battingcages`, `watergunrace` — 12 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
+`battingcages`, `watergunrace`, `trivia` — 13 of the 19 games in the server's earning registry. Run `node scripts/arcade-bot.mjs --list` for the current list and, more
 usefully, for *why* each unsupported game isn't in it.
 
 The gap is narrowing rather than fixed. Whack-a-Mole was the first REACTIVE
@@ -78,8 +78,7 @@ position recovered from pixels and predicted forward, which is the next step up.
 
 Still out: air hockey, pinball and the driving games; milk
 bottle, whose aim inverts but whose scatter is a sim (bowling is now in, by
-CALIBRATING the line rather than solving it — see its policy); trivia, which is knowledge rather than a
-gesture.
+CALIBRATING the line rather than solving it — see its policy).
 
 Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
@@ -97,6 +96,7 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | Claw Machine | 40–50 | 20–55 | 80 |
 | Batting Cages | 40 | 14–22 | 40 |
 | Water Gun Race | 2 (sweeps) | 0 | 3 heats |
+| Trivia | 10/10 | 3/10 | 10 |
 
 Two honest caveats:
 

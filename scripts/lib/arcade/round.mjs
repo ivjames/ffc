@@ -23,7 +23,8 @@ export async function playRound(page, game, { rng, skill, baseUrl, timeoutMs = 1
   await page.goto(`${baseUrl}${game.route}`, { waitUntil: 'domcontentloaded' });
 
   const d = new ArcadeDriver(page, game.field);
-  await d.attach();
+  // Trivia is pure DOM — waiting for a canvas that never mounts would hang.
+  if (!game.domOnly) await d.attach();
 
   // Several games open on a "ready" card behind a Start button and then run a
   // "3, 2, 1, GO!" countdown before input is live. Clear both here so every
@@ -49,7 +50,10 @@ export async function playRound(page, game, { rng, skill, baseUrl, timeoutMs = 1
   const raw = game.readScore
     ? await game.readScore(page)
     : ((await page.locator(SCORE_SEL).first().textContent()) ?? '');
-  const score = Number(String(raw).replace(/[^\d-]/g, '').match(/-?\d+/)?.[0] ?? NaN);
+  // Take the FIRST number as it appears, without stripping separators first:
+  // some cards render a fraction ("10 / 10" on Trivia) and flattening that to
+  // digits yields 1010.
+  const score = Number(String(raw).match(/-?\d+/)?.[0] ?? NaN);
   if (!Number.isFinite(score)) {
     throw new RoundError(`${game.key}: unreadable score ${JSON.stringify(raw)}`);
   }
