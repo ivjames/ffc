@@ -169,6 +169,21 @@ describe('scoring', () => {
 describe('the field', () => {
   const loser = card(4);
 
+  test('host needs company, not just a lobby', () => {
+    const shared = (players: number, slot: number) =>
+      round(
+        Array.from({ length: players }, () => card(3)),
+        { shared: { gameId: 'g', participantToken: 't', slot } } as Partial<LocalRound>,
+      );
+    // Opening a lobby and walking away is not hosting a game.
+    expect(has([shared(1, 0)], 'host')).toBe(false);
+    expect(has([shared(2, 0)], 'host')).toBe(true);
+    // Seat 0 is the creator; a joiner didn't host it.
+    expect(has([shared(2, 1)], 'host')).toBe(false);
+    // Pass-and-play isn't hosting either — nobody joined from another phone.
+    expect(has([round([card(3), card(3)])], 'host')).toBe(false);
+  });
+
   test('squad goals reads the shared round, not a join-time tally', () => {
     const shared = (players: number) =>
       round(

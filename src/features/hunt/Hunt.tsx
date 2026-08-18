@@ -78,7 +78,16 @@ type ItemState =
 const ALLOW_UPLOAD = DEV_MODE;
 
 /**
- * Which hole the group is up to: one past the furthest hole anyone has carded.
+ * The furthest hole anyone in the group has carded — where the group is
+ * standing, not where it's headed.
+ *
+ * Deliberately NOT `furthest + 1`. Between carding the ninth and starting the
+ * tenth a group is still on the ninth, and guessing forward there would report
+ * hole 10 for a photo taken at the turn — costing a player a badge for
+ * finishing the hunt exactly when the badge says to. Reporting the hole just
+ * played resolves that boundary in the player's favour, and once the tenth is
+ * carded it reads 10 correctly.
+ *
  * Undefined when there's no round (the venue-wide hunt) or nothing is scored
  * yet — the server treats that as "unknown" rather than hole zero.
  */
@@ -91,8 +100,7 @@ function currentHole(round: LocalRound | null): number | undefined {
       if (s != null) furthest = Math.max(furthest, i + 1);
     });
   }
-  if (furthest === 0) return undefined;
-  return Math.min(18, furthest + 1);
+  return furthest === 0 ? undefined : Math.min(18, furthest);
 }
 
 export default function Hunt({ mode = 'course' }: { mode?: HuntMode }) {

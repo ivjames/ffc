@@ -118,12 +118,20 @@ export function huntAchievements(finds, { completedTags = new Set() } = {}) {
       if (!ordered.some((f) => f.flagged)) add("above_board");
       if (!ordered.some((f) => !f.verified)) add("naturalist");
 
-      // Finished the hunt before the back nine. `hole` is advisory (null on a
-      // venue hunt, an older client, or a find made before the first score), so
-      // this needs EVERY verified find to carry one — an unknown hole can't be
-      // assumed early, or a client that sends nothing would earn it for free.
-      const holes = verified.map((f) => f.hole);
-      if (holes.length > 0 && holes.every((h) => h != null && h <= 9)) {
+      // Finished the hunt before the back nine.
+      //
+      // Judged on the REQUIRED items only — the non-countable ones that define
+      // completion, exactly as hunt_master does. Countable items are the "find
+      // as many as you can" kind and keep being submitted all round, so
+      // counting them would punish a player for carrying on collecting after
+      // they had already finished.
+      //
+      // `hole` is advisory (null on a venue hunt, an older client, or a find
+      // made before the first score), so every required find must carry a KNOWN
+      // hole of 9 or lower: an unknown hole can't be assumed early, or a client
+      // that sends nothing would earn this for free.
+      const required = verified.filter((f) => !f.countable);
+      if (required.length > 0 && required.every((f) => f.hole != null && f.hole <= 9)) {
         add("quick_draw");
       }
     }

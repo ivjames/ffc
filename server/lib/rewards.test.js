@@ -157,6 +157,28 @@ test("quick draw needs every find on the front nine, and a KNOWN hole", () => {
   );
 });
 
+test("quick draw ignores optional countable finds made later", () => {
+  const done = new Set(["AAA"]);
+  const keys = (rows) => huntAchievements(rows, { completedTags: done }).map((g) => g.achievement);
+  // The required list was finished on the front nine; the player then carried
+  // on collecting a countable item into the back nine. Still a quick draw.
+  assert.ok(
+    keys([
+      find({ hole: 4 }),
+      find({ hole: 8, itemId: "i2" }),
+      find({ hole: 14, itemId: "many", countable: true, createdAt: 5 }),
+    ]).includes("quick_draw")
+  );
+  // A REQUIRED item found on the back nine is not.
+  assert.ok(
+    !keys([find({ hole: 4 }), find({ hole: 12, itemId: "i2" })]).includes("quick_draw")
+  );
+  // Countable finds alone can't earn it — there are no required finds to judge.
+  assert.ok(
+    !keys([find({ hole: 3, itemId: "many", countable: true })]).includes("quick_draw")
+  );
+});
+
 test("each player's finds are judged separately", () => {
   const grants = huntAchievements(
     [find({ tag: "AAA" }), find({ tag: "BBB", verified: false, createdAt: 2 })],

@@ -268,6 +268,10 @@ const ROUND_RULES: Record<string, (r: PlayerRound) => boolean> = {
   // the early joiners see a half-empty roster when they arrive, so only the
   // last person through the door would ever have recorded four.
   squad_goals: (r) => r.isShared && r.field.length === 4,
+  // Seat 0 is the creator. Judged on the finished round rather than on the act
+  // of creating one, because the badge is "other phones join" — opening a lobby
+  // and walking away is not hosting a game.
+  host: (r) => r.isShared && r.slot === 0 && r.field.length >= 2,
   full_house: (r) =>
     r.field.length === 4 &&
     allFull(r) &&
@@ -670,7 +674,6 @@ const ACTIVITY_RULES: Record<string, (m: Marks) => boolean> = {
   directors_cut: (m) => m.count('booth', 'reedit') >= 1,
 
   // Playing together
-  host: (m) => m.count('social', 'host') >= 1,
   joiner: (m) => m.count('social', 'join') >= 1,
 
   // Regulars
