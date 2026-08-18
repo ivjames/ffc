@@ -93,7 +93,7 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | Whack-a-Mole | 48–53 | — | (30s clock) |
 | Bowling | 300 | 126 | 300 |
 | Shooting Gallery | 1085–1105 | — | (45s clock) |
-| Claw Machine | 40–50 | 20–55 | 80 |
+| Claw Machine | 45–55 | 20–55 | 80 |
 | Batting Cages | 40 | 14–22 | 40 |
 | Water Gun Race | 2 (sweeps) | 0 | 3 heats |
 | Trivia | 10/10 | 3/10 | 10 |

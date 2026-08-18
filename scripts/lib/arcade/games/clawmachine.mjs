@@ -152,10 +152,17 @@ export default {
       //     never fires, and the whole round scores zero. The sweep starts at
       //     88 precisely to stay clear of the chute, so clipping the scan to
       //     the sweep range excludes it on principle, not by tuning.
-      //   * the bottom-row tan/orange teddies (#e8b483, #fb923c) also pass the
-      //     gate and are fatter than a star, so the band stops at 472 — above
-      //     the floor row, where only a star riding the pile top can be.
-      for (let y = 380; y <= 472; y += 8) {
+      //   * the bottom-row tan/orange plush also pass the gate, so the band
+      //     stops short of the pit floor.
+      //
+      // The lower bound was 472 and is now 500, because the pit's ART CHANGED
+      // under this policy: a later redesign reshaped the plush and let the pile
+      // settle lower, which pushed the second gold star below the old band. The
+      // bot then only ever saw one star and expert rounds fell from ~50 to a
+      // mean of 22. --assert-skill is what caught it (best 5 against a floor of
+      // 30) — this is exactly the drift that gate exists to find, and the fix
+      // was re-running the band sweep: 472 -> 22, 500 -> 52, 520 -> 47.
+      for (let y = 380; y <= 500; y += 8) {
         const row = await d.probeRow(y, { x0: SWEEP_X0 + 4, x1: SWEEP_X1 - 4 });
         for (const r of amberRuns(row, { from: SWEEP_X0 + 4, span: SWEEP_X1 - SWEEP_X0 - 8 })) {
           const lo = r.x - r.w / 2;
