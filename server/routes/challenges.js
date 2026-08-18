@@ -269,6 +269,21 @@ router.post("/:id/play", requireUser, async (req, res) => {
     if (!isParty(challenge, req.user.id)) {
       return res.status(403).json({ ok: false, error: "you're not in this challenge" });
     }
+    // A REPLAY of a round already recorded is answered before any of the gates
+    // below, because none of them are about this request: the round is already
+    // in, and the only question left is what to show for it. Checking after the
+    // status gate meant a retry that arrived a moment after the opponent
+    // finished — exactly when both phones are on the screen together — was
+    // refused as "that challenge is closed", and the marker cleared on it.
+    const mine = await pool.query(
+      `select session_id as "sessionId" from challenge_entry
+        where challenge_id = $1 and app_user_id = $2`,
+      [challenge.id, req.user.id]
+    );
+    if (mine.rows[0]?.sessionId === sessionId) {
+      return res.json({ ok: true, ...(await buildView(challenge, req.user.id)) });
+    }
+
     if ((await expireIfStale(challenge)) !== "open") {
       return res.status(409).json({ ok: false, error: "that challenge is closed" });
     }
@@ -288,7 +303,21 @@ router.post("/:id/play", requireUser, async (req, res) => {
       [challenge.id, req.user.id, score, JSON.stringify(detail ?? {}), sessionId]
     );
     if (inserted.rowCount === 0) {
-      return res.status(409).json({ ok: false, error: "you've already played this challenge" });
+      // Two copies of the same submit in flight at once — the early check
+      // above found nothing because neither had landed yet. Same rule: the
+      // round's own session id decides whether this is that round arriving
+      // twice or a second attempt at the challenge.
+      const existing = await pool.query(
+        `select session_id as "sessionId" from challenge_entry
+          where challenge_id = $1 and app_user_id = $2`,
+        [challenge.id, req.user.id]
+      );
+      if (existing.rows[0]?.sessionId !== sessionId) {
+        return res.status(409).json({ ok: false, error: "you've already played this challenge" });
+      }
+      // Same round: fall through and answer with where the challenge stands.
+      // The board write below is keyed on (game, session_id) and the
+      // completion is guarded on status, so replaying changes nothing.
     }
 
     // A challenge round is a real round, so it lands on the venue's board too —
@@ -322,10 +351,13 @@ router.post("/:id/play", requireUser, async (req, res) => {
     if (count.rows[0].n >= 2) {
       const done = await pool.query(
         `update challenge set status = 'complete', completed_at = now()
-          where id = $1 returning ${COLS.replace(/c\./g, "")}`,
+          where id = $1 and status = 'open' returning ${COLS.replace(/c\./g, "")}`,
         [challenge.id]
       );
-      fresh = done.rows[0];
+      // Guarded on `open` so a replayed round can't move completed_at, which
+      // means the update can legitimately match nothing — re-read instead of
+      // trusting the returning clause to have a row.
+      fresh = done.rows[0] ?? (await loadChallenge(challenge.id)) ?? challenge;
     }
 
     await broadcast(fresh);

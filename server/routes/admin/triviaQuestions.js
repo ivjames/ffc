@@ -19,7 +19,15 @@ import { Router } from "express";
 import { pool } from "../../db.js";
 import { audit, orgScope, actorLabel, isSuperAdmin } from "../../lib/adminAuth.js";
 import { UUID_RE } from "../../lib/validateLocation.js";
-import { normalizeQuestion } from "../../lib/triviaLive.js";
+import {
+  MIN_QUESTIONS,
+  MAX_QUESTIONS,
+  DEFAULT_QUESTIONS,
+  normalizeConfig,
+  normalizeQuestion,
+} from "../../lib/triviaLive.js";
+import { moduleLive } from "../../lib/modules.js";
+import { dealSession } from "../../lib/triviaDeal.js";
 
 export const router = Router();
 
@@ -187,3 +195,67 @@ async function setArchived(req, res, archived) {
 
 router.post("/questions/:id/archive", (req, res) => setArchived(req, res, true));
 router.post("/questions/:id/unarchive", (req, res) => setArchived(req, res, false));
+
+// --- Hosting a game ---------------------------------------------------------
+//
+//   POST /api/admin/trivia/sessions   deal a room, return its host capability
+//
+// Creating the room is the ONE staff-only step in live trivia, and it is here
+// rather than on the player API because the host token it returns can read
+// every correct answer. Left where any signed-in player could call it, a guest
+// could open rooms of their own and read the venue's whole bank out of the
+// host snapshot before trivia night. Everything after this — joining,
+// answering, advancing, ending — runs on the tokens dealt here and needs no
+// staff identity at all, which is what lets forty guests play from their own
+// phones without an account between them.
+router.post("/sessions", async (req, res) => {
+  const { locationId, questionCount, category, config: rawConfig } = req.body ?? {};
+  if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
+    return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
+  }
+  const count = questionCount ?? DEFAULT_QUESTIONS;
+  if (!Number.isInteger(count) || count < MIN_QUESTIONS || count > MAX_QUESTIONS) {
+    return res
+      .status(400)
+      .json({ ok: false, error: `questionCount must be ${MIN_QUESTIONS}..${MAX_QUESTIONS}` });
+  }
+  const configCheck = normalizeConfig(rawConfig);
+  if (configCheck.error) return res.status(400).json({ ok: false, error: configCheck.error });
+
+  try {
+    const found = await pool.query(
+      `select id, org_id, pos, modules from location where id = $1`,
+      [locationId]
+    );
+    const loc = found.rows[0];
+    // 404 rather than 403 for another org's venue: an org_admin has no
+    // business learning which location ids exist outside their own client.
+    if (!loc || (orgScope(req) && loc.org_id !== orgScope(req))) {
+      return res.status(404).json({ ok: false, error: "unknown location" });
+    }
+    // The venue's plan has to include the arcade before we record arcade work
+    // for it (lib/modules.js).
+    if (!moduleLive(loc, "arcade")) {
+      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
+    }
+
+    const dealt = await dealSession(loc, {
+      count,
+      category,
+      config: configCheck.config,
+    });
+    if (dealt.error) return res.status(dealt.status).json({ ok: false, error: dealt.error });
+
+    await audit({
+      action: "trivia.session.create",
+      entity: "trivia_session",
+      entityId: dealt.session.id,
+      detail: { locationId, questions: dealt.dealt, category: category ?? null },
+      actor: actorLabel(req),
+    });
+    return res.json({ ok: true, ...dealt });
+  } catch (err) {
+    console.error("[admin/trivia] session create error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});

@@ -1246,6 +1246,16 @@ create table if not exists trivia_session (
 create unique index if not exists trivia_session_code_live_idx
   on trivia_session (join_code) where status <> 'final' and status <> 'abandoned';
 create index if not exists trivia_session_location_idx on trivia_session (location_id);
+-- The dealt questions, COPIED rather than referenced: [{id, category, prompt,
+-- choices, answer}, ...] parallel to question_ids.
+--
+-- A session is a live event that lasts an evening, and the question bank is
+-- editable by admins the whole time. Reading the bank per request meant an
+-- edit could land mid-round: two players answering the same question a second
+-- apart could be scored against different correct choices, and the prompt on
+-- forty phones could change under them between the ask and the reveal. A game
+-- deals its cards once.
+alter table trivia_session add column if not exists questions jsonb not null default '[]';
 
 -- The scoring unit: one solo player, or one table's team. Teams are why this
 -- is a separate table from the device list below — at a table, one person

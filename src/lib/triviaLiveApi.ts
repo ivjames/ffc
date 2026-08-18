@@ -154,10 +154,50 @@ export function createSession(input: {
   category?: string | null;
   config?: { questionSeconds?: number; speedBonus?: boolean; teams?: boolean };
 }) {
-  return call<{ session: TriviaSnapshot['session']; hostToken: string }>('/sessions', {
+  // Creating a room is the one STAFF step: it mints the host capability, which
+  // can read every correct answer, so it lives on the admin surface behind a
+  // Master Control login rather than on /api/trivia where any signed-in guest
+  // could call it. Everything after this runs on the tokens it returns.
+  //
+  // `dealt` can be under `requested` when the chosen category holds fewer
+  // questions than the host asked for — the game still starts, but the host is
+  // told rather than finding out at the last question.
+  return adminCall<{
+    session: TriviaSnapshot['session'];
+    hostToken: string;
+    requested: number;
+    dealt: number;
+  }>('/sessions', {
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+/** Same shape as `call`, against /api/admin/trivia. The admin session cookie
+ *  is scoped to /api/admin on purpose, so it reaches this path and no other. */
+async function adminCall<T>(path: string, init?: RequestInit): Promise<Result<T>> {
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(`/api/admin/trivia${path}`), {
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      ...init,
+    });
+  } catch {
+    return { ok: false, error: 'offline', status: 0 };
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      error:
+        res.status === 401
+          ? 'Hosting needs a staff sign-in — open Master Control on this device, then come back.'
+          : (data.error ?? `HTTP ${res.status}`),
+    };
+  }
+  return { ok: true, ...data };
 }
 
 export function joinSession(input: {

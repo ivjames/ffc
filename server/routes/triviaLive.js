@@ -26,20 +26,15 @@
 // client-supplied elapsed time is just a score the client chose for itself.
 import { Router } from "express";
 import { pool } from "../db.js";
-import { requireUser } from "../lib/userAuth.js";
 import { UUID_RE } from "../lib/validateLocation.js";
 import { tenant, findTenantLocation } from "../lib/tenant.js";
-import { moduleLive, locationModuleLive } from "../lib/modules.js";
+import { locationModuleLive } from "../lib/modules.js";
 import { generateJoinCode, normalizeJoinCode } from "../lib/joinCode.js";
 import { subscribe, publish, sseSend } from "../lib/gameBus.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
 import {
-  MIN_QUESTIONS,
-  MAX_QUESTIONS,
-  DEFAULT_QUESTIONS,
   MAX_ENTRANTS,
   MAX_ENTRANT_NAME,
-  normalizeConfig,
   normalizeEntrantName,
   publicQuestion,
   revealedQuestion,
@@ -76,7 +71,7 @@ export function resetTriviaRateLimits() {
 // of cleverness that breaks silently the first time a column name contains the
 // prefix being stripped.
 const SESSION_FIELDS = `id, join_code as "joinCode", location_id as "locationId",
-                        status, question_ids as "questionIds",
+                        status, question_ids as "questionIds", questions,
                         current_index as "currentIndex", asked_at as "askedAt",
                         config, created_at as "createdAt", ended_at as "endedAt"`;
 const SESSION_COLS = SESSION_FIELDS.replace(/(^|,)(\s*)(\w+)/g, "$1$2s.$3");
@@ -136,9 +131,23 @@ async function loadBoard(sessionId) {
   return result.rows.map((row, i) => ({ ...row, rank: i + 1 }));
 }
 
-/** `q` lets the answer path read inside its own transaction — using the pool
- *  there would read outside the row lock it is holding. */
+/**
+ * The current question, as DEALT — read from the session's own copy, not from
+ * the bank it was drawn out of.
+ *
+ * The bank stays editable while a game is running, so re-reading it meant an
+ * admin's edit could land mid-round: answers a second apart scored against
+ * different correct choices, and the prompt on every phone in the room
+ * replaced between the ask and the reveal.
+ *
+ * `q` lets the answer path read inside its own transaction — using the pool
+ * there would read outside the row lock it is holding. It is only needed by
+ * the fallback below, which serves sessions that were already in a lobby when
+ * this column was added; those have no copy to read.
+ */
 async function currentQuestionRow(session, q = pool) {
+  const dealt = session.questions?.[session.currentIndex];
+  if (dealt) return dealt;
   const id = session.questionIds?.[session.currentIndex];
   if (!id) return null;
   const result = await q.query(
@@ -248,73 +257,12 @@ async function broadcastById(sessionId) {
 }
 
 // --- Create -----------------------------------------------------------------
-
-router.post("/sessions", requireUser, tenant(), async (req, res) => {
-  const { locationId, questionCount, category, config: rawConfig } = req.body ?? {};
-  if (typeof locationId !== "string" || !UUID_RE.test(locationId)) {
-    return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
-  }
-  const count = questionCount ?? DEFAULT_QUESTIONS;
-  if (!Number.isInteger(count) || count < MIN_QUESTIONS || count > MAX_QUESTIONS) {
-    return res.status(400).json({ ok: false, error: `questionCount must be ${MIN_QUESTIONS}..${MAX_QUESTIONS}` });
-  }
-  const configCheck = normalizeConfig(rawConfig);
-  if (configCheck.error) return res.status(400).json({ ok: false, error: configCheck.error });
-
-  try {
-    const loc = await findTenantLocation(locationId, req.tenant, {
-      cols: "id, org_id, pos, modules",
-    });
-    if (!loc) return res.status(404).json({ ok: false, error: "unknown location" });
-    // The venue's plan has to include the arcade before we record arcade work
-    // for it (lib/modules.js). The client route guard keeps players out of the
-    // UI; this keeps a hand-rolled request out of the data.
-    if (!moduleLive(loc, "arcade")) {
-      return res.status(403).json({ ok: false, error: "the arcade is not enabled for this venue" });
-    }
-
-    // The bank this venue can draw on: the platform pack (org_id null) plus
-    // this org's own questions, plus any written specifically for this venue.
-    // A question belonging to another client is never in scope.
-    const bank = await pool.query(
-      `select id from trivia_question
-        where archived_at is null and active
-          and (org_id is null or org_id = $1)
-          and (location_id is null or location_id = $2)
-          and ($3::text is null or category = $3)
-        order by random()
-        limit $4`,
-      [loc.org_id ?? null, locationId, typeof category === "string" && category ? category : null, count]
-    );
-    if (bank.rows.length < MIN_QUESTIONS) {
-      return res.status(409).json({
-        ok: false,
-        error: `not enough questions in the bank (${bank.rows.length} available, ${MIN_QUESTIONS} needed)`,
-      });
-    }
-
-    const questionIds = bank.rows.map((r) => r.id);
-    // Retry on the partial-unique collision rather than pre-checking: the
-    // window between "is this code free" and "insert" is exactly the race.
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        const inserted = await pool.query(
-          `insert into trivia_session (location_id, join_code, created_by, question_ids, config)
-           values ($1, $2, $3, $4::uuid[], $5::jsonb)
-           returning ${SESSION_FIELDS}, host_token as "hostToken"`,
-          [locationId, generateJoinCode(), req.user.id, questionIds, JSON.stringify(configCheck.config)]
-        );
-        const row = inserted.rows[0];
-        return res.json({ ok: true, session: row, hostToken: row.hostToken });
-      } catch (err) {
-        if (err?.code !== "23505" || attempt === 4) throw err;
-      }
-    }
-  } catch (err) {
-    console.error("[trivia] create error:", err);
-    return res.status(500).json({ ok: false, error: "internal error" });
-  }
-});
+// Creating a room is a STAFF action and lives on the admin surface
+// (POST /api/admin/trivia/sessions, lib/triviaDeal.js). It is not here because
+// the host capability it mints can read every correct answer: on the player
+// API, any signed-in guest could open rooms of their own and read the bank out
+// of the host snapshot until they had learned the lot. Everything below runs
+// on the tokens that call hands out.
 
 // --- Join -------------------------------------------------------------------
 

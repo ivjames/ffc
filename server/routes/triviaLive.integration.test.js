@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { TEST_DATABASE_URL, ensureSchema, testQuery, listenEphemeral } from "../test-support/testDb.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
+process.env.APP_TOKEN = "trivia-live-test-token";
 
 const { app } = await import("../app.js");
 const { createUserSession } = await import("../lib/userAuth.js");
@@ -37,6 +38,14 @@ function post(path, body, cookie) {
   });
 }
 
+function postAdmin(path, body) {
+  return fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-app-token": process.env.APP_TOKEN },
+    body: JSON.stringify(body),
+  });
+}
+
 let userSeq = 0;
 async function player() {
   const email = `trivia-${stamp}-${userSeq++}@example.com`;
@@ -49,13 +58,16 @@ async function player() {
   return `ffc_session=${token}`;
 }
 
-/** Create a session and return { id, hostToken, joinCode }. */
+/** Create a session and return { id, hostToken, joinCode }.
+ *
+ * Dealing a room is a STAFF action on the admin surface — APP_TOKEN stands in
+ * for a Master Control session here, as it does across the admin tests. */
 async function createSession(overrides = {}) {
-  const res = await post(
-    "/api/trivia/sessions",
-    { locationId, questionCount: 3, ...overrides },
-    hostCookie
-  );
+  const res = await postAdmin("/api/admin/trivia/sessions", {
+    locationId,
+    questionCount: 3,
+    ...overrides,
+  });
   assert.equal(res.status, 200, `create failed: ${await res.clone().text()}`);
   const body = await json(res);
   sessionIds.push(body.session.id);
@@ -111,9 +123,19 @@ test("the platform question pack is seeded, so a venue can run a game immediatel
   assert.ok(total >= 3, `expected a seeded bank, got ${total} questions`);
 });
 
-test("creating needs an account; joining does not", async () => {
-  const anon = await post("/api/trivia/sessions", { locationId, questionCount: 3 });
+test("creating needs STAFF; joining needs nothing at all", async () => {
+  // The host capability minted at create can read every correct answer, so
+  // hosting is not something a signed-in guest may do — otherwise anyone could
+  // open rooms of their own and read the venue's bank out of the host
+  // snapshot before trivia night.
+  const anon = await post("/api/admin/trivia/sessions", { locationId, questionCount: 3 });
   assert.equal(anon.status, 401);
+  const asPlayer = await post(
+    "/api/admin/trivia/sessions",
+    { locationId, questionCount: 3 },
+    hostCookie // an ordinary player session — not a staff credential
+  );
+  assert.equal(asPlayer.status, 401, "a player session is not a staff session");
 
   const { joinCode } = await createSession();
   // A walk-up guest with no account can still play — that's the point of a
@@ -265,6 +287,63 @@ test("one answer per TEAM, however many phones are at the table", async () => {
 
   const view = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
   assert.equal(view.board.find((e) => e.name === "Table 4").score, BASE_POINTS);
+});
+
+test("an edit to the bank cannot change a question already in play", async () => {
+  // The bank stays editable while a game runs — it's the same admin screen a
+  // manager tidies up between rounds. Re-reading it per request meant an edit
+  // could land mid-question: two players a second apart scored against
+  // different correct choices, and the prompt on every phone in the room
+  // replaced between the ask and the reveal. A game deals its cards once.
+  const { id, hostToken, joinCode } = await createSession({
+    questionCount: 3,
+    config: { speedBonus: false },
+  });
+  const { participantToken } = await join(joinCode, "Steady");
+  await advance(id, hostToken); // -> question
+
+  const asked = await json(
+    await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`)
+  );
+  const dealtId = (
+    await testQuery(`select question_ids, current_index from trivia_session where id = $1`, [id])
+  ).rows[0];
+  const liveId = dealtId.question_ids[dealtId.current_index];
+
+  // The bank is shared by the whole suite, so the edit is put back afterwards
+  // — this test is about the session's copy, not about damaging the pack.
+  const original = (
+    await testQuery(`select prompt, choices, answer from trivia_question where id = $1`, [liveId])
+  ).rows[0];
+  try {
+    // The manager rewrites the question under the room, answer and all.
+    await testQuery(
+      `update trivia_question set prompt = $2, choices = $3::jsonb, answer = $4 where id = $1`,
+      [liveId, "Rewritten mid-round", JSON.stringify(["a", "b", "c", "d"]), 3]
+    );
+
+    const after = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+    assert.equal(
+      after.question.prompt,
+      asked.question.prompt,
+      "the room keeps the question it was asked"
+    );
+    assert.equal(after.question.answer, asked.question.answer);
+
+    // And the scoring agrees with what the players were shown, not the edit.
+    const correct = await post(`/api/trivia/sessions/${id}/answer`, {
+      participant: participantToken,
+      choice: asked.question.answer,
+    });
+    assert.equal(correct.status, 200);
+    const board = await json(await fetch(`${baseUrl}/api/trivia/sessions/${id}?host=${hostToken}`));
+    assert.equal(board.board.find((e) => e.name === "Steady").score, BASE_POINTS);
+  } finally {
+    await testQuery(
+      `update trivia_question set prompt = $2, choices = $3::jsonb, answer = $4 where id = $1`,
+      [liveId, original.prompt, JSON.stringify(original.choices), original.answer]
+    );
+  }
 });
 
 test("a solo player's entrant cannot be joined by someone else in the room", async () => {

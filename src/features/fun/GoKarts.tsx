@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import GameTicketAward from './GameTicketAward';
 import GameHighScore from './GameHighScore';
+import { recordLap } from './lapBest';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playClick, playStroke, playCup, playFanfare } from '../../lib/sound';
@@ -244,7 +245,10 @@ type GS = {
   raceTime: number; // ms of active racing
   lapStart: number;
   laps: number; // completed laps
-  best: number; // best lap ms (Infinity until first)
+  // This race's best lap, and the screen's best on this track. Two different
+  // figures on purpose — see lapBest.ts; only `best` is ever submitted.
+  best: number;
+  pb: number;
   lastLap: number;
   prevF: number;
   halfway: boolean;
@@ -267,6 +271,7 @@ function freshGS(now: number, track: Track): GS {
     lapStart: 0,
     laps: 0,
     best: Infinity,
+    pb: Infinity,
     lastLap: 0,
     prevF: 0,
     halfway: false,
@@ -766,13 +771,13 @@ export default function GoKarts() {
 
   const startRace = useCallback((track: Track) => {
     const gs = freshGS(performance.now(), track);
-    gs.best = bestsRef.current[track.id] ?? Infinity;
+    gs.pb = bestsRef.current[track.id] ?? Infinity;
     gsRef.current = gs;
     fxRef.current = freshFX();
     setPhase('countdown');
     setLap(0);
     setRaceTime(0);
-    setBest(gs.best);
+    setBest(gs.best); // Infinity — this race has not set a lap yet
     setSessionId(crypto.randomUUID());
   }, []);
 
@@ -832,13 +837,11 @@ export default function GoKarts() {
           const lapped = step(gs);
           if (lapped) {
             const lapMs = gs.raceTime - gs.lapStart;
-            const isBest = lapMs < gs.best; // read before gs.best mutates (FX only)
+            const lap = recordLap(gs, lapMs);
+            const isBest = lap.personalBest; // FX only
             gs.lastLap = lapMs;
-            if (lapMs < gs.best) {
-              gs.best = lapMs;
-              bestsRef.current[gs.track.id] = lapMs;
-              setBest(lapMs);
-            }
+            if (lap.raceBest) setBest(lapMs);
+            if (lap.personalBest) bestsRef.current[gs.track.id] = lapMs;
             gs.lapStart = gs.raceTime;
             // —— juice (rendering only): flash + spark burst on every lap, a
             // brighter one on a personal best ——

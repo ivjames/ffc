@@ -17,8 +17,11 @@ const { hashPassword } = await import("../../lib/adminPasswords.js");
 let baseUrl, close;
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let orgA, orgB, adminACookie, platformQuestionId;
+let locationA, locationB;
 const orgIds = [];
 const adminEmails = [];
+const locationIds = [];
+const sessionIds = [];
 
 function call(method, path, body, { cookie, token } = {}) {
   return fetch(`${baseUrl}/api/admin${path}`, {
@@ -67,6 +70,14 @@ before(async () => {
   }
   [orgA, orgB] = orgIds;
   adminACookie = await orgAdmin(orgA);
+  for (const [i, org] of orgIds.entries()) {
+    const loc = await testQuery(
+      `insert into location (name, slug, tz, org_id) values ($1, $1, 'UTC', $2) returning id`,
+      [`triv-loc-${i}-${stamp}`, org]
+    );
+    locationIds.push(loc.rows[0].id);
+  }
+  [locationA, locationB] = locationIds;
   const platform = await testQuery(
     `select id from trivia_question where org_id is null limit 1`
   );
@@ -75,6 +86,8 @@ before(async () => {
 
 after(async () => {
   if (close) await close();
+  await testQuery(`delete from trivia_session where id = any($1::uuid[])`, [sessionIds]);
+  await testQuery(`delete from location where id = any($1::uuid[])`, [locationIds]);
   await testQuery(`delete from trivia_question where org_id = any($1::uuid[])`, [orgIds]);
   await testQuery(`delete from admin_user where email = any($1::text[])`, [adminEmails]);
   await testQuery(`delete from org where id = any($1::uuid[])`, [orgIds]);
@@ -180,4 +193,48 @@ test("archiving hides a question from the default list but keeps the row", async
   await call("POST", `/trivia/questions/${question.id}/unarchive`, null, { cookie: adminACookie });
   const back = await (await call("GET", "/trivia/questions", null, { cookie: adminACookie })).json();
   assert.ok(back.questions.some((q) => q.id === question.id));
+});
+
+// --- Hosting ----------------------------------------------------------------
+
+test("dealing a room needs staff, and only for your own venue", async () => {
+  // The host token this returns can read every correct answer, which is why
+  // creating a room is the one step that is not player-facing.
+  const anon = await call("POST", "/trivia/sessions", { locationId: locationA });
+  assert.equal(anon.status, 401);
+
+  const mine = await call("POST", "/trivia/sessions", { locationId: locationA }, { cookie: adminACookie });
+  assert.equal(mine.status, 200, await mine.clone().text());
+  const body = await mine.json();
+  sessionIds.push(body.session.id);
+  assert.ok(body.hostToken, "the host capability comes back to the caller");
+  assert.match(body.session.joinCode, /^[A-Z0-9]{4,8}$/);
+  assert.equal(
+    body.session.questions,
+    undefined,
+    "the dealt questions carry the answers and stay server-side"
+  );
+  assert.ok(!JSON.stringify(body).includes('"answer"'));
+
+  // 404, not 403: an org_admin has no business learning which location ids
+  // exist outside their own client.
+  const theirs = await call("POST", "/trivia/sessions", { locationId: locationB }, { cookie: adminACookie });
+  assert.equal(theirs.status, 404);
+});
+
+test("a short category deals what it has, and says so", async () => {
+  const res = await call(
+    "POST",
+    "/trivia/sessions",
+    { locationId: locationA, questionCount: 40 },
+    { token: true }
+  );
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  sessionIds.push(body.session.id);
+  assert.equal(body.requested, 40);
+  assert.equal(body.dealt, body.session.questionIds.length);
+  // The seeded pack is smaller than the maximum, so this is the short case —
+  // the host is told rather than discovering it at the last question.
+  assert.ok(body.dealt <= body.requested);
 });
