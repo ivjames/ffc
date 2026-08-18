@@ -25,9 +25,12 @@ export class RoundError extends Error {}
  */
 async function readShownTickets(page) {
   const text = await page.locator('body').innerText().catch(() => '');
-  const m = /earn\s+([\d,]+)\s+tickets|([\d,]+)\s+tickets\b/i.exec(text);
+  // Anchored on GameTicketAward's own wording ("...to earn N tickets from
+  // games like this"). A loose "N tickets" match anywhere in the body would let
+  // any unrelated copy on the end card silently override the policy's figure.
+  const m = /to earn\s+([\d,]+)\s+tickets/i.exec(text);
   if (!m) return null;
-  const n = Number((m[1] ?? m[2]).replace(/,/g, ''));
+  const n = Number(m[1].replace(/,/g, ''));
   return Number.isFinite(n) ? n : null;
 }
 
