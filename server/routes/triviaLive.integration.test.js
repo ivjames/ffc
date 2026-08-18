@@ -16,7 +16,8 @@ process.env.DATABASE_URL = TEST_DATABASE_URL;
 
 const { app } = await import("../app.js");
 const { createUserSession } = await import("../lib/userAuth.js");
-const { resetTriviaRateLimits, tickAutopilot } = await import("./triviaLive.js");
+const { resetTriviaRateLimits, tickAutopilot, autoAdvanceIfDue, SESSION_FIELDS } =
+  await import("./triviaLive.js");
 const { BASE_POINTS, MAX_SPEED_BONUS } = await import("../lib/triviaLive.js");
 
 let baseUrl, close;
@@ -759,12 +760,13 @@ test("the host's button and the clock cannot both move the same question", async
   await advance(id, hostToken); // -> question 0
   await expireDeadline(id);
 
-  // The phase the clock is holding when it wakes to find this room overdue.
+  // The row the clock is holding when it wakes to find this room overdue —
+  // read the way the ticker reads it, so the transition below is the real one.
   const clockHeld = (
-    await testQuery(`select status, current_index from trivia_session where id = $1`, [id])
+    await testQuery(`select ${SESSION_FIELDS} from trivia_session where id = $1`, [id])
   ).rows[0];
   assert.equal(clockHeld.status, "question");
-  assert.equal(clockHeld.current_index, 0);
+  assert.equal(clockHeld.currentIndex, 0);
 
   // The host's tap lands first and makes the transition.
   const tapped = await advance(id, hostToken);
@@ -773,15 +775,13 @@ test("the host's button and the clock cannot both move the same question", async
   assert.equal(body.session.status, "reveal", "the tap made the transition");
   assert.equal(body.session.currentIndex, 0, "and the room did not skip a question");
 
-  // Now the clock's transition lands, still predicated on (question, 0). It
-  // must find nothing to update — applying it would reveal the same question
-  // twice and restart the phase clock under a room that has already moved.
-  const late = await testQuery(
-    `update trivia_session set status = 'reveal', current_index = 0
-      where id = $1 and status = $2 and current_index = $3 returning id`,
-    [id, clockHeld.status, clockHeld.current_index]
-  );
-  assert.equal(late.rowCount, 0, "one transition, not two");
+  // Now the clock's transition lands, still holding the phase it read before
+  // the tap. Driven through autoAdvanceIfDue — the function the ticker calls
+  // per due row — rather than a hand-written UPDATE: re-stating the predicate
+  // here would only test this file's SQL, and would stay green if applyPhase
+  // ever stopped predicating on the phase it was computed from.
+  const late = await autoAdvanceIfDue(clockHeld);
+  assert.equal(late, null, "one transition, not two");
 
   const now = (
     await testQuery(`select status, current_index from trivia_session where id = $1`, [id])
