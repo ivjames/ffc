@@ -82,8 +82,51 @@ The upstream corpus stripped apostrophes wholesale. Two layers put them back:
    apply time: pure apostrophe insertion, unique whole-word match, no dedupe
    collision, and the repaired row must still pass the admin validator.
 
-`node scripts/repair-trivia-pack.mjs` applies the committed repairs to the pack
-in place — the no-upstream-checkout path, byte-identical to a full rebuild and
+### Typo and grammar repairs
+
+`scripts/lib/trivia-pack-typos.ndjson` is a second overlay, same file format,
+applied straight after the apostrophe one — so its entries key rows by the
+*apostrophe-repaired* prompt. It carries three kinds of fix:
+
+- **Misspellings** found by treating the corpus as its own dictionary: a token
+  appearing once or twice that is one edit from a token appearing 25+ times is
+  a candidate, which a model then judged in context. `Flinstones`,
+  `Antartica`, `Hermoine`, `Titantic`, `Vespuci`.
+- **Grammar and wrong-word errors** that only show up on reading: `can weight
+  up to`, `Nuremberg trails`, `does not includes`, `2th to 3th century`,
+  `badly effected their equipment`, plus duplicated words.
+- **Stray double spaces**, collapsed mechanically.
+
+These cannot be insertion-only, so `applyPackTypos` re-checks each entry
+against `isMinorTextEdit`: word count may move by one, character distance
+stays inside a quarter of the span (floor four, ceiling twenty), and a doubled
+word may be dropped. That bounds *blast radius, not meaning* — no string
+metric separates `was`→`were` from `cat`→`dog`, so correctness came from
+independent verification of every entry, and the gate only guarantees an entry
+cannot swap out a question's content.
+
+Two guards hold whole rows back, because the trap is the row rather than the
+string. `looksLikeSpellingQuestion` catches questions that say so. The
+structural one catches the rest: **a choice fix whose result equals another
+choice is refused**, which is what saves `Commercial or mercantile activity.
+(noun)` over four manglings of *business*, and near-miss distractors like
+`Tigon`/`Tigen` and `joie de vivre`/`joie de livre`. Correcting those would
+leave two identical options and no question.
+
+### Known upstream defect: the missing ampersands
+
+The corpus contains **no `&` at all** — 47,710 questions, zero — while every
+other symbol appears hundreds of times. Each one was dropped upstream, leaving
+a double space: `Gateman, Goodbury  Graves Funeral Home`, `Mr.  Mrs.`,
+`Me, Myself  Irene`. This was verified against a fresh clone of the upstream
+repo, where the gap is already present, so it is not something this build
+does. The ~840 gaps that plausibly held an `&` are therefore left **exactly as
+they are** — collapsing them would turn *Rowan & Martin's Laugh-In* into a
+person named Rowan Martin. Only the 542 gaps that cannot have held one are
+collapsed. Restoring the ampersands is an open piece of work.
+
+`node scripts/repair-trivia-pack.mjs` applies both committed overlays to the
+pack in place — the no-upstream-checkout path, byte-identical to a full rebuild and
 a no-op when re-run. Entries key rows by their unrepaired prompt, so a rebuild
 from upstream hits every entry again. A handful of rows remain unrepairable:
 two prompts sit at the validator's 300-character cap (an inserted apostrophe
