@@ -222,11 +222,25 @@ export default {
       // Fine phase: poll the real trolley and fire one probe-latency short of
       // the aim. This reads position instead of predicting it, which is what
       // kills the scheduled stop's bimodal error.
+      //
+      // The loop is TIME-bounded, not iteration-bounded: an iteration count
+      // only spans the early-arrival window because a probe happens to cost
+      // ~8ms on this host — on a faster one, N cheap round trips can finish
+      // before the trolley arrives, and a poll that gives up without pressing
+      // desyncs the whole round (the game consumes no credit, the end card
+      // never shows, and the runner times out). The deadline covers the
+      // early lead plus one full sweep period, so even a missed crossing comes
+      // back around; and if the deadline still expires, the bot presses
+      // wherever the trolley is — a wasted credit keeps the round honest, a
+      // skipped one hangs it.
+      const fireBy = Date.now() + EARLY_MS + SWEEP_MS + 300;
       let prev = await sampleTrolley();
-      for (let i = 0; i < 80; i++) {
+      let fired = false;
+      while (Date.now() < fireBy) {
         const cur = await sampleTrolley();
         if (!cur || !prev) {
           prev = cur;
+          await d.page.waitForTimeout(12);
           continue;
         }
         const dir = Math.sign(cur.x - prev.x) || 1;
@@ -234,9 +248,15 @@ export default {
         if (remain <= SWEEP_SPEED * FIRE_LEAD_MS && remain > -SWEEP_SPEED * 40) {
           await d.page.mouse.down(); // any press stops the trolley
           await d.page.mouse.up();
+          fired = true;
           break;
         }
         prev = cur;
+        await d.page.waitForTimeout(4); // pace fast hosts; ~4px of travel max
+      }
+      if (!fired) {
+        await d.page.mouse.down();
+        await d.page.mouse.up();
       }
 
       // Descend, grab, hoist, carry, release, and the between-credits beat.
