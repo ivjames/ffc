@@ -24,6 +24,7 @@ import {
   shakeOffset,
   drawGlow,
   makeCachedLayer,
+  fxRandom,
 } from './fx';
 
 // §12 Bowling — the sixth attraction mini-game. Swipe up the lane to roll (aim
@@ -56,9 +57,13 @@ const HOOK = 0.006; // lateral curve per step, in the aim's x direction
 const DOWN_DIST = 6; // a pin moved this far from its spot is knocked down
 const MAX_ROLL_MS = 2200; // hard stop for a roll's simulation
 const SWEEP_MS = 950; // pause showing the fallen pins before the sweep clears them
+const TURKEY_SWEEP_MS = 1900; // longer hold on a turkey so the bird gets its flight
 const REST_SPEED = 0.5; // below this a ball/pin is parked so micro-jitter can't stall settle
 
 type Pin = { x: number; y: number; vx: number; vy: number; ox: number; oy: number; down: boolean };
+/** What the last roll earned, if anything — drives the banner, the shake and
+ *  (for a turkey) the birds. Derived from the deck, not from the note text. */
+type Celebration = 'strike' | 'spare' | 'turkey' | null;
 type Ball = { x: number; y: number; vx: number; vy: number; gutter: boolean; rolling: boolean };
 type Vel = { vx0: number; vy0: number; spin: number };
 
@@ -104,6 +109,11 @@ function computeScore(rolls: number[]): number {
   }
   return score;
 }
+
+/** What to call a run of consecutive strikes. Three is the turkey; past that
+ *  the alley names keep going, and anything long enough just gets counted. */
+const RUN_NAMES: Record<number, string> = { 3: 'Turkey', 4: 'Four-bagger', 5: 'Five-bagger', 6: 'Six-pack' };
+const runName = (n: number) => RUN_NAMES[n] ?? `${n} in a row`;
 
 /** One frame's display on the scorecard: the ball marks (`X` `/` digit `-`) and
  *  the running total, which stays null until the frame's bonus balls exist. */
@@ -188,7 +198,11 @@ type GS = {
   standing: number; // pins up at the start of the current ball
   rollStart: number;
   note: string;
+  celebrate: Celebration; // what the settled roll earned (banner / fx / birds)
+  strikeRun: number; // consecutive strikes, across frames — 3 is a turkey
+  turkeys: number; // turkeys earned this game — one per completed three-in-a-row
   sweepAt: number; // when the current sweep pause began
+  sweepMs: number; // how long this sweep pause runs (a turkey gets longer)
   lastClack: number; // throttle so a pile-up doesn't machine-gun the clack
   afterSweep: 'rack' | 'clear' | 'done'; // what the sweep resolves to
 };
@@ -209,7 +223,11 @@ function freshGS(): GS {
     standing: 10,
     rollStart: 0,
     note: '',
+    celebrate: null,
+    strikeRun: 0,
+    turkeys: 0,
     sweepAt: 0,
+    sweepMs: SWEEP_MS,
     lastClack: -1e9,
     afterSweep: 'rack',
   };
@@ -340,17 +358,87 @@ type FX = {
   shake: number; // camera shake magnitude (px), decays to 0
   flash: number; // strike/spare flash 0..1, decays to 0
   floaters: Floater[]; // rising "+N" pinfall popups
+  turkeys: Turkey[]; // birds launched out of the pit on three-in-a-row
   downSeen: Map<Pin, boolean>; // pins already spark-flashed (so each falls once)
   prevPhase: Phase; // for edge-detecting the roll → sweep transition
 };
 
+/** A live bird: screen-space (px) ballistics, tumbling and flapping as it goes.
+ *  Rendering-only, like everything else in FX — the sim never sees it. */
+type Turkey = {
+  x: number;
+  y: number;
+  vx: number; // px/s
+  vy: number;
+  rot: number; // rad
+  spin: number; // rad/s
+  flap: number; // wing phase (rad)
+  life: number; // ms remaining
+  max: number; // ms total (for the fade-out)
+};
+
 function freshFX(): FX {
-  return { trail: [], particles: [], shake: 0, flash: 0, floaters: [], downSeen: new Map(), prevPhase: 'aim' };
+  return { trail: [], particles: [], shake: 0, flash: 0, floaters: [], turkeys: [], downSeen: new Map(), prevPhase: 'aim' };
 }
 
 const PURPLE_LIGHT = '#e9d5ff';
 const PURPLE = '#a855f7';
 const PURPLE_DEEP = '#6b21a8';
+// The bird runs warm on purpose: a turkey has to read as a turkey, and nothing
+// else on this lane is orange.
+const FEATHER = '#f59e0b';
+const TAIL_FEATHERS = ['#f59e0b', '#ef4444', '#f97316', '#fbbf24', '#f97316', '#ef4444', '#f59e0b'];
+
+const TURKEY_LIFE = 2400; // ms of flight before a bird fades out
+const TURKEY_GRAVITY = 420; // px/s² — arcs over the rack, then down the lane inside the sweep
+const MAX_TURKEYS = 6; // a bird per strike in the run, capped
+
+/** Launch `n` birds out of the pit behind the rack. They pop up over the deck,
+ *  then gravity brings them down the lane toward the bowler — growing as they
+ *  come, which is what sells "thrown at you" under this projection. */
+function spawnTurkeys(fx: FX, n: number) {
+  const deck = project(W / 2, HEAD_Y);
+  for (let i = 0; i < n; i++) {
+    // Fan them across the deck but keep them flying down the lane, not out of
+    // frame — the point is that they come at the bowler.
+    const spread = (n === 1 ? 0 : (i / (n - 1)) * 2 - 1) * (0.6 + fxRandom() * 0.4);
+    fx.turkeys.push({
+      x: W / 2 + spread * 42,
+      y: deck.y - 8,
+      vx: spread * 46,
+      vy: -(175 + fxRandom() * 45),
+      rot: -spread * 0.3,
+      spin: (spread >= 0 ? 1 : -1) * (0.7 + fxRandom() * 1.1),
+      flap: fxRandom() * TWO_PI,
+      life: TURKEY_LIFE,
+      max: TURKEY_LIFE,
+    });
+  }
+}
+
+/** How big a bird draws at screen height `y`: small up by the pit, large down
+ *  by the bowler — matching the lane's own perspective without projecting it
+ *  (the birds are off the lane surface, so project() doesn't apply). */
+const turkeyScale = (y: number) => 0.55 + Math.max(0, Math.min(1, (y - HORIZON) / (H - HORIZON))) * 1.3;
+
+/** Advance the birds by `dt` ms and return the ones still in flight. Molting a
+ *  feather now and then is what ties them to the rest of the particle work. */
+function stepTurkeys(list: Turkey[], particles: Particle[], dt: number): Turkey[] {
+  const dts = dt / 1000;
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i];
+    t.x += t.vx * dts;
+    t.y += t.vy * dts;
+    t.vy += TURKEY_GRAVITY * dts;
+    t.rot += t.spin * dts;
+    t.flap += dts * 15;
+    t.life -= dt;
+    if (fxRandom() < dt / 130) {
+      spawnBurst(particles, t.x, t.y, 1, 26, TAIL_FEATHERS[i % TAIL_FEATHERS.length]);
+    }
+  }
+  return list.filter((t) => t.life > 0 && t.y < H + 80);
+}
 
 /** Advance the visual-only effects by `dt` ms (framerate-correct). Reads gs but
  *  never mutates it — every event it reacts to (pin down, strike, spare) has
@@ -369,15 +457,22 @@ function updateFX(fx: FX, gs: GS, dt: number) {
     }
   }
 
-  // On the roll → sweep edge, celebrate strikes (big) and spares (small).
+  // On the roll → sweep edge, celebrate what the roll earned: a turkey throws
+  // birds, a strike is big, a spare is small.
   if (fx.prevPhase !== 'sweep' && gs.phase === 'sweep') {
     const { x: cx, y: cy } = project(W / 2, HEAD_Y - PIN_GAP_Y * 1.5);
-    if (gs.note.includes('Strike')) {
+    if (gs.celebrate === 'turkey') {
+      fx.shake = 11;
+      fx.flash = 1;
+      spawnBurst(fx.particles, cx, cy, 34, 320, PURPLE_LIGHT);
+      spawnBurst(fx.particles, cx, cy, 24, 280, FEATHER);
+      spawnTurkeys(fx, Math.min(MAX_TURKEYS, gs.strikeRun));
+    } else if (gs.celebrate === 'strike') {
       fx.shake = 8;
       fx.flash = 1;
       spawnBurst(fx.particles, cx, cy, 34, 320, PURPLE_LIGHT);
       spawnBurst(fx.particles, cx, cy, 18, 180, '#f0abfc');
-    } else if (gs.note.includes('Spare')) {
+    } else if (gs.celebrate === 'spare') {
       fx.shake = 4;
       fx.flash = 0.6;
       spawnBurst(fx.particles, cx, cy, 20, 240, PURPLE);
@@ -385,6 +480,7 @@ function updateFX(fx: FX, gs: GS, dt: number) {
   }
   fx.prevPhase = gs.phase;
 
+  fx.turkeys = stepTurkeys(fx.turkeys, fx.particles, dt);
   fx.particles = stepParticles(fx.particles, dt, 0.02, 40);
   fx.floaters = stepFloaters(fx.floaters, dt);
   fx.shake = decay(fx.shake, dt, 0.02);
@@ -480,6 +576,135 @@ function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
   ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
   drawPinShape(ctx);
   ctx.restore();
+}
+
+/** The bird, centered on the origin, facing +x, at unit scale (1 ≈ a 14px
+ *  body radius). `flap` is -1..1 and swings the near wing. Drawn rather than
+ *  emoji'd so it lights, scales and molts like everything else on this lane. */
+function drawTurkeyShape(ctx: CanvasRenderingContext2D, flap: number) {
+  const R = 14;
+
+  // Tail fan, behind everything: seven feathers sweeping back off the body.
+  for (let i = 0; i < TAIL_FEATHERS.length; i++) {
+    const t = i / (TAIL_FEATHERS.length - 1);
+    ctx.save();
+    ctx.rotate(Math.PI * (0.72 + t * 0.56));
+    ctx.translate(R * 1.2, 0);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, R * 0.95, R * 0.33, 0, 0, TWO_PI);
+    ctx.fillStyle = TAIL_FEATHERS[i];
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(60,26,10,0.5)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Legs, tucked back mid-flight.
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = R * 0.19;
+  ctx.lineCap = 'round';
+  for (const dy of [-R * 0.16, R * 0.22]) {
+    ctx.beginPath();
+    ctx.moveTo(R * 0.3, R * 0.5 + dy * 0.3);
+    ctx.lineTo(R * 0.86, R * 0.98 + dy);
+    ctx.lineTo(R * 1.14, R * 0.8 + dy);
+    ctx.stroke();
+  }
+
+  // Body.
+  const body = ctx.createLinearGradient(0, -R * 0.8, 0, R * 0.8);
+  body.addColorStop(0, '#a9662f');
+  body.addColorStop(0.6, '#7c4a21');
+  body.addColorStop(1, '#5a3417');
+  ctx.strokeStyle = 'rgba(40,18,6,0.55)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, R * 0.98, R * 0.8, 0, 0, TWO_PI);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.stroke();
+
+  // Neck + head, craned up and forward off the shoulder.
+  ctx.beginPath();
+  ctx.moveTo(R * 0.3, -R * 0.5);
+  ctx.quadraticCurveTo(R * 0.72, -R * 0.62, R * 0.86, -R * 1.05);
+  ctx.lineTo(R * 0.38, -R * 0.95);
+  ctx.quadraticCurveTo(R * 0.34, -R * 0.7, R * 0.12, -R * 0.6);
+  ctx.closePath();
+  ctx.fillStyle = '#7a4620';
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(R * 0.92, -R * 1.15, R * 0.46, 0, TWO_PI);
+  ctx.fillStyle = '#93582b';
+  ctx.fill();
+  ctx.stroke();
+
+  // Beak, wattle, eye.
+  ctx.beginPath();
+  ctx.moveTo(R * 1.26, -R * 1.26);
+  ctx.lineTo(R * 1.82, -R * 1.1);
+  ctx.lineTo(R * 1.26, -R * 0.98);
+  ctx.closePath();
+  ctx.fillStyle = '#fbbf24';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(R * 1.24, -R * 1.06);
+  ctx.quadraticCurveTo(R * 1.56, -R * 0.62, R * 1.1, -R * 0.72);
+  ctx.closePath();
+  ctx.fillStyle = '#dc2626';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(R * 0.98, -R * 1.3, R * 0.12, 0, TWO_PI);
+  ctx.fillStyle = '#1b1020';
+  ctx.fill();
+
+  // Near wing, beating over the body — pivoted at the shoulder so the flap
+  // swings the tip, and paler than the body so it doesn't read as one blob.
+  ctx.save();
+  ctx.translate(R * 0.32, -R * 0.28);
+  ctx.rotate(0.35 + flap * 0.75);
+  const wing = ctx.createLinearGradient(0, -R * 0.3, 0, R * 0.3);
+  wing.addColorStop(0, '#e0a865');
+  wing.addColorStop(1, '#a9662f');
+  ctx.beginPath();
+  ctx.moveTo(0, -R * 0.12);
+  ctx.quadraticCurveTo(-R * 0.55, -R * 0.5, -R * 1.15, -R * 0.12);
+  ctx.quadraticCurveTo(-R * 0.6, R * 0.34, 0, R * 0.16);
+  ctx.closePath();
+  ctx.fillStyle = wing;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(40,18,6,0.5)';
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+  // Two flight-feather seams so the wing reads as feathered at size.
+  ctx.strokeStyle = 'rgba(70,32,10,0.35)';
+  ctx.lineWidth = 0.9;
+  for (const k of [0.45, 0.72]) {
+    ctx.beginPath();
+    ctx.moveTo(-R * k, -R * 0.3);
+    ctx.lineTo(-R * (k - 0.06), R * 0.16);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Paint the birds in flight: lit from behind so they carry the lane's glow,
+ *  fading out over the last stretch of their life. */
+function drawTurkeys(ctx: CanvasRenderingContext2D, list: Turkey[]) {
+  for (const t of list) {
+    const sc = turkeyScale(t.y);
+    const fade = Math.min(1, t.life / 320);
+    drawGlow(ctx, t.x, t.y, 34 * sc, PURPLE_LIGHT, 0.16 * fade);
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.translate(t.x, t.y);
+    ctx.scale(sc, sc);
+    ctx.rotate(t.rot);
+    drawTurkeyShape(ctx, Math.sin(t.flap));
+    ctx.restore();
+  }
 }
 
 /** View-scale for the ball: ×1 in the hand, boosted with distance so it stays
@@ -730,19 +955,23 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
 
   drawParticles(ctx, fx.particles);
   drawFloaters(ctx, fx.floaters);
+  // Birds last of the shaken layer: they fly in front of the rack, over the pit.
+  drawTurkeys(ctx, fx.turkeys);
   ctx.restore();
 
-  // —— On-canvas STRIKE! / SPARE! banner, softly lit ——
-  if (gs.phase === 'sweep' && (gs.note.includes('Strike') || gs.note.includes('Spare'))) {
-    const strike = gs.note.includes('Strike');
+  // —— On-canvas TURKEY! / STRIKE! / SPARE! banner, softly lit ——
+  if (gs.phase === 'sweep' && gs.celebrate) {
+    const turkey = gs.celebrate === 'turkey';
+    const label = turkey ? `${runName(gs.strikeRun).toUpperCase()}!` : gs.celebrate === 'strike' ? 'STRIKE!' : 'SPARE!';
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 34px system-ui, sans-serif';
-    ctx.fillStyle = strike ? '#f5e9ff' : '#ede9fe';
-    ctx.shadowColor = withAlpha(PURPLE, 0.95);
+    // Long run names ("8 IN A ROW!") have to fit the 340px lane.
+    ctx.font = `bold ${label.length > 9 ? 26 : 34}px system-ui, sans-serif`;
+    ctx.fillStyle = turkey ? '#fff3d6' : gs.celebrate === 'strike' ? '#f5e9ff' : '#ede9fe';
+    ctx.shadowColor = withAlpha(turkey ? FEATHER : PURPLE, 0.95);
     ctx.shadowBlur = 18;
-    ctx.fillText(strike ? 'STRIKE!' : 'SPARE!', W / 2, 330);
+    ctx.fillText(label, W / 2, 330);
     ctx.restore();
   }
 
@@ -791,6 +1020,7 @@ export default function Bowling() {
   const [score, setScore] = useState(0);
   const [frame, setFrame] = useState(0);
   const [note, setNote] = useState('');
+  const [turkeys, setTurkeys] = useState(0);
   const [rolls, setRolls] = useState<number[]>([]);
   // One id per played round — the ticket award's idempotency key.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
@@ -805,10 +1035,25 @@ export default function Bowling() {
     const gs = gsRef.current;
     const after = standingCount(gs.pins);
     const pinfall = gs.standing - after;
+    const tenthFrame = gs.frame === 9;
     gs.rolls.push(pinfall);
     setScore(computeScore(gs.rolls));
     setRolls([...gs.rolls]);
-    if (after === 0) playCup(); // cleared the deck (strike / spare / clean-up)
+
+    // What the ball earned, read off the deck rather than off the note text: a
+    // cleared full rack is a strike, a cleared remainder is a spare. Three
+    // strikes back to back — across frames, and through the 10th's fresh racks
+    // — is a turkey, which is the one that gets birds thrown on screen.
+    const struck = gs.standing === 10 && after === 0;
+    gs.strikeRun = struck ? gs.strikeRun + 1 : 0;
+    let celebrate: Celebration = after === 0 ? (struck ? 'strike' : 'spare') : null;
+    if (struck && gs.strikeRun >= 3) celebrate = 'turkey';
+
+    // Every strike in a live run keeps throwing birds, but the tally counts
+    // whole turkeys — twelve straight is four turkeys, not ten.
+    if (celebrate === 'turkey' && gs.strikeRun % 3 === 0) gs.turkeys += 1;
+    if (celebrate === 'turkey') playFanfare(); // a turkey outranks the deck-clear chime
+    else if (after === 0) playCup(); // cleared the deck (strike / spare / clean-up)
     else if (pinfall === 0) playUndo(); // whiff or gutter
 
     // 'rack' = fresh ten after the sweep; 'clear' = sweep the downed pins and
@@ -860,23 +1105,33 @@ export default function Bowling() {
       }
     }
 
-    // The STRIKE!/SPARE! banner covers those rolls; pop the pinfall for the
-    // rest — including 10th-frame bonus clears, which set no banner note.
-    if (!note.includes('Strike') && !note.includes('Spare')) {
+    // A turkey renames the roll — the bird is the headline, and in the 10th the
+    // "one more" hint still has to survive it.
+    if (celebrate === 'turkey') {
+      note = `${runName(gs.strikeRun)}! 🦃${tenthFrame && afterSweep !== 'done' ? ' One more.' : ''}`;
+    }
+
+    // The banner covers a celebrated roll; pop the pinfall for the rest —
+    // including 10th-frame bonus clears, which set no banner note.
+    if (!celebrate) {
       spawnFloater(fxRef.current.floaters, W / 2, project(W / 2, HEAD_Y).y + 44, pinfall > 0 ? `+${pinfall}` : 'MISS', pinfall > 0 ? '#d8b4fe' : '#94a3b8', { size: 22, life: 800 });
     }
 
     gs.afterSweep = afterSweep;
     gs.note = note;
+    gs.celebrate = celebrate;
     setNote(note);
+    setTurkeys(gs.turkeys);
     gs.phase = 'sweep';
     gs.sweepAt = performance.now();
+    gs.sweepMs = celebrate === 'turkey' ? TURKEY_SWEEP_MS : SWEEP_MS;
   }, []);
 
   // The sweep pause elapsed: clear the downed pins (or rack a fresh ten) and
   // hand the next ball to the player.
   const applySweep = useCallback(() => {
     const gs = gsRef.current;
+    gs.celebrate = null;
     if (gs.afterSweep === 'done') {
       gs.phase = 'done';
       setPhase('done');
@@ -953,7 +1208,7 @@ export default function Bowling() {
         if ((ballDone && !pinsMoving) || now - gs.rollStart > MAX_ROLL_MS) {
           settleRoll();
         }
-      } else if (gs.phase === 'sweep' && now - gs.sweepAt > SWEEP_MS) {
+      } else if (gs.phase === 'sweep' && now - gs.sweepAt > gs.sweepMs) {
         applySweep();
       }
 
@@ -1019,13 +1274,26 @@ export default function Bowling() {
     setFrame(0);
     setNote('');
     setRolls([]);
+    setTurkeys(0);
     setPhase('aim');
     setSessionId(crypto.randomUUID());
   }, []);
 
   if (phase === 'done') {
-    const remark =
-      score >= 180 ? 'Turkey time! 🦃' : score >= 120 ? 'Great game! 🎳' : score >= 80 ? 'Nice rolling! 👍' : 'Keep bowling! 🎮';
+    // Now that a turkey throws a bird on screen, only claim one when it happened.
+    const remark = score === 300
+      ? 'Perfect game! 🎳🔥'
+      : turkeys
+        ? turkeys === 1
+          ? 'Turkey! 🦃'
+          : `${turkeys} turkeys! 🦃`
+        : score >= 180
+          ? 'Red hot! 🔥'
+          : score >= 120
+            ? 'Great game! 🎳'
+            : score >= 80
+              ? 'Nice rolling! 👍'
+              : 'Keep bowling! 🎮';
     return (
       <Screen>
         <TopBar title="Bowling" back="/arcade" />
