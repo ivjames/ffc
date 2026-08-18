@@ -13,6 +13,7 @@ import { router as locationsRouter } from "./routes/locations.js";
 import { router as contentRouter } from "./routes/content.js";
 import { router as manifestRouter } from "./routes/manifest.js";
 import { router as huntRouter } from "./routes/hunt.js";
+import { router as syntheticRouter } from "./routes/synthetic.js";
 import { router as photosRouter } from "./routes/photos.js";
 import { router as adminRouter } from "./routes/admin/index.js";
 import { router as authRouter } from "./routes/auth.js";
@@ -132,6 +133,10 @@ app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/seed", seedRouter);
 app.use("/api/locations", locationsRouter);
 app.use("/api/content", contentRouter);
+// Cross-tenant discovery feed for the synthetic load bot (x-synthetic-key
+// gated). Separate from /api/content because that one is Host-scoped to a
+// single org, and the bot runs over loopback with no tenant to name.
+app.use("/api/synthetic", syntheticRouter);
 // Per-tenant PWA manifest — index.html links here instead of a static file.
 app.use("/api/manifest.webmanifest", manifestRouter);
 // Player accounts — passwordless email sign-in.

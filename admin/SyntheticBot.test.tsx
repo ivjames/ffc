@@ -19,11 +19,26 @@ const COURSES: SyntheticStatus['courses'] = [
     courseName: 'California Course',
     locationId: 'loc-upland',
     locationName: 'Upland',
+    orgName: "Bullwinkle's",
     tz: 'America/Los_Angeles',
     hours: null,
     parsKnown: true,
     openNow: true,
     weeklyOpenHours: 71,
+  },
+  // A second org's venue — a super_admin's list spans every client, which is
+  // what the bot plays against.
+  {
+    courseId: 'c2',
+    courseName: 'Surf City Links',
+    locationId: 'loc-santa-cruz',
+    locationName: 'Santa Cruz Boardwalk',
+    orgName: 'Boardwalk Fun Co.',
+    tz: 'America/Los_Angeles',
+    hours: null,
+    parsKnown: true,
+    openNow: false,
+    weeklyOpenHours: 60,
   },
 ];
 
@@ -79,6 +94,27 @@ describe('SyntheticBot', () => {
     await user.click(start);
     expect(api.syntheticStart).toHaveBeenCalledWith(
       expect.objectContaining({ playsPerCourse: 2, intervalMin: 60, maxPlayers: 4, locationId: null })
+    );
+  });
+
+  test('the venue picker names the owning org (a super_admin list spans clients)', async () => {
+    const user = userEvent.setup();
+    render(<SyntheticBot />);
+
+    const picker = await screen.findByRole('combobox');
+    expect(screen.getByRole('option', { name: 'All venues (2)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: "Bullwinkle's — Upland" })).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', { name: 'Boardwalk Fun Co. — Santa Cruz Boardwalk' })
+    ).toBeInTheDocument();
+
+    // Picking another org's venue scopes the run to it — the case that used to
+    // die at bot startup with "no live courses at location <uuid>".
+    await user.selectOptions(picker, 'loc-santa-cruz');
+    await waitFor(() =>
+      expect(api.syntheticProjection).toHaveBeenCalledWith(
+        expect.objectContaining({ locationId: 'loc-santa-cruz' })
+      )
     );
   });
 

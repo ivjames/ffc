@@ -96,8 +96,8 @@ Responses:
 #### Synthetic rounds & the load bot
 `scripts/course-bot.mjs` drives synthetic player traffic — a load/soak test, an
 end-to-end smoke test, and a demo-data seeder in one. It discovers live courses
-(`GET /api/leaderboard/courses`), then plays each a few times per sweep on a
-repeating interval by POSTing rounds with `synthetic: true` and the
+(`GET /api/synthetic/catalog` — see below), then plays each a few times per
+sweep on a repeating interval by POSTing rounds with `synthetic: true` and the
 `x-synthetic-key` header. Each round takes the **real** production path (insert
 → rewards → leaderboards), so it exercises exactly what real play does.
 
@@ -121,9 +121,27 @@ per-sweep and cumulative stats (OK/failed, latency p50/p95/max, throughput,
 bytes) — no third-party model calls are made, so there's no per-token cost, only
 API/DB load.
 
+**Multi-org discovery — `GET /api/synthetic/catalog`.** The bot is a *platform*
+tool (start/stop in Master Control is super_admin only), but `/api/content` is
+**tenant-scoped**: the org comes from the `Host` header, and the bot talks to
+the API over loopback (`http://127.0.0.1:<port>`, exactly how the Master
+Control runner launches it), which resolves to the **default** org. On that
+feed every other org's venues look nonexistent — the bot died at startup with
+`no live courses at location <uuid>` for a venue the admin UI had just listed,
+and any round it did aim there came back `courseId does not exist`. So:
+- `GET /api/synthetic/catalog` (gated on the same `x-synthetic-key`, `403`
+  without it) serves live courses + venue tz/hours across **every live org**,
+  plus org-less legacy venues. Suspended/archived orgs are excluded — their
+  venues are dark to players, so the bot must not manufacture traffic on them.
+- An **authorised** synthetic `POST /api/rounds` resolves its course across
+  every org too (`routes/rounds.js`), since the operator key already proves
+  platform-level intent. Real rounds stay strictly tenant-scoped.
+- With no key (`--dry-run`) the bot falls back to `/api/content` and says which
+  scope it discovered under, so an empty result explains itself.
+
 **Business-hours gating.** By default the bot only plays a venue while it is
-open, evaluated in the venue's own tz from `location.hours` (served by
-`/api/content`; see `lib/venueHours.js`). It re-reads hours at the top of every
+open, evaluated in the venue's own tz from `location.hours` (served with the
+catalog; see `lib/venueHours.js`). It re-reads hours at the top of every
 sweep, so a schedule change (edited in Master Control) is honored with no
 restart. Unknown/unset hours → treated closed (fail-closed). `--ignore-hours`
 plays 24/7 for pure load testing. The pre-flight shows each venue's open/closed

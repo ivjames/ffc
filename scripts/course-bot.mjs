@@ -10,9 +10,18 @@
 //   / mint reward tickets is a SERVER policy (SYNTHETIC_COUNT_ON_BOARD,
 //   SYNTHETIC_MINT_REWARDS), not something this bot decides.
 //
+// DISCOVERY (multi-org)
+//   With a key, courses come from GET /api/synthetic/catalog — every live
+//   course at every live org. The public /api/content feed can't serve this:
+//   it is scoped to the org resolved from the Host header, and the bot talks
+//   to the API over loopback, so it would only ever see the DEFAULT org's
+//   venues. Without a key (--dry-run) the bot falls back to /api/content and
+//   says so. An authorised synthetic round likewise resolves its course across
+//   every org, so a venue picked in Master Control plays regardless of tenant.
+//
 // BUSINESS HOURS
 //   By default the bot only plays a venue while it is OPEN, evaluated in the
-//   venue's own timezone from location.hours (served by /api/content). It
+//   venue's own timezone from location.hours (served with the catalog). It
 //   re-reads hours at the top of every sweep, so a schedule change (edited in
 //   Master Control) is honored with no restart — venues that just closed drop
 //   out, venues that just opened join. Unknown/unset hours → treated CLOSED
@@ -195,20 +204,54 @@ function buildRound(course, runId, maxPlayers) {
 }
 
 // --- API -------------------------------------------------------------------
-// Everything comes from the open content catalog (GET /api/content) in one
-// fetch: courses (with pars), and each course's venue (tz + business hours) so
-// the bot can gate synthetic play on "is this venue open right now, in its own
-// timezone" — the same rows the app bundles and the same source of truth.
-async function discoverCourses(api, location, fallbackTz = null) {
+// Discovery is one fetch: courses (with pars) plus each course's venue (tz +
+// business hours), so the bot can gate synthetic play on "is this venue open
+// right now, in its own timezone". Two feeds serve the same shapes:
+//
+//   GET /api/synthetic/catalog  (x-synthetic-key) — the one the bot wants.
+//     Every live course at every live ORG. Necessary because /api/content is
+//     TENANT-scoped: the org comes from the Host header, and the bot talks to
+//     the API over loopback (127.0.0.1 — exactly how Master Control launches
+//     it), which carries no org label and lands on the DEFAULT org. Under that
+//     feed every other org's venues look nonexistent, so a venue picked in the
+//     admin UI dies at startup with "no live courses at location <uuid>".
+//
+//   GET /api/content — fallback: --dry-run with no key, and APIs that predate
+//     the catalog endpoint. Single-tenant view (default org + org-less legacy
+//     venues), so cross-org runs are not possible on this path.
+async function fetchCatalog(api, key) {
+  if (key) {
+    const url = `${api}/api/synthetic/catalog`;
+    const res = await fetch(url, { headers: { "x-synthetic-key": key } });
+    if (res.ok) return { ...(await res.json()), scope: "all live orgs" };
+    // 403 = key rejected / feature off: a real misconfiguration, so say so
+    // rather than silently falling back to a narrower catalog (the rounds
+    // POST would fail the same way a moment later anyway).
+    if (res.status !== 404) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error(
+        `course discovery failed: GET ${url} → ${res.status}${j.error ? ` (${j.error})` : ""}`
+      );
+    }
+    console.warn(
+      "  ! this API has no /api/synthetic/catalog (older build) — falling back to " +
+        "/api/content, which only sees the default org's venues"
+    );
+  }
   const url = `${api}/api/content`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`course discovery failed: GET ${url} → ${res.status}`);
-  const content = await res.json();
+  return { ...(await res.json()), scope: "default org only (tenant-scoped feed)" };
+}
+
+async function discoverCourses(api, location, fallbackTz = null, key = "") {
+  const content = await fetchCatalog(api, key);
 
   const locsById = new Map();
   for (const l of content.locations ?? []) {
     locsById.set(l.id, {
       name: l.name,
+      orgName: l.orgName ?? null, // catalog feed only — venues can share a name across orgs
       // Never assume a zone: the server's VENUE_TZ fallback is configurable and
       // not necessarily Pacific, so guessing could play a venue while it's
       // actually closed. Use an operator-supplied --fallback-tz if given, else
@@ -228,13 +271,22 @@ async function discoverCourses(api, location, fallbackTz = null) {
       courseName: c.name,
       locationId: c.locationId,
       locationName: venue.name,
+      orgName: venue.orgName,
       tz: venue.tz,
       hours: venue.hours,
       pars: Array.isArray(c.pars) && c.pars.length > 0 ? c.pars : null,
     });
   }
   if (courses.length === 0) {
-    throw new Error(location ? `no live courses at location ${location}` : "no live courses found to play");
+    // Name the scope in the error: "no live courses at <uuid>" is baffling when
+    // the venue is plainly there in Master Control but belongs to another org.
+    const where = location ? `at location ${location}` : "to play";
+    throw new Error(
+      `no live courses ${where} — catalog scope: ${content.scope}` +
+        (content.scope.startsWith("default org")
+          ? " (a venue at another org is invisible on this feed; run with --key so the bot uses /api/synthetic/catalog)"
+          : "")
+    );
   }
 
   const noPars = courses.filter((c) => !c.pars).length;
@@ -332,7 +384,14 @@ function preflight(a, courses, now = new Date()) {
   const venues = new Map();
   for (const c of courses) {
     if (!venues.has(c.locationId)) {
-      venues.set(c.locationId, { name: c.locationName, tz: c.tz, hours: c.hours, courses: 0 });
+      venues.set(c.locationId, {
+        // Org qualifies the venue name: two clients may both run a "Riverside",
+        // and a cross-org run lists them side by side.
+        name: c.orgName ? `${c.orgName} — ${c.locationName}` : c.locationName,
+        tz: c.tz,
+        hours: c.hours,
+        courses: 0,
+      });
     }
     venues.get(c.locationId).courses += 1;
   }
@@ -436,7 +495,7 @@ async function main() {
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   let courses;
   try {
-    courses = await discoverCourses(a.api, a.location, a.fallbackTz);
+    courses = await discoverCourses(a.api, a.location, a.fallbackTz, a.key);
   } catch (e) {
     fail(e.message);
   }
@@ -472,7 +531,7 @@ async function main() {
     // (edited in Master Control, or a re-fetch job) is honored with no restart.
     // If the refresh fails, keep the last-known set rather than dying.
     try {
-      courses = await discoverCourses(a.api, a.location, a.fallbackTz);
+      courses = await discoverCourses(a.api, a.location, a.fallbackTz, a.key);
     } catch (e) {
       console.warn(`  ! ${label}: hours/course refresh failed (${e.message}); using last-known set`);
     }

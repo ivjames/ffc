@@ -165,7 +165,17 @@ router.post("/", rateLimit, tenant(), async (req, res) => {
     // computation below). A foreign tenant's course id answers exactly like a
     // nonexistent one — a guessed/stale UUID must not write a round onto
     // another venue's leaderboard.
-    const course = await findTenantCourse(courseId, req.tenant, client);
+    //
+    // An AUTHORISED synthetic round is the one exception: the load bot is a
+    // platform tool that talks to the API over loopback, so its Host header
+    // names no org and every request resolves to the default-org fallback —
+    // leaving every other org's courses unplayable ("courseId does not exist")
+    // even though the operator picked them in Master Control. The
+    // x-synthetic-key has already been verified above and is an operator-level
+    // secret, so a synthetic round resolves its course across every org,
+    // exactly like the catalog it was discovered from (routes/synthetic.js).
+    // Real rounds are unaffected.
+    const course = await findTenantCourse(courseId, synthetic ? null : req.tenant, client);
     if (!course) {
       await client.query("ROLLBACK");
       return res.status(400).json({ ok: false, error: "courseId does not exist" });
