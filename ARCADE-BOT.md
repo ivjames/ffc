@@ -116,6 +116,10 @@ lumpy in exactly the way real darts is.
 
 ## Usage
 
+Trivia reads its answer bank from `src/data/funContent.ts`, which needs
+**Node 22.6+** for type stripping. On an older Node the bot says so and plays
+trivia by guessing; every other game is unaffected.
+
 ```bash
 # capture a profile (needs the app running — npm run dev)
 node scripts/arcade-bot.mjs --rounds 20 --out arcade-profile.json

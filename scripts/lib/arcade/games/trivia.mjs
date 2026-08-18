@@ -6,6 +6,14 @@
 // directly under its type stripping, which beats regex-scraping a file whose
 // strings carry escaped apostrophes.
 //
+// That import is LAZY AND GUARDED, and the blast radius is why. Type stripping
+// needs Node 22.6+ (and a flag before 22.18); on an older Node the import
+// throws ERR_UNKNOWN_FILE_EXTENSION at module load, and because registry.mjs
+// imports every policy eagerly, a top-level import would take down every other
+// game and `--list` along with it. Loading it inside play(), behind a catch,
+// keeps a failure contained to this one game — where it lands on the
+// guess-from-screen path that already exists for a stale bank.
+//
 // Matching is by ANSWER TEXT, never by index: buildRound() shuffles the choices
 // per question and re-derives `answer` against the shuffled array, so the index
 // in the data file has no relationship to the index on screen. Looking up the
@@ -24,16 +32,36 @@
 // appear, so one edited question would turn every round into a 3-minute
 // failure. If scores here ever collapse toward 2-3 out of 10 at high skill,
 // suspect the bank, not the bot.
-import { TRIVIA } from '../../../../src/data/funContent.ts';
 import { clamp, lerp } from '../skill.mjs';
 
 const ROUND_SIZE = 10;
 const TICKETS_PER_CORRECT = 5;
 
-/** question text → { correct, choices } — both as TEXT, never indices. */
-const BANK = new Map(
-  TRIVIA.map((t) => [t.q.trim(), { correct: t.choices[t.answer], choices: t.choices }]),
-);
+/**
+ * question text → { correct, choices } — both as TEXT, never indices.
+ * Resolves to null when the bank cannot be loaded (old Node, moved file), which
+ * downgrades this game to guessing instead of breaking the run.
+ */
+let bankPromise = null;
+function loadBank() {
+  if (!bankPromise) {
+    bankPromise = import('../../../../src/data/funContent.ts')
+      .then(
+        (m) =>
+          new Map(
+            m.TRIVIA.map((t) => [t.q.trim(), { correct: t.choices[t.answer], choices: t.choices }]),
+          ),
+      )
+      .catch((err) => {
+        console.log(
+          `  (trivia: question bank unavailable — ${err.code ?? err.message}; ` +
+            'the bot will guess. Node 22.6+ is needed to read the .ts bank.)',
+        );
+        return null;
+      });
+  }
+  return bankPromise;
+}
 
 export default {
   key: 'trivia',
@@ -49,6 +77,7 @@ export default {
 
   async play(d, { rng, skill }) {
     const page = d.page;
+    const bank = await loadBank();
     // Even a strong player misses the odd one; a weak one is barely above the
     // 1-in-4 a blind guess would score.
     const knowRate = lerp(0.28, 0.97, clamp(skill, 0, 1));
@@ -65,7 +94,7 @@ export default {
       // navigated away from the game and hung the round. Answering from the
       // bank keeps the click inside the question no matter what else is on
       // screen.
-      const entry = BANK.get(asked);
+      const entry = bank?.get(asked);
 
       if (!entry) {
         // Unknown question: guess from what is on screen. The choice buttons are
