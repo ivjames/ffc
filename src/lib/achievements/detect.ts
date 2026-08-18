@@ -3,7 +3,7 @@ import { COURSES, LOCATIONS } from '../../data/courses';
 import { modulesFor } from '../modules';
 import { STROKE_CAP } from '../scoring';
 import { venueDayWindow, type VenueHours } from '../venueHours';
-import { ARCADE_GAME_COUNT } from './arcade';
+import { ARCADE_GAME_KEYS } from './arcade';
 import {
   ACHIEVEMENTS,
   CATEGORY_ORDER,
@@ -682,7 +682,9 @@ const ACTIVITY_RULES: Record<string, (m: Marks) => boolean> = {
   // Arcade
   arcade_rookie: (m) => m.distinct('game') >= 1,
   sampler: (m) => m.distinct('game') >= 5,
-  completionist: (m) => m.distinct('game') >= ARCADE_GAME_COUNT,
+  // Every key on the CURRENT roster, not a count of distinct historical marks:
+  // a retired game's row would otherwise stand in for a new one nobody played.
+  completionist: (m) => ARCADE_GAME_KEYS.every((g) => m.count('game', g) > 0),
   regular_player: (m) => m.totalOf('game') >= 50,
   big_payout: (m) => m.count('feat', 'ticket-ceiling') >= 1,
   trivia_buff: (m) => m.count('feat', 'trivia-perfect') >= 1,

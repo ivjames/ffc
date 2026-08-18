@@ -429,6 +429,14 @@ describe('reachability', () => {
     ).map((a) => a.category);
     expect(noHunt).not.toContain('hunt');
 
+    // Hunt badges are granted against a round's COURSE, so a deployment with
+    // the module on but no courses at all (venue-hunt only, no golf) can't earn
+    // any of them either.
+    const noCourses = reachableAchievements(
+      reachContext([], { arcade: true, ordering: true, hunt: true }),
+    ).map((a) => a.category);
+    expect(noCourses).not.toContain('hunt');
+
     // Food badges live in a mixed category, so they're gated individually.
     const noFood = reachableAchievements(
       reachContext(CATALOG, { arcade: true, ordering: false, hunt: true }),
@@ -503,6 +511,15 @@ describe('arcade', () => {
     expect(earnWith(five).has('completionist')).toBe(false);
     const all = ARCADE_GAME_KEYS.map((g) => mark('game', g));
     expect(earnWith(all).has('completionist')).toBe(true);
+  });
+
+  test('completionist wants every CURRENT game, not a count', () => {
+    // A row for a game the arcade has since dropped must not stand in for one
+    // it has since added: same number of distinct marks, different games.
+    const allButOne = ARCADE_GAME_KEYS.slice(1).map((g) => mark('game', g));
+    const withRetired = [...allButOne, mark('game', 'coinpusher')];
+    expect(withRetired).toHaveLength(ARCADE_GAME_KEYS.length);
+    expect(earnWith(withRetired).has('completionist')).toBe(false);
   });
 
   test('rounds played accumulate across games', () => {

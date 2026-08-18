@@ -102,7 +102,13 @@ export const CATEGORY_ORDER: AchievementCategory[] = [
 /** Categories that only exist where a venue module is live. */
 const MODULE_GATED: Partial<Record<AchievementCategory, (c: ReachContext) => boolean>> = {
   arcade: (c) => c.modules.arcade,
-  hunt: (c) => c.modules.hunt,
+  // The hunt module alone isn't enough. Every hunt badge is granted in the
+  // round-completion path, which matches finds to the round's COURSE — so a
+  // deployment running only the course-free venue hunt (no golf at all) can
+  // never earn one, however enabled the module is. Granting them from venue
+  // sessions is real work and a real feature; until then, don't advertise a
+  // category this deployment cannot reach.
+  hunt: (c) => c.modules.hunt && c.maxCoursesAtOneVenue >= 1,
 };
 
 export const ACHIEVEMENTS: Achievement[] = [
