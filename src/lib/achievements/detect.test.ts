@@ -17,10 +17,10 @@ const PARS = Array(18).fill(3);
 const PAR4S = [...Array(17).fill(3), 4]; // one par-4, for threading_it
 
 const CATALOG: CourseInfo[] = [
-  { id: 'c1', locationId: 'v1', pars: PARS },
-  { id: 'c2', locationId: 'v1', pars: PARS },
-  { id: 'c3', locationId: 'v2', pars: PARS },
-  { id: 'c4', locationId: 'v3', pars: PAR4S },
+  { id: 'c1', locationId: 'v1', pars: PARS, hasHunt: true },
+  { id: 'c2', locationId: 'v1', pars: PARS, hasHunt: true },
+  { id: 'c3', locationId: 'v2', pars: PARS, hasHunt: true },
+  { id: 'c4', locationId: 'v3', pars: PAR4S, hasHunt: true },
 ];
 
 let seq = 0;
@@ -412,6 +412,7 @@ describe('reachability', () => {
       hasParFourHole: true,
       modules: ALL_MODULES,
       courseHuntVenue: true,
+      maxHuntCoursesAtOneVenue: 2,
     });
   });
 
@@ -457,8 +458,57 @@ describe('reachability', () => {
     expect(noFood).toContain('century_club'); // same category, not food
   });
 
+  test('a hunt-less course does not count as a hunt', () => {
+    // The module can be on, and the venue can have courses, and there can still
+    // be nothing to find: the hunt is items on a course, not a switch. The
+    // server grants every hunt badge against those items, so a venue whose
+    // courses carry none can never produce one.
+    const empty: CourseInfo[] = [
+      { id: 'c1', locationId: 'v1', pars: PARS, hasHunt: false },
+      { id: 'c2', locationId: 'v1', pars: PARS, hasHunt: false },
+    ];
+    const ctx = reachContext(empty, ALL_MODULES);
+    expect(ctx.courseHuntVenue).toBe(false);
+    expect(ctx.maxHuntCoursesAtOneVenue).toBe(0);
+    expect(reachableAchievements(ctx).map((a) => a.category)).not.toContain('hunt');
+  });
+
+  test('Grand Hunter counts hunt-carrying courses, not courses', () => {
+    // Mirrors the server, which looks for a venue where every course that HAS a
+    // hunt has been completed and requires two of them (routes/rounds.js). A
+    // venue with three courses and one hunt grants Hunt Master and nothing
+    // more, so the badge must not be advertised there.
+    const oneHunt: CourseInfo[] = [
+      { id: 'c1', locationId: 'v1', pars: PARS, hasHunt: true },
+      { id: 'c2', locationId: 'v1', pars: PARS, hasHunt: false },
+      { id: 'c3', locationId: 'v1', pars: PARS, hasHunt: false },
+    ];
+    const ctx = reachContext(oneHunt, ALL_MODULES);
+    expect(ctx.maxCoursesAtOneVenue).toBe(3); // the golf badges still stand
+    expect(ctx.maxHuntCoursesAtOneVenue).toBe(1);
+    const keys = reachableAchievements(ctx).map((a) => a.key);
+    expect(keys).not.toContain('grand_hunter');
+    expect(keys).toContain('hunt_master'); // one hunt is still a hunt
+    expect(keys).toContain('course_collector');
+
+    // Two hunt-carrying courses at one venue and it is back.
+    const twoHunts = oneHunt.map((c, i) => ({ ...c, hasHunt: i < 2 }));
+    const back = reachContext(twoHunts, ALL_MODULES);
+    expect(back.maxHuntCoursesAtOneVenue).toBe(2);
+    expect(reachableAchievements(back).map((a) => a.key)).toContain('grand_hunter');
+  });
+
+  test('hunt courses are counted per venue, never pooled', () => {
+    // One hunt at each of two venues is not two hunts at one venue.
+    const split: CourseInfo[] = [
+      { id: 'c1', locationId: 'v1', pars: PARS, hasHunt: true },
+      { id: 'c2', locationId: 'v2', pars: PARS, hasHunt: true },
+    ];
+    expect(reachContext(split, ALL_MODULES).maxHuntCoursesAtOneVenue).toBe(1);
+  });
+
   test('drops badges a deployment cannot reach', () => {
-    const oneVenue: CourseInfo[] = [{ id: 'c1', locationId: 'v1', pars: PARS }];
+    const oneVenue: CourseInfo[] = [{ id: 'c1', locationId: 'v1', pars: PARS, hasHunt: true }];
     const keys = reachableAchievements(reachContext(oneVenue, ALL_MODULES)).map((a) => a.key);
     expect(keys).not.toContain('road_trip'); // needs three venues
     expect(keys).not.toContain('course_collector'); // needs a venue with two courses

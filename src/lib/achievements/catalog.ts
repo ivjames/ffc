@@ -59,8 +59,18 @@ export type ReachContext = {
    * has the golf but not the hunt, and venue B the hunt but no golf, satisfies
    * both and can still never grant a hunt badge: every one of them is granted
    * against a round's course, and neither venue can produce such a round.
+   *
+   * "Has the hunt" here means a course with items to find, not merely the
+   * module switched on — an empty hunt is a dead end, not a hunt.
    */
   courseHuntVenue: boolean;
+  /**
+   * Most hunt-carrying courses any one venue has, counting only venues with the
+   * hunt module live. The unit Grand Hunter is granted in: the server looks for
+   * a venue where every course that HAS a hunt has had it completed, so a venue
+   * with six courses and one hunt can't produce it.
+   */
+  maxHuntCoursesAtOneVenue: number;
 };
 
 export type Achievement = {
@@ -179,7 +189,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'above_board', label: 'Above Board', how: 'Finish a hunt with every photo above suspicion.', icon: 'state.done', category: 'hunt', local: false },
   { key: 'hoarder', label: 'Hoarder', how: 'Find ten of something there are many of.', icon: 'state.celebrate', category: 'hunt', local: false },
   { key: 'multitasker', label: 'Multitasker', how: 'Finish the hunt and beat par in the same round.', icon: 'award.trophy', category: 'hunt', local: false },
-  { key: 'grand_hunter', label: 'Grand Hunter', how: "Complete every course's hunt at one venue.", icon: 'nav.locations', category: 'hunt', local: false, reach: (c) => c.maxCoursesAtOneVenue >= 2 },
+  { key: 'grand_hunter', label: 'Grand Hunter', how: "Complete every course's hunt at one venue.", icon: 'nav.locations', category: 'hunt', local: false, reach: (c) => c.maxHuntCoursesAtOneVenue >= 2 },
   { key: 'naturalist', label: 'Naturalist', how: 'Complete a hunt without a single rejected photo.', icon: 'award.medal', category: 'hunt', local: false },
 
   // ── Wipeouts ──────────────────────────────────────────────────────────────

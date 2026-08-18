@@ -76,6 +76,7 @@ function renderCourse(c) {
     holeCount: ${lit(c.holeCount ?? 18)},
     pars: ${JSON.stringify(c.pars)},
     sortOrder: ${lit(c.sortOrder ?? 0)},
+    hasHunt: ${lit(c.hasHunt ?? false)},
   },`;
 }
 
@@ -139,6 +140,13 @@ export type GeneratedCourse = {
   holeCount: number;
   pars: number[];
   sortOrder: number;
+  // Whether this course has a hunt anyone can COMPLETE (active, non-countable
+  // items). Optional: the baked snapshot predates it, and a cached payload from
+  // an older server won't carry it. Absent reads as "assume it has one" — the
+  // opposite of \`venueHunt\` above, and deliberately: that flag ADDS a surface,
+  // this one GATES achievements off, and a stale cache must not silently hide
+  // badges the deployment can actually grant (src/lib/achievements/detect.ts).
+  hasHunt?: boolean;
 };
 
 // The tenant org the payload was filtered by (MULTI-VENUE.md §3), or null when

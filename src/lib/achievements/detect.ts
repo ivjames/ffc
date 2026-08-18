@@ -75,10 +75,24 @@ export type PlayerRound = {
  * Defaulting to the live catalog keeps call sites simple; naming it as a
  * parameter keeps every rule a pure function of its inputs.
  */
-export type CourseInfo = { id: string; locationId: string | null; pars: number[] };
+export type CourseInfo = {
+  id: string;
+  locationId: string | null;
+  pars: number[];
+  /** Does this course have a completable hunt? Drives the hunt reach rules. */
+  hasHunt: boolean;
+};
 
 export function liveCatalog(): CourseInfo[] {
-  return COURSES.map((c) => ({ id: c.id, locationId: c.locationId ?? null, pars: c.pars }));
+  return COURSES.map((c) => ({
+    id: c.id,
+    locationId: c.locationId ?? null,
+    pars: c.pars,
+    // Absent reads as TRUE: a content cache written before the server learned
+    // to report the flag has no opinion, and the safe reading of "no opinion"
+    // is the one that leaves badges visible. Only an explicit false hides them.
+    hasHunt: c.hasHunt !== false,
+  }));
 }
 
 /** A venue's clock, for the rules that care when a round started. */
@@ -586,16 +600,26 @@ const CAREER_RULES: Record<string, (rs: PlayerRound[], catalog: CourseInfo[]) =>
     }),
 };
 
-/** Courses grouped by the venue that owns them, from the live catalog. */
-function venuesWithCourses(catalog: CourseInfo[]): { locationId: string; courseIds: string[] }[] {
-  const byVenue = new Map<string, string[]>();
+/**
+ * Courses grouped by the venue that owns them, from the live catalog.
+ * `huntCourseIds` is the subset with a completable hunt — the unit the hunt
+ * badges are actually granted against, which is not the same as "courses".
+ */
+function venuesWithCourses(
+  catalog: CourseInfo[],
+): { locationId: string; courseIds: string[]; huntCourseIds: string[] }[] {
+  const byVenue = new Map<string, CourseInfo[]>();
   for (const c of catalog) {
     if (!c.locationId) continue;
     const list = byVenue.get(c.locationId) ?? [];
-    list.push(c.id);
+    list.push(c);
     byVenue.set(c.locationId, list);
   }
-  return [...byVenue].map(([locationId, courseIds]) => ({ locationId, courseIds }));
+  return [...byVenue].map(([locationId, courses]) => ({
+    locationId,
+    courseIds: courses.map((c) => c.id),
+    huntCourseIds: courses.filter((c) => c.hasHunt).map((c) => c.id),
+  }));
 }
 
 /** What this deployment's catalog can support — drives `Achievement.reach`. */
@@ -610,9 +634,16 @@ export function reachContext(
     hasParFourHole: catalog.some((c) => c.pars.includes(4)),
     modules,
     // Per venue, not two globals: the hunt has to be switched on at a venue
-    // that also has courses, because a hunt badge is granted against a round.
+    // that also has a course carrying hunt items, because a hunt badge is
+    // granted against a round on that course. A venue with the module on and
+    // courses but no items has nothing to find — the module switch is not the
+    // same fact as "there is a hunt to complete here".
     courseHuntVenue: venues.some(
-      (v) => v.courseIds.length > 0 && venueHunt(v.locationId, modules.hunt),
+      (v) => v.huntCourseIds.length > 0 && venueHunt(v.locationId, modules.hunt),
+    ),
+    maxHuntCoursesAtOneVenue: venues.reduce(
+      (m, v) => (venueHunt(v.locationId, modules.hunt) ? Math.max(m, v.huntCourseIds.length) : m),
+      0,
     ),
   };
 }

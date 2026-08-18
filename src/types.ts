@@ -121,6 +121,11 @@ export type CourseSeed = {
   mapAsset?: string; // path to bundled image/SVG when a map exists
   rules?: string[]; // course-specific notes
   accent: string; // themed accent color (hex) for UI
+  // Whether this course has a hunt that can be COMPLETED — active items that
+  // aren't the "count as many as you like" kind. Optional: a content cache
+  // written before the flag existed lacks it, and absent must read as "assume
+  // it has one" so a stale cache never hides earnable badges.
+  hasHunt?: boolean;
 };
 
 // §Achievements — a badge this device has earned. Once written it is never
