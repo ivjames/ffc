@@ -87,6 +87,14 @@ the room; `/arcade/trivia/live/:sessionId` joins one. Server side is
 `trivia_session` / `trivia_question` / `trivia_entrant` / `trivia_participant` /
 `trivia_answer` tables. Entrants can join solo or as a table.
 
+The host device can read the game aloud (`src/lib/speech.ts`, browser
+SpeechSynthesis — no audio files, no API spend): the join code in the lobby,
+each question and its choices as it opens, the answer plus the leader at the
+reveal, and the podium at the end, with a "read it again" control. Players can
+switch the same read-aloud on for their own phone; it is off by default there,
+since one voice in the room is an MC and forty is noise. The existing `ffc.muted`
+toggle silences it along with everything else.
+
 ## 5. AI Scavenger Hunt (`/golf/hunt`)
 
 Photo-verified hunt. `server/routes/hunt.js`, tables `hunt_item`,
