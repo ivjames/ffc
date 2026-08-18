@@ -75,7 +75,15 @@ before(async () => {
   locBId = await insertLocation(`Bench Venue B ${stamp}`, orgBId);
   // One question only org B can see — the cross-tenant canary.
   await insertQuestion(`ORG B SECRET ${stamp}?`, { orgId: orgBId });
-  await insertQuestion(`Org A question ${stamp}?`, { orgId: orgAId });
+  // Padded to be, reliably, the LONGEST prompt in the bank.
+  //
+  // loadQuestions sorts by length(prompt) and takes evenly-spaced picks, so
+  // which rows it returns depends on every other row in scope — and "in scope"
+  // includes every org_id-null platform question, which other test files
+  // create and delete while this one runs. Without an anchor at one end of the
+  // ordering, "the pick includes our row" is a coin flip and this test fails
+  // roughly one run in three. The longest row is always the final pick.
+  await insertQuestion(`Org A question ${stamp}? ${"padding ".repeat(30)}`, { orgId: orgAId });
   await insertQuestion(`A shared platform question ${stamp}?`);
 });
 

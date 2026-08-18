@@ -257,6 +257,34 @@ export type RewardSummary = {
 
 // A stored photo-booth picture (the AI-free pipeline — no moderation verdict
 // or people flags exist; staff review IS the moderation).
+// A row in the live-trivia question bank. `source` is null when a person wrote
+// it — by hand here, or in the House Pack seed — and names the bulk import
+// otherwise ('opentriviaqa'), which is what lets the UI mark a row as donated
+// and carry its CC BY-SA credit.
+export type TriviaQuestion = {
+  id: string;
+  orgId: string | null;
+  locationId: string | null;
+  category: string;
+  prompt: string;
+  choices: string[];
+  answer: number;
+  difficulty: number;
+  active: boolean;
+  source: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+};
+
+export type TriviaPage = {
+  questions: TriviaQuestion[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type TriviaCategory = { category: string; n: number };
+
 export type AdminBoothPhoto = {
   id: string;
   locationName: string | null;
@@ -729,6 +757,40 @@ export const api = {
     req<{ ok: true; announcement: Announcement }>(
       'POST',
       `/announcements/${id}/${archived ? 'archive' : 'unarchive'}`
+    ),
+
+  // Live-trivia question bank. The list is PAGED and returns `total` — the
+  // platform pack alone runs to ~48,000 rows after the OpenTriviaQA import, so
+  // there is no "fetch them all" call here on purpose.
+  listTriviaQuestions: (opts: {
+    category?: string;
+    q?: string;
+    orgId?: string;
+    includeArchived?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.category) p.set('category', opts.category);
+    if (opts.q) p.set('q', opts.q);
+    if (opts.orgId) p.set('orgId', opts.orgId);
+    if (opts.includeArchived) p.set('includeArchived', '1');
+    if (opts.limit !== undefined) p.set('limit', String(opts.limit));
+    if (opts.offset) p.set('offset', String(opts.offset));
+    const s = p.toString();
+    return req<TriviaPage>('GET', `/trivia/questions${s ? `?${s}` : ''}`);
+  },
+  listTriviaCategories: (orgId?: string) =>
+    req<{ categories: TriviaCategory[] }>(
+      'GET',
+      `/trivia/categories${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''}`
+    ),
+  saveTriviaQuestion: (q: Partial<TriviaQuestion>) =>
+    req<{ ok: true; question: TriviaQuestion }>('POST', '/trivia/questions', q),
+  archiveTriviaQuestion: (id: string, archived: boolean) =>
+    req<{ ok: true; question: TriviaQuestion }>(
+      'POST',
+      `/trivia/questions/${id}/${archived ? 'archive' : 'unarchive'}`
     ),
 
   // Office reporting (punchlist #2).
