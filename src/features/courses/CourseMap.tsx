@@ -1,8 +1,9 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen, TopBar, Content } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
-import { themeEmoji } from '../../lib/theme';
+import { themeIcon } from '../../lib/theme';
 import { courseById } from '../../data/courses';
+import Icon from '../../ui/Icon';
 
 // §5.2 Opening course screen — the map (bundled asset) plus a "tap anywhere to
 // begin" prompt. Reached by picking a course on the home page; tapping starts
@@ -57,7 +58,7 @@ export default function CourseMap() {
             className="flex flex-1 items-center justify-center text-7xl"
             style={{ background: `${course.accent}22` }}
           >
-            {themeEmoji(course.theme)}
+            <Icon name={themeIcon(course.theme)} />
           </div>
         )}
 

@@ -6,6 +6,8 @@ import type { Order, OrderStatus } from '../../lib/pos/types';
 import { usePos } from '../../lib/pos';
 import { forgetOrder } from '../../lib/foodOrders';
 import { playClick } from '../../lib/sound';
+import Icon from '../../ui/Icon';
+import type { DrawnIcon } from '../../ui/icons/registry';
 import {
   enableOrderNotifications,
   notificationPermission,
@@ -20,12 +22,12 @@ import {
 // always terminates. The real API may offer webhooks/SSE instead, in which
 // case this polling loop is the seam to replace).
 
-const STEPS: Array<{ status: OrderStatus; label: string; emoji: string }> = [
-  { status: 'received', label: 'Order received', emoji: '🧾' },
-  { status: 'sent_to_kitchen', label: 'Sent to the kitchen', emoji: '📨' },
-  { status: 'preparing', label: 'Being prepared', emoji: '🍳' },
-  { status: 'ready', label: 'Ready for pickup!', emoji: '🔔' },
-  { status: 'picked_up', label: 'Picked up — enjoy!', emoji: '🎉' },
+const STEPS: Array<{ status: OrderStatus; label: string; icon: DrawnIcon }> = [
+  { status: 'received', label: 'Order received', icon: 'order.received' },
+  { status: 'sent_to_kitchen', label: 'Sent to the kitchen', icon: 'order.sent-to-kitchen' },
+  { status: 'preparing', label: 'Being prepared', icon: 'order.being-prepared' },
+  { status: 'ready', label: 'Ready for pickup!', icon: 'order.ready' },
+  { status: 'picked_up', label: 'Picked up — enjoy!', icon: 'order.picked-up' },
 ];
 
 const POLL_MS = 4_000;
@@ -186,12 +188,12 @@ export default function OrderStatusScreen() {
               <div className="mb-5">
                 {notifyPerm === 'default' && (
                   <Button variant="ghost" onClick={enableNotifications}>
-                    🔔 Notify me when it's ready
+                    <Icon name="order.notify" /> Notify me when it's ready
                   </Button>
                 )}
                 {notifyPerm === 'granted' && (
                   <p className="text-center text-xs text-fairway-100/80">
-                    🔔 Notifications on — we'll alert you when it's ready.
+                    <Icon name="order.notify" /> Notifications on — we'll alert you when it's ready.
                   </p>
                 )}
                 {notifyPerm === 'denied' && (
@@ -216,7 +218,7 @@ export default function OrderStatusScreen() {
                     } ${!done && !current ? 'opacity-50' : ''}`}
                   >
                     <span className="text-xl" aria-hidden="true">
-                      {done ? '✅' : step.emoji}
+                      <Icon name={done ? 'state.done' : step.icon} />
                     </span>
                     <span
                       className={`font-bold ${current ? 'text-fairway-50' : 'text-fairway-100/80'}`}

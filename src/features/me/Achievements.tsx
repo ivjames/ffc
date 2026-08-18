@@ -3,6 +3,8 @@ import { Screen, TopBar, Content } from '../../ui/components';
 import { getAllRounds } from '../../db';
 import { courseById } from '../../data/courses';
 import { coursePar } from '../../lib/scoring';
+import type { DrawnIcon } from '../../ui/icons/registry';
+import Icon from '../../ui/Icon';
 
 // Player achievements gallery. The server grants three round achievements
 // (server/routes/rounds.js: hole_in_one, under_par, hunt_master); they're
@@ -20,7 +22,7 @@ import { coursePar } from '../../lib/scoring';
 
 type Badge = {
   key: string;
-  emoji: string;
+  icon: DrawnIcon;
   label: string;
   how: string;
   /** Whether we can detect this from local round data. */
@@ -30,21 +32,21 @@ type Badge = {
 const BADGES: Badge[] = [
   {
     key: 'hole_in_one',
-    emoji: '🎯',
+    icon: 'award.hole-in-one',
     label: 'Hole-in-One',
     how: 'Sink any hole in a single stroke.',
     detectable: true,
   },
   {
     key: 'under_par',
-    emoji: '⛳',
+    icon: 'award.under-par',
     label: 'Under Par',
     how: 'Finish a full round below the course par.',
     detectable: true,
   },
   {
     key: 'hunt_master',
-    emoji: '🕵️',
+    icon: 'award.hunt-master',
     label: 'Hunt Master',
     how: "Complete a course's scavenger hunt during a round.",
     detectable: false,
@@ -114,7 +116,7 @@ export default function Achievements() {
                   }}
                   aria-hidden="true"
                 >
-                  {b.emoji}
+                  <Icon name={b.icon} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">

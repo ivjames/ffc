@@ -268,78 +268,108 @@ export function shakeOffset(mag: number): Vec {
   return { x: (fxRandom() * 2 - 1) * mag, y: (fxRandom() * 2 - 1) * mag };
 }
 
-// --- Cabinet screen treatment ----------------------------------------------
-// The last thing a game's draw loop does. The CSS side (`.arcade-screen` in
-// index.css) supplies the bezel, the bloom, and the seat shadow — everything
-// OUTSIDE the drawing. These two supply what has to be composited on top of
-// the pixels themselves, which CSS cannot do to a canvas: a <canvas> is a
-// replaced element, so a ::after veil is never rendered on it.
+// --- Cached static layers ---------------------------------------------------
+// Most of these games repaint a completely static backdrop every frame — a
+// dartboard is 60 wedge fills, 20 numbers and a spider wire that are identical
+// on frame 1 and frame 10,000. Painting it once into an offscreen canvas and
+// blitting it costs one drawImage instead, which is what buys the per-frame
+// budget for the lighting work layered on top.
 //
-// Both are pure overlays: call them after everything else, and they need no
-// state, no per-game tuning, and no changes to what the game already draws.
+// Same idea as PuttGolf's cached hazard layer, generalised: build once, keep it
+// in a module-level slot, blit forever.
 
-/** Scanline pitch in CSS pixels. Three is the tightest that still reads as
- *  lines rather than as a flat grey wash once the canvas is scaled down to a
- *  phone. */
-const SCANLINE_PITCH = 3;
+/** Supersample factor for cached layers. Two matches the DPR cap the games
+ *  render at, so a blit is pixel-exact on a phone rather than resampled soft. */
+export const LAYER_SS = 2;
 
 /**
- * The CRT veil: scanlines plus a corner vignette, as a curved tube gives.
+ * Build a static layer: `paint` runs ONCE into an offscreen canvas sized for
+ * `w`×`h` logical units (already scaled, so paint in plain game coordinates).
+ * Blit it with `ctx.drawImage(layer, 0, 0, w, h)`.
  *
- * Cheap by construction — one fillRect per line over a canvas a few hundred
- * pixels tall, no gradients per line, no offscreen buffer — because this runs
- * every frame in games that are already doing physics.
- *
- * @param strength 0..1; scales both effects together so a game with a dark
- *   playfield can dial it down rather than turning it off.
+ * Returns null when there's no DOM or no 2D context; callers fall back to
+ * painting directly so a layer that can't be built is never a blank screen.
  */
-export function drawScreenVeil(
-  ctx: CanvasRenderingContext2D,
+export function makeLayer(
   w: number,
   h: number,
-  strength = 1,
-): void {
-  if (strength <= 0) return;
-  ctx.save();
-
-  // Scanlines.
-  ctx.fillStyle = `rgba(0,0,0,${0.14 * strength})`;
-  for (let y = 0; y < h; y += SCANLINE_PITCH) ctx.fillRect(0, y, w, 1);
-
-  // Vignette. One radial gradient, transparent through most of the frame so it
-  // only bites at the corners.
-  const grad = ctx.createRadialGradient(w / 2, h * 0.45, Math.min(w, h) * 0.3, w / 2, h * 0.5, Math.max(w, h) * 0.75);
-  grad.addColorStop(0, 'rgba(0,0,0,0)');
-  grad.addColorStop(1, `rgba(0,0,0,${0.42 * strength})`);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
-
-  ctx.restore();
+  paint: (c: CanvasRenderingContext2D) => void,
+): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+  const cv = document.createElement('canvas');
+  cv.width = w * LAYER_SS;
+  cv.height = h * LAYER_SS;
+  const c = cv.getContext('2d');
+  if (!c) return null;
+  c.scale(LAYER_SS, LAYER_SS);
+  paint(c);
+  return cv;
 }
 
 /**
- * A full-screen colored flash — the frame a machine lights up on a jackpot,
- * a strike, a bullseye. Drive `amount` from a scalar you decay() each frame:
+ * A static layer that builds on first use and REBUILDS when `key` changes.
  *
- *   gs.flash = decay(gs.flash, dt, 0.004);
- *   drawScreenFlash(ctx, W, H, gs.flash, '#fbbf24');
+ * The key matters more than it looks. Every one of these backdrops paints the
+ * venue logo, and `drawLogo` no-ops until the mark has decoded — which happens
+ * after the first frames, because branding hydrates from /api/content. A layer
+ * built naively on frame one would latch the logo-less version forever. Passing
+ * `logoReady(variant)` as the key rebuilds it exactly once, when the mark
+ * actually becomes drawable (and again if a branding swap changes it).
  *
- * Screen-blended, so it brightens the playfield rather than fogging it grey —
- * a plain white overlay at low alpha is what makes a "flash" look like haze.
+ * Call at module scope; the returned getter is what the draw loop calls.
  */
-export function drawScreenFlash(
-  ctx: CanvasRenderingContext2D,
+export function makeCachedLayer(
   w: number,
   h: number,
-  amount: number,
-  color = '#ffffff',
+  paint: (c: CanvasRenderingContext2D) => void,
+): (key?: unknown) => HTMLCanvasElement | null {
+  let layer: HTMLCanvasElement | null = null;
+  let built = false;
+  let lastKey: unknown;
+  return (key?: unknown) => {
+    if (!built || key !== lastKey) {
+      layer = makeLayer(w, h, paint);
+      built = true;
+      lastKey = key;
+    }
+    return layer;
+  };
+}
+
+/**
+ * Deterministic anisotropic streaks — the directional grain that separates
+ * brushed metal from a flat grey fill. Paint it INTO a cached layer (it's a few
+ * hundred hairline strokes, far too much for a frame) over an existing fill,
+ * clipped by the caller.
+ *
+ * Index-derived, never fxRandom(): a cached layer is built once, so a random
+ * grain would differ between a rebuild and look like the surface changed.
+ */
+export function brushedStreaks(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  count = 90,
+  alpha = 0.05,
 ): void {
-  if (amount <= 0) return;
   ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = Math.min(1, amount) * 0.55;
-  ctx.fillStyle = color;
-  ctx.fillRect(0, 0, w, h);
+  ctx.lineWidth = 1;
+  for (let i = 0; i < count; i++) {
+    // Two coprime strides keep successive streaks from stacking into bands.
+    const sx = x + ((i * 71) % w);
+    const sy = y + ((i * 137) % h);
+    const len = 18 + ((i * 29) % 46);
+    const light = i % 3 === 0;
+    ctx.strokeStyle = light
+      ? `rgba(255,255,255,${alpha})`
+      : `rgba(0,0,0,${alpha * 1.4})`;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx, Math.min(sy + len, y + h));
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

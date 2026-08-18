@@ -4,8 +4,9 @@ import AnnouncementBanner from '../../ui/AnnouncementBanner';
 import { useCurrentLocationId } from '../../lib/location';
 import { LOCATIONS, locationById, courseById } from '../../data/courses';
 import { getBranding } from '../../lib/branding';
-import { themeEmoji } from '../../lib/theme';
+import { themeIcon } from '../../lib/theme';
 import { fetchCourseBoards, courseBoardsStreamUrl, type CourseBoard } from '../../sync';
+import Icon from '../../ui/Icon';
 
 // The venue display wall — every course's board side by side on one big
 // screen, separate from the phone-first /tv route. Built for a TV stick
@@ -104,7 +105,7 @@ export default function TvWall() {
       <div className="mb-4 flex shrink-0 items-center gap-6">
         <div className="shrink-0">
           <h1 className="text-3xl font-black tracking-tight text-fairway-50">
-            ⛳️ {location?.name ?? 'Mini Golf'} Leaderboard
+            <Icon name="nav.golf" /> {location?.name ?? 'Mini Golf'} Leaderboard
           </h1>
           <div className="text-sm font-semibold uppercase tracking-[0.2em] text-fairway-400">
             {PERIOD_LABEL[period]}
@@ -145,7 +146,7 @@ export default function TvWall() {
                   style={{ background: `${accent}24`, borderBottom: `2px solid ${accent}` }}
                 >
                   <span className="text-2xl" aria-hidden="true">
-                    {themeEmoji(board.theme)}
+                    <Icon name={themeIcon(board.theme)} />
                   </span>
                   <span className="truncate text-lg font-black text-fairway-50">
                     {board.courseName}

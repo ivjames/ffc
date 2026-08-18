@@ -3,6 +3,7 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { useSession } from '../../lib/session';
 import { usePos } from '../../lib/pos';
 import { isStandalone } from '../../lib/pwaInstall';
+import Icon from '../../ui/Icon';
 
 // "Me" section hub — the personal/account corner of the app. Gathers everything
 // that's about the player rather than an attraction: sign-in/profile, teams,
@@ -27,7 +28,7 @@ export default function MeHome() {
             style={{ background: '#16653422', border: '1px solid #16653455' }}
             aria-hidden="true"
           >
-            {me ? '👤' : '✨'}
+            <Icon name={me ? 'state.account' : 'state.guest'} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-base font-bold text-fairway-50">
@@ -49,25 +50,25 @@ export default function MeHome() {
           {me && (
             <>
               <Button variant="ghost" onClick={() => navigate('/me/achievements')}>
-                🏅 Achievements
+                <Icon name="award.medal" /> Achievements
               </Button>
               <Button variant="ghost" onClick={() => navigate('/me/teams')}>
-                👥 My teams
+                <Icon name="state.teams" /> My teams
               </Button>
               {pos.loyalty && (
                 <Button variant="ghost" onClick={() => navigate('/me/rewards')}>
-                  🎟️ Rewards card
+                  <Icon name="nav.rewards" /> Rewards card
                 </Button>
               )}
             </>
           )}
           {!isStandalone() && (
             <Button variant="ghost" onClick={() => navigate('/install')}>
-              ⬇️ Install app
+              <Icon name="nav.install" /> Install app
             </Button>
           )}
           <Button variant="ghost" onClick={() => navigate('/me/privacy')}>
-            🔒 Privacy
+            <Icon name="state.locked" /> Privacy
           </Button>
         </div>
       </Content>

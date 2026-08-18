@@ -8,6 +8,7 @@ import { useCart, cartCount } from '../../lib/foodCart';
 import { useMenu } from './useMenu';
 import ItemSheet from './ItemSheet';
 import ActiveOrdersCard from './ActiveOrdersCard';
+import Icon from '../../ui/Icon';
 
 // /food — browse the venue menu and build a cart. Native ordering is a
 // POS-integration add-on: only venues whose Master Control config enables the
@@ -92,7 +93,7 @@ export default function Food() {
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         >
           <Button onClick={() => navigate('/food/checkout')} sound="cup">
-            🛒 View cart · {count} {count === 1 ? 'item' : 'items'} · {formatCents(subtotal)}
+            <Icon name="order.cart" /> View cart · {count} {count === 1 ? 'item' : 'items'} · {formatCents(subtotal)}
           </Button>
         </div>
       )}

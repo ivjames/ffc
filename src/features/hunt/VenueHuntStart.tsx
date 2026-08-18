@@ -3,6 +3,7 @@ import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
 import { TAG_LENGTH, sanitizeTagInput, tagError } from '../../lib/sanitize';
 import { startVenueHuntSession, type VenueHuntSession } from './venueSession';
+import Icon from '../../ui/Icon';
 
 // The venue hunt's front door. A course hunt inherits its group from the round
 // the players already set up; a course-free hunt has no such round, so this is
@@ -59,7 +60,7 @@ export default function VenueHuntStart({
         <TopBar title="Scavenger hunt" back={backTo} />
         <Content>
           <div className="mb-5 text-center">
-            <div className="text-5xl">🔍</div>
+            <Icon name="nav.hunt" className="text-5xl" />
             <h2 className="mt-3 text-xl font-bold text-fairway-50">
               {venueName ? `Hunt around ${venueName}` : 'Start the hunt'}
             </h2>

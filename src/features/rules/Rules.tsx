@@ -1,9 +1,10 @@
 import { Screen, TopBar, Content } from '../../ui/components';
 import { coursesByLocation } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
-import { accentInk, themeEmoji } from '../../lib/theme';
+import { accentInk, themeIcon } from '../../lib/theme';
 import type { CSSProperties } from 'react';
 import { STROKE_CAP } from '../../lib/scoring';
+import Icon from '../../ui/Icon';
 
 // §5.3 Rules — general rules + optional per-course notes. Static bundled
 // content, works offline.
@@ -62,7 +63,7 @@ export default function Rules() {
                     <div className="relative">
                       <div className="mb-3 flex items-center gap-2">
                         <span aria-hidden className="text-lg">
-                          {themeEmoji(c.theme)}
+                          <Icon name={themeIcon(c.theme)} />
                         </span>
                         <span className="font-bold" style={{ color: ink }}>
                           {c.name}

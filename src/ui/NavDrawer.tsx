@@ -11,6 +11,8 @@ import { playClick } from '../lib/sound';
 import ThemeToggle from './ThemeToggle';
 import SoundToggle from './SoundToggle';
 import BrandLogo from './BrandLogo';
+import Icon from './Icon';
+import type { DrawnIcon } from './icons/registry';
 
 // The global navigation drawer — the app's one persistent way to move between
 // the top-level sections (Home / Golf / Arcade / Food / Me). Opened by the
@@ -22,7 +24,7 @@ import BrandLogo from './BrandLogo';
 
 type Item = {
   to: string;
-  emoji: string;
+  icon: DrawnIcon;
   label: string;
   /** Prefix used to mark the row active for the current route. */
   match?: string;
@@ -40,22 +42,24 @@ function useSectionRows(): { primary: Item[]; secondary: Item[] } {
   const hasFood = pos.ordering != null;
 
   const primary: Item[] = [
-    { to: '/', emoji: '🏠', label: 'Home', match: '/' },
-    { to: '/golf', emoji: '⛳️', label: 'Mini Golf', match: '/golf' },
+    { to: '/', icon: 'nav.home', label: 'Home', match: '/' },
+    { to: '/golf', icon: 'nav.golf', label: 'Mini Golf', match: '/golf' },
     // The arcade is an à la carte module too — a venue that didn't buy it
     // shouldn't have it in the drawer (src/lib/modules.ts).
-    ...(modules.arcade ? [{ to: '/arcade', emoji: '🎮', label: 'Arcade', match: '/arcade' }] : []),
-    ...(hasFood ? [{ to: '/food', emoji: '🌭', label: 'Food & Drink', match: '/food' }] : []),
-    { to: '/me', emoji: '👤', label: 'Me', match: '/me' },
+    ...(modules.arcade
+      ? [{ to: '/arcade', icon: 'nav.arcade', label: 'Arcade', match: '/arcade' } as Item]
+      : []),
+    ...(hasFood ? [{ to: '/food', icon: 'nav.food', label: 'Food & Drink', match: '/food' } as Item] : []),
+    { to: '/me', icon: 'nav.me', label: 'Me', match: '/me' },
   ];
 
   const secondary: Item[] = [
-    { to: '/photos', emoji: '📸', label: 'Photo Booth' },
+    { to: '/photos', icon: 'nav.photos', label: 'Photo Booth' },
     ...(pos.loyalty && signedIn
-      ? [{ to: '/me/rewards', emoji: '🎟️', label: 'Rewards card' }]
+      ? [{ to: '/me/rewards', icon: 'nav.rewards', label: 'Rewards card' } as Item]
       : []),
-    { to: '/locations', emoji: '📍', label: 'Change location' },
-    ...(!isStandalone() ? [{ to: '/install', emoji: '⬇️', label: 'Install app' }] : []),
+    { to: '/locations', icon: 'nav.locations', label: 'Change location' },
+    ...(!isStandalone() ? [{ to: '/install', icon: 'nav.install', label: 'Install app' } as Item] : []),
   ];
 
   return { primary, secondary };
@@ -163,7 +167,7 @@ export default function NavDrawer() {
                     }`}
                   >
                     <span className="text-xl" aria-hidden="true">
-                      {it.emoji}
+                      <Icon name={it.icon} />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{it.label}</span>
                     {active && (
@@ -187,7 +191,7 @@ export default function NavDrawer() {
                   className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold text-fairway-100/90 transition-transform active:translate-y-px active:bg-fairway-800/40"
                 >
                   <span className="text-base" aria-hidden="true">
-                    {it.emoji}
+                    <Icon name={it.icon} />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{it.label}</span>
                 </button>
@@ -202,18 +206,14 @@ export default function NavDrawer() {
           <div className="space-y-1">
             <div className="flex items-center justify-between rounded-xl px-3.5 py-2">
               <span className="flex items-center gap-3 text-sm font-semibold text-fairway-100/90">
-                <span className="text-base" aria-hidden="true">
-                  🔊
-                </span>
+                <Icon name="control.sound-on" className="text-base" />
                 Sound
               </span>
               <SoundToggle />
             </div>
             <div className="flex items-center justify-between rounded-xl px-3.5 py-2">
               <span className="flex items-center gap-3 text-sm font-semibold text-fairway-100/90">
-                <span className="text-base" aria-hidden="true">
-                  🌙
-                </span>
+                <Icon name="control.theme-dark" className="text-base" />
                 Dark mode
               </span>
               <ThemeToggle />

@@ -21,6 +21,9 @@ import ActiveOrdersCard from '../food/ActiveOrdersCard';
 import AdoptionNudge from '../../ui/AdoptionNudge';
 import AdoptionBonusToast from '../../ui/AdoptionBonusToast';
 import type { LocalRound } from '../../types';
+import Icon from '../../ui/Icon';
+import type { DrawnIcon } from '../../ui/icons/registry';
+import type { ReactNode } from 'react';
 
 // Food & drink deep links for the current venue. External links, so they open
 // in a new tab and need a connection — offline the card stays visible (the
@@ -39,7 +42,7 @@ function FoodDrinkCard({ menuUrl, orderingUrl }: { menuUrl?: string; orderingUrl
   }, []);
 
   if (!menuUrl && !orderingUrl) return null;
-  const link = (url: string, label: string) => (
+  const link = (url: string, label: ReactNode) => (
     <a
       href={online ? url : undefined}
       target="_blank"
@@ -63,9 +66,7 @@ function FoodDrinkCard({ menuUrl, orderingUrl }: { menuUrl?: string; orderingUrl
   return (
     <div className="surface-1 mb-3 rounded-2xl border border-fairway-800/60 p-3.5">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-lg" aria-hidden="true">
-          🌭
-        </span>
+        <Icon name="nav.food" className="text-lg" />
         <span className="text-sm font-bold text-fairway-50">Food &amp; Drink</span>
         {!online && (
           <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-fairway-400">
@@ -75,7 +76,16 @@ function FoodDrinkCard({ menuUrl, orderingUrl }: { menuUrl?: string; orderingUrl
       </div>
       <div className="flex gap-2">
         {menuUrl && link(menuUrl, 'See the menu')}
-        {orderingUrl && link(orderingUrl, '🛒 Order food')}
+        {orderingUrl && (
+            <>
+              {link(
+                orderingUrl,
+                <>
+                  <Icon name="order.cart" /> Order food
+                </>,
+              )}
+            </>
+          )}
       </div>
     </div>
   );
@@ -83,7 +93,7 @@ function FoodDrinkCard({ menuUrl, orderingUrl }: { menuUrl?: string; orderingUrl
 
 // A top-level section tile for the dashboard grid. Big, glossy, tappable — the
 // launcher into each part of the app.
-type SectionTile = { to: string; emoji: string; title: string; accent: string };
+type SectionTile = { to: string; icon: DrawnIcon; title: string; accent: string };
 
 // Home — the FEC venue dashboard. This used to be the Mini Golf course picker;
 // in the restructure it becomes a launcher for the whole family-fun-center:
@@ -139,17 +149,17 @@ export default function Home() {
   // POS-integrated venues (others use the deep-link card below).
   const sections: SectionTile[] = [
     ...(hasGolf
-      ? [{ to: '/golf', emoji: '⛳️', title: 'Mini Golf', accent: '#16a34a' } as SectionTile]
+      ? [{ to: '/golf', icon: 'nav.golf', title: 'Mini Golf', accent: '#16a34a' } as SectionTile]
       : []),
     ...(hasVenueHunt
-      ? [{ to: '/hunt', emoji: '🔍', title: 'Scavenger Hunt', accent: '#0ea5e9' } as SectionTile]
+      ? [{ to: '/hunt', icon: 'nav.hunt', title: 'Scavenger Hunt', accent: '#0ea5e9' } as SectionTile]
       : []),
     ...(modules.arcade
-      ? [{ to: '/arcade', emoji: '🎮', title: 'Arcade', accent: '#a855f7' } as SectionTile]
+      ? [{ to: '/arcade', icon: 'nav.arcade', title: 'Arcade', accent: '#a855f7' } as SectionTile]
       : []),
-    { to: '/photos', emoji: '📸', title: 'Photo Booth', accent: '#ec4899' },
+    { to: '/photos', icon: 'nav.photos', title: 'Photo Booth', accent: '#ec4899' },
     ...(pos.ordering
-      ? [{ to: '/food', emoji: '🌭', title: 'Food & Drink', accent: '#ef4444' } as SectionTile]
+      ? [{ to: '/food', icon: 'nav.food', title: 'Food & Drink', accent: '#ef4444' } as SectionTile]
       : []),
   ];
 
@@ -169,9 +179,7 @@ export default function Home() {
           <BrandLogo
             className="mx-auto h-14 w-auto max-w-[75%] object-contain drop-shadow"
             fallback={
-              <div className="animate-wiggle inline-block text-4xl leading-none drop-shadow">
-                🎡
-              </div>
+              <Icon name="brand.mark" className="animate-wiggle inline-block text-4xl leading-none drop-shadow" />
             }
           />
           <h1 className="mt-1.5 text-2xl font-black tracking-tight text-fairway-50">
@@ -247,7 +255,7 @@ export default function Home() {
                 className="course-puck flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl transition-transform duration-150 group-active:scale-110"
                 style={{ '--puck-accent': s.accent } as CSSProperties}
               >
-                <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">{s.emoji}</span>
+                <Icon name={s.icon} className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]" />
               </span>
               <span className="min-w-0 text-sm font-black leading-tight text-fairway-50">
                 {s.title}
@@ -266,7 +274,8 @@ export default function Home() {
 
         <div className="space-y-2">
           <Button variant="ghost" onClick={() => navigate('/me')}>
-            {me ? `👤 ${me.displayName || me.defaultTag || me.email}` : '👤 Sign in / register'}
+            <Icon name="state.account" />
+            {me ? me.displayName || me.defaultTag || me.email : 'Sign in / register'}
           </Button>
         </div>
       </Content>

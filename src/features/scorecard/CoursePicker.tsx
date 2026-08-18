@@ -3,8 +3,9 @@ import { Screen, TopBar, Content } from '../../ui/components';
 import { coursesByLocation, locationById } from '../../data/courses';
 import { useCurrentLocationId } from '../../lib/location';
 import { coursePar } from '../../lib/scoring';
-import { themeEmoji } from '../../lib/theme';
+import { themeIcon } from '../../lib/theme';
 import { VenueOpenLine } from '../../ui/VenueHoursInfo';
+import Icon from '../../ui/Icon';
 
 // §5.1 step 1 — pick a course at the current location (one round = one course).
 export default function CoursePicker() {
@@ -24,7 +25,7 @@ export default function CoursePicker() {
         >
           <span>
             <span className="text-fairway-100/70">
-              📍 <span className="font-semibold text-fairway-100">{location?.name}</span>
+              <Icon name="state.located" /> <span className="font-semibold text-fairway-100">{location?.name}</span>
             </span>
             <VenueOpenLine hours={location?.hours} tz={location?.tz} className="mt-1" />
           </span>
@@ -48,7 +49,7 @@ export default function CoursePicker() {
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl"
                 style={{ background: `${c.accent}22`, border: `1px solid ${c.accent}55` }}
               >
-                {themeEmoji(c.theme)}
+                <Icon name={themeIcon(c.theme)} />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-lg font-bold text-fairway-50">{c.name}</span>

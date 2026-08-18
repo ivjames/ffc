@@ -6,6 +6,7 @@ import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
 import { playStroke, playCup, playUndo, playFanfare } from '../../lib/sound';
 import type { Particle, Vec as FxVec } from './fx';
+import Icon from '../../ui/Icon';
 import {
   TWO_PI,
   withAlpha,
@@ -18,7 +19,6 @@ import {
   pushTrail,
   decay,
   shakeOffset,
-  drawScreenVeil,
 } from './fx';
 
 // §12 Axe Throwing — the fourth attraction mini-game. A two-tap timing game:
@@ -461,9 +461,6 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX, now: number) {
 
   // Cabinet finish, last of all: scanlines + a tube vignette over the
   // finished frame. The bezel and bloom around the screen are CSS
-  // (.arcade-screen); this is the half that has to composite onto the
-  // pixels, which CSS cannot do to a <canvas>.
-  drawScreenVeil(ctx, W, H);
 }
 
 export default function AxeThrow() {
@@ -671,7 +668,7 @@ export default function AxeThrow() {
         <TopBar title="Axe Throwing" back="/arcade" />
         <Content>
           <div className="animate-trophy-pop mt-6 flex flex-col items-center gap-3 text-center">
-            <span className="text-6xl">🪓</span>
+            <Icon name="game.axe-throwing" className="text-6xl" />
             <div className="text-5xl font-black text-fairway-50">{total}</div>
             <p className="text-lg font-semibold text-fairway-100">{remark}</p>
             <p className="text-sm text-fairway-400">across {THROWS} throws</p>
@@ -726,7 +723,7 @@ export default function AxeThrow() {
         />
         {phase === 'ready' && (
           <div className="col-start-1 row-start-1 m-4 flex max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] flex-col items-center justify-center gap-4 rounded-2xl bg-black/70 px-6 py-5 text-center">
-            <span className="text-5xl">🪓</span>
+            <Icon name="game.axe-throwing" className="text-5xl" />
             <p className="text-sm text-fairway-100">
               Tap to set your aim, tap again to set the height. {THROWS} throws — stick the bullseye or a clutch.
             </p>
