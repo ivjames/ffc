@@ -96,6 +96,8 @@ type GS = {
   startAt: number; // timestamp play began
   score: number;
   hits: number; // moles + golds bopped (bombs excluded)
+  streak: number; // current run of clean bops
+  bestStreak: number; // longest run this round — the Mole Patrol achievement
   moles: Mole[];
   nextSpawnAt: number;
   lastTickSec: number; // last whole second we played the countdown tick for
@@ -108,6 +110,8 @@ function freshGS(): GS {
     startAt: 0,
     score: 0,
     hits: 0,
+    streak: 0,
+    bestStreak: 0,
     moles: [],
     nextSpawnAt: 0,
     lastTickSec: -1,
@@ -663,6 +667,7 @@ export default function WhackAMole() {
     setScore(gs.score);
 
     if (best.kind === 'bomb') {
+      gs.streak = 0; // a bomb ends the run
       spawnBurst(fx.particles, hx, headY, 26, 320, '#fca5a5');
       fx.shake = 7;
       fx.flash = 1;
@@ -671,6 +676,8 @@ export default function WhackAMole() {
       playBuzz();
     } else {
       gs.hits += 1;
+      gs.streak += 1;
+      gs.bestStreak = Math.max(gs.bestStreak, gs.streak);
       setHits(gs.hits);
       const gold = best.kind === 'gold';
       spawnBurst(fx.particles, hx, headY, gold ? 20 : 12, gold ? 260 : 180, gold ? '#fde68a' : '#c8963e');
@@ -699,6 +706,8 @@ export default function WhackAMole() {
   }, []);
 
   if (phase === 'done') {
+    // The clean-run tally lives in the canvas game state, not React state.
+    const gs = gsRef.current;
     const remark =
       score >= 38
         ? 'Mole mayhem master! 🔨'
@@ -725,6 +734,7 @@ export default function WhackAMole() {
             game="whackamole"
             tickets={Math.min(100, Math.max(0, Math.round(score * 1.5)))}
             sessionId={sessionId}
+            feat={gs.bestStreak >= 10 ? 'mole-streak' : undefined}
           />
           <GameHighScore game="whackamole" score={score} sessionId={sessionId} />
           <div className="mt-8">

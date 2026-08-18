@@ -521,13 +521,25 @@ def _badge(glyph, title, how, earned=False, n=None, first=False):
               el(f'<div style="display:flex;align-items:center">{sp(title,16,700)}{pill}</div><div>{lab(how,13)}</div>',
                  cls="col ai-start", grow=True, border="none", background="none", margin_left="14px"),
               cls="s1 rowc", n=n, r=16, pad="14px", border=bd, mt=(0 if first else 12), **st)
+def _achvhead(title, count, n=None, mt=16):
+    return el(f'<div style="display:flex;align-items:baseline;justify-content:space-between">'
+              f'{lab(title,11)}<span style="font-size:11px;color:var(--mut)">{count}</span></div>',
+              n=n, mt=mt, border="none")
+
 screen(id="achv", name="Achievements",
  body=dev(bar("Achievements") + content(
-   el(f'<div style="text-align:center">{lab("1 of 3 unlocked · earn tickets at the counter",13)}</div>', n=1, border="none") +
-   el(_badge("🎯","Hole-in-One","Sink any hole in a single stroke.",earned=True,n=2,first=True) +
-      _badge("⛳","Under Par","Finish a round below the course par.") +
-      _badge("🕵️","Hunt Master","Complete a course's scavenger hunt."),
-      mt=16, border="none") +
+   el(f'<div style="text-align:center">{lab("4 of 46 unlocked",13)}</div>', n=1, border="none") +
+   _achvhead("SCORING", "2/22", n=2) +
+   el(_badge("🎯","Hole-in-One","Sink any hole in a single stroke.",earned=True,n=3,first=True) +
+      _badge("⛳","Under Par","Finish a full round below the course par.",earned=True) +
+      _badge("🐦","Birdie","Beat par on any single hole."),
+      mt=8, border="none") +
+   _achvhead("WIPEOUTS", "0/8") +
+   el(_badge("🔒","???","Hidden — you will know it when it happens.",n=4,first=True),
+      mt=8, border="none") +
+   _achvhead("SCAVENGER HUNT", "0/1") +
+   el(_badge("🕵️","Hunt Master","Complete a course's scavenger hunt.",n=5,first=True),
+      mt=8, border="none") +
    el(f'<div style="text-align:center">{lab("Tracked on this device. Sign in to keep them.",12)}</div>', mt=16, border="none")
  ))),
 

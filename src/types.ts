@@ -35,9 +35,22 @@ export type LocalRound = {
   createdAt: number;
   completedAt: number | null;
   syncState: SyncState;
+  // The course's pars, copied at creation. The venue catalog is LIVE — a course
+  // archived in Master Control disappears from /api/content — and without this
+  // a round played on it becomes unjudgeable, taking even par-independent
+  // badges (a hole-in-one is a hole-in-one) down with it. Optional because
+  // rounds created before this existed don't have it; those fall back to the
+  // catalog, and are simply lost if their course is gone.
+  pars?: number[];
   // Present only on shared multi-device rounds. Shared rounds never enter the
   // 'pending' push queue — the server finalizes them at completion instead.
   shared?: SharedInfo;
+  // When this round's server-granted achievements were pulled into the local
+  // earned set (see features/me/Achievements). Absent = not yet imported, which
+  // is what makes the import self-healing: a round the worker synced in the
+  // background, or one whose fetch failed, is simply retried on the next visit
+  // to the wall.
+  grantsImportedAt?: number;
 };
 
 // One queued cell write from this device, awaiting delivery to the shared
@@ -108,4 +121,31 @@ export type CourseSeed = {
   mapAsset?: string; // path to bundled image/SVG when a map exists
   rules?: string[]; // course-specific notes
   accent: string; // themed accent color (hex) for UI
+  // Whether this course has a hunt that can be COMPLETED — active items that
+  // aren't the "count as many as you like" kind. Optional: a content cache
+  // written before the flag existed lacks it, and absent must read as "assume
+  // it has one" so a stale cache never hides earnable badges.
+  hasHunt?: boolean;
+};
+
+// §Achievements — a badge this device has earned. Once written it is never
+// removed: detection re-derives from stored rounds, so without this record a
+// cleared cache (or an aged-out round) would quietly take badges away.
+export type EarnedBadge = {
+  key: string;
+  earnedAt: number;
+};
+
+// A device-local tally of something the round record cannot see — a mini-game
+// played, a booth photo saved, a food order placed. `best` is a high-water mark
+// for rules phrased as "reach N" (a game's ticket ceiling, stickers on one
+// photo). Never leaves the device.
+export type ActivityMark = {
+  id: string; // `${kind}:${name}`
+  kind: 'game' | 'feat' | 'booth' | 'food' | 'social';
+  name: string;
+  count: number;
+  best: number;
+  firstAt: number;
+  lastAt: number;
 };

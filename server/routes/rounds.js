@@ -8,7 +8,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { validateTags, isValidTag } from "../lib/sanitize.js";
 import { makeRateLimit } from "../lib/rateLimit.js";
-import { scoreAchievements } from "../lib/rewards.js";
+import { huntAchievements, scoreAchievements } from "../lib/rewards.js";
 import { domainEvents, ROUND_COMPLETED } from "../lib/events.js";
 import { resolveSynthetic, syntheticMintsRewards } from "../lib/syntheticConfig.js";
 import { tenant, findTenantCourse } from "../lib/tenant.js";
@@ -60,6 +60,12 @@ function collectScoreRows(scores, playerCount) {
 }
 
 // --- Rewards ---------------------------------------------------------------
+
+/** Advisory-lock namespace for the per-account Grand Hunter check (see below).
+ *  Arbitrary; it only has to be distinct from the other advisory locks this app
+ *  takes (lib/diskBudget.js, lib/dailyTickets.js). The hex spells "hunt". */
+const GRAND_HUNTER_LOCK = 0x68756e74;
+
 /**
  * Grant achievements for a freshly-synced completed round (same transaction).
  * Score-based ones (hole-in-one, under par) come from lib/rewards.js; Hunt
@@ -68,7 +74,7 @@ function collectScoreRows(scores, playerCount) {
  * device round id — our clientId — because the hunt runs during play, before
  * the round exists server-side).
  */
-export async function grantRewards(client, { roundId, clientId, courseId, playerTags, scoreRows, pars }) {
+export async function grantRewards(client, { roundId, clientId, courseId, playerTags, scoreRows, pars, appUserId = null }) {
   const grants = scoreAchievements(scoreRows, playerTags.length, pars);
 
   const huntDone = await client.query(
@@ -85,11 +91,180 @@ export async function grantRewards(client, { roundId, clientId, courseId, player
         and count(distinct i.id) > 0`,
     [clientId, courseId]
   );
+  // Hunt finds are keyed by tag, not roster position — credit the first roster
+  // slot with that tag (duplicate tags can't be told apart anyway).
+  const slotOf = (tag) => playerTags.indexOf(tag);
+  const completedTags = new Set();
   for (const { tag } of huntDone.rows) {
-    // Hunt finds are keyed by tag, not roster position — credit the first
-    // roster slot with that tag (duplicate tags can't be told apart anyway).
-    const playerIndex = playerTags.indexOf(tag);
+    completedTags.add(tag);
+    const playerIndex = slotOf(tag);
     if (playerIndex !== -1) grants.push({ playerIndex, achievement: "hunt_master" });
+  }
+
+  // The rest of the hunt badges, from this round's submissions. Rules live in
+  // lib/rewards.js so they're unit-testable without a DB; this only supplies
+  // the rows (every submission, verified or not — several rules are about the
+  // rejections).
+  const finds = await client.query(
+    `select f.player_tag as tag, f.item_id as "itemId", f.verified,
+            f.confidence, f.flagged, f.countable, i.active,
+            extract(epoch from f.created_at) as "createdAt"
+       from hunt_find f
+       join hunt_item i on i.id = f.item_id
+      where f.round_client_id = $1 and i.course_id = $2`,
+    [clientId, courseId]
+  );
+  for (const { tag, achievement } of huntAchievements(finds.rows, { completedTags })) {
+    const playerIndex = slotOf(tag);
+    if (playerIndex !== -1) grants.push({ playerIndex, achievement });
+  }
+
+  // Multitasker — finished the hunt AND beat the course, same round. Composed
+  // here because it straddles the two rule sets.
+  const underPar = new Set(
+    grants.filter((g) => g.achievement === "under_par").map((g) => g.playerIndex)
+  );
+  for (const tag of completedTags) {
+    const playerIndex = slotOf(tag);
+    if (playerIndex !== -1 && underPar.has(playerIndex)) {
+      grants.push({ playerIndex, achievement: "multitasker" });
+    }
+  }
+
+  // Grand Hunter — Hunt Master on every course at this venue. The only hunt
+  // badge judged ACROSS rounds, which makes identity the whole problem.
+  //
+  // A 3-char tag is a display label, not a person: tags repeat by design, so
+  // matching on one would hand a player a badge off a stranger's history and
+  // lose their own the moment they picked different letters. But owning the
+  // ROUND isn't enough either — a signed-in player hosting a pass-and-play
+  // foursome owns a round whose other three seats are guests, so crediting
+  // every finisher would let a rotating cast of companions collectively earn
+  // one person's badge, and would count a guest's hunt as the owner's history.
+  //
+  // So this needs a seat whose owner is unambiguous, in both directions:
+  //   · a solo round attributed to an account — one seat, one owner
+  //   · a shared game — every seat carries its own app_user_id
+  // Multi-player pass-and-play has no per-seat identity at all, so it neither
+  // earns this nor counts toward it. Every other hunt badge is judged inside a
+  // single round, where the tag IS unambiguous, so none of them need this.
+  if (completedTags.size > 0) {
+    // slot -> the account that unambiguously holds it.
+    const seatOwners = new Map();
+    if (clientId.startsWith("shared:")) {
+      const roster = await client.query(
+        `select slot, app_user_id from shared_game_player
+          where game_id = $1::uuid and app_user_id is not null`,
+        [clientId.slice("shared:".length)]
+      );
+      for (const r of roster.rows) seatOwners.set(r.slot, r.app_user_id);
+    } else if (appUserId && playerTags.length === 1) {
+      seatOwners.set(0, appUserId);
+    }
+
+    const finishers = [...completedTags]
+      .map((tag) => ({ tag, slot: slotOf(tag) }))
+      .filter(({ slot }) => slot !== -1 && seatOwners.has(slot));
+
+    if (finishers.length > 0) {
+      // Live courses that actually HAVE a hunt. Two exclusions, same reason:
+      // requiring a course nobody can complete makes "every course at this
+      // venue" permanently unreachable. An archived course is gone from
+      // /api/content and can't be picked at all; a course with no active
+      // non-countable items can be played but can never produce hunt_master,
+      // because completion is defined over exactly those items.
+      const venueCourses = await client.query(
+        `select c.id from course c
+          where c.location_id = (select location_id from course where id = $1)
+            and c.archived_at is null
+            and exists (
+              select 1 from hunt_item i
+               where i.course_id = c.id and i.active and not i.countable
+            )`,
+        [courseId]
+      );
+      const allCourseIds = venueCourses.rows.map((r) => r.id);
+      // A one-course venue would grant this for the same work as Hunt Master,
+      // so it isn't an achievement there. Mirrors the client's `reach`
+      // predicate, which hides the badge rather than showing it unearnable.
+      if (allCourseIds.length >= 2) {
+        // Serialize the check per account before reading anyone's history.
+        // One player with two phones can sync the last two courses at the same
+        // moment: each transaction reads the other's `hunt_master` before it
+        // commits, so neither sees a finished venue — and because a duplicate
+        // re-sync returns early, nothing ever reconsiders it. The badge is
+        // lost permanently, from a race the player can't even observe.
+        //
+        // Holding this until commit makes the second transaction read the
+        // first's grant. Owners are locked in a fixed order so two shared games
+        // with overlapping rosters can't deadlock against each other.
+        const owners = [...new Set(finishers.map(({ slot }) => seatOwners.get(slot)))].sort();
+        for (const owner of owners) {
+          await client.query(`select pg_advisory_xact_lock($1, hashtext($2::text))`, [
+            GRAND_HUNTER_LOCK,
+            owner,
+          ]);
+        }
+        for (const { slot } of finishers) {
+          const owner = seatOwners.get(slot);
+          // Courses this ACCOUNT has hunted, counting only rounds where its
+          // seat was equally unambiguous — solo owned rounds, and shared games
+          // where the roster names the seat.
+          const prior = await client.query(
+            `select distinct r.course_id as id
+               from reward_grant g
+               join round r on r.id = g.round_id
+              where g.achievement = 'hunt_master'
+                and r.course_id = any($2::uuid[])
+                and (
+                  (r.app_user_id = $1 and array_length(r.player_tags, 1) = 1)
+                  or exists (
+                    select 1
+                      from shared_game sg
+                      join shared_game_player sp
+                        on sp.game_id = sg.id and sp.slot = g.player_index
+                     where r.client_id = 'shared:' || sg.id::text
+                       and sp.app_user_id = $1
+                  )
+                )`,
+            [owner, allCourseIds]
+          );
+          const done = new Set([...prior.rows.map((r) => r.id), courseId]);
+          if (allCourseIds.every((id) => done.has(id))) {
+            grants.push({ playerIndex: slot, achievement: "grand_hunter" });
+          }
+        }
+      }
+    }
+  }
+
+  // Team Player — played a round alongside someone from one of your teams.
+  // Read off the shared game's roster rather than a team picker, because the
+  // app has no screen that ties a round to a team (createGame accepts a teamId
+  // that nothing passes). Two members of the same team in one game IS playing
+  // with your team, and it needs no new UI to be true.
+  if (clientId.startsWith("shared:")) {
+    const gameId = clientId.slice("shared:".length);
+    const mates = await client.query(
+      `select p.slot, p.tag
+         from shared_game_player p
+        where p.game_id = $1::uuid and p.app_user_id is not null
+          and exists (
+            select 1
+              from team_member me
+              join team_member them on them.team_id = me.team_id
+              join shared_game_player q on q.app_user_id = them.app_user_id
+             where me.app_user_id = p.app_user_id
+               and q.game_id = p.game_id
+               and q.app_user_id <> p.app_user_id
+          )`,
+      [gameId]
+    );
+    for (const { slot } of mates.rows) {
+      if (slot >= 0 && slot < playerTags.length) {
+        grants.push({ playerIndex: slot, achievement: "team_player" });
+      }
+    }
   }
 
   for (const grant of grants) {
@@ -226,6 +401,7 @@ router.post("/", rateLimit, tenant(), async (req, res) => {
           playerTags,
           scoreRows: collected.rows,
           pars: course.pars,
+          appUserId,
         });
       }
     } else {

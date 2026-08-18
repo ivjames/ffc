@@ -13,6 +13,7 @@ import { shareRound } from './shareImage';
 import { playFanfare } from '../../lib/sound';
 import type { CourseSeed, LocalRound } from '../../types';
 import Icon from '../../ui/Icon';
+import { ACHIEVEMENTS_BY_KEY } from '../../lib/achievements/catalog';
 import type { DrawnIcon } from '../../ui/icons/registry';
 import {
   coursePar,
@@ -102,6 +103,10 @@ export default function Summary() {
   useEffect(() => {
     if (syncState !== 'synced') return;
     let alive = true;
+    // Display only. Banking these for the achievements wall is the WALL's job
+    // (features/me/Achievements): a round can reach 'synced' in the background
+    // worker long after this screen unmounts, so an import that lived here
+    // would miss exactly the offline rounds it most needs to catch.
     fetchRewards(clientId).then(
       (rows) => {
         if (alive) setRewards(rows);
@@ -398,12 +403,6 @@ function NineGrid({
 }
 
 // What each achievement is called on the card (mirrors server/lib/rewards.js).
-const REWARD_META: Record<string, { icon: DrawnIcon; label: string }> = {
-  hole_in_one: { icon: 'award.hole-in-one', label: 'Hole-in-One' },
-  under_par: { icon: 'award.under-par', label: 'Under Par' },
-  hunt_master: { icon: 'award.hunt-master', label: 'Hunt Master' },
-};
-
 // Achievements earned this round. A pure badge display: achievements pay no
 // tickets, so there is no card to link, nothing to claim, and no per-device
 // ownership rule — every player's badge shows on every device in the round,
@@ -421,7 +420,13 @@ function RewardsCard({ rewards }: { rewards: RewardRow[] }) {
 
       <div className="space-y-2">
         {rewards.map((r) => {
-          const meta = REWARD_META[r.achievement] ?? { icon: 'award.trophy' as DrawnIcon, label: r.achievement };
+          // Name and icon come from the one catalog the wall renders from, so
+          // the summary can never drift from Me -> Achievements. The fallback
+          // covers a server that grants a key this build predates.
+          const meta = ACHIEVEMENTS_BY_KEY.get(r.achievement) ?? {
+            icon: 'award.trophy' as DrawnIcon,
+            label: r.achievement,
+          };
           return (
             <div
               key={`${r.playerIndex}:${r.achievement}`}

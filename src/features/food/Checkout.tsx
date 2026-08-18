@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { getActiveRound, markActivity } from '../../db';
+import type { LocalRound } from '../../types';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import { formatCents, orderTotals } from '../../lib/pos/pricing';
@@ -29,6 +31,25 @@ function lineLabel(menu: Menu, line: StoredCartLine): { name: string; mods: stri
     .filter((o) => line.modifierIds?.includes(o.id))
     .map((o) => o.name);
   return { name: item.name, mods: names.join(', ') };
+}
+
+/**
+ * Is this order genuinely being placed mid-round?
+ *
+ * An active round in IndexedDB is NOT enough on its own: that store is the
+ * resume lookup, nothing deletes abandoned rounds, and a round walked away from
+ * last month still sits there as 'active' — which would quietly turn every
+ * later food order into a Turn Snack. So this asks for signs of a round in
+ * play: at least one hole carded, and started recently enough to still be
+ * happening. The window is an approximation, deliberately generous compared to
+ * a round of mini-golf and far shorter than "some time last week".
+ */
+const MID_ROUND_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+function isMidRound(round: LocalRound | undefined): boolean {
+  if (!round || round.completedAt != null) return false;
+  if (Date.now() - round.createdAt > MID_ROUND_WINDOW_MS) return false;
+  return Object.values(round.scores).some((card) => card?.some((s) => s != null));
 }
 
 export default function Checkout() {
@@ -65,6 +86,12 @@ export default function Checkout() {
       return;
     }
     clearCart();
+    // Achievements: an order placed, and whether it was placed mid-round —
+    // ordering from the turn is its own small badge (lib/achievements).
+    void markActivity('food', 'order');
+    void getActiveRound().then((r) => {
+      if (isMidRound(r)) void markActivity('food', 'mid-round');
+    });
     // Remember the order on-device so Home and /food can link back to its
     // status screen after the user navigates away.
     recordOrder({

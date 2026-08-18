@@ -10,6 +10,7 @@
 // (gameRewards.js) this mirrors.
 import { Router } from "express";
 import { pool } from "../../db.js";
+import { ACHIEVEMENTS } from "../../lib/rewards.js";
 import { orgScope } from "../../lib/adminAuth.js";
 
 const VENUE_TZ = process.env.VENUE_TZ || "America/Los_Angeles";
@@ -62,6 +63,10 @@ router.get("/summary", async (req, res) => {
       days,
       byAchievement: byAch.rows.map((r) => ({
         achievement: r.achievement,
+        // Labelled here so Master Control renders a name, not a raw key — the
+        // server is what decides which achievements exist, so it is what knows
+        // their names.
+        label: ACHIEVEMENTS[r.achievement] ?? r.achievement,
         granted: Number(r.granted),
       })),
       rows: rollup.rows.map((r) => ({
@@ -69,6 +74,7 @@ router.get("/summary", async (req, res) => {
         locationId: r.location_id,
         locationName: r.location_name,
         achievement: r.achievement,
+        label: ACHIEVEMENTS[r.achievement] ?? r.achievement,
         granted: Number(r.granted),
       })),
     });

@@ -20,12 +20,28 @@ let close;
 let locationId;
 let courseId; // pars all 3 -> course par 54
 
-function postRound(body) {
+function postRound(body, cookie) {
   return fetch(`${baseUrl}/api/rounds`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookie ? { cookie } : {}),
+    },
     body: JSON.stringify(body),
   });
+}
+
+/** A signed-in player. Grand Hunter is scoped to the ACCOUNT that owns the
+ *  rounds — a 3-char tag is a display label, not a person — so the badge needs
+ *  a real session behind the syncs. */
+async function signedIn() {
+  const { createUserSession } = await import("../lib/userAuth.js");
+  const user = await testQuery(
+    `insert into app_user (email) values ($1) returning id`,
+    [`hunter-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.test`]
+  );
+  const { token } = await createUserSession(user.rows[0].id);
+  return `ffc_session=${token}`;
 }
 
 function admin(path, opts = {}) {
@@ -164,10 +180,291 @@ test("hunt master: verified finds covering the course's full list earn the grant
   }
   await postRound(body);
   const grants = await (await fetch(`${baseUrl}/api/rewards?clientId=${body.clientId}`)).json();
-  assert.deepEqual(
-    grants.map((g) => [g.playerTag, g.achievement]),
-    [["HNT", "hunt_master"]]
+  const mine = grants.filter((g) => g.playerTag === "HNT").map((g) => g.achievement).sort();
+  // Covering the list earns Hunt Master, and the badges that ride on a clean
+  // completed hunt: nothing was rejected (naturalist) and nothing was flagged
+  // by anti-cheat (above_board), plus the first verified find.
+  assert.deepEqual(mine, ["above_board", "first_find", "hunt_master", "naturalist"]);
+  // NOP found only one of the two items — no hunt_master, and none of the
+  // badges that require a completed hunt.
+  const theirs = grants.filter((g) => g.playerTag === "NOP").map((g) => g.achievement).sort();
+  assert.deepEqual(theirs, ["first_find"]);
+  // Grand Hunter is NOT granted: this venue has a single course, where it would
+  // mean exactly what Hunt Master already means.
+  assert.ok(!grants.some((g) => g.achievement === "grand_hunter"));
+});
+
+
+test("multitasker and grand hunter — the two composed in the grant path", async () => {
+  // A venue with TWO courses, so "every course's hunt" is a real bar.
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Hunt Venue ${stamp}`, `hunt-${stamp}`]
   );
+  const venue = loc.rows[0].id;
+  const mkCourse = async (name) =>
+    (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [name, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+  const courseA = await mkCourse(`A ${stamp}`);
+  const courseB = await mkCourse(`B ${stamp}`);
+  const mkItem = async (courseId, slug) =>
+    (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $3) returning id`,
+        [courseId, slug, slug]
+      )
+    ).rows[0].id;
+  const itemA = await mkItem(courseA, `a-${stamp}`);
+  const itemB = await mkItem(courseB, `b-${stamp}`);
+
+  const cookie = await signedIn();
+  const playHunt = async (courseId, itemId, strokes) => {
+    const clientId = `hunt-${courseId}-${stamp}`;
+    await testQuery(
+      `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'GHT', $2, true)`,
+      [clientId, itemId]
+    );
+    await postRound(
+      {
+        clientId,
+        courseId,
+        playerTags: ["GHT"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(strokes) },
+      },
+      cookie
+    );
+    return (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json())
+      .map((g) => g.achievement)
+      .sort();
+  };
+
+  // Course A, carding 2s: under par (36 < 54) AND the hunt done — multitasker.
+  const first = await playHunt(courseA, itemA, 2);
+  assert.ok(first.includes("hunt_master"));
+  assert.ok(first.includes("under_par"));
+  assert.ok(first.includes("multitasker"), "hunt + under par in one round");
+  // Only one of the venue's two courses is done, so not yet Grand Hunter.
+  assert.ok(!first.includes("grand_hunter"));
+
+  // Course B at par: the venue is now complete.
+  const second = await playHunt(courseB, itemB, 3);
+  assert.ok(second.includes("grand_hunter"), "every course at the venue hunted");
+  // Par is not under par, so this round is not a multitasker.
+  assert.ok(!second.includes("multitasker"));
+});
+
+
+test("grand hunter counts only LIVE courses at the venue", async () => {
+  // Archiving a course removes it from /api/content, so players can't pick it.
+  // Counting it would make "every course at this venue" permanently unreachable
+  // for anyone without a historical grant on the retired one.
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Arch Venue ${stamp}`, `arch-${stamp}`]
+  );
+  const venue = loc.rows[0].id;
+  const mkCourse = async (n) =>
+    (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [`${n} ${stamp}`, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+  const live1 = await mkCourse("L1");
+  const live2 = await mkCourse("L2");
+  const retired = await mkCourse("RT");
+  await testQuery(`update course set archived_at = now() where id = $1`, [retired]);
+  await testQuery(
+    `insert into hunt_item (course_id, slug, name) values ($1, $2, $2)`,
+    [retired, `rt-${stamp}`]
+  );
+  const mkItem = async (courseId, slug) =>
+    (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $2) returning id`,
+        [courseId, slug]
+      )
+    ).rows[0].id;
+  const item1 = await mkItem(live1, `l1-${stamp}`);
+  const item2 = await mkItem(live2, `l2-${stamp}`);
+  const cookie = await signedIn();
+
+  const play = async (courseId, itemId, suffix) => {
+    const clientId = `arch-${suffix}-${stamp}`;
+    await testQuery(
+      `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'ARC', $2, true)`,
+      [clientId, itemId]
+    );
+    await postRound(
+      {
+        clientId,
+        courseId,
+        playerTags: ["ARC"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(3) },
+      },
+      cookie
+    );
+    return (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json()).map(
+      (g) => g.achievement
+    );
+  };
+
+  await play(live1, item1, "one");
+  // Both LIVE courses hunted. The archived one is not required.
+  const second = await play(live2, item2, "two");
+  assert.ok(second.includes("grand_hunter"), "an archived course must not block the badge");
+});
+
+
+test("grand hunter needs a seat whose owner is unambiguous", async () => {
+  // A signed-in host with three guests owns the round, but only their own seat
+  // is theirs. Crediting every finisher would let a rotating cast of companions
+  // collectively earn one person's badge — and would count a guest's hunt as
+  // the owner's history.
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Seat Venue ${stamp}`, `seat-${stamp}`]
+  );
+  const venue = loc.rows[0].id;
+  const mkCourse = async (n) =>
+    (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [`${n} ${stamp}`, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+  const courseA = await mkCourse("SA");
+  const courseB = await mkCourse("SB");
+  const mkItem = async (courseId, slug) =>
+    (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $3) returning id`,
+        [courseId, slug, slug]
+      )
+    ).rows[0].id;
+  const itemA = await mkItem(courseA, `sa-${stamp}`);
+  const itemB = await mkItem(courseB, `sb-${stamp}`);
+  const cookie = await signedIn();
+
+  // Round 1: solo — unambiguous, so it counts toward the account's history.
+  const solo = `seat-solo-${stamp}`;
+  await testQuery(
+    `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'OWN', $2, true)`,
+    [solo, itemA]
+  );
+  await postRound(
+    {
+      clientId: solo,
+      courseId: courseA,
+      playerTags: ["OWN"],
+      createdAt: Date.now(),
+      completedAt: Date.now(),
+      scores: { 0: Array(18).fill(3) },
+    },
+    cookie
+  );
+
+  // Round 2: the same account hosts a foursome, and a GUEST finishes course B's
+  // hunt. Nobody may earn Grand Hunter off that — the guest's seat has no
+  // identity, and the host did not do it.
+  const party = `seat-party-${stamp}`;
+  await testQuery(
+    `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'GST', $2, true)`,
+    [party, itemB]
+  );
+  await postRound(
+    {
+      clientId: party,
+      courseId: courseB,
+      playerTags: ["OWN", "GST", "TWO", "TRE"],
+      createdAt: Date.now(),
+      completedAt: Date.now(),
+      scores: Object.fromEntries([0, 1, 2, 3].map((i) => [i, Array(18).fill(3)])),
+    },
+    cookie
+  );
+  const partyGrants = await (
+    await fetch(`${baseUrl}/api/rewards?clientId=${party}`)
+  ).json();
+  assert.ok(
+    !partyGrants.some((g) => g.achievement === "grand_hunter"),
+    "a guest's hunt in a pass-and-play round is nobody's Grand Hunter"
+  );
+  // The guest did finish that course's hunt, so Hunt Master still lands.
+  assert.ok(partyGrants.some((g) => g.achievement === "hunt_master"));
+});
+
+
+test("grand hunter is scoped to the account, not a reusable 3-char tag", async () => {
+  // Two venues' worth of setup, but the point is identity: a second guest who
+  // happens to pick the same tag must not inherit the first one's progress.
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Tag Venue ${stamp}`, `tag-${stamp}`]
+  );
+  const venue = loc.rows[0].id;
+  const mkCourse = async (n) =>
+    (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [`${n} ${stamp}`, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+  const courseA = await mkCourse("TA");
+  const courseB = await mkCourse("TB");
+  const mkItem = async (courseId, slug) =>
+    (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $3) returning id`,
+        [courseId, slug, slug]
+      )
+    ).rows[0].id;
+  const itemA = await mkItem(courseA, `ta-${stamp}`);
+  const itemB = await mkItem(courseB, `tb-${stamp}`);
+
+  const play = async (who, courseId, itemId, suffix) => {
+    const clientId = `tag-${courseId}-${suffix}-${stamp}`;
+    await testQuery(
+      `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'SAM', $2, true)`,
+      [clientId, itemId]
+    );
+    await postRound(
+      {
+        clientId,
+        courseId,
+        playerTags: ["SAM"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(3) },
+      },
+      who
+    );
+    return (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json())
+      .map((g) => g.achievement);
+  };
+
+  const alice = await signedIn();
+  const bob = await signedIn();
+  await play(alice, courseA, itemA, "alice");
+  // Bob shares the tag "SAM" and finishes the OTHER course. Under a tag-scoped
+  // rule he'd inherit Alice's course and take Grand Hunter on his first visit.
+  const bobsSecond = await play(bob, courseB, itemB, "bob");
+  assert.ok(!bobsSecond.includes("grand_hunter"), "another guest's history is not yours");
+  // Alice finishing the second course herself does earn it.
+  const alicesSecond = await play(alice, courseB, itemB, "alice2");
+  assert.ok(alicesSecond.includes("grand_hunter"));
 });
 
 
@@ -239,3 +536,82 @@ test("admin summary rolls up achievement issuance per venue + achievement", asyn
   }
 });
 
+
+// The badge is judged ACROSS rounds, which makes it the one grant that can be
+// lost to a race: one player with two phones can sync their last two courses at
+// the same moment, each transaction reading the other's hunt_master before it
+// commits. Neither would see a finished venue — and a duplicate re-sync returns
+// early, so nothing ever reconsiders it. A per-account advisory lock in
+// grantRewards (routes/rounds.js) makes the second sync wait for the first.
+test("grand hunter survives two devices syncing the last courses at once", async () => {
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const loc = await testQuery(
+    `insert into location (name, slug) values ($1, $2) returning id`,
+    [`Race Venue ${stamp}`, `race-${stamp}`]
+  );
+  const venue = loc.rows[0].id;
+  const mk = async (name) => {
+    const course = (
+      await testQuery(
+        `insert into course (name, theme, pars, location_id) values ($1, $2, $3, $4) returning id`,
+        [name, "test", Array(18).fill(3), venue]
+      )
+    ).rows[0].id;
+    const item = (
+      await testQuery(
+        `insert into hunt_item (course_id, slug, name) values ($1, $2, $3) returning id`,
+        [course, `${name}-${stamp}`, name]
+      )
+    ).rows[0].id;
+    const clientId = `race-${name}-${stamp}`;
+    await testQuery(
+      `insert into hunt_find (round_client_id, player_tag, item_id, verified) values ($1, 'RCE', $2, true)`,
+      [clientId, item]
+    );
+    return { course, clientId };
+  };
+  const a = await mk(`RA${stamp.slice(-4)}`);
+  const b = await mk(`RB${stamp.slice(-4)}`);
+
+  const cookie = await signedIn();
+  const sync = ({ course, clientId }) =>
+    postRound(
+      {
+        clientId,
+        courseId: course,
+        playerTags: ["RCE"],
+        createdAt: Date.now(),
+        completedAt: Date.now(),
+        scores: { 0: Array(18).fill(3) },
+      },
+      cookie
+    );
+
+  // Both at once — whichever commits second must see the other's hunt_master.
+  await Promise.all([sync(a), sync(b)]);
+
+  const granted = async (clientId) =>
+    (await (await fetch(`${baseUrl}/api/rewards?clientId=${clientId}`)).json()).map(
+      (g) => g.achievement
+    );
+  const all = [...(await granted(a.clientId)), ...(await granted(b.clientId))];
+  assert.equal(
+    all.filter((x) => x === "hunt_master").length,
+    2,
+    "both hunts completed"
+  );
+  assert.equal(
+    all.filter((x) => x === "grand_hunter").length,
+    1,
+    "the later sync completes the venue — exactly once, never zero"
+  );
+
+  await testQuery(`delete from round where course_id in ($1, $2)`, [a.course, b.course]);
+  await testQuery(`delete from hunt_find where round_client_id in ($1, $2)`, [
+    a.clientId,
+    b.clientId,
+  ]);
+  await testQuery(`delete from hunt_item where course_id in ($1, $2)`, [a.course, b.course]);
+  await testQuery(`delete from course where id in ($1, $2)`, [a.course, b.course]);
+  await testQuery(`delete from location where id = $1`, [venue]);
+});

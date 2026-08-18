@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { useFitCanvas } from '../fun/useFitCanvas';
 import GameHighScore from '../fun/GameHighScore';
+import { markActivity } from '../../db';
 import {
   W,
   H,
@@ -482,6 +483,19 @@ export default function PuttGolf() {
   const [holeIndex, setHoleIndex] = useState(0);
   const [strokes, setStrokes] = useState(0);
   const [scores, setScores] = useState<number[]>([]);
+  // Arcade Putt earns no tickets, so it mounts no <GameTicketAward> — which is
+  // where every other arcade game gets recorded for the achievements wall. It
+  // records itself here instead: a game the arcade lists is a game "play them
+  // all" has to count. Keyed on the session id so a re-render can't double it.
+  const recordedRound = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase !== 'done' || recordedRound.current === sessionId) return;
+    // Endless mode can be ended before a single hole is sunk, and pressing
+    // "End run" on an untouched board is not playing the game.
+    if (scores.length === 0) return;
+    recordedRound.current = sessionId;
+    void markActivity('game', 'arcadeputt');
+  }, [phase, sessionId, scores.length]);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [note, setNote] = useState<ReactNode>('');
   const scoresRef = useRef<number[]>([]);

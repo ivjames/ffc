@@ -544,18 +544,24 @@ screen(id="teams", name="Teams", route="/me/teams",
 
 # ============================================================ 24. ACHIEVEMENTS
 screen(id="achv", name="Achievements", route="/me/achievements",
- purpose="Badges wall of three round achievements, earned/locked from locally-stored completed rounds.",
+ purpose="Badges wall — the catalog grouped by category, earned/locked from locally-stored completed rounds. Achievements pay nothing; they are status, not currency.",
  body="".join([
    topbar("Achievements", right=MENU()),
-   txt("“k of 3 unlocked · earn tickets at the counter”","center muted",n=1),
-   row(box("emoji","chip",n=2), box("badge label · “Earned” · how-to","grow"), cls="lrow"),
-   row(box("emoji","chip"), box("badge label · how-to","grow"), cls="lrow"),
-   row(box("emoji","chip"), box("badge label · how-to","grow"), cls="lrow"),
+   txt("“k of n unlocked”","center muted",n=1),
+   row(box("SCORING","grow",n=2), box("3/22","chip"), cls="lrow"),
+   row(box("icon","chip",n=3), box("badge label · “Earned” · how-to","grow"), cls="lrow"),
+   row(box("icon","chip"), box("badge label · how-to","grow"), cls="lrow"),
+   row(box("THE FIELD","grow"), box("0/10","chip"), cls="lrow"),
+   row(box("lock","chip",n=4), box("“???” · hidden until earned","grow"), cls="lrow"),
+   row(box("icon","chip"), box("Hunt Master · “At the venue” chip","grow",n=5), cls="lrow"),
    txt("footer — tracked on this device; sign in to keep them","muted"),
  ]),
  specs=[
-  (1,"Status caption","“k of 3 unlocked”","centered text","“Checking your rounds…” while loading","—","—"),
-  (2,"Badge row","3 fixed badges (Hole-in-One / Under Par / Hunt Master)","full-width, radius 16; emoji circle","earned = bright + “Earned” pill; locked = dimmed/grayscaled","--accent (earned)","the badge emoji + earned/locked treatment"),
+  (1,"Status caption","“k of n unlocked” — n counts only badges this deployment can reach","centered text","“Checking your rounds…” while loading","—","—"),
+  (2,"Category heading","One per populated category, with its own earned/total","uppercase label + tabular count, split left/right","a category with no reachable badges is omitted entirely","--accent (label)","the heading treatment"),
+  (3,"Badge row","One per badge; earned rise to the top of their section","full-width, radius 16; icon circle","earned = bright + “Earned” pill; locked = dimmed/grayscaled","--accent (earned)","the icon circle + earned/locked treatment"),
+  (4,"Secret badge","Name and how-to withheld until earned","same row, label reads “???”","locked only — an earned secret renders as a normal badge","—","the lock icon"),
+  (5,"“At the venue” chip","Marks a badge only the server can grant (the hunt)","small outline pill beside the label","shown when unearned; the device cannot detect it","—","the chip outline"),
  ]),
 
 # ============================================================ 25. REWARDS

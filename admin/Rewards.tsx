@@ -9,12 +9,11 @@ import { Card, Banner, EmptyState, PageHeader, Select, Spinner, Table, Th, Td, u
 // to the per-card daily cap. Achievements stopped paying because golf scores
 // are self-reported, so there was nothing verifying what a payout rewarded.
 
-const ACHIEVEMENT_LABELS: Record<string, string> = {
-  hole_in_one: 'Hole-in-One',
-  under_par: 'Under Par',
-  hunt_master: 'Hunt Master',
-};
-const achLabel = (key: string) => ACHIEVEMENT_LABELS[key] ?? key;
+// Names come from the server's catalog, served with the rollup. A local map
+// here went stale the moment the server learned to grant a new achievement —
+// the table would render `first_find` at a venue manager.
+const achLabel = (row: { achievement: string; label?: string }) =>
+  row.label ?? row.achievement;
 
 // Golf achievement issuance — what players are earning. No ticket columns:
 // achievements pay nothing, so there is no claimed/unclaimed state to report.
@@ -48,7 +47,7 @@ function AchievementRewards({ days }: { days: number }) {
               <tbody>
                 {summary.data.byAchievement.map((a) => (
                   <tr key={a.achievement}>
-                    <Td>{achLabel(a.achievement)}</Td>
+                    <Td>{achLabel(a)}</Td>
                     <Td align="right" className="font-semibold">
                       {a.granted.toLocaleString()}
                     </Td>
@@ -80,7 +79,7 @@ function AchievementRewards({ days }: { days: number }) {
                     <tr key={i}>
                       <Td className="whitespace-nowrap">{r.day.slice(0, 10)}</Td>
                       <Td>{r.locationName ?? '—'}</Td>
-                      <Td>{achLabel(r.achievement)}</Td>
+                      <Td>{achLabel(r)}</Td>
                       <Td align="right" className="font-semibold">
                         {r.granted.toLocaleString()}
                       </Td>

@@ -134,3 +134,48 @@ test("venueHunt needs BOTH venueMode on and an active item on the venue's list",
   await testQuery(`update location set hunt = '{}'::jsonb where id = $1`, [liveLocationId]);
   await testQuery(`delete from hunt_item where course_id = $1`, [liveCourseId]);
 });
+
+// `hasHunt` is the client's answer to "is there a hunt to COMPLETE on this
+// course" — the achievements wall hides the whole hunt category without one
+// (src/lib/achievements/detect.ts), and Grand Hunter counts these courses
+// rather than all courses, matching what routes/rounds.js will grant.
+test("hasHunt needs an active, non-countable item on the course itself", async () => {
+  const read = async () =>
+    (await (await fetch(`${baseUrl}/api/content`)).json()).courses.find(
+      (c) => c.id === liveCourseId
+    ).hasHunt;
+
+  // No items at all.
+  assert.equal(await read(), false);
+
+  // A countable item is the "find as many as you like" kind — completion is
+  // defined over the others, so it alone leaves the hunt uncompletable.
+  const counter = await testQuery(
+    `insert into hunt_item (course_id, slug, name, countable) values ($1, 'acorns', 'Acorns', true) returning id`,
+    [liveCourseId]
+  );
+  assert.equal(await read(), false);
+
+  // Inactive: staged, not playable.
+  const item = await testQuery(
+    `insert into hunt_item (course_id, slug, name, active) values ($1, 'flag', 'A flag', false) returning id`,
+    [liveCourseId]
+  );
+  assert.equal(await read(), false);
+
+  // Active and completable.
+  await testQuery(`update hunt_item set active = true where id = $1`, [item.rows[0].id]);
+  assert.equal(await read(), true);
+
+  // The VENUE's list doesn't make a course's hunt — they are separate hunts.
+  await testQuery(`delete from hunt_item where id = any($1::uuid[])`, [
+    [counter.rows[0].id, item.rows[0].id],
+  ]);
+  await testQuery(
+    `insert into hunt_item (location_id, slug, name) values ($1, 'wheel', 'The wheel')`,
+    [liveLocationId]
+  );
+  assert.equal(await read(), false);
+
+  await testQuery(`delete from hunt_item where location_id = $1`, [liveLocationId]);
+});

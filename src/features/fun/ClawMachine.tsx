@@ -1191,7 +1191,12 @@ export default function ClawMachine() {
           {/* POS add-on: now that the grip is a deterministic skill rubric, the
               claw earns tickets like the other skill games — 1 per prize point
               (a perfect five-grab run tops out at 80, under the server cap). */}
-          <GameTicketAward game="clawmachine" tickets={Math.min(100, score)} sessionId={sessionId} />
+          <GameTicketAward
+            game="clawmachine"
+            tickets={Math.min(100, score)}
+            sessionId={sessionId}
+            feat={gs.won >= 1 ? 'claw-win' : undefined}
+          />
           <GameHighScore game="clawmachine" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">

@@ -158,6 +158,7 @@ create table if not exists hunt_find (
 -- For databases created before `countable` existed: add it idempotently.
 alter table hunt_find add column if not exists countable boolean not null default false;
 
+
 create index if not exists hunt_find_round_idx  on hunt_find (round_client_id);
 create index if not exists hunt_find_item_idx   on hunt_find (item_id);
 create index if not exists hunt_find_player_idx on hunt_find (player_tag);

@@ -100,6 +100,11 @@ async function buildSnapshot(game) {
       teamId: game.teamId,
       status: game.status,
       roundId: game.roundId ?? null,
+      // When the GAME started, not when this device joined it. A joiner's local
+      // round would otherwise be stamped with its own arrival, which is a
+      // different evening's worth of difference for anything that asks what
+      // time the round began.
+      createdAt: game.createdAt,
     },
     players: players.rows,
     scores: scores.rows.map((s) => ({ ...s, ts: Number(s.ts) })),

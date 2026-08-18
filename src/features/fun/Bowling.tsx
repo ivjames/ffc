@@ -91,6 +91,31 @@ function launch(dx: number, dy: number): Vel | null {
 
 /** Standard 10-frame scoring over a flat list of pinfalls. Missing future
  *  bonus balls count as 0 so the running total updates as you play. */
+/**
+ * Three strikes in a row — a "turkey". Frames 1–9 take one roll when struck and
+ * two otherwise; the 10th allows up to three balls, so consecutive tens there
+ * continue the run too. Reads the same flat roll list computeScore walks.
+ */
+export function hasTurkey(rolls: number[]): boolean {
+  let run = 0;
+  let i = 0;
+  for (let frame = 0; frame < 9 && i < rolls.length; frame++) {
+    if (rolls[i] === 10) {
+      if (++run >= 3) return true;
+      i += 1;
+    } else {
+      run = 0;
+      i += 2;
+    }
+  }
+  for (; i < rolls.length; i++) {
+    if (rolls[i] === 10) {
+      if (++run >= 3) return true;
+    } else run = 0;
+  }
+  return false;
+}
+
 function computeScore(rolls: number[]): number {
   let score = 0;
   let i = 0;
@@ -1309,7 +1334,12 @@ export default function Bowling() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 3 points — a perfect 300 pays 100). */}
-          <GameTicketAward game="bowling" tickets={Math.round(score / 3)} sessionId={sessionId} />
+          <GameTicketAward
+            game="bowling"
+            tickets={Math.round(score / 3)}
+            sessionId={sessionId}
+            feat={hasTurkey(rolls) ? 'turkey' : undefined}
+          />
           <GameHighScore game="bowling" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={restart} sound="none">

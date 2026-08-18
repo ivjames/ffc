@@ -785,7 +785,12 @@ export default function Pinball() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 200 points, capped at 100). */}
-          <GameTicketAward game="pinball" tickets={Math.min(100, Math.round(score / 200))} sessionId={sessionId} />
+          <GameTicketAward
+            game="pinball"
+            tickets={Math.min(100, Math.round(score / 200))}
+            sessionId={sessionId}
+            feat={score >= 1_000_000 ? 'pinball-million' : undefined}
+          />
           <GameHighScore game="pinball" score={score} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">

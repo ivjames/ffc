@@ -153,6 +153,7 @@ function buildCourses(raw: GeneratedCourse[]): CourseSeed[] {
     pars: c.pars,
     accent: courseAccent(c),
     rules: THEME_RULES[c.theme],
+    hasHunt: c.hasHunt,
   }));
 }
 

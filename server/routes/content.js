@@ -94,12 +94,21 @@ router.get("/", tenant(), async (req, res) => {
       pool.query(
         t == null
           ? `select id, location_id as "locationId", name, theme,
-                    hole_count as "holeCount", pars, sort_order as "sortOrder"
+                    hole_count as "holeCount", pars, sort_order as "sortOrder",
+                    -- Whether this course has a hunt anyone can COMPLETE. Same
+                    -- shape as the venueHunt flag above, and for the same
+                    -- reason: a surface that offers a hunt with no items is a
+                    -- dead end. The achievements wall uses it to avoid showing
+                    -- hunt badges no deployment can grant.
+                    exists (select 1 from hunt_item i
+                             where i.course_id = course.id and i.active and not i.countable) as "hasHunt"
                from course
               where archived_at is null
               order by sort_order, name`
           : `select c.id, c.location_id as "locationId", c.name, c.theme,
-                    c.hole_count as "holeCount", c.pars, c.sort_order as "sortOrder"
+                    c.hole_count as "holeCount", c.pars, c.sort_order as "sortOrder",
+                    exists (select 1 from hunt_item i
+                             where i.course_id = c.id and i.active and not i.countable) as "hasHunt"
                from course c
                join location l on l.id = c.location_id
               where c.archived_at is null and l.archived_at is null ${orgFilter}

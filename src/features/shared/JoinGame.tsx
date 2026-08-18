@@ -5,7 +5,7 @@ import { sanitizeTagInput, tagError, TAG_LENGTH } from '../../lib/sanitize';
 import { fetchMe } from '../../lib/authApi';
 import { joinGame } from '../../lib/gamesApi';
 import { createSharedLocalRound } from '../../lib/sharedMerge';
-import { getRound, putRound } from '../../db';
+import { getRound, markActivity, putRound } from '../../db';
 
 // Join a shared game by code (QR deep link lands here as /join?code=XXXXXX).
 // No account needed — a guest phone claims a roster slot with just a tag.
@@ -53,6 +53,14 @@ export default function JoinGame() {
       );
       return;
     }
+    // Crashed the Party is about joining SOMEONE ELSE's game. The host typing
+    // their own code is a rejoin — /api/games/join hands a signed-in creator
+    // their existing seat back — so gate on the slot: seat 0 is the creator's
+    // by construction (createGame inserts it), and every joiner lands above it.
+    // A guest host whose tag is reclaimed by a stranger is the one case this
+    // reads wrong, and it errs toward not granting, which is the right way to
+    // be wrong about a badge.
+    if (res.slot !== 0) void markActivity('social', 'join'); // achievements (device-local)
     const clientId = `shared:${res.snapshot.game.id}`;
     // Rejoin on a device that already mirrors this game: keep the local state
     // (scores survive), just refresh the credentials.

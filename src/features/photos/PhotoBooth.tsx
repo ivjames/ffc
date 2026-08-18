@@ -5,6 +5,7 @@ import { loadImage, encodeJpeg, blobToBase64 } from '../../lib/image';
 import { useCurrentLocationId } from '../../lib/location';
 import Icon from '../../ui/Icon';
 import {
+  markActivity,
   putBoothDraft,
   getBoothDraft,
   deleteBoothDraft,
@@ -245,7 +246,18 @@ type Editor = {
   /** The server photo id when re-editing an existing save; null for a new
    *  capture. Drives whether Save creates or replaces. */
   editingId: string | null;
+  /** The decoration state this editor OPENED with, for telling an actual edit
+   *  from a reopen-and-save. Only set when re-editing. */
+  openedAs?: string;
 };
+
+/** A comparable fingerprint of a photo's decoration. */
+function decorSignature(stickers: Sticker[], frameId: string | null): string {
+  return JSON.stringify({
+    frameId,
+    stickers: stickers.map((s) => [s.x, s.y, s.scale, s.rot, s.emoji ?? s.svgId]),
+  });
+}
 
 // Intrinsic sizes for the venue SVG stickers currently in play, so an SVG
 // sticker draws at the right aspect. Missing entry -> a 1:1 fallback.
@@ -584,6 +596,7 @@ export default function PhotoBooth() {
         img,
         base: draft.base,
         editingId: photo.id,
+        openedAs: decorSignature(draft.stickers, draft.frameId ?? null),
       });
     } catch {
       setGalleryError("Couldn't open that photo for editing.");
@@ -714,6 +727,17 @@ export default function PhotoBooth() {
         frameId,
         updatedAt: Date.now(),
       }).catch(() => {});
+
+      // Achievements (lib/achievements). Device-local and never uploaded, like
+      // the draft above. Stickers are tallied under their own mark so a re-edit
+      // can raise the high-water without inflating the photo count.
+      // A re-edit only counts when something actually changed: reopening a
+      // photo and pressing save unchanged is not a director's cut.
+      const changed =
+        editor.openedAs != null && decorSignature(stickers, frameId) !== editor.openedAs;
+      void markActivity('booth', editor.editingId ? (changed ? 'reedit' : 'resave') : 'photo');
+      void markActivity('booth', 'stickers', stickers.length);
+      if (frameId) void markActivity('booth', 'frame');
 
       closeEditor();
       void refreshGallery();

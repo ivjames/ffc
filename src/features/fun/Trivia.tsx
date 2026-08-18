@@ -108,6 +108,7 @@ export default function Trivia() {
             game="trivia"
             tickets={score * TICKETS_PER_CORRECT}
             sessionId={sessionId}
+            feat={score === round.length ? 'trivia-perfect' : undefined}
           />
           <GameHighScore game="trivia" score={score} sessionId={sessionId} />
           <div className="mt-8">

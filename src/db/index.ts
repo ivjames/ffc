@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { LocalRound, OutboxEntry } from '../types';
+import type { ActivityMark, EarnedBadge, LocalRound, OutboxEntry } from '../types';
 import { HOLE_COUNT } from '../lib/scoring';
 
 // §4 IndexedDB wrapper — the offline source of truth for round state.
@@ -67,10 +67,19 @@ interface FfcDB extends DBSchema {
     key: string; // the server booth_photo id
     value: BoothPhotoDraft;
   };
+  achievements: {
+    key: string; // the badge key
+    value: EarnedBadge;
+  };
+  /** Small append-only counters the achievement rules read (see lib/achievements). */
+  activity: {
+    key: string; // '<kind>:<name>', e.g. 'game:bowling'
+    value: ActivityMark;
+  };
 }
 
 const DB_NAME = 'ffc';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase<FfcDB>> | null = null;
 
@@ -90,6 +99,12 @@ function getDB(): Promise<IDBPDatabase<FfcDB>> {
           // Photo-booth editable drafts, keyed by the server photo id.
           db.createObjectStore('boothDrafts', { keyPath: 'id' });
         }
+        if (oldVersion < 4) {
+          // Earned badges, and the activity marks some of them are derived
+          // from. Both are additive: v3 devices simply re-derive on first open.
+          db.createObjectStore('achievements', { keyPath: 'key' });
+          db.createObjectStore('activity', { keyPath: 'id' });
+        }
       },
     });
   }
@@ -108,6 +123,7 @@ export function createLocalRound(
   courseId: string,
   playerTags: string[],
   groupTag: string | null = null,
+  pars?: number[],
 ): LocalRound {
   const scores: Record<number, (number | null)[]> = {};
   for (let p = 0; p < playerTags.length; p++) {
@@ -122,6 +138,8 @@ export function createLocalRound(
     createdAt: Date.now(),
     completedAt: null,
     syncState: 'active',
+    // Snapshot: the live catalog can lose this course (see LocalRound.pars).
+    ...(pars ? { pars } : {}),
   };
 }
 
@@ -133,6 +151,69 @@ export async function putRound(round: LocalRound): Promise<void> {
 export async function getRound(clientId: string): Promise<LocalRound | undefined> {
   const db = await getDB();
   return db.get('rounds', clientId);
+}
+
+// ── Achievements ────────────────────────────────────────────────────────────
+// A badge, once earned, STAYS earned. Detection re-derives from stored rounds
+// on every visit, which keeps a badge honest but also means clearing site data
+// (or aging a round out) would silently take badges away. Recording them here
+// makes the wall additive: what the rounds prove is unioned with what was
+// already earned, never subtracted.
+
+export async function getEarnedBadges(): Promise<EarnedBadge[]> {
+  const db = await getDB();
+  return db.getAll('achievements');
+}
+
+/** Record newly-earned badges. Existing keys keep their original earnedAt. */
+export async function putEarnedBadges(keys: string[], at = Date.now()): Promise<void> {
+  if (keys.length === 0) return;
+  const db = await getDB();
+  const tx = db.transaction('achievements', 'readwrite');
+  await Promise.all(
+    keys.map(async (key) => {
+      if (await tx.store.get(key)) return; // first-earned wins
+      await tx.store.put({ key, earnedAt: at });
+    }),
+  );
+  await tx.done;
+}
+
+// ── Activity marks ──────────────────────────────────────────────────────────
+// Things the round record can't see: which mini-games have been played, booth
+// photos saved, a food order placed. One row per distinct thing, with a count
+// and a high-water mark, which is all any badge needs. Deliberately tiny and
+// device-local — none of it is sent anywhere.
+
+export async function getActivity(): Promise<ActivityMark[]> {
+  const db = await getDB();
+  return db.getAll('activity');
+}
+
+/**
+ * Note that something happened. Increments `count`, raises `best` when a
+ * higher value is supplied, and stamps `lastAt`.
+ */
+export async function markActivity(
+  kind: ActivityMark['kind'],
+  name: string,
+  value?: number,
+): Promise<void> {
+  const db = await getDB();
+  const id = `${kind}:${name}`;
+  const tx = db.transaction('activity', 'readwrite');
+  const prior = await tx.store.get(id);
+  const now = Date.now();
+  await tx.store.put({
+    id,
+    kind,
+    name,
+    count: (prior?.count ?? 0) + 1,
+    best: Math.max(prior?.best ?? 0, value ?? 0),
+    firstAt: prior?.firstAt ?? now,
+    lastAt: now,
+  });
+  await tx.done;
 }
 
 export async function getAllRounds(): Promise<LocalRound[]> {

@@ -8,6 +8,7 @@ import {
   coursesByLocation,
   LOCATIONS,
 } from './courses';
+import { liveCatalog } from '../lib/achievements/detect';
 import { getOrg, getBranding, hasExplicitThemeColor } from '../lib/branding';
 import { getCurrentLocationId } from '../lib/location';
 import { detectNearestLocation } from '../lib/geolocate';
@@ -85,6 +86,28 @@ describe('hydrateContent', () => {
     expect(locationById('live-loc')).toBeUndefined(); // not in baked content
     await hydrateContent();
     expect(locationById('live-loc')?.pos?.loyalty?.gameRewards).toBe(true);
+  });
+
+  it('a payload without the hunt flag reads as "has a hunt"', async () => {
+    // Absent is not false. An older server (or a cache written before the flag
+    // existed) says nothing about a course's hunt, and the safe reading of
+    // silence is the one that leaves the hunt badges visible — hiding a whole
+    // category on the strength of a missing key is the failure that looks like
+    // a bug. See liveCatalog() in lib/achievements/detect.ts.
+    const live = {
+      locations: [{ id: 'hh-loc', name: 'Upland', slug: 'upland', pos: null }],
+      courses: [
+        { id: 'hh-old', locationId: 'hh-loc', name: 'Old', theme: 'blue', pars: Array(18).fill(3) },
+        { id: 'hh-no', locationId: 'hh-loc', name: 'No', theme: 'blue', pars: Array(18).fill(3), hasHunt: false },
+      ],
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(live), { status: 200 }),
+    );
+    await hydrateContent();
+    const byId = new Map(liveCatalog().map((c) => [c.id, c]));
+    expect(byId.get('hh-old')?.hasHunt).toBe(true);
+    expect(byId.get('hh-no')?.hasHunt).toBe(false);
   });
 
   it('keeps existing content when the fetch fails', async () => {
