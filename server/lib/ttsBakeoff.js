@@ -18,6 +18,21 @@ import { lobbyScript, questionScript, revealScript } from "./triviaSpeechScript.
 // $ per 1M characters, by engine. Re-verify at build time — cheap TTS tiers
 // churn (TTS-PRICING.md).
 export const NEURAL_USD_PER_M = 16;
+// Generative runs in a SUBSET of Polly's regions. A region that serves neural
+// but not generative does not degrade — it rejects every generative request
+// while the neural half of the same batch synthesizes and bills, handing the
+// operator a half-failed run they already approved an estimate for. So the
+// lineup is decided against the configured region up front, and the estimate
+// only ever prices what can actually run.
+export const GENERATIVE_REGIONS = new Set([
+  "us-east-1", "us-west-2", "eu-central-1", "eu-central-2", "eu-west-2",
+  "ca-central-1", "ap-northeast-1", "ap-northeast-2", "ap-southeast-1", "ap-southeast-2",
+]);
+
+export function generativeAvailable(env = process.env) {
+  return GENERATIVE_REGIONS.has(env.AWS_REGION || "us-east-1");
+}
+
 export const ENGINES = {
   neural: { label: "neural", usdPerM: 16 },
   // The billion-parameter model: markedly more human, and priced accordingly.
@@ -134,11 +149,12 @@ export function ssmlFor(text, style) {
 }
 
 /** Every clip a run would make, priced before anything is spent. */
-export function planClips(lines) {
+export function planClips(lines, { generative = true } = {}) {
   const clips = [];
   for (const line of lines) {
     for (const voice of VOICES) {
       for (const engine of voice.engines) {
+        if (engine === "generative" && !generative) continue;
         // Only neural takes the speaking styles; generative is plain because
         // that is all it supports.
         const styles = engine === "neural" ? STYLES : [STYLES[0]];

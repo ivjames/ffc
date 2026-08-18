@@ -173,6 +173,9 @@ async function price() {
       planned.chars.toLocaleString() + " billable characters, <strong>$" + planned.usd.toFixed(4) +
       "</strong></div>" +
       '<div class="note">' + (split ? split + ". " : "") +
+      (planned.generative === false
+        ? "Generative is not available in " + esc(planned.region) + " — neural only. "
+        : "") +
       "Neural is $16/M, generative $30/M. Nothing spent yet; the first 1M neural characters a " +
       "month are free for the first 12 months.</div>";
     $("out").innerHTML = planned.lines
