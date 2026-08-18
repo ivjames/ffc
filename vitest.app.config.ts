@@ -6,6 +6,9 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.{ts,tsx}'],
+    // scripts/ too: the content generator rewrites src/data/content.generated.ts
+    // (types included) on every deploy, so its template is load-bearing and
+    // needs the same gate the app modules get.
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
   },
 });
