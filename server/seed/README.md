@@ -113,17 +113,37 @@ choice is refused**, which is what saves `Commercial or mercantile activity.
 `Tigon`/`Tigen` and `joie de vivre`/`joie de livre`. Correcting those would
 leave two identical options and no question.
 
-### Known upstream defect: the missing ampersands
+### The missing ampersands, restored
 
-The corpus contains **no `&` at all** — 47,710 questions, zero — while every
-other symbol appears hundreds of times. Each one was dropped upstream, leaving
-a double space: `Gateman, Goodbury  Graves Funeral Home`, `Mr.  Mrs.`,
-`Me, Myself  Irene`. This was verified against a fresh clone of the upstream
-repo, where the gap is already present, so it is not something this build
-does. The ~840 gaps that plausibly held an `&` are therefore left **exactly as
-they are** — collapsing them would turn *Rowan & Martin's Laugh-In* into a
-person named Rowan Martin. Only the 542 gaps that cannot have held one are
-collapsed. Restoring the ampersands is an open piece of work.
+The corpus arrived with **no `&` at all** — 47,710 questions, zero — while
+every other symbol appeared in the hundreds. Each one had been stripped before
+the data reached us (a fresh upstream clone shows the same gaps), leaving a
+double space behind: `Gateman, Goodbury  Graves Funeral Home`, `Mr.  Mrs.
+Smith`, `Paul McCartney  Wings`.
+
+Because *only* `&` went missing — `and` survives tens of thousands of times
+over — every remaining gap is one of two things, and shape cannot tell them
+apart: `Sonny  Cher` is two people, `John  Lithgow` is one. So all 855 gaps
+were judged individually, in context and with the sibling options as evidence,
+and each ampersand call was then confirmed by a second pass:
+
+- **334 restored** into `scripts/lib/trivia-pack-ampersands.ndjson` — Hall &
+  Oates, Earth Wind & Fire, Simon & Garfunkel, Abbott & Costello, Law & Order,
+  Abercrombie & Fitch, Pratt & Whitney, Rowan & Martin's Laugh-In.
+- **370 were only stray spaces** and became whitespace fixes in the typo
+  overlay: `Henny  Youngman`, `Jane  Seymour`, `Thoroughbred  Horse racing`.
+- **151 left exactly as they are**, because the judgment was not clear enough
+  to act on. A gap left alone costs nothing; a wrong `&` splits a person's
+  name in half.
+
+Restoration is faithful to what the contributor typed, not to the canonical
+title: `Green Eggs  Ham` has no `and` in it to have been the original wording,
+so `Green Eggs & Ham` is what was there to restore, whatever the cover of the
+book says.
+
+`isAmpersandRestoration` keeps this honest by permitting exactly one thing —
+one run of blanks replaced by ` & ` — so an entry can never move text, change
+a word, or put an ampersand anywhere upstream did not leave a gap.
 
 `node scripts/repair-trivia-pack.mjs` applies both committed overlays to the
 pack in place — the no-upstream-checkout path, byte-identical to a full rebuild
