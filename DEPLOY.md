@@ -232,8 +232,19 @@ Two features lean on infrastructure beyond the code:
 ## Routine redeploys
 
 ```bash
-ffc deploy      # pull main -> TEST GATE -> build into releases/<ts> -> migrate DB -> swap current -> restart API -> health check
+ffc deploy      # pull main -> TEST GATE -> build into releases/<ts> -> migrate DB -> restart API -> health check -> swap current
 ```
+
+**Cutover order.** Everything slow (tests, npm installs, the client build, the
+migrate) runs while the old client and old API keep serving each other
+consistently. Only once the restarted API passes its health check does the
+`current` symlink flip to the new client — so the served client and the live
+API change together, sub-second apart, instead of open apps sitting on a
+client/API build mismatch (and the update modal's refresh loop) for the whole
+deploy. A failed health check therefore leaves the **old client still live**;
+only the API is on new code. Deploys also skip `npm ci` when the relevant
+`package-lock.json` is unchanged since the last successful install
+(`FFC_FRESH_DEPS=1` forces a full reinstall).
 
 **The test gate.** There is no CI on this project, so the deploy is the gate:
 after pulling, `ffc deploy` runs the full server suite (`server/*.test.js`,

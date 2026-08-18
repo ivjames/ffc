@@ -11,8 +11,11 @@
 #
 # Subcommands:
 #   setup     one-time: static vhost + TLS, DB migrate, first build, seed
-#   deploy    pull main -> test -> build atomically -> migrate -> swap ->
-#             restart API -> health check (FFC_SKIP_TESTS=1 skips the gate)
+#   deploy    pull main -> test -> build -> migrate -> restart API ->
+#             health check -> swap client (FFC_SKIP_TESTS=1 skips the gate).
+#             The client symlink swap is the LAST step, after the new API is
+#             healthy, so the served client and the live API change together —
+#             the old client+API pair keeps serving right up to the cutover.
 #   rollback  [sha] return to the previously-deployed commit (code only —
 #             schema migrations are forward-only and stay applied)
 #   migrate   apply schema.sql (idempotent; new tables/columns)
@@ -105,16 +108,44 @@ die(){ printf '%serror:%s %s\n' "$c_r" "$c_o" "$*" >&2; exit 1; }
 # Quiet npm's noise (deprecation `npm warn`s, funding/audit nags) — we're not
 # acting on them, so they're just clutter in the deploy readout. `--loglevel=error`
 # keeps real failures visible; --no-fund/--no-audit drop the trailing nags.
+#
+# `npm ci` wipes node_modules and reinstalls from scratch every run — the bulk
+# of a deploy's wall-clock when deps haven't changed. Since npm ci is
+# deterministic from the lockfile, skip it when the lockfile hash matches the
+# stamp recorded after the last SUCCESSFUL install (stamp lives inside
+# node_modules, so npm ci itself erases it: stamp present ⇒ that install
+# completed). FFC_FRESH_DEPS=1 forces a full reinstall.
 NPM_QUIET=(--loglevel=error --no-fund --no-audit)
 npm_install(){
   local dir="$1"; shift
-  if [ -f "$dir/package-lock.json" ]; then ( cd "$dir" && npm ci "${NPM_QUIET[@]}" "$@" )
+  if [ -f "$dir/package-lock.json" ]; then
+    local stamp="$dir/node_modules/.ffc-lock-hash" want
+    want="$(sha256sum "$dir/package-lock.json" | cut -d' ' -f1)"
+    if [ -z "${FFC_FRESH_DEPS:-}" ] && [ "$want" = "$(cat "$stamp" 2>/dev/null || true)" ]; then
+      log "deps in $dir current (lockfile unchanged) — skipping npm ci"
+      return 0
+    fi
+    ( cd "$dir" && npm ci "${NPM_QUIET[@]}" "$@" )
+    printf '%s\n' "$want" > "$stamp"
   else log "no lockfile in $dir — using npm install"; ( cd "$dir" && npm install "${NPM_QUIET[@]}" "$@" ); fi
 }
 
-# Build into a fresh release dir and swap the `current` symlink atomically
-# (§3): never overwrite the served dir in place, or a mid-deploy load serves
-# mixed old/new hashed assets and poisons the service-worker cache.
+# Server deps once per invocation: deploy needs them for the test gate, the
+# migrate, and the pm2 restart — one `npm ci` covers all three.
+SERVER_DEPS_DONE=""
+server_deps(){
+  [ -d "$APP_DIR/server" ] || return 0
+  [ -n "$SERVER_DEPS_DONE" ] && return 0
+  npm_install "$APP_DIR/server" --omit=dev
+  SERVER_DEPS_DONE=1
+}
+
+# Build into a fresh release dir (§3): never overwrite the served dir in
+# place, or a mid-deploy load serves mixed old/new hashed assets and poisons
+# the service-worker cache. Building does NOT go live — activate_release()
+# performs the symlink swap, and deploy calls it only after the new API passes
+# its health check, so the served client and the live API cut over together.
+RELEASE_DIR=""
 build_release(){
   local ts release
   ts="$(date +%Y%m%d%H%M%S)"
@@ -153,17 +184,29 @@ build_release(){
   else
     log "admin build failed — shipping player build only this release"
   fi
-  ln -sfn "$release" "$APP_DIR/current.tmp"
+  RELEASE_DIR="$release"
+}
+
+# Flip `current` to the release build_release just produced. The swap itself is
+# atomic (rename over the symlink); keeping it separate from the build lets
+# deploy sequence it AFTER migrate + API restart + health check, so an open app
+# never sits for minutes on a client/API build mismatch (the UpdateModal's
+# reload loop). Prunes old releases only here — a built-but-never-activated
+# release from a failed deploy is cleaned up by the next successful one.
+activate_release(){
+  [ -n "$RELEASE_DIR" ] || die "activate_release called without a built release"
+  ln -sfn "$RELEASE_DIR" "$APP_DIR/current.tmp"
   mv -Tf "$APP_DIR/current.tmp" "$APP_DIR/current"
-  log "current -> $ts"
-  ls -1dt "$APP_DIR/releases"/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -rf
+  log "current -> $(basename "$RELEASE_DIR")"
+  ls -1dt "$APP_DIR/releases"/*/ 2>/dev/null \
+    | grep -vF "$RELEASE_DIR" | tail -n +$((KEEP)) | xargs -r rm -rf
 }
 
 # Install deps + (re)start the API under pm2. Start from server/ (--cwd) so
 # dotenv loads server/.env (DATABASE_URL, APP_TOKEN).
 api_up(){
   [ -d "$APP_DIR/server" ] || return 0
-  npm_install "$APP_DIR/server" --omit=dev
+  server_deps
   pm2 restart ffc-api --update-env \
     || pm2 start index.js --name ffc-api --cwd "$APP_DIR/server"
   pm2 save
@@ -226,7 +269,7 @@ run_server_tests(){
   psql "$test_url" -qc "select 1" >/dev/null 2>&1 \
     || die "cannot reach test database $test_url — create it as the postgres superuser (create database ${name}_test owner <app-role>; then in it: create extension pgcrypto), or set FFC_TEST_DATABASE_URL (FFC_SKIP_TESTS=1 to bypass)"
   log "Test gate: running server suite against ${test_url##*/} (quiet unless red)"
-  npm_install "$APP_DIR/server" --omit=dev
+  server_deps
   # DOTENV_CONFIG_PATH=/dev/null: app.js/db.js `import "dotenv/config"`, and
   # on the droplet server/.env is PRODUCTION config — real API keys and
   # testing toggles that break tests written for a clean environment (e.g.
@@ -343,7 +386,7 @@ cmd_vhost(){
 cmd_migrate(){
   [ -d "$APP_DIR/server" ] || return 0
   log "Migrating database (idempotent)"
-  npm_install "$APP_DIR/server" --omit=dev
+  server_deps
   ( cd "$APP_DIR/server" && npm run migrate )
 }
 
@@ -429,15 +472,22 @@ cmd_deploy(){
   platform_fqdn="$(grep -E '^PLATFORM_FQDN=' "$APP_DIR/server/.env" 2>/dev/null | cut -d= -f2- || true)"
   [ -n "$platform_fqdn" ] \
     || log "WARNING: no PLATFORM_FQDN in server/.env — unknown client subdomains (typo.$FQDN etc.) will serve the default org until it is set (see server/.env.example)."
+  # Cutover atomicity: everything slow (tests, npm installs, client build,
+  # migrate) happens while the OLD client + OLD API keep serving each other
+  # consistently. The visible cutover is then just [restart API -> health ->
+  # symlink swap] — sub-second between the API going new and the client
+  # following, instead of the minutes-long mismatch window that used to trap
+  # open apps in the UpdateModal's refresh loop.
   run_server_tests      # the gate: red aborts with production untouched
-  build_release
+  build_release         # build into releases/<ts> — NOT live yet
   cmd_migrate           # apply any new schema before the new code serves
   api_up
   if ! api_health; then
     log "API FAILED its health check after restart — recent logs:"
     pm2 logs ffc-api --lines 30 --nostream || true
-    die "deploy is NOT healthy. Roll back with: ffc rollback  (target: $(cat "$APP_DIR/.ffc-prev-sha" 2>/dev/null || echo 'unknown — pass a sha'))"
+    die "deploy is NOT healthy (old client still being served — new build was never activated). Roll back with: ffc rollback  (target: $(cat "$APP_DIR/.ffc-prev-sha" 2>/dev/null || echo 'unknown — pass a sha'))"
   fi
+  activate_release      # new API is healthy — flip the served client to match
   mock_up               # (re)start the CenterEdge mock behind the /ce proxy
   # Ensure the live vhost carries current nginx directives (e.g. the photo-upload
   # client_max_body_size). Re-rendering re-runs certbot, so only do it when the
@@ -478,6 +528,7 @@ cmd_setup(){
   api_up
   mock_up
   build_release
+  activate_release
   cmd_vhost
   sleep 1   # let the API bind before seeding
   cmd_seed || log "seed skipped — run 'ffc seed' once the API + DB are ready"
@@ -585,6 +636,7 @@ cmd_rollback(){
     pm2 logs ffc-api --lines 30 --nostream || true
     die "API still unhealthy after rollback — inspect: ffc logs"
   fi
+  activate_release      # same cutover order as deploy: healthy API first
   mock_up
   cmd_version
   log "Rolled back. NOTE: the next 'ffc deploy' ships origin/$BRANCH tip again."

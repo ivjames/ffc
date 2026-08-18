@@ -48,3 +48,54 @@ export function useApiBuild(): string | null {
 
   return apiBuild;
 }
+
+// An API-build mismatch alone is NOT proof that reloading helps: mid-deploy,
+// nginx can briefly serve a client build that disagrees with the API (in
+// either direction), and a reload just lands on the same mismatched pair —
+// which used to trap open apps in an UpdateModal reload loop for the whole
+// deploy window. So before declaring an update ready, confirm against the
+// SERVED build (/version.json, emitted next to the bundle and excluded from
+// the SW precache, so no-store reads what nginx serves right now):
+//
+//   served !== running  -> a reload actually fetches a different bundle, and
+//   served === api      -> that bundle matches the live API.
+//
+// Anything else means a deploy is still in flight — stay quiet and re-probe;
+// the states converge within seconds once the deploy's cutover completes.
+const CONFIRM_MS = 10_000;
+
+export function useUpdateReady(apiBuild: string | null): boolean {
+  const [ready, setReady] = useState(false);
+
+  const mismatch =
+    __BUILD_ID__ !== 'dev' && apiBuild != null && apiBuild !== __BUILD_ID__;
+
+  useEffect(() => {
+    if (!mismatch || ready) return; // ready latches — the modal never flickers
+    let cancelled = false;
+
+    const probe = () => {
+      void fetch('/version.json', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          const served = typeof d?.build === 'string' ? d.build : null;
+          if (served != null && served !== __BUILD_ID__ && served === apiBuild) {
+            setReady(true);
+          }
+        })
+        .catch(() => {
+          /* offline / mid-deploy hiccup — try again on the next tick */
+        });
+    };
+
+    probe();
+    const id = setInterval(probe, CONFIRM_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [mismatch, apiBuild, ready]);
+
+  return ready;
+}
