@@ -1,8 +1,8 @@
 // Amazon Polly voice bake-off for live trivia — pick the room's voice by ear.
 //
-//   cd /var/www/ffc/server && npm run tts:bakeoff -- --yes
+//   cd /var/www/ffc/server && npm run tts:bakeoff -- --location upland --yes
 //
-// Synthesizes REAL questions from this venue's bank (not lorem ipsum) through
+// Synthesizes REAL questions from ONE venue's bank (not lorem ipsum) through
 // several Polly neural voices and speaking styles, writes the mp3s and a page
 // that plays them side by side, and reports exactly what AWS billed.
 //
@@ -31,17 +31,33 @@
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
-import { lobbyScript, questionScript, revealScript } from "../../src/lib/speechScript.ts";
 
-// `--experimental-strip-types` (so this can import the app's TypeScript script
-// builders instead of keeping a second copy of the words) needs Node 22. The
-// server itself still runs on 18, so say so plainly rather than dying in the
-// loader.
+// This imports the app's TypeScript script builders rather than keeping a
+// second copy of the words, which needs `--experimental-strip-types` and so
+// Node 22. The flag CANNOT live in the npm script: node rejects an unknown
+// flag while parsing its own argv, before this file runs, so a version check
+// inside the script would never get to print anything on Node 18 or 20 — the
+// operator would just see a flag-parse error. So the entry point takes no
+// flag, checks the version itself, and re-execs with it.
 const [major] = process.versions.node.split(".").map(Number);
 if (major < 22) {
-  console.error(`This script needs Node 22+ (found ${process.versions.node}) for --experimental-strip-types.`);
+  console.error(
+    `\nThis script needs Node 22+ (found ${process.versions.node}).\n` +
+      `It imports the app's TypeScript script builders via --experimental-strip-types,\n` +
+      `so the words the room hears have exactly one definition.\n` +
+      `The API itself still runs fine on ${process.versions.node}; only this script needs 22.\n`
+  );
   process.exit(1);
+}
+if (!process.execArgv.includes("--experimental-strip-types")) {
+  const run = spawnSync(
+    process.execPath,
+    ["--experimental-strip-types", fileURLToPath(import.meta.url), ...process.argv.slice(2)],
+    { stdio: "inherit" }
+  );
+  process.exit(run.status ?? 1);
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -85,10 +101,16 @@ function loadEnv() {
 
 // --- the lines to read ------------------------------------------------------
 
-/** Questions from the live bank, spread across the length range: the shortest,
- *  the longest, and evenly spaced in between. A voice that handles a one-line
- *  question can still fall apart on a long one, so auditioning three of the
- *  same size tells you the least. */
+/** Questions from ONE venue's bank, spread across the length range: the
+ *  shortest, the longest, and evenly spaced in between. A voice that handles a
+ *  one-line question can still fall apart on a long one, so auditioning three
+ *  of the same size tells you the least.
+ *
+ *  Scoped exactly as dealSession scopes it (lib/triviaDeal.js): the platform
+ *  pack plus this org's own questions plus anything written for this venue.
+ *  This box is multi-tenant — an unscoped "select every active question" would
+ *  happily pick another client's material, send it to Polly, and write it into
+ *  a page that then sits on disk. A venue has to be named. */
 async function loadQuestions(count) {
   if (!process.env.DATABASE_URL) {
     console.warn("  ! no DATABASE_URL — using built-in sample questions");
@@ -97,10 +119,34 @@ async function loadQuestions(count) {
   const { default: pg } = await import("pg");
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   try {
+    const wanted = flag("location");
+    const venues = await pool.query(
+      `select l.id, l.org_id, l.name, l.slug, o.name as org_name
+         from location l left join org o on o.id = l.org_id
+        where l.archived_at is null
+        order by o.name nulls first, l.sort_order, l.name`
+    );
+    const loc = wanted
+      ? venues.rows.find((v) => v.id === wanted || v.slug === wanted)
+      : null;
+    if (!loc) {
+      console.error(
+        wanted ? `\nNo live venue matches "${wanted}".\n` : `\n--location is required: the bank is per venue.\n`
+      );
+      console.error("Available venues:");
+      for (const v of venues.rows) {
+        console.error(`  ${v.slug.padEnd(20)} ${v.name}${v.org_name ? ` (${v.org_name})` : ""}`);
+      }
+      console.error(`\n  npm run tts:bakeoff -- --location <slug>\n`);
+      process.exit(1);
+    }
     const res = await pool.query(
       `select category, prompt, choices, answer from trivia_question
         where archived_at is null and active
-        order by length(prompt)`
+          and (org_id is null or org_id = $1)
+          and (location_id is null or location_id = $2)
+        order by length(prompt)`,
+      [loc.org_id ?? null, loc.id]
     );
     if (res.rowCount === 0) {
       console.warn("  ! the bank is empty — using built-in sample questions");
@@ -114,6 +160,7 @@ async function loadQuestions(count) {
       const at = Math.round((i * (rows.length - 1)) / Math.max(1, Math.min(count, rows.length) - 1));
       picked.push(rows[at]);
     }
+    picked.venue = `${loc.name}${loc.org_name ? ` (${loc.org_name})` : ""}`;
     return picked;
   } finally {
     await pool.end();
@@ -143,7 +190,7 @@ const SAMPLES = [
 ];
 
 /** Every line the bake-off reads, in the order a game says them. */
-function linesFor(questions) {
+function linesFor(questions, { lobbyScript, questionScript, revealScript }) {
   const lines = [{ label: "Join code (lobby)", text: lobbyScript("B8S5Z2").join(" ") }];
   for (const [i, q] of questions.entries()) {
     const view = {
@@ -319,12 +366,17 @@ which AWS synthesizes with the standard voice while still billing neural.</foote
 
 async function main() {
   loadEnv();
+  // Dynamic, so the re-exec guard above runs first — a static import of a .ts
+  // file is hoisted and would fail to parse on the first pass.
+  const { lobbyScript, questionScript, revealScript } = await import(
+    "../../src/lib/speechScript.ts"
+  );
   const count = Number(flag("questions", "3"));
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const outDir = flag("out", join(ROOT, "data", "tts-bakeoff", stamp));
 
   const questions = await loadQuestions(count);
-  const lines = linesFor(questions);
+  const lines = linesFor(questions, { lobbyScript, questionScript, revealScript });
 
   // Every clip we intend to make, priced BEFORE anything is spent.
   const clips = [];
@@ -348,7 +400,8 @@ async function main() {
   const estUsd = (estChars / 1e6) * NEURAL_USD_PER_M;
 
   console.log(`\nPolly bake-off — pre-flight`);
-  console.log(`  questions   ${questions.length} (from ${process.env.DATABASE_URL ? "the live bank" : "built-in samples"})`);
+  console.log(`  venue       ${questions.venue ?? "built-in samples (no DATABASE_URL)"}`);
+  console.log(`  questions   ${questions.length}, spread shortest to longest`);
   console.log(`  voices      ${VOICES.map((v) => v.id).join(", ")}`);
   console.log(`  styles      ${STYLES.map((s) => s.label).join(", ")}`);
   console.log(`  clips       ${clips.length}`);

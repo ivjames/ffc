@@ -12,7 +12,7 @@
     "migrate": "node migrate.js",
     "import:trivia": "node importTriviaPack.js",
     "test": "node --experimental-test-module-mocks --test",
-    "tts:bakeoff": "node --experimental-strip-types scripts/tts-bakeoff.mjs"
+    "tts:bakeoff": "node scripts/tts-bakeoff.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.1",

@@ -96,15 +96,21 @@ before designing around them.
 
 ## Auditioning
 
-`server/scripts/tts-bakeoff.mjs` reads real questions from the venue's bank and
+`server/scripts/tts-bakeoff.mjs` reads real questions from one venue's bank —
+scoped exactly as `dealSession` scopes it, since this box is multi-tenant and an
+unscoped read would pick up another client's material — and
 synthesizes them through each voice and style, then writes a page that plays
 them side by side with the exact billed characters and cost per clip:
 
 ```bash
 cd /var/www/ffc/server
-npm run tts:bakeoff              # pre-flight only — prices the run, spends nothing
-npm run tts:bakeoff -- --yes     # synthesize
+npm run tts:bakeoff -- --location upland          # pre-flight — prices it, spends nothing
+npm run tts:bakeoff -- --location upland --yes    # synthesize
 ```
+
+Needs Node 22 on the box (it imports the app's TypeScript script builders so the
+words have one definition); the API itself still runs on 18. Run it with no
+`--location` to list the venues.
 
 Play it on the tablet you host from, through the speaker the room hears. A
 voice that reads well on a laptop can vanish over a PA, which is the whole
