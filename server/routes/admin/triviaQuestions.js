@@ -1,5 +1,7 @@
 // Admin: the live-trivia question bank.
-//   GET    /api/admin/trivia/questions?orgId=&locationId=&includeArchived=
+//   GET    /api/admin/trivia/questions
+//            ?orgId=&locationId=&category=&includeArchived=&limit=&offset=
+//            -> { questions, total, limit, offset }
 //   POST   /api/admin/trivia/questions          create/update
 //   POST   /api/admin/trivia/questions/:id/archive
 //   POST   /api/admin/trivia/questions/:id/unarchive
@@ -24,8 +26,24 @@ import { normalizeQuestion } from "../../lib/triviaLive.js";
 export const router = Router();
 
 const COLS = `id, org_id as "orgId", location_id as "locationId", category, prompt,
-              choices, answer, difficulty, active, archived_at as "archivedAt",
+              choices, answer, difficulty, active, source, archived_at as "archivedAt",
               created_at as "createdAt"`;
+
+// The bank used to be small enough to hand over whole. It isn't: the
+// OpenTriviaQA import (server/importTriviaPack.js) can put ~48,000 rows in the
+// platform pack, and every org_admin's list includes that pack because it is
+// what their hosts deal. So the list is paged, and says how many rows the
+// filter actually matched.
+const DEFAULT_LIMIT = 200;
+const MAX_LIMIT = 1000;
+
+/** A non-negative integer query param, or `fallback` when absent/unparseable. */
+function intParam(raw, fallback, max) {
+  if (typeof raw !== "string" || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return null;
+  return max === undefined ? n : Math.min(n, max);
+}
 
 router.get("/questions", async (req, res) => {
   const scope = orgScope(req);
@@ -34,6 +52,14 @@ router.get("/questions", async (req, res) => {
   if (locationId && !UUID_RE.test(locationId)) {
     return res.status(400).json({ ok: false, error: "locationId must be a uuid" });
   }
+  const limit = intParam(req.query.limit, DEFAULT_LIMIT, MAX_LIMIT);
+  const offset = intParam(req.query.offset, 0);
+  if (limit === null || offset === null) {
+    return res.status(400).json({ ok: false, error: "limit and offset must be non-negative integers" });
+  }
+  // Narrowing by category is what makes a paged bank usable — 48,000 rows is
+  // not a list anyone scrolls, but "Sports" is 2,819 and "For Kids" is 748.
+  const category = typeof req.query.category === "string" && req.query.category ? req.query.category : null;
 
   // A super_admin may narrow to one org; an org_admin is pinned to theirs.
   let orgId = scope;
@@ -46,16 +72,30 @@ router.get("/questions", async (req, res) => {
 
   try {
     // An org_admin sees their own rows PLUS the read-only platform pack, since
-    // that's what their hosts will actually be dealing.
-    const result = await pool.query(
-      `select ${COLS} from trivia_question
-        where ($1::uuid is null or org_id = $1 or org_id is null)
-          and ($2::uuid is null or location_id = $2 or location_id is null)
-          and ($3::bool or archived_at is null)
-        order by org_id nulls last, category, created_at`,
-      [orgId, locationId, includeArchived]
-    );
-    return res.json({ ok: true, questions: result.rows });
+    // that's what their hosts will actually be dealing. `org_id nulls last`
+    // keeps a client's own questions on the first page even when the platform
+    // pack behind them runs to tens of thousands of rows.
+    const where = `where ($1::uuid is null or org_id = $1 or org_id is null)
+                     and ($2::uuid is null or location_id = $2 or location_id is null)
+                     and ($3::bool or archived_at is null)
+                     and ($4::text is null or category = $4)`;
+    const filters = [orgId, locationId, includeArchived, category];
+    const [result, counted] = await Promise.all([
+      pool.query(
+        `select ${COLS} from trivia_question ${where}
+          order by org_id nulls last, category, created_at, id
+          limit $5 offset $6`,
+        [...filters, limit, offset]
+      ),
+      pool.query(`select count(*)::int as n from trivia_question ${where}`, filters),
+    ]);
+    return res.json({
+      ok: true,
+      questions: result.rows,
+      total: counted.rows[0].n,
+      limit,
+      offset,
+    });
   } catch (err) {
     console.error("[admin/trivia] list error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
