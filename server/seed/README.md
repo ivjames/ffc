@@ -65,6 +65,31 @@ The build is deterministic — no timestamps, and the option shuffle is seeded o
 each prompt — so rebuilding from an unchanged upstream produces a byte-identical
 file and an empty diff.
 
+### Apostrophe repairs
+
+The upstream corpus stripped apostrophes wholesale. Two layers put them back:
+
+1. **Rule repairs** (`repairApostrophes` in `scripts/lib/trivia-pack.mjs`):
+   strings that are only ever a mangled contraction ("dont", "youre") are fixed
+   during the build. The list is deliberately incomplete — "ill", "lets", "its"
+   and friends are real words.
+2. **Judgment repairs** (`scripts/lib/trivia-pack-repairs.ndjson`): possessives
+   ("dogs ears" → "dog's ears") and ambiguous contractions ("Ill" → "I'll"),
+   where only the sentence decides. These were found by a model sweep of every
+   row, each accepted fix independently verified in context, and committed as
+   data. The build applies them last (after sort and shuffle, both seeded on
+   the unrepaired prompt), and `applyPackRepairs` re-checks every entry at
+   apply time: pure apostrophe insertion, unique whole-word match, no dedupe
+   collision, and the repaired row must still pass the admin validator.
+
+`node scripts/repair-trivia-pack.mjs` applies the committed repairs to the pack
+in place — the no-upstream-checkout path, byte-identical to a full rebuild and
+a no-op when re-run. Entries key rows by their unrepaired prompt, so a rebuild
+from upstream hits every entry again. A handful of rows remain unrepairable:
+two prompts sit at the validator's 300-character cap (an inserted apostrophe
+would break the length rule), and same-field text like "The dogs saw the dogs
+bone" is skipped as ambiguous by design.
+
 ### What the build drops, and why
 
 Of 49,716 source questions, 47,710 survive. The build prints the tally; the
