@@ -37,6 +37,10 @@ export async function playRound(page, game, { rng, skill, baseUrl, timeoutMs = 1
     await d.refit();
   }
 
+  // Games that steer with a held pointer press once here, before play() takes
+  // over moving it.
+  if (game.startGesture) await game.startGesture(d);
+
   await game.play(d, { rng, skill });
 
   // The policy paces itself, but the last shot still has to resolve.

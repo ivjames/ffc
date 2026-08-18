@@ -98,6 +98,7 @@ const SKILL_FLOOR = {
   watergunrace: 2,
   trivia: 8,
   milkbottle: 12,
+  airhockey: 4,
 };
 
 const pct = (xs, p) => {
