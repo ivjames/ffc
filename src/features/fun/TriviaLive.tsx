@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
+import QrScanner from '../shared/QrScanner';
+import { joinCodeFromScan } from '../../lib/scanJoinCode';
 import { useDeadline, formatCountdown } from './useDeadline';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
 import {
@@ -107,6 +109,9 @@ export default function TriviaLive() {
   const [joinCode, setJoinCode] = useState(params.get('code') ?? '');
   const [name, setName] = useState('');
   const [isTeam, setIsTeam] = useState(false);
+  // The camera is opt-in: it's a permission prompt and a hot phone, so it
+  // stays shut until someone actually asks to scan.
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Optimistic lock so the tapped button reads as chosen before the round trip
@@ -340,6 +345,34 @@ export default function TriviaLive() {
             <p className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
               {error}
             </p>
+          )}
+          {/* Scanning first, typing second. Six characters heard across a
+              loud room is where players are actually lost: the codes B/8,
+              S/5 and Z/2 are all legal, so a mis-keyed one is a valid code
+              for no game and the room is told "no live game with that code".
+              The field stays right below for anyone whose camera won't play
+              along, and the QR to scan is on the host's lobby screen. */}
+          {scanning ? (
+            <QrScanner
+              accept={(text) => joinCodeFromScan(text) !== null}
+              onResult={(text) => {
+                const code = joinCodeFromScan(text);
+                if (code) setJoinCode(code);
+                setScanning(false);
+              }}
+              onCancel={() => setScanning(false)}
+            />
+          ) : (
+            <button
+              onClick={() => {
+                playClick();
+                setError(null);
+                setScanning(true);
+              }}
+              className="mb-4 w-full rounded-xl border border-fairway-700 bg-fairway-900/60 px-4 py-3 text-sm font-semibold text-fairway-100/90 active:bg-fairway-800"
+            >
+              📷 Scan the code
+            </button>
           )}
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fairway-400">
             Game code
