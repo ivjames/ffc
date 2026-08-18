@@ -755,3 +755,72 @@ test("the host's button and the clock cannot both move the same question", async
   assert.equal(body.session.status, "reveal", "one transition, not two");
   assert.equal(body.session.currentIndex, 0, "and the room did not skip a question");
 });
+
+test("a stalled actor cannot drag the room back a question", async () => {
+  // Status alone is not a version: it comes round again on every question. An
+  // actor holding (question, 0) that stalls while the room moves on to
+  // (question, 1) would match the predicate and apply its stale transition —
+  // reverting current_index and revealing the answer to the wrong question in
+  // front of everybody.
+  const { id, hostToken, joinCode } = await createSession({
+    questionCount: 3,
+    config: { questionSeconds: 5, revealSeconds: 5, lobbySeconds: 10 },
+  });
+  await join(joinCode, "Bystander");
+  await advance(id, hostToken); // -> question 0
+  const stale = (
+    await testQuery(`select status, current_index from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.equal(stale.current_index, 0);
+
+  // The room moves on while our stalled actor still believes in question 0.
+  await advance(id, hostToken); // -> reveal 0
+  await advance(id, hostToken); // -> question 1
+
+  // Now the stalled transition lands. It must find nothing to update.
+  const applied = await testQuery(
+    `update trivia_session set status = 'reveal', current_index = 0
+      where id = $1 and status = $2 and current_index = $3 returning id`,
+    [id, stale.status, stale.current_index]
+  );
+  assert.equal(applied.rowCount, 0, "the predicate rejected a transition from a spent phase");
+
+  const now = (
+    await testQuery(`select status, current_index from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.equal(now.current_index, 1, "the room is still on the question it was asking");
+  assert.equal(now.status, "question");
+});
+
+test("the network grace outlives the clock that closes the question", async () => {
+  // The grace window is for latency, not for thinking time — so the phase must
+  // not close before it. Closing exactly on the configured length would flip
+  // the session to reveal while a tap made at 19.9s was in flight, and the
+  // answer handler would refuse it on status before ever reaching the grace
+  // calculation. Whether a slow tap counted would then depend on how the
+  // ticker's second lined up.
+  const { id, hostToken, joinCode } = await createSession({
+    config: { questionSeconds: 5, revealSeconds: 5, lobbySeconds: 10, speedBonus: false },
+  });
+  const { participantToken } = await join(joinCode, "Laggy");
+  await advance(id, hostToken); // -> question
+
+  const row = (
+    await testQuery(`select asked_at, auto_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  const graceMs = new Date(row.auto_at).getTime() - new Date(row.asked_at).getTime() - 5000;
+  assert.ok(graceMs > 0, `the clock must not close before the grace, got ${graceMs}ms`);
+
+  // A tap inside the grace still scores, and the ticker has not closed the
+  // phase out from under it.
+  await testQuery(
+    `update trivia_session set asked_at = now() - interval '5100 milliseconds' where id = $1`,
+    [id]
+  );
+  await tickAutopilot();
+  const late = await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: participantToken,
+    choice: await correctChoice(id),
+  });
+  assert.equal(late.status, 200, "a tap inside the grace is still a tap inside the grace");
+});

@@ -723,12 +723,7 @@ function nextPhase(session) {
   const cfg = session.config ?? {};
   const after = (seconds) => new Date(Date.now() + seconds * 1000);
   if (session.status === "lobby") {
-    return {
-      status: "question",
-      currentIndex: 0,
-      askedAt: new Date(),
-      autoAt: after(cfg.questionSeconds ?? DEFAULT_SECONDS),
-    };
+    return { status: "question", currentIndex: 0, ...openQuestion(cfg) };
   }
   if (session.status === "question") {
     return {
@@ -743,12 +738,28 @@ function nextPhase(session) {
   // there — and a final board waits for nobody, so it has no deadline.
   return following >= session.questionIds.length
     ? { status: "final", currentIndex: session.currentIndex, askedAt: null, autoAt: null }
-    : {
-        status: "question",
-        currentIndex: following,
-        askedAt: new Date(),
-        autoAt: after(cfg.questionSeconds ?? DEFAULT_SECONDS),
-      };
+    : { status: "question", currentIndex: following, ...openQuestion(cfg) };
+}
+
+/**
+ * Open a question: when it was asked, and when the clock should close it.
+ *
+ * The deadline sits ANSWER_GRACE_MS past the configured length, and that is
+ * not slack for the player — it is the same network allowance the answer
+ * handler applies. Closing the phase exactly on the configured length would
+ * flip the session to `reveal` while a tap made at 19.9s was still in flight,
+ * and the handler's status check would refuse it before ever reaching the
+ * grace calculation. The allowance would then hold or not depending on how the
+ * ticker's second happened to line up, which is no allowance at all.
+ *
+ * Players never see this: their countdown runs off asked_at and the configured
+ * length, so the extra second and a half is invisible slack, exactly as it was
+ * when only a human closed the question.
+ */
+function openQuestion(cfg) {
+  const askedAt = new Date();
+  const lengthMs = (cfg.questionSeconds ?? DEFAULT_SECONDS) * 1000;
+  return { askedAt, autoAt: new Date(askedAt.getTime() + lengthMs + ANSWER_GRACE_MS) };
 }
 
 /**
@@ -759,15 +770,30 @@ function nextPhase(session) {
  * question means two transitions computed from the same state, and only the
  * first can land. The loser sees rowCount 0 and reports where the game
  * actually is instead of writing a stale next-state over it.
+ *
+ * It takes BOTH the status and the index, because status alone repeats. A
+ * stalled actor holding (question, 0) would otherwise still match a room that
+ * had moved on to (question, 1) — and its transition, computed against the
+ * question before last, would drag the whole room back a question and reveal
+ * the wrong answer. Together the two are a version: within a session the index
+ * only ever grows, so a (status, index) pair never comes round again.
  */
 async function applyPhase(session, next) {
   const updated = await pool.query(
     `update trivia_session
         set status = $1, current_index = $2, asked_at = $3, auto_at = $4,
             ended_at = case when $1 = 'final' then now() else ended_at end
-      where id = $5 and status = $6
+      where id = $5 and status = $6 and current_index = $7
       returning ${SESSION_FIELDS}`,
-    [next.status, next.currentIndex, next.askedAt, next.autoAt, session.id, session.status]
+    [
+      next.status,
+      next.currentIndex,
+      next.askedAt,
+      next.autoAt,
+      session.id,
+      session.status,
+      session.currentIndex,
+    ]
   );
   return updated.rows[0] ?? null;
 }

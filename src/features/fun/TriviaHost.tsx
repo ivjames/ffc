@@ -77,6 +77,15 @@ export default function TriviaHost() {
   const [notice, setNotice] = useState<string | null>(null);
   const signedIn = useSession().user != null;
   const [busy, setBusy] = useState(false);
+  // Above every conditional return below, and nullable on purpose. This screen
+  // returns early four times — no account, no game yet, snapshot still loading
+  // — so a hook called down beside the render it belongs to would appear only
+  // once the snapshot lands, changing the hook count between renders and
+  // taking the controller down with "rendered more hooks than during the
+  // previous render" at exactly the moment the host needs it.
+  const startsIn = useDeadline(
+    snapshot?.session.status === 'lobby' ? snapshot.session.autoAt : null,
+  );
 
   useEffect(() => {
     if (!locationId) return;
@@ -269,7 +278,6 @@ export default function TriviaHost() {
   }
 
   const { session, question, board, answeredCount, entrantCount } = snapshot;
-  const startsIn = useDeadline(session.status === 'lobby' ? session.autoAt : null);
   const done = session.status === 'final';
 
   return (
