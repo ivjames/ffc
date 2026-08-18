@@ -120,17 +120,35 @@ describe('Achievements wall', () => {
     expect(screen.getByText('Courses & venues')).toBeInTheDocument();
   });
 
+  // The earned half of the count is its own element (it renders gold), so the
+  // tally has to be read off the line's full text rather than a text node.
+  const tally = () => screen.getByText(/unlocked$/).textContent;
+
   it('counts nothing earned on a fresh device', async () => {
     renderWall();
-    await waitFor(() => expect(screen.getByText(/^0 of \d+ unlocked$/)).toBeInTheDocument());
+    await waitFor(() => expect(tally()).toMatch(/^0 of \d+ unlocked$/));
   });
 
   it('marks a badge earned once a round proves it', async () => {
     rounds.current = [aceRound()];
     renderWall();
     await waitFor(() => expect(screen.getAllByText('Earned').length).toBeGreaterThan(0));
-    expect(screen.getByText(/^[1-9]\d* of \d+ unlocked$/)).toBeInTheDocument();
+    expect(tally()).toMatch(/^[1-9]\d* of \d+ unlocked$/);
     expect(screen.getByText('Hole-in-One')).toBeInTheDocument();
+  });
+
+  it('lights earned rows gold and leaves locked ones plain', async () => {
+    // The gold IS the answer to "which of these have I got" — a hundred rows
+    // deep, the chip alone meant counting chips. Assert the treatment reaches
+    // exactly the earned rows, so a refactor can't quietly drop it.
+    rounds.current = [aceRound()];
+    const { container } = renderWall();
+    await waitFor(() => expect(screen.getAllByText('Earned').length).toBeGreaterThan(0));
+    const gold = container.querySelectorAll('li.badge-earned');
+    expect(gold.length).toBe(screen.getAllByText('Earned').length);
+    expect(container.querySelectorAll('li').length).toBeGreaterThan(gold.length);
+    // ...and the gold row is the one the badge name sits in.
+    expect(screen.getByText('Hole-in-One').closest('li')).toHaveClass('badge-earned');
   });
 
   it('hides secret badges behind ??? until they are earned', async () => {
