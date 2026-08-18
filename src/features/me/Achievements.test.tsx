@@ -11,17 +11,24 @@ import type { LocalRound } from '../../types';
 // Two venues, three courses — enough that "every course at one venue" is real
 // but "three different venues" is not, so both sides of `reach` are exercised.
 // Declared inside the factory: vi.mock is hoisted above module-level consts.
+const catalog = vi.hoisted(() => ({ revision: 1, courses: [] as unknown[] }));
 vi.mock('../../data/courses', () => {
   const pars = Array(18).fill(3);
+  catalog.courses = [
+    { id: 'c1', locationId: 'v1', pars },
+    { id: 'c2', locationId: 'v1', pars },
+    { id: 'c3', locationId: 'v2', pars },
+  ];
   return {
-    COURSES: [
-      { id: 'c1', locationId: 'v1', pars },
-      { id: 'c2', locationId: 'v1', pars },
-      { id: 'c3', locationId: 'v2', pars },
-    ],
+    // A getter, so a test can swap the catalog the way hydration does.
+    get COURSES() {
+      return catalog.courses;
+    },
     LOCATIONS: [],
     courseById: () => undefined,
     locationById: () => undefined,
+    // The wall subscribes to this so it recomputes when /api/content lands.
+    useContentRevision: () => catalog.revision,
   };
 });
 
@@ -131,6 +138,32 @@ describe('Achievements wall', () => {
     await waitFor(() => expect(screen.getAllByText('???').length).toBeGreaterThan(0));
     // Rock Bottom is secret, so its name must not leak on an unearned wall.
     expect(screen.queryByText('Rock Bottom')).not.toBeInTheDocument();
+  });
+
+  it('recomputes when the venue catalog hydrates', async () => {
+    // Landing here before /api/content returns means an EMPTY catalog: no
+    // course to judge a round against, and no venue shape to decide what's
+    // reachable. The wall must not freeze that first answer.
+    const pars = Array(18).fill(3);
+    catalog.courses = [];
+    catalog.revision = 1;
+    const { rerender } = renderWall();
+    await waitFor(() => expect(screen.getByText(/unlocked$/)).toBeInTheDocument());
+    // With no courses at all, the multi-course badge isn't shown.
+    expect(screen.queryByText('Course Collector')).not.toBeInTheDocument();
+
+    // Content lands: two courses at one venue, and the revision ticks.
+    catalog.courses = [
+      { id: 'c1', locationId: 'v1', pars },
+      { id: 'c2', locationId: 'v1', pars },
+    ];
+    catalog.revision = 2;
+    rerender(
+      <MemoryRouter initialEntries={['/me/achievements']}>
+        <Achievements />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByText('Course Collector')).toBeInTheDocument());
   });
 
   it('omits badges this deployment cannot reach', async () => {

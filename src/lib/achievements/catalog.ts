@@ -175,7 +175,13 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'arcade_rookie', label: 'Arcade Rookie', how: 'Play any arcade game.', icon: 'nav.arcade', category: 'arcade', local: true },
   { key: 'sampler', label: 'Sampler', how: 'Play five different arcade games.', icon: 'game.challenge-spinner', category: 'arcade', local: true },
   { key: 'completionist', label: 'Completionist', how: 'Play every game in the arcade.', icon: 'award.trophy', category: 'arcade', local: true },
-  { key: 'maxed_out', label: 'Maxed Out', how: "Hit a game's top ticket payout in a single round.", icon: 'award.ticket', category: 'arcade', local: true },
+  // Named for what can actually be observed. The obvious badge — "hit THIS
+  // game's maximum" — needs each game's own ceiling, and most top out well below
+  // the platform limit (trivia at 50, high striker at 60), so a single global
+  // comparison would have made it unearnable on most of the roster while
+  // claiming otherwise. A hundred tickets from one round is a real thing that
+  // happens, and it is a thing this can see.
+  { key: 'big_payout', label: 'Big Payout', how: 'Earn a hundred tickets from a single arcade round.', icon: 'award.ticket', category: 'arcade', local: true },
   { key: 'regular_player', label: 'Frequent Flyer', how: 'Play fifty arcade rounds.', icon: 'state.timer', category: 'arcade', local: true },
   { key: 'trivia_buff', label: 'Trivia Buff', how: 'Answer every trivia question correctly.', icon: 'game.trivia', category: 'arcade', local: true },
   // Per-game skill feats. Each game reports its own through GameTicketAward's

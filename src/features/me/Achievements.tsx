@@ -3,6 +3,7 @@ import { Screen, TopBar, Content } from '../../ui/components';
 import { getActivity, getAllRounds, getEarnedBadges, putEarnedBadges, putRound } from '../../db';
 import { fetchRewards } from '../../sync';
 import type { LocalRound } from '../../types';
+import { useContentRevision } from '../../data/courses';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
 import { useSession } from '../../lib/session';
 import { isStandalone } from '../../lib/pwaInstall';
@@ -36,9 +37,14 @@ const SECRET_HOW = 'Hidden — you will know it when it happens.';
 
 export default function Achievements() {
   const [earned, setEarned] = useState<Set<string> | null>(null);
-  // The catalog is read once per mount: it depends on the venue list, which is
-  // hydrated at boot, and the wall is not a hot path.
-  const shown = useMemo(() => reachableAchievements(), []);
+  // The venue catalog boots EMPTY and fills in when /api/content lands (see
+  // data/courses.ts). Both halves of this screen read it — which badges are
+  // reachable here, and which rounds can be judged at all — so both have to be
+  // recomputed when it arrives. Landing on this screen directly, before the
+  // hydrate finishes, would otherwise show a wall that judged every round
+  // against no course and stay that way until the player left and came back.
+  const revision = useContentRevision();
+  const shown = useMemo(() => reachableAchievements(), [revision]);
   const signedIn = useSession().user != null;
   const carded = useLinkedPlayerId() != null;
 
@@ -67,7 +73,7 @@ export default function Achievements() {
     return () => {
       alive = false;
     };
-  }, [signedIn, carded]);
+  }, [signedIn, carded, revision]);
 
   const earnedCount = earned ? shown.filter((a) => earned.has(a.key)).length : 0;
 

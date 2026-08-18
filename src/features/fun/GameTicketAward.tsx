@@ -54,6 +54,9 @@ export default function GameTicketAward({
     if (recorded.current === sessionId) return;
     recorded.current = sessionId;
     void markActivity('game', game, tickets);
+    // The PLATFORM ceiling, not this game's own: most games top out below it,
+    // and there is no per-game maximum on the client to compare against. The
+    // badge is worded to match (Big Payout, not "maxed out this game").
     if (tickets >= MAX_PER_ROUND) void markActivity('feat', 'ticket-ceiling');
     if (feat) void markActivity('feat', feat);
   }, [game, tickets, sessionId, feat]);

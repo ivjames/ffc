@@ -655,7 +655,7 @@ const ACTIVITY_RULES: Record<string, (m: Marks) => boolean> = {
   sampler: (m) => m.distinct('game') >= 5,
   completionist: (m) => m.distinct('game') >= ARCADE_GAME_COUNT,
   regular_player: (m) => m.totalOf('game') >= 50,
-  maxed_out: (m) => m.count('feat', 'ticket-ceiling') >= 1,
+  big_payout: (m) => m.count('feat', 'ticket-ceiling') >= 1,
   trivia_buff: (m) => m.count('feat', 'trivia-perfect') >= 1,
   pinball_wizard: (m) => m.count('feat', 'pinball-million') >= 1,
   turkey: (m) => m.count('feat', 'turkey') >= 1,

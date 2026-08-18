@@ -468,7 +468,7 @@ describe('arcade', () => {
   });
 
   test('feats a game reports for itself', () => {
-    expect(earnWith([mark('feat', 'ticket-ceiling')]).has('maxed_out')).toBe(true);
+    expect(earnWith([mark('feat', 'ticket-ceiling')]).has('big_payout')).toBe(true);
     expect(earnWith([mark('feat', 'trivia-perfect')]).has('trivia_buff')).toBe(true);
     expect(earnWith([mark('feat', 'pinball-million')]).has('pinball_wizard')).toBe(true);
     expect(earnWith([mark('feat', 'turkey')]).has('turkey')).toBe(true);
