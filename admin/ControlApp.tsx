@@ -554,7 +554,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             Times shown in {ADMIN_TZ_LABEL}
           </div>
           <Routes>
-            <Route path="/" element={<Overview />} />
+            <Route path="/" element={<Overview isSuperAdmin={isSuperAdmin} />} />
             <Route path="/orgs" element={<Orgs isSuperAdmin={isSuperAdmin} />} />
             <Route path="/orgs/:id" element={<OrgDetail isSuperAdmin={isSuperAdmin} />} />
             <Route
@@ -576,7 +576,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             {isSuperAdmin && <Route path="/signups" element={<Signups />} />}
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
             {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}
-            <Route path="*" element={<Overview />} />
+            <Route path="*" element={<Overview isSuperAdmin={isSuperAdmin} />} />
           </Routes>
         </main>
       </div>
