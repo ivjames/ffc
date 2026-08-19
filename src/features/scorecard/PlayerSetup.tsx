@@ -47,7 +47,14 @@ export default function PlayerSetup() {
   const [me, setMe] = useState<AppUser | null | 'loading'>('loading');
 
   useEffect(() => {
-    void fetchMe().then(setMe);
+    void fetchMe().then((u) => {
+      setMe(u);
+      // Signed-in players with a saved tag get it prefilled as player 1 — the
+      // same assumption arcade play makes — unless they already typed one.
+      if (u?.defaultTag) {
+        setTags((prev) => (prev[0] === '' ? [u.defaultTag!, ...prev.slice(1)] : prev));
+      }
+    });
   }, []);
 
   const activeTags = useMemo(() => tags.slice(0, count), [tags, count]);
