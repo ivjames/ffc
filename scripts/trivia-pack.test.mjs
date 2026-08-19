@@ -5,7 +5,8 @@
 // shuffle is deliberately seeded, the safety filter is deliberately blunt.
 //
 // The rest checks server/seed/open-trivia-pack.ndjson.gz as shipped. That file
-// is 48,264 rows nobody will ever read, loaded straight into the bank a venue
+// is tens of thousands of rows nobody will ever read, loaded straight into the
+// bank a venue
 // deals its trivia night from, so "every row would pass the admin validator"
 // and "nothing in it is unfit for a room full of kids" have to be assertions,
 // not a claim in a commit message.
@@ -16,11 +17,15 @@ import { describe, expect, test } from 'vitest';
 import { normalizeQuestion } from '../server/lib/triviaLive.js';
 import {
   CATEGORY_LABELS,
+  MAX_CHOICE_CHARS,
+  MAX_PROMPT_CHARS,
   applyPackAmpersands,
   applyPackRepairs,
   applyPackTypos,
   decodeMixedUtf8,
   dedupeKey,
+  dropOversized,
+  fitsOnScreen,
   isAmpersandRestoration,
   isApostropheInsertion,
   isDoubledWordRemoval,
@@ -420,6 +425,54 @@ describe('applyPackAmpersands', () => {
   });
 });
 
+describe('fitsOnScreen', () => {
+  const row = (prompt, choices = ['Alpha', 'Beta']) => ({ prompt, choices });
+
+  test('keeps a question a host can read out', () => {
+    expect(fitsOnScreen(row('Which planet is closest to the sun?'))).toBe(true);
+    expect(fitsOnScreen(row('x'.repeat(MAX_PROMPT_CHARS)))).toBe(true);
+  });
+
+  test('drops the paragraph-with-a-question-mark', () => {
+    // The corpus's longest entry was a 300-character biography of George Burns
+    // with a quotation attached — a paragraph, not a trivia question.
+    expect(fitsOnScreen(row('x'.repeat(MAX_PROMPT_CHARS + 1)))).toBe(false);
+  });
+
+  test('holds options to a tighter bound than the prompt', () => {
+    // One prompt is read once; up to six options are all read out, so a wordy
+    // option costs the room more time than a wordy prompt does.
+    expect(MAX_CHOICE_CHARS).toBeLessThan(MAX_PROMPT_CHARS);
+    expect(fitsOnScreen(row('Short?', ['y'.repeat(MAX_CHOICE_CHARS)]))).toBe(true);
+    expect(fitsOnScreen(row('Short?', ['y'.repeat(MAX_CHOICE_CHARS + 1)]))).toBe(false);
+    expect(fitsOnScreen(row('Short?', ['Alpha', 'z'.repeat(MAX_CHOICE_CHARS + 1)]))).toBe(false);
+  });
+});
+
+describe('dropOversized', () => {
+  test('splits the rows and says which bound each one broke', () => {
+    const rows = [
+      { prompt: 'Fine?', choices: ['Alpha', 'Beta'] },
+      { prompt: 'x'.repeat(MAX_PROMPT_CHARS + 1), choices: ['Alpha'] },
+      { prompt: 'Fine?', choices: ['y'.repeat(MAX_CHOICE_CHARS + 1)] },
+    ];
+    const { kept, dropped, longPrompt, longChoice } = dropOversized(rows);
+    expect(kept).toHaveLength(1);
+    expect(dropped).toHaveLength(2);
+    expect(longPrompt).toBe(1);
+    expect(longChoice).toBe(1);
+  });
+
+  test('counts a row breaking both bounds once in each tally', () => {
+    const { dropped, longPrompt, longChoice } = dropOversized([
+      { prompt: 'x'.repeat(MAX_PROMPT_CHARS + 1), choices: ['y'.repeat(MAX_CHOICE_CHARS + 1)] },
+    ]);
+    expect(dropped).toHaveLength(1);
+    expect(longPrompt).toBe(1);
+    expect(longChoice).toBe(1);
+  });
+});
+
 describe('isFamilySafe', () => {
   test('blocks the words that must never reach the big screen', () => {
     expect(isFamilySafe('Who said this line?', 'Fuck, Im dead')).toBe(false);
@@ -626,7 +679,10 @@ describe('the committed pack', () => {
   test('holds the number of questions its header claims', async () => {
     const { header, rows } = await pack;
     expect(rows).toHaveLength(header.count);
-    expect(rows.length).toBeGreaterThan(45_000);
+    // A floor, not a target: it exists to catch a build that quietly lost half
+    // the corpus. Lowered from 45,000 when the screen-length bounds dropped
+    // 3,853 rows a host could not reasonably read out.
+    expect(rows.length).toBeGreaterThan(40_000);
   });
 
   test('every row would be accepted from a human typing it into Master Control', async () => {
@@ -692,6 +748,21 @@ describe('the committed pack', () => {
     const { rows } = await pack;
     const broken = rows.filter((r) => /\b(dont|cant|didnt|wasnt|youre|thats|arent)\b/i.test(r.prompt));
     expect(broken.map((r) => r.prompt)).toEqual([]);
+  });
+
+  test('every row is short enough for a host to deal', async () => {
+    const { rows } = await pack;
+    const oversized = rows.filter((r) => !fitsOnScreen(r));
+    expect(oversized.map((r) => r.prompt)).toEqual([]);
+  });
+
+  test('the length bound is applied after the overlays, not before', async () => {
+    // An apostrophe or an ampersand makes a row longer. If length were judged
+    // first, repaired rows could sit over the line in the shipped pack.
+    const { rows } = await pack;
+    const repaired = rows.filter((r) => [r.prompt, ...r.choices].some((s) => s.includes("'") || s.includes('&')));
+    expect(repaired.length).toBeGreaterThan(0);
+    expect(repaired.every((r) => fitsOnScreen(r))).toBe(true);
   });
 
   test('every committed ampersand entry only fills a gap', () => {

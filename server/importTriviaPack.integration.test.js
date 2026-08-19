@@ -279,5 +279,8 @@ test("the committed pack loads, and every row survives the validator on the way 
   assert.equal(header.pack, PACK_SOURCE);
   assert.equal(header.license, "CC BY-SA 4.0");
   assert.equal(rows.length, header.count);
-  assert.ok(rows.length > 45_000, `expected a full pack, got ${rows.length}`);
+  // A floor, not a target: it catches a build that quietly lost half the
+  // corpus. Lowered from 45,000 when the screen-length bounds dropped 3,853
+  // rows a host could not reasonably read out.
+  assert.ok(rows.length > 40_000, `expected a full pack, got ${rows.length}`);
 });

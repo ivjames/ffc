@@ -621,6 +621,55 @@ export function looksLikeSpellingQuestion(row) {
 }
 
 /**
+ * How much question fits on a screen a room is reading from.
+ *
+ * The admin validator's 300-character ceiling is a sanity bound on what the
+ * API will store, not a judgement about what plays in a venue. A host reads
+ * the prompt and then every option aloud while a TV shows them, so length is
+ * a gameplay property: the corpus's longest entry is a 300-character
+ * biography of George Burns with a quotation attached, which is a paragraph
+ * with a question mark, not a trivia question.
+ *
+ * Options are capped harder than prompts on purpose. There is one prompt and
+ * up to six options, all of them read out, so a wordy option costs the room
+ * more time than a wordy prompt does.
+ *
+ * Applied AFTER the repair overlays, never before: restoring an apostrophe or
+ * an ampersand makes a row longer, so measuring first would keep rows that
+ * end up over the line.
+ */
+export const MAX_PROMPT_CHARS = 180;
+export const MAX_CHOICE_CHARS = 60;
+
+/** True when a row is short enough to deal. */
+export function fitsOnScreen(row) {
+  return row.prompt.length <= MAX_PROMPT_CHARS && row.choices.every((c) => c.length <= MAX_CHOICE_CHARS);
+}
+
+/**
+ * Split built rows into the ones a venue can deal and the ones it cannot.
+ *
+ * @param {object[]} rows
+ * @returns {{ kept: object[], dropped: object[], longPrompt: number, longChoice: number }}
+ */
+export function dropOversized(rows) {
+  const kept = [];
+  const dropped = [];
+  let longPrompt = 0;
+  let longChoice = 0;
+  for (const row of rows) {
+    if (fitsOnScreen(row)) {
+      kept.push(row);
+      continue;
+    }
+    if (row.prompt.length > MAX_PROMPT_CHARS) longPrompt++;
+    if (row.choices.some((c) => c.length > MAX_CHOICE_CHARS)) longChoice++;
+    dropped.push(row);
+  }
+  return { kept, dropped, longPrompt, longChoice };
+}
+
+/**
  * Ampersand restorations: the character upstream lost entirely.
  *
  * The corpus contains no `&` at all — 47,710 questions, zero — while every

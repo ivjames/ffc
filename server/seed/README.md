@@ -2,7 +2,7 @@
 
 ## open-trivia-pack.ndjson.gz
 
-47,710 multiple-choice trivia questions for the live-trivia question bank,
+43,857 multiple-choice trivia questions for the live-trivia question bank,
 built from the **OpenTriviaQA** corpus.
 
 | | |
@@ -47,7 +47,7 @@ own work — the `source` column is what keeps the two apart.
 Gzipped NDJSON. The first line is a header:
 
 ```json
-{"pack":"opentriviaqa","source":"…","license":"CC BY-SA 4.0","upstreamCommit":"…","count":47710}
+{"pack":"opentriviaqa","source":"…","license":"CC BY-SA 4.0","upstreamCommit":"…","count":43857}
 ```
 
 Every line after it is one question, in exactly the shape the admin API
@@ -158,6 +158,38 @@ same order. A handful of rows remain unrepairable:
 two prompts sit at the validator's 300-character cap (an inserted apostrophe
 would break the length rule), and same-field text like "The dogs saw the dogs
 bone" is skipped as ambiguous by design.
+
+### Short enough to deal
+
+The admin validator's 300-character ceiling is a bound on what the API will
+store, not a judgement about what plays in a venue. A host reads the prompt
+and then every option aloud while a TV shows them, so length is a gameplay
+property — and the corpus's longest entry was a 300-character biography of
+George Burns with a quotation attached, which is a paragraph with a question
+mark rather than a trivia question.
+
+So the build holds rows to what a room can follow:
+
+| | |
+|---|---|
+| `MAX_PROMPT_CHARS` | **180** — drops 2,742 rows (median prompt is 82) |
+| `MAX_CHOICE_CHARS` | **60** — drops a further 1,174 |
+
+3,853 rows in total, 8.1% of the pack, spread evenly at 7–9% of every
+category so none is gutted. Options are capped harder than prompts on
+purpose: there is one prompt and up to six options, all read out, so a wordy
+option costs the room more time than a wordy prompt does.
+
+The bound is applied **after** the repair overlays, never before — restoring
+an apostrophe or an ampersand makes a row longer, so measuring first would
+ship rows that end up over the line. Both `build-trivia-pack.mjs` and
+`repair-trivia-pack.mjs` do it in that order, which is what keeps the two
+paths byte-identical.
+
+Changing either number is a one-line edit in `scripts/lib/trivia-pack.mjs`
+followed by `node scripts/repair-trivia-pack.mjs` — but note that raising a
+bound cannot bring a dropped row back, because the committed pack no longer
+holds it. That needs a rebuild from upstream.
 
 ### Getting corrections into a bank that already has the pack
 

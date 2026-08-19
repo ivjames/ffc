@@ -25,10 +25,13 @@ import { fileURLToPath } from "node:url";
 import {
   CATEGORY_LABELS,
   REJECT_REASONS,
+  MAX_CHOICE_CHARS,
+  MAX_PROMPT_CHARS,
   applyPackAmpersands,
   applyPackRepairs,
   applyPackTypos,
   decodeMixedUtf8,
+  dropOversized,
   loadPackAmpersands,
   loadPackRepairs,
   loadPackTypos,
@@ -127,6 +130,17 @@ async function main() {
     skippedByReason.set(s.reason, (skippedByReason.get(s.reason) ?? 0) + 1);
   }
 
+  // Length is judged last, on the repaired text: restoring an apostrophe or an
+  // ampersand makes a row longer, so measuring before the overlays would keep
+  // rows that end up over the line.
+  const sized = dropOversized(rows);
+  rows.length = 0;
+  rows.push(...sized.kept);
+  // Recount after the drop, or the per-category tally below describes a pack
+  // that was never written.
+  perCategory.clear();
+  for (const row of rows) perCategory.set(row.category, (perCategory.get(row.category) ?? 0) + 1);
+
   const header = {
     pack: "opentriviaqa",
     source: UPSTREAM,
@@ -151,6 +165,10 @@ async function main() {
   for (const [reason, n] of skippedByReason) {
     console.log(`[build-trivia-pack]   skipped ${String(n).padStart(5)}  ${reason}`);
   }
+  console.log(
+    `[build-trivia-pack] too long to deal: ${sized.dropped.length} dropped ` +
+      `(${sized.longPrompt} prompt over ${MAX_PROMPT_CHARS}, ${sized.longChoice} option over ${MAX_CHOICE_CHARS})`
+  );
   console.log(`[build-trivia-pack] kept ${rows.length} questions across ${perCategory.size} categories`);
   for (const [category, n] of [...perCategory].sort((a, b) => b[1] - a[1])) {
     console.log(`[build-trivia-pack]   ${String(n).padStart(5)}  ${category}`);

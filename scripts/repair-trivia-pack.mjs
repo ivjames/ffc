@@ -18,6 +18,7 @@ import {
   applyPackAmpersands,
   applyPackRepairs,
   applyPackTypos,
+  dropOversized,
   loadPackAmpersands,
   loadPackRepairs,
   loadPackTypos,
@@ -64,16 +65,26 @@ async function main() {
     console.log(`[repair-trivia-pack]   ${s.reason}: ${JSON.stringify(s.entry)}`);
   }
 
+  // Same order as the build: overlays first, length last, so both paths land
+  // on the identical artifact.
+  const sized = dropOversized(rows);
+  if (sized.dropped.length) {
+    console.log(
+      `[repair-trivia-pack] too long to deal: ${sized.dropped.length} dropped ` +
+        `(${sized.longPrompt} prompt, ${sized.longChoice} option)`
+    );
+  }
+
   if (dryRun) {
     console.log("[repair-trivia-pack] dry run — pack not written");
     return;
   }
-  if (!applied) {
+  if (!applied && !sized.dropped.length) {
     console.log("[repair-trivia-pack] nothing applied — pack left untouched");
     return;
   }
 
-  const out = [header, ...rows].map((o) => `${JSON.stringify(o)}\n`);
+  const out = [{ ...header, count: sized.kept.length }, ...sized.kept].map((o) => `${JSON.stringify(o)}\n`);
   await pipeline(Readable.from(out), createGzip({ level: 9 }), createWriteStream(PACK_PATH));
   console.log(`[repair-trivia-pack] wrote ${PACK_PATH}`);
   console.log("[repair-trivia-pack] no model or API calls — applying committed repairs costs nothing but CPU");
