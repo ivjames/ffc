@@ -311,12 +311,13 @@ export function stepPhysics(
   return 'rolling';
 }
 
-// --- The course: nine holes ------------------------------------------------
+// --- The Classic: the original nine ------------------------------------------
 // Each hole is a fairway (approach) feeding a green (putting surface) around the
 // cup. Curved walls, blobby sand/water and patches of rough down the edges add
 // variety. Hazards and rough are smooth-unioned (sdBlob) so a cluster of discs
 // renders and plays as one filleted blob, never a bunch of grapes. Validated by
-// putt-sim.
+// putt-sim. This is the first of the fixed courses — the full course book
+// (including the other authored nines) lives in courses.ts.
 export const HOLES: Hole[] = [
   // 1 — warm-up: straight fairway into a round green.
   {

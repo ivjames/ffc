@@ -10,6 +10,13 @@ The physics and geometry live in `world.ts` and are shared verbatim by the game,
 the validator, and the map renderer (`scripts/putt-render.ts`). There is one
 source of truth — never fork the rules.
 
+The fixed nine-hole courses live in `courses.ts` (the original nine stays in
+`world.ts` as `HOLES`; `courses.ts` is the course book that lists them all). A
+course's `key` doubles as its high-score sub-board variant, so adding a course
+means adding a matching variant line in `server/lib/gameScores.js` — and never
+renaming a key that has scores against it. `npm run putt:sim` validates every
+hole of every course; `putt-render.ts` writes one montage PNG per course.
+
 ---
 
 ## 1. The only primitive is a capsule

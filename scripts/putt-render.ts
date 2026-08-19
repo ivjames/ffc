@@ -1,18 +1,20 @@
-// Dev-only: rasterize every hole straight from the shared world geometry into a
-// single PNG montage, so the course layout can be eyeballed without a browser.
+// Dev-only: rasterize every hole straight from the shared world geometry into
+// one PNG montage per course, so the layouts can be eyeballed without a
+// browser. Writes putt-<key>.png for each course (optional argv[2] = out dir).
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   W,
   H,
   HOLE_R,
   BALL_R,
   ROUGH_BAND,
-  HOLES,
   sdUnion,
   sdBlob,
   sdSurface,
 } from '../src/features/putt/world.ts';
+import { COURSES } from '../src/features/putt/courses.ts';
 
 const SCALE = 3; // field px per image px
 const CW = W / SCALE; // cell width  (120)
@@ -41,6 +43,7 @@ const ROUGH: RGB = [40, 104, 58]; // authored rough patch on the surface
 const CUP: RGB = [4, 22, 12];
 const MARK: RGB = [248, 250, 252];
 
+function renderCourse(holes: (typeof COURSES)[number]['holes']): Buffer {
 const img = Buffer.alloc(IW * IH * 3);
 const put = (x: number, y: number, c: RGB) => {
   const o = (y * IW + x) * 3;
@@ -49,8 +52,8 @@ const put = (x: number, y: number, c: RGB) => {
   img[o + 2] = c[2];
 };
 
-for (let hi = 0; hi < HOLES.length; hi++) {
-  const h = HOLES[hi];
+for (let hi = 0; hi < holes.length; hi++) {
+  const h = holes[hi];
   const ox = (hi % COLS) * CW;
   const oy = Math.floor(hi / COLS) * CH;
   for (let cy = 0; cy < CH; cy++) {
@@ -88,6 +91,8 @@ for (let hi = 0; hi < HOLES.length; hi++) {
     }
   }
 }
+return img;
+}
 
 // --- minimal truecolor PNG encoder -----------------------------------------
 function crc32(buf: Buffer): number {
@@ -106,23 +111,28 @@ function chunk(type: string, data: Buffer): Buffer {
   crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
   return Buffer.concat([len, typeBuf, data, crc]);
 }
-const raw = Buffer.alloc(IH * (1 + IW * 3));
-for (let y = 0; y < IH; y++) {
-  raw[y * (1 + IW * 3)] = 0; // filter: none
-  img.copy(raw, y * (1 + IW * 3) + 1, y * IW * 3, (y + 1) * IW * 3);
+function encodePng(img: Buffer): Buffer {
+  const raw = Buffer.alloc(IH * (1 + IW * 3));
+  for (let y = 0; y < IH; y++) {
+    raw[y * (1 + IW * 3)] = 0; // filter: none
+    img.copy(raw, y * (1 + IW * 3) + 1, y * IW * 3, (y + 1) * IW * 3);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(IW, 0);
+  ihdr.writeUInt32BE(IH, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type: truecolor
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(IW, 0);
-ihdr.writeUInt32BE(IH, 4);
-ihdr[8] = 8; // bit depth
-ihdr[9] = 2; // color type: truecolor
-const png = Buffer.concat([
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  chunk('IHDR', ihdr),
-  chunk('IDAT', deflateSync(raw)),
-  chunk('IEND', Buffer.alloc(0)),
-]);
 
-const out = process.argv[2] || 'holes.png';
-writeFileSync(out, png);
-console.log(`wrote ${out} (${IW}x${IH})`);
+const outDir = process.argv[2] || '.';
+for (const course of COURSES) {
+  const out = join(outDir, `putt-${course.key}.png`);
+  writeFileSync(out, encodePng(renderCourse(course.holes)));
+  console.log(`wrote ${out} (${IW}x${IH}) — ${course.label}`);
+}

@@ -49,15 +49,23 @@
 /** @type {readonly ScoredGame[]} */
 export const SCORED_GAMES = Object.freeze([
   { key: "airhockey", label: "Air Hockey", direction: "high", unit: "count", noun: "goal margin" },
-  // Only the fixed course is ranked: an endless run generates holes as you go,
-  // so its stroke total measures how long you kept playing, not how well.
+  // Only the fixed courses are ranked: an endless run generates holes as you
+  // go, so its stroke total measures how long you kept playing, not how well.
+  // Variant keys are the Course keys in src/features/putt/courses.ts — a new
+  // course needs a line here before its rounds can score. 'course' is the
+  // original nine's historical key; it predates there being other courses.
   {
     key: "arcadeputt",
     label: "Arcade Putt",
     direction: "low",
     unit: "strokes",
     noun: "strokes",
-    variants: [{ key: "course", label: "Full course" }],
+    variants: [
+      { key: "course", label: "The Classic" },
+      { key: "creekside", label: "Creekside" },
+      { key: "dunes", label: "The Dunes" },
+      { key: "gauntlet", label: "The Gauntlet" },
+    ],
   },
   { key: "axethrow", label: "Axe Throw", direction: "high", unit: "points", noun: "points" },
   { key: "battingcages", label: "Batting Cages", direction: "high", unit: "points", noun: "runs" },
