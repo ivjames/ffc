@@ -13,6 +13,7 @@ import {
   isSpeechEnabled,
   lobbyScript,
   primeSpeech,
+  primeSpeechOnce,
   questionScript,
   revealScript,
   setSpeechEnabled,
@@ -190,6 +191,11 @@ export default function TriviaHost() {
 
   const start = useCallback(async () => {
     if (!locationId) return;
+    // The tap that opens the room is also this page's chance to unlock the
+    // voice. The switch above is persisted, so a host who turned it on weeks
+    // ago never touches it — and priming only from the switch left the lobby
+    // and the whole first question silent (see primeSpeechOnce).
+    primeSpeechOnce();
     setError(null);
     setBusy(true);
     const res = await createSession({
@@ -219,6 +225,9 @@ export default function TriviaHost() {
   const step = useCallback(async () => {
     if (!host) return;
     playClick();
+    // Also here, for the host who reloaded mid-game: their session was
+    // restored without a tap, so this is the first gesture the page has had.
+    primeSpeechOnce();
     setBusy(true);
     const res = await advance(host.sessionId, host.hostToken);
     setBusy(false);

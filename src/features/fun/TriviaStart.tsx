@@ -11,6 +11,7 @@ import {
   joinSession,
 } from '../../lib/triviaLiveApi';
 import { savePlayer, saveOwner } from './triviaLiveStorage';
+import { primeSpeechOnce } from '../../lib/speech';
 
 // /arcade/trivia/start — a PLAYER starts a game and plays in it.
 //
@@ -56,6 +57,12 @@ export default function TriviaStart() {
 
   const start = useCallback(async () => {
     if (!locationId) return;
+    // This screen creates AND joins, then hands the capabilities to the live
+    // screen through router state — so that screen's own join never runs, and
+    // this tap is the only gesture before question 1 is read. Without it a
+    // player whose voice was already on from an earlier game opens their own
+    // room in silence (see primeSpeechOnce).
+    primeSpeechOnce();
     setError(null);
     setBusy(true);
     const created = await createSession({
