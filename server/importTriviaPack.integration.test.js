@@ -13,6 +13,10 @@
 // this one's cleanup unreliable. The committed pack's own contents are
 // asserted, without a database, in scripts/trivia-pack.test.mjs.
 import { test, before, after } from "node:test";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { TEST_DATABASE_URL, ensureSchema, testQuery } from "./test-support/testDb.js";
 
@@ -332,6 +336,25 @@ test("archiving the pack leaves the hand-written House Pack dealing", async () =
   );
   assert.ok(house.rows[0].n >= 1, "the seeded House Pack survives an archive of the import");
   await setPackArchived(client, { archived: false, source: SOURCE });
+});
+
+test("the CLI explains a missing DATABASE_URL instead of failing at the first query", async () => {
+  // The operator-facing failure modes are worth pinning: this script is run by
+  // hand, rarely, by someone who will not be reading its source.
+  const execFileAsync = promisify(execFile);
+  const script = join(dirname(fileURLToPath(import.meta.url)), "importTriviaPack.js");
+  const env = { ...process.env };
+  delete env.DATABASE_URL;
+  delete env.TEST_DATABASE_URL;
+
+  const failure = await execFileAsync("node", [script, "--dry-run"], { env }).then(
+    () => null,
+    (err) => err
+  );
+  assert.ok(failure, "it exits non-zero rather than pretending to work");
+  assert.equal(failure.code, 1);
+  assert.match(failure.stderr, /DATABASE_URL is not set/);
+  assert.match(failure.stderr, /run this from the server directory/);
 });
 
 test("the committed pack loads, and every row survives the validator on the way in", async () => {
