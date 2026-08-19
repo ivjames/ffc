@@ -12,6 +12,9 @@
 // anything it rejects is dropped with a counted reason rather than patched
 // into the bank. The pack can only ever contain questions an operator could
 // have typed into Master Control by hand.
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { normalizeQuestion } from "../../server/lib/triviaLive.js";
 
 /**
@@ -399,4 +402,390 @@ export function toPackRow(raw, { category, seen }) {
 /** The key two questions must share to count as the same question. */
 export function dedupeKey(prompt) {
   return prompt.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
+ * Judgment repairs: apostrophes `repairApostrophes` cannot restore by rule.
+ *
+ * "dogs ears", "the worlds largest", "Lets", "Ill" — whether each needs an
+ * apostrophe depends on the sentence, so these were adjudicated one at a time
+ * (a model sweep over the whole pack, each accepted fix independently
+ * verified) and committed as data. Each NDJSON line is one fix:
+ *
+ *   {"q": <exact prompt of the row>, "f": "p"|0..3, "b": <substring as it
+ *    stands>, "a": <the same substring with apostrophes inserted>}
+ *
+ * `q` keys the row by its pre-repair prompt, so a rebuild from upstream hits
+ * every entry, while re-running the repair over an already-patched pack
+ * matches nothing and is a no-op. `f` is "p" for the prompt or a choice
+ * position in the built (post-shuffle) row.
+ */
+export const REPAIRS_PATH = join(dirname(fileURLToPath(import.meta.url)), "trivia-pack-repairs.ndjson");
+
+export function loadPackRepairs(path = REPAIRS_PATH) {
+  let text;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return [];
+  }
+  return text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+}
+
+/** True when `after` is exactly `before` with one or more apostrophes added. */
+export function isApostropheInsertion(before, after) {
+  let i = 0;
+  let inserted = 0;
+  for (const ch of after) {
+    if (ch === before[i]) i++;
+    else if (ch === "'") inserted++;
+    else return false;
+  }
+  return i === before.length && inserted > 0;
+}
+
+/**
+ * Shared applier for both overlays.
+ *
+ * Nothing here trusts the entry file: `allow` decides whether the edit is the
+ * kind this overlay is permitted to make, the match must be unique and
+ * whole-word, a prompt edit must not collide with another row's dedupe key,
+ * and the repaired row must still pass the admin validator. Anything that
+ * fails is skipped with a reason — a repair pass must never be the thing that
+ * corrupts the pack.
+ */
+function applyEdits(rows, entries, { allow, allowReason, guard }) {
+  const byPrompt = new Map(rows.map((r) => [r.prompt, r]));
+  const byKey = new Map(rows.map((r) => [dedupeKey(r.prompt), r]));
+  const skipped = [];
+  let applied = 0;
+
+  for (const e of entries) {
+    const skip = (reason) => skipped.push({ entry: e, reason });
+    const row = byPrompt.get(e.q);
+    if (!row) { skip("no-such-prompt"); continue; }
+    if (!allow(e.b, e.a)) { skip(allowReason); continue; }
+    if (guard && guard(row)) { skip("guarded-row"); continue; }
+
+    const isPrompt = e.f === "p";
+    const field = isPrompt ? row.prompt : row.choices[e.f];
+    if (typeof field !== "string") { skip("no-such-field"); continue; }
+    const at = field.indexOf(e.b);
+    if (at === -1) { skip("before-not-found"); continue; }
+    if (field.indexOf(e.b, at + 1) !== -1) { skip("ambiguous-match"); continue; }
+    // An entry must not continue a word on either side — "shows star" matching
+    // inside "TV shows starred" would corrupt correct text.
+    const alpha = (ch) => ch !== undefined && /[a-z]/i.test(ch);
+    if ((alpha(field[at - 1]) && alpha(e.b[0])) || (alpha(field[at + e.b.length]) && alpha(e.b[e.b.length - 1]))) {
+      skip("mid-word-match");
+      continue;
+    }
+    const fixed = field.slice(0, at) + e.a + field.slice(at + e.b.length);
+
+    // A choice edit that lands on another choice means the options were near
+    // misses of each other on purpose — a spelling question that never says
+    // the word "spelling", like "Commercial or mercantile activity. (noun)"
+    // over four manglings of "business". Structure catches what vocabulary
+    // cannot, so this guard is checked for every overlay.
+    if (!isPrompt) {
+      const clash = row.choices.some((c, i) => i !== e.f && c.trim().toLowerCase() === fixed.trim().toLowerCase());
+      if (clash) { skip("would-duplicate-choice"); continue; }
+    }
+
+    const candidate = isPrompt
+      ? { ...row, prompt: fixed }
+      : { ...row, choices: row.choices.map((c, i) => (i === e.f ? fixed : c)) };
+    if (isPrompt) {
+      const oldKey = dedupeKey(row.prompt);
+      const newKey = dedupeKey(fixed);
+      if (newKey !== oldKey && byKey.has(newKey)) { skip("dedupe-collision"); continue; }
+      if (normalizeQuestion(candidate).error) { skip("fails-validator"); continue; }
+      byKey.delete(oldKey);
+      byKey.set(newKey, row);
+      row.prompt = fixed;
+    } else {
+      if (normalizeQuestion(candidate).error) { skip("fails-validator"); continue; }
+      row.choices[e.f] = fixed;
+    }
+    applied++;
+  }
+  return { applied, skipped };
+}
+
+/**
+ * Apply the committed apostrophe repairs to built rows, mutating in place.
+ *
+ * The replacement must be a pure apostrophe insertion — the property that
+ * makes this overlay safe to apply without re-reading every question.
+ */
+export function applyPackRepairs(rows, entries) {
+  return applyEdits(rows, entries, {
+    allow: isApostropheInsertion,
+    allowReason: "not-insertion-only",
+  });
+}
+
+/**
+ * Typo and grammar repairs: the corpus is hand-maintained and full of
+ * ordinary mistakes — "milllion", "Micheal", "thery" for "they're", doubled
+ * words, subject-verb disagreement.
+ *
+ * These cannot be insertion-only, so the safety story is different. Each
+ * entry was proposed by a model sweep, independently verified in sentence
+ * context, and is re-checked at apply time against `isMinorTextEdit`: an
+ * entry may correct wording, never rewrite it. Same file format as the
+ * apostrophe overlay.
+ */
+export const TYPOS_PATH = join(dirname(fileURLToPath(import.meta.url)), "trivia-pack-typos.ndjson");
+
+export function loadPackTypos(path = TYPOS_PATH) {
+  return loadPackRepairs(path);
+}
+
+/** Levenshtein distance, bounded by `cap` so a long pair exits early. */
+function editDistance(a, b, cap) {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = a[i - 1] === b[j - 1]
+        ? prev[j - 1]
+        : 1 + Math.min(prev[j - 1], prev[j], cur[j - 1]);
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > cap) return cap + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * True when `after` corrects `before` rather than rewriting it.
+ *
+ * This bounds blast radius, NOT meaning. "was" -> "were" and "cat" -> "dog"
+ * are the same shape to any string metric, so whether an edit is *right* is
+ * the verifier's job and this function's job is only to guarantee that an
+ * entry cannot quietly swap out the content of a question. Three bounds, all
+ * of which must hold: the word count may move by at most one (so "alot" ->
+ * "a lot" and a doubled-word deletion stay expressible, a reworded sentence
+ * does not), the character distance stays inside a quarter of the original
+ * with a floor of four so short corrections still fit, and no edit may exceed
+ * 20 characters however long the span is.
+ */
+export function isMinorTextEdit(before, after) {
+  if (!before || !after || before === after) return false;
+  if (isDoubledWordRemoval(before, after)) return true;
+  const words = (s) => s.trim().split(/\s+/).length;
+  if (Math.abs(words(before) - words(after)) > 1) return false;
+  const cap = Math.min(20, Math.max(4, Math.ceil(before.length * 0.25)));
+  return editDistance(before, after, cap) <= cap;
+}
+
+/**
+ * True when `after` is `before` with one adjacent repeated word dropped.
+ *
+ * Deleting a doubled word costs its whole length plus a space, which busts a
+ * proportional distance bound on a short span — "have have" -> "have" is five
+ * characters out of nine. So this class of edit is recognised for what it is
+ * rather than measured: the two spans must be identical word sequences apart
+ * from one word that repeats the one before it, case-insensitively, which is
+ * a defect no matter which of the pair survives ("the The" -> "The").
+ */
+export function isDoubledWordRemoval(before, after) {
+  const b = before.trim().split(/\s+/);
+  const a = after.trim().split(/\s+/);
+  if (b.length !== a.length + 1) return false;
+  for (let i = 1; i < b.length; i++) {
+    if (b[i].toLowerCase() !== b[i - 1].toLowerCase()) continue;
+    const collapsed = b.slice(0, i).concat(b.slice(i + 1));
+    if (collapsed.length === a.length && collapsed.every((w, k) => w === a[k])) return true;
+  }
+  return false;
+}
+
+/**
+ * Questions whose subject IS the spelling, where a typo fix destroys the
+ * question.
+ *
+ * The corpus asks "Can you find the correct spelling of this group/singer?"
+ * over four manglings of Lynyrd Skynyrd; correcting the distractors leaves
+ * four identical options and no question. Whole rows are held back rather
+ * than individual fields, because the trap is the row, not the string.
+ */
+const SPELLING_QUESTION_RE = /\b(?:spell|spells|spelled|spelling|spellings|misspell\w*|spelt)\b/i;
+
+export function looksLikeSpellingQuestion(row) {
+  return SPELLING_QUESTION_RE.test([row.prompt, ...row.choices].join(" | "));
+}
+
+/**
+ * Trace each original prompt to the prompt it ends up with.
+ *
+ * The overlays are chained: apostrophe entries key rows by the prompt as it
+ * came out of the build, typo entries by the apostrophe-repaired prompt, and
+ * ampersand entries by the typo-repaired one. Replaying those keys in order
+ * reconstructs where every corrected question went.
+ *
+ * The importer needs this because it matches rows on the prompt, so a repair
+ * that rewrote a prompt looks like a brand new question and arrives as a fresh
+ * insert. Without a lineage, an operator's decision to retire a question is
+ * silently undone the next time its wording is corrected.
+ *
+ * @returns {Map<string, string>} original prompt -> final prompt, for the
+ *   prompts that actually changed.
+ */
+export function packPromptLineage({ repairs, typos, ampersands } = {}) {
+  const stage = (entries, from) => {
+    // Only prompt edits move a row's identity; a choice edit leaves the key be.
+    const byPrompt = new Map();
+    for (const e of entries) {
+      if (e.f !== "p") continue;
+      if (!byPrompt.has(e.q)) byPrompt.set(e.q, []);
+      byPrompt.get(e.q).push(e);
+    }
+    const out = new Map();
+    for (const [original, current] of from) {
+      const edits = byPrompt.get(current);
+      if (!edits) {
+        out.set(original, current);
+        continue;
+      }
+      // Applied in file order against the running text, exactly as applyEdits
+      // does, so a row carrying two fixes lands on the same string here.
+      let text = current;
+      for (const e of edits) {
+        const at = text.indexOf(e.b);
+        if (at === -1 || text.indexOf(e.b, at + 1) !== -1) continue;
+        text = text.slice(0, at) + e.a + text.slice(at + e.b.length);
+      }
+      out.set(original, text);
+    }
+    return out;
+  };
+
+  const seed = new Map();
+  for (const e of repairs ?? loadPackRepairs()) {
+    if (e.f === "p") seed.set(e.q, e.q);
+  }
+  let lineage = stage(repairs ?? loadPackRepairs(), seed);
+  // Later stages can also be the first to touch a prompt, so their keys join in.
+  for (const [entries, loader] of [[typos, loadPackTypos], [ampersands, loadPackAmpersands]]) {
+    const list = entries ?? loader();
+    const reached = new Set(lineage.values());
+    for (const e of list) {
+      if (e.f === "p" && !reached.has(e.q) && !lineage.has(e.q)) lineage.set(e.q, e.q);
+    }
+    lineage = stage(list, lineage);
+  }
+
+  const changed = new Map();
+  for (const [was, now] of lineage) if (was !== now) changed.set(was, now);
+  return changed;
+}
+
+/**
+ * How much question fits on a screen a room is reading from.
+ *
+ * The admin validator's 300-character ceiling is a sanity bound on what the
+ * API will store, not a judgement about what plays in a venue. A host reads
+ * the prompt and then every option aloud while a TV shows them, so length is
+ * a gameplay property: the corpus's longest entry is a 300-character
+ * biography of George Burns with a quotation attached, which is a paragraph
+ * with a question mark, not a trivia question.
+ *
+ * Options are capped harder than prompts on purpose. There is one prompt and
+ * up to six options, all of them read out, so a wordy option costs the room
+ * more time than a wordy prompt does.
+ *
+ * Applied AFTER the repair overlays, never before: restoring an apostrophe or
+ * an ampersand makes a row longer, so measuring first would keep rows that
+ * end up over the line.
+ */
+export const MAX_PROMPT_CHARS = 180;
+export const MAX_CHOICE_CHARS = 60;
+
+/** True when a row is short enough to deal. */
+export function fitsOnScreen(row) {
+  return row.prompt.length <= MAX_PROMPT_CHARS && row.choices.every((c) => c.length <= MAX_CHOICE_CHARS);
+}
+
+/**
+ * Split built rows into the ones a venue can deal and the ones it cannot.
+ *
+ * @param {object[]} rows
+ * @returns {{ kept: object[], dropped: object[], longPrompt: number, longChoice: number }}
+ */
+export function dropOversized(rows) {
+  const kept = [];
+  const dropped = [];
+  let longPrompt = 0;
+  let longChoice = 0;
+  for (const row of rows) {
+    if (fitsOnScreen(row)) {
+      kept.push(row);
+      continue;
+    }
+    if (row.prompt.length > MAX_PROMPT_CHARS) longPrompt++;
+    if (row.choices.some((c) => c.length > MAX_CHOICE_CHARS)) longChoice++;
+    dropped.push(row);
+  }
+  return { kept, dropped, longPrompt, longChoice };
+}
+
+/**
+ * Ampersand restorations: the character upstream lost entirely.
+ *
+ * The corpus contains no `&` at all — 47,710 questions, zero — while every
+ * other symbol appears in the hundreds. Each one was dropped before the data
+ * ever reached us (the gap is present in a fresh upstream clone too), leaving
+ * a double space behind: "Gateman, Goodbury  Graves Funeral Home",
+ * "Peter, Paul  Mary", "Laverne  Shirley".
+ *
+ * Because only `&` went missing, a gap either held one or was always a stray
+ * double space — and which it is cannot be decided by shape. "Sonny  Cher" is
+ * two people; "John  Lithgow" is one. So each gap was judged individually and
+ * the survivors committed here; the ones that were merely stray spaces live in
+ * the typo overlay instead, as ordinary whitespace fixes.
+ */
+export const AMPERSANDS_PATH = join(dirname(fileURLToPath(import.meta.url)), "trivia-pack-ampersands.ndjson");
+
+export function loadPackAmpersands(path = AMPERSANDS_PATH) {
+  return loadPackRepairs(path);
+}
+
+/**
+ * True when `after` is `before` with one run of blanks replaced by " & ".
+ *
+ * As tight as `isApostropheInsertion`, and for the same reason: an overlay
+ * that can only do one mechanically-checkable thing does not need every row
+ * re-read to be trusted. An entry cannot move text, change a word, or put an
+ * ampersand anywhere except into a gap that upstream left behind.
+ */
+export function isAmpersandRestoration(before, after) {
+  if (!before || !after || before === after) return false;
+  const gap = /  +/g;
+  for (let m = gap.exec(before); m; m = gap.exec(before)) {
+    if (before.slice(0, m.index) + " & " + before.slice(m.index + m[0].length) === after) return true;
+  }
+  return false;
+}
+
+/** Apply the committed ampersand restorations to built rows, mutating in place. */
+export function applyPackAmpersands(rows, entries) {
+  return applyEdits(rows, entries, {
+    allow: isAmpersandRestoration,
+    allowReason: "not-an-ampersand-restoration",
+    guard: looksLikeSpellingQuestion,
+  });
+}
+
+/** Apply the committed typo repairs to built rows, mutating in place. */
+export function applyPackTypos(rows, entries) {
+  return applyEdits(rows, entries, {
+    allow: isMinorTextEdit,
+    allowReason: "not-a-minor-edit",
+    guard: looksLikeSpellingQuestion,
+  });
 }
