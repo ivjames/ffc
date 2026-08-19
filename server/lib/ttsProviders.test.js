@@ -90,3 +90,25 @@ test("billing comes from the API's own count, not the wrapped SSML length", asyn
   );
   assert.equal(billed, 42, "RequestCharacters, which excludes the SSML tags");
 });
+
+// --- Cartesia voice discovery -----------------------------------------------
+// The droplet's failure mode: the key is valid, GET /voices answers 200, and
+// the account simply has no voices. Nothing throws, so the provider reports
+// itself healthy while contributing zero rows.
+
+const cartesia = providerByKey("cartesia");
+
+test("English is decided by accents, since language is deprecated and may be absent", () => {
+  const rows = cartesia.lineup({}, [{ id: "abc", name: "Ada" }]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].voiceLabel, "Ada");
+  assert.equal(rows[0].model, "sonic-3.5");
+});
+
+test("no voices means no rows, and the provider carries the reason", () => {
+  assert.deepEqual(cartesia.lineup({}, []), []);
+  // Not an error — an empty library is a valid 200. The note is what keeps an
+  // empty plan from reading as a broken bench, and it names both ways out.
+  assert.match(cartesia.emptyNote, /CARTESIA_VOICE_IDS/);
+  assert.match(cartesia.emptyNote, /Cartesia dashboard/);
+});

@@ -149,6 +149,15 @@ export async function planClips(lines, env = process.env) {
       }
     }
   }
+  // A provider that is configured, raised no error, and still contributed
+  // nothing is the worst of the three states: the screen shows one fewer
+  // column with no reason given, and a plan of zero clips looks like a broken
+  // bench. Whatever it is, say it.
+  for (const state of status) {
+    if (!state.configured || state.error || state.note) continue;
+    if (clips.some((c) => c.provider === state.key)) continue;
+    state.note = providerByKey(state.key)?.emptyNote ?? "configured, but it offered no voices to audition.";
+  }
   return { clips, status };
 }
 
