@@ -40,26 +40,49 @@ export const GENERATIVE_REGIONS = new Set([
   "ca-central-1", "ap-northeast-1", "ap-northeast-2", "ap-southeast-1", "ap-southeast-2",
 ]);
 
+/** SSML is XML, so a bare & or < in a question is a 400 from Polly, not a
+ *  mispronunciation. Questions come from a venue's own bank and ampersands in
+ *  band and film names are common, so this is a live path, not a nicety. */
+function xmlEscape(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 const pollyProvider = {
   key: "polly",
   label: "Polly",
   usdPerM: 30, // generative; neural is 16
   configured: (env) => Boolean(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY),
   why: "AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in server/.env",
-  // Trimmed to one row on the operator's call: Stephen generative was the best
-  // of the ten Polly variants auditioned. The others are a `git log` away.
-  lineup: (env) =>
-    GENERATIVE_REGIONS.has(env.AWS_REGION || "us-east-1")
-      ? [{ voice: "Stephen", model: "generative", styleLabel: "generative", usdPerM: 30 }]
-      : [{ voice: "Stephen", model: "neural", styleLabel: "neural (no generative in this region)", usdPerM: 16 }],
+  // Trimmed to Stephen on the operator's call: he was the best of the ten
+  // Polly variants auditioned. The other voices are a `git log` away.
+  //
+  // Three rows, because Stephen exists on BOTH engines and the two knobs are
+  // worth separating. Generative reads better but supports no DRC; neural is
+  // flatter but DRC (dynamic range compression) lifts quiet consonants over
+  // room noise, which is the actual problem in a bar. Comparing generative
+  // against neural+DRC alone would conflate engine with compression, so plain
+  // neural is the control that says which of the two did the work.
+  lineup: (env) => [
+    ...(GENERATIVE_REGIONS.has(env.AWS_REGION || "us-east-1")
+      ? [{ voice: "Stephen", model: "generative", styleLabel: "generative (no DRC)", usdPerM: 30 }]
+      : []),
+    { voice: "Stephen", model: "neural", styleLabel: "neural", usdPerM: 16 },
+    { voice: "Stephen", model: "neural", styleLabel: "neural + DRC", ssml: "drc", usdPerM: 16 },
+  ],
   async synth(clip, env) {
     const res = await polly(env).send(
       new SynthesizeSpeechCommand({
         Engine: clip.model,
         VoiceId: clip.voice,
         OutputFormat: "mp3",
-        TextType: "text",
-        Text: clip.text,
+        ...(clip.ssml === "drc"
+          ? { TextType: "ssml", Text: `<speak><amazon:effect name="drc">${xmlEscape(clip.text)}</amazon:effect></speak>` }
+          : { TextType: "text", Text: clip.text }),
       })
     );
     return {

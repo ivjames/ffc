@@ -104,6 +104,13 @@ export async function providerStatus(env = process.env) {
   return out;
 }
 
+/** One filename-safe token. Collapses runs of punctuation rather than mapping
+ *  each character to its own dash, so a style label like "generative (no DRC)"
+ *  does not come out with a double dash where the bracket was. */
+function slug(text) {
+  return text.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+}
+
 /** Every clip a run would make, priced before anything is spent. */
 export async function planClips(lines, env = process.env) {
   const status = await providerStatus(env);
@@ -123,10 +130,11 @@ export async function planClips(lines, env = process.env) {
           model: row.model,
           styleLabel: row.styleLabel,
           instructions: row.instructions,
+          ssml: row.ssml,
           chars: line.text.length,
           usdPerM: row.usdPerM ?? p.usdPerM,
           estimated: Boolean(p.estimated),
-          file: `${p.key}-${(row.voiceLabel ?? row.voice).slice(0, 12)}-${row.styleLabel.replace(/[^a-z0-9]+/gi, "-")}-${line.label.replace(/[^a-z0-9]+/gi, "-")}.mp3`.toLowerCase(),
+          file: slug(`${p.key}-${(row.voiceLabel ?? row.voice).slice(0, 12)}-${row.styleLabel}-${line.label}`) + ".mp3",
         });
       }
     }
