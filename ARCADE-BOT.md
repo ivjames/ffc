@@ -139,6 +139,59 @@ node scripts/arcade-traffic.mjs --profile arcade-profile.json \
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
 run replayable; `--headed` lets you watch it play.
 
+### Leave the skill knob alone
+
+**The default — no `--skill` at all — is the right one for traffic.** It draws
+each round's ability from a player population (`sampleSkill`): a bell around
+0.5 with a thin good tail, because most arcade play is casual. A measured
+10-round Skee-Ball capture came out skill 0.30–0.74, mean 0.51, scoring 50–360
+against an expert's 780 — about 15 tickets an award rather than 89.
+
+`--skill 1` exists for the regression harness (`--assert-skill`, below), not
+for generating traffic. It matters because **a profile is a recording**: replay
+resamples the captured rounds, so a profile captured at a fixed skill pays that
+same standard of play forever. Master Control's profile picker labels each
+profile with the skill spread it will replay as, and says so out loud when one
+is fixed.
+
+### From Master Control
+
+Both halves are also driven from the admin: **Master Control → Ops → Arcade
+bot** (super_admin only). Capture and replay are separate processes with their
+own status, live log tail and stop button, so both can run at once.
+
+- Capture writes into `data/arcade-profiles/`, and replay's profile picker reads
+  that directory back — so the two steps chain without touching a shell. The
+  newest profile is preselected.
+- **Capture needs a browser on the API host**, which an API box has no reason to
+  ship. When there isn't one the page says so and the button stays disabled
+  rather than spawning a run that dies on a Playwright stack trace. Capture on a
+  workstation and drop the profile JSON into `data/arcade-profiles/` instead.
+- The venue picker flags venues with game rewards switched off — awards to those
+  come back 403 — and replay always talks to the API over loopback, never out
+  through a proxy or to another host.
+- The capture form shows a pre-flight estimate summed from the bot's own
+  per-game `estRoundMs`, because the games are nowhere near equal: a full
+  one-round pass over all 19 is ~20 minutes, and Go-Karts alone is ~3 min a
+  round against Skee-Ball's ~20s.
+- Each profile is listed with its game/round counts and the skill spread it
+  will replay as — `skill 0.30–0.74 (mean 0.51)` or a flagged `fixed skill
+  1.00`. A profile that recorded 0 rounds (a capture whose app went down
+  mid-run still writes one) is refused rather than replayed as silence.
+
+- The replay game list is the chosen profile's, not the registry's: a game the
+  profile never captured makes `arcade-traffic` exit with "profile has no game"
+  having posted nothing, so the picker doesn't offer it and the route refuses it.
+- "Game rewards on" means what the award route means by it — the venue's
+  `pos.loyalty.gameRewards` flag AND a live `gameTickets` module. Checking only
+  the flag called a venue enabled while every award 403'd.
+
+The child processes are started with `FFC_EXIT_WITH_PARENT=1` and killed on API
+shutdown, so a bot can't outlive the API that's reporting on it. Both halves run
+`watchParentOrExit` (`scripts/lib/parentWatchdog.mjs`), which polls `process.ppid`
+and exits on reparenting — that is the half that covers an API SIGKILL or crash,
+where no parent handler gets to run.
+
 To watch it on a machine with no display — CI, a remote dev container — record
 the session instead, since `--headed` has nothing to display to there:
 
@@ -161,7 +214,21 @@ POST /api/game-rewards/award {locationId, game, tickets, sessionId}
 ```
 
 `--players N` fabricates N cards at the loyalty vendor and signs an account in
-for each, so no card list is needed. Against a real vendor — which issues cards
+for each, so no card list is needed. `N` is the pool SIZE, not "mint N more":
+cached sessions count toward it and are reused first, so `--players 0` against
+a warm cache runs with no auth calls at all.
+
+**A cached session belongs to the venue it was minted at.** The account's card
+is linked through `user_card_link` at one location, so the cache records the
+venue and only lends entries back to that same venue — one file holds pools for
+several venues without one venue's sessions posting cardless awards at another.
+
+**A venue outside the default org needs `--tenant-host <org-slug>`.** The server
+resolves the tenant from the request host, so an ip/loopback address lands on
+the default-org fallback and both link and award reject the location as foreign.
+(It travels as `X-Forwarded-Host` — node's `fetch` silently drops a `host`
+header and sends the connection host regardless.) Master Control fills this in
+from the venue's org. Against a real vendor — which issues cards
 at a counter, not over an API — pass existing numbers with `--card` /
 `--cards-file` instead. Either way a card the vendor doesn't know fails at link
 time, before anything is posted.

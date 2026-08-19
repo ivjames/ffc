@@ -474,6 +474,86 @@ export type SyntheticBotParams = {
   ignoreHours?: boolean;
 };
 
+
+// —— Arcade bot (Ops → Arcade bot) ——————————————————————————————————————————
+// Two halves of one tool: `capture` plays the games in a browser and writes a
+// score profile; `replay` posts the awards that profile implies. They run as
+// independent processes, so each has its own runner state.
+export type ArcadeRunner = {
+  running: boolean;
+  pid: number | null;
+  startedAt: string | null;
+  params: Record<string, unknown> | null;
+  lastExit: { at: string; code: number | null; signal: string | null } | null;
+  logs: { at: string; line: string }[];
+};
+
+/** A profile's summary is what it will REPLAY as: replay draws from the
+ *  recorded samples, so a fixed-skill capture produces that same standard of
+ *  play forever. null when the file couldn't be read as one of ours. */
+export type ArcadeProfileSummary = {
+  games: number;
+  /** The games this profile can actually replay (captured with samples). */
+  gameKeys: string[];
+  samples: number;
+  skillMin: number | null;
+  skillMax: number | null;
+  skillMean: number | null;
+  capturedAt?: string | null;
+};
+
+export type ArcadeProfile = {
+  name: string;
+  bytes: number;
+  modifiedAt: string;
+  summary: ArcadeProfileSummary | null;
+};
+
+export type ArcadeVenue = {
+  id: string;
+  name: string;
+  orgName: string | null;
+  orgSlug: string | null;
+  /** Awards 403 unless BOTH the pos loyalty flag and the gameTickets module
+   *  are on — resolved server-side exactly as the award route does. */
+  gameRewards: boolean;
+};
+
+export type ArcadeStatus = {
+  canControl: boolean;
+  /** The server's earning registry — every one of these has a bot policy.
+   *  estRoundMs is the bot's own per-round estimate (null if unreadable). */
+  games: { key: string; label: string; estRoundMs: number | null }[];
+  /** Capture drives a real browser; an API host may not have one. */
+  browser: { available: boolean; at: string | null; reason?: string };
+  appBase: string;
+  profiles: ArcadeProfile[];
+  venues: ArcadeVenue[];
+  syntheticAwards: { total: number; last24h: number; tickets: number };
+  capture: ArcadeRunner;
+  replay: ArcadeRunner;
+};
+
+export type ArcadeCaptureParams = {
+  rounds: number;
+  seed: number;
+  skill: number | null;
+  games: string[];
+};
+
+export type ArcadeReplayParams = {
+  locationId: string;
+  profile: string;
+  plays: number;
+  players: number;
+  concurrency: number;
+  seed: number;
+  intervalMin: number | null;
+  sweeps: number | null;
+  dryRun: boolean;
+  games: string[];
+};
+
 export type SyntheticRunner = {
   running: boolean;
   pid: number | null;
@@ -1056,6 +1136,16 @@ export const api = {
   syntheticStart: (params: SyntheticBotParams) =>
     req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/start', params),
   syntheticStop: () => req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/stop'),
+
+  // Arcade bot. status is org-scoped and readable by any admin; capture/replay
+  // are super_admin only (enforced server-side — the UI just hides them).
+  arcadeStatus: () => req<ArcadeStatus>('GET', '/arcade-bot/status'),
+  arcadeCapture: (params: ArcadeCaptureParams) =>
+    req<{ ok: true; profile: string; runner: ArcadeRunner }>('POST', '/arcade-bot/capture', params),
+  arcadeReplay: (params: ArcadeReplayParams) =>
+    req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/replay', params),
+  arcadeStop: (slot: 'capture' | 'replay') =>
+    req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/stop', { slot }),
 
   // Voice bench — Polly bake-off for live trivia's read-aloud. `plan` prices a
   // run and spends nothing; `run` is the one that bills.

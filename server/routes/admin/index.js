@@ -29,6 +29,7 @@ import { router as exportRouter } from "./export.js";
 import { router as launchSignupsRouter } from "./launchSignups.js";
 import { router as provisionRouter } from "./provision.js";
 import { router as syntheticBotRouter } from "./syntheticBot.js";
+import { router as arcadeBotRouter } from "./arcadeBot.js";
 import { router as mailRouter } from "./mail.js";
 import { router as triviaQuestionsRouter } from "./triviaQuestions.js";
 import {
@@ -78,6 +79,7 @@ router.use("/provision", provisionRouter);
 // Synthetic load/soak bot control plane (super_admin drives start/stop) — a
 // fixed script spawned with validated args; the key stays server-side.
 router.use("/synthetic-bot", syntheticBotRouter);
+router.use("/arcade-bot", arcadeBotRouter);
 // Vision vetting bench (super_admin only) — sources/labels/verifies zone
 // images against the production judge and the selected describe model.
 // UI: log in to Master Control, then open /api/admin/vision-bakeoff/ui.

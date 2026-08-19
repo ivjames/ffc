@@ -21,6 +21,7 @@ import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
 import HuntUsage from './HuntUsage';
 import SyntheticBot from './SyntheticBot';
+import ArcadeBot from './ArcadeBot';
 import Signups from './Signups';
 import ProvisionSite from './ProvisionSite';
 import Account from './Account';
@@ -229,6 +230,8 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/signups', label: 'Signups', icon: 'signups', superAdminOnly: true },
       // Load/soak bot — a platform tool.
       { to: '/synthetic', label: 'Synthetic', icon: 'synthetic', superAdminOnly: true },
+      // Synthetic arcade traffic (capture + replay) — also a platform tool.
+      { to: '/arcade-bot', label: 'Arcade bot', icon: 'synthetic', superAdminOnly: true },
       // The benches. The voice bench is a real route; the vision bench is
       // still a server-rendered page, hence `external`.
       { to: '/voice-bench', label: 'Voice bench', icon: 'usage', superAdminOnly: true },
@@ -600,6 +603,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
             {isSuperAdmin && <Route path="/signups" element={<Signups />} />}
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
+            {isSuperAdmin && <Route path="/arcade-bot" element={<ArcadeBot />} />}
             {isSuperAdmin && <Route path="/voice-bench" element={<VoiceBench />} />}
             {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}
             <Route path="*" element={<Overview />} />
