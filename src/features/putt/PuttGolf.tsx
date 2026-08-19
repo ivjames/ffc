@@ -5,6 +5,7 @@ import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components'
 import { useFitCanvas } from '../fun/useFitCanvas';
 import GameHighScore from '../fun/GameHighScore';
 import { markActivity } from '../../db';
+import { playClick } from '../../lib/sound';
 import {
   W,
   H,
@@ -14,7 +15,6 @@ import {
   MAX_SHOT,
   MAX_DRAG,
   ROUGH_BAND,
-  HOLES,
   stepPhysics,
   sdBlob,
   sdSurface,
@@ -22,6 +22,7 @@ import {
   type Ball,
   type Hole,
 } from './world';
+import { COURSES, courseByKey, type Course } from './courses';
 import { generateHole } from './generate';
 import Icon from '../../ui/Icon';
 import type { DrawnIcon } from '../../ui/icons/registry';
@@ -32,9 +33,9 @@ import type { DrawnIcon } from '../../ui/icons/registry';
 // channels); curved walls deflect the ball and blobby pits swallow a slow one
 // for a penalty.
 //
-// Two modes: the hand-authored nine-hole COURSE, and an ENDLESS run of
-// procedurally generated holes (generate.ts) that never ends until you stop.
-// All client-side — works offline.
+// Two modes: a hand-authored nine-hole COURSE (pick one of the four in
+// courses.ts), and an ENDLESS run of procedurally generated holes (generate.ts)
+// that never ends until you stop. All client-side — works offline.
 //
 // Physics + geometry live in ./world (shared with the validation sim). This file
 // is input, the rAF loop, and rendering.
@@ -465,7 +466,7 @@ export default function PuttGolf() {
     holes: [],
     mode: 'course',
     seed: 0,
-    ball: { x: HOLES[0].tee.x, y: HOLES[0].tee.y, vx: 0, vy: 0 },
+    ball: { x: COURSES[0].holes[0].tee.x, y: COURSES[0].holes[0].tee.y, vx: 0, vy: 0 },
     phase: 'aim',
     holeIndex: 0,
     strokes: 0,
@@ -475,10 +476,14 @@ export default function PuttGolf() {
   });
 
   const [mode, setMode] = useState<Mode | null>(null);
+  // Which fixed course a course-mode round is on (null while in endless / the
+  // picker). Its key is the round's score-board variant.
+  const [course, setCourse] = useState<Course | null>(null);
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
-  // Challenges are always on the fixed course; endless has no comparable score.
+  // Challenges are always on a fixed course; endless has no comparable score.
+  // The challenge's variant IS the course key, so the deep link picks the course.
   const [searchParams] = useSearchParams();
-  const challengeMode = searchParams.get('variant');
+  const challengeCourse = courseByKey(searchParams.get('variant'));
   const [phase, setPhase] = useState<Phase>('aim');
   const [holeIndex, setHoleIndex] = useState(0);
   const [strokes, setStrokes] = useState(0);
@@ -516,17 +521,21 @@ export default function PuttGolf() {
     setNote('');
   }, []);
 
-  // Start a round in the chosen mode. Course mode plays the authored HOLES;
-  // endless mode generates the first hole from a fresh seed and grows from there.
+  // Start a round in the chosen mode. Course mode plays the chosen authored
+  // course; endless generates the first hole from a fresh seed and grows from
+  // there.
   const beginRound = useCallback(
-    (m: Mode) => {
+    (m: Mode, c: Course | null = null) => {
       const gs = gsRef.current;
       gs.mode = m;
       if (m === 'course') {
-        gs.holes = HOLES;
+        const chosen = c ?? COURSES[0];
+        gs.holes = chosen.holes;
+        setCourse(chosen);
       } else {
         gs.seed = freshSeed();
         gs.holes = [generateHole(gs.seed)];
+        setCourse(null);
       }
       scoresRef.current = [];
       setScores([]);
@@ -771,11 +780,11 @@ export default function PuttGolf() {
             : '';
 
   // Mode picker — the entry screen.
-  // A challenge is always on the fixed course (endless has no comparable
-  // score), so skip the mode picker rather than letting the player choose a
-  // mode their round can't be submitted under.
-  if (mode === null && challengeMode === 'course') {
-    beginRound('course');
+  // A challenge is always on a fixed course (endless has no comparable score),
+  // and its variant names WHICH one — so skip the picker and start that course
+  // rather than letting the player choose a round that can't be submitted.
+  if (mode === null && challengeCourse) {
+    beginRound('course', challengeCourse);
     return null;
   }
 
@@ -787,13 +796,31 @@ export default function PuttGolf() {
           <div className="mt-6 text-center">
             <Icon name="game.arcade-putt" className="text-5xl" />
             <BrandMark className="mx-auto mt-3 h-4 w-44 text-fairway-400" />
-            <h2 className="mt-2 text-2xl font-black text-fairway-50">Choose your game</h2>
+            <h2 className="mt-2 text-2xl font-black text-fairway-50">Choose your course</h2>
             <p className="mx-auto mt-1 max-w-xs text-sm text-fairway-100/70">
               Drag back from the ball to aim, release to putt. Sink it in as few strokes as you can.
             </p>
           </div>
-          <div className="mt-6 space-y-3">
-            <Button onClick={() => beginRound('course')}><Icon name="state.finish" /> 9-Hole Course</Button>
+          <div className="mt-6 flex flex-col gap-3">
+            {COURSES.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => {
+                  playClick();
+                  beginRound('course', c);
+                }}
+                className="flex items-center gap-3 rounded-2xl border border-fairway-800 bg-fairway-900/40 p-3 text-left transition active:scale-[0.99] active:bg-fairway-800/50"
+              >
+                <Icon name="state.finish" className="shrink-0 text-2xl text-fairway-300" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-bold text-fairway-50">{c.label}</span>
+                  <span className="block text-sm text-fairway-300">{c.blurb}</span>
+                </span>
+                <span className="shrink-0 text-xs text-fairway-400">
+                  9 holes · par {c.holes.reduce((a, h) => a + h.par, 0)}
+                </span>
+              </button>
+            ))}
             <Button variant="ghost" onClick={() => beginRound('endless')}>
               <Icon name="score.endless" /> Endless (procedural)
             </Button>
@@ -817,7 +844,7 @@ export default function PuttGolf() {
           <span className="font-bold text-fairway-50">
             Hole {holeIndex + 1}
             <span className="font-normal text-fairway-400">
-              {isEndless ? ' · Endless' : ` / ${HOLES.length}`}
+              {isEndless ? ' · Endless' : ` / ${holes.length}${course ? ` · ${course.label}` : ''}`}
             </span>
           </span>
           <span className="text-fairway-300">
@@ -849,7 +876,7 @@ export default function PuttGolf() {
         <div className="shrink-0 space-y-2 px-4 pb-4 pt-1">
           {phase === 'sunk' && (
             <Button onClick={advance}>
-              {!isEndless && holeIndex + 1 >= HOLES.length ? 'See scorecard →' : 'Next hole →'}
+              {!isEndless && holeIndex + 1 >= holes.length ? 'See scorecard →' : 'Next hole →'}
             </Button>
           )}
           {phase !== 'sunk' && (
@@ -882,7 +909,7 @@ export default function PuttGolf() {
                 {isEndless ? 'Run complete' : 'Round complete'}
               </h2>
               <p className="mt-1 text-fairway-100/70">
-                {isEndless ? `${played} holes · ` : ''}
+                {isEndless ? `${played} holes · ` : course ? `${course.label} · ` : ''}
                 {totalStrokes} strokes · {toParText(totalStrokes - totalPar)}
               </p>
             </div>
@@ -908,13 +935,15 @@ export default function PuttGolf() {
               </div>
             )}
 
-            {/* Only the fixed course is ranked. An endless run deals holes for
-                as long as you keep playing, so its stroke total measures
-                stamina, not putting — there is no fair board to put it on. */}
-            {!isEndless && (
+            {/* Only the fixed courses are ranked — each on its own board (the
+                course key is the variant), since different courses have
+                different pars. An endless run deals holes for as long as you
+                keep playing, so its stroke total measures stamina, not putting
+                — there is no fair board to put it on. */}
+            {!isEndless && course && (
               <GameHighScore
                 game="arcadeputt"
-                variant="course"
+                variant={course.key}
                 score={totalStrokes}
                 detail={{ par: totalPar, holes: playedHoles.length }}
                 sessionId={sessionId}
@@ -922,9 +951,11 @@ export default function PuttGolf() {
             )}
 
             <div className="mt-4 space-y-2">
-              <Button onClick={() => beginRound(mode)}>{isEndless ? 'New run' : 'Play again'}</Button>
+              <Button onClick={() => beginRound(mode, course)}>
+                {isEndless ? 'New run' : 'Play again'}
+              </Button>
               <Button variant="ghost" onClick={() => setMode(null)}>
-                Change mode
+                {isEndless ? 'Change mode' : 'Pick another course'}
               </Button>
             </div>
           </div>
