@@ -21,6 +21,7 @@ import {
   linesFor,
   loadQuestions,
   loadVenues,
+  noProviderReason,
   planClips,
   synthesizeAll,
 } from "../server/lib/ttsBakeoff.js";
@@ -117,9 +118,7 @@ async function main() {
       return;
     }
     if (clips.length === 0) {
-      console.error(`\nNo provider is configured. Add one of these to server/.env:`);
-      for (const p of status.filter((p) => !p.configured)) console.error(`  ${p.why}`);
-      console.error("");
+      console.error(`\n${noProviderReason(status)}\n`);
       process.exitCode = 1;
       return;
     }

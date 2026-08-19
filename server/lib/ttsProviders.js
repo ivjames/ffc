@@ -169,7 +169,11 @@ function isEnglish(voice) {
 }
 
 export async function loadCartesiaVoices(env) {
-  if (cartesiaVoices) return cartesiaVoices;
+  // Deliberately `?.length` and not a plain truthiness check: an empty array is
+  // truthy, so caching one would pin "no voices" for the life of the process.
+  // The note this produces tells the operator to go add a voice — that advice
+  // is worthless if repricing afterwards still reads a cached empty list.
+  if (cartesiaVoices?.length) return cartesiaVoices;
   const pinned = (env.CARTESIA_VOICE_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (pinned.length > 0) {
     cartesiaVoices = pinned.map((id) => ({ id, name: id.slice(0, 8) }));
@@ -190,11 +194,13 @@ export async function loadCartesiaVoices(env) {
   }
   const body = await res.json();
   const all = Array.isArray(body) ? body : (body.data ?? []);
-  cartesiaVoices = all
+  const found = all
     .filter(isEnglish)
     .slice(0, 2)
     .map((v) => ({ id: v.id, name: v.name ?? v.id.slice(0, 8) }));
-  return cartesiaVoices;
+  // Only a real answer is worth keeping; an empty one is re-asked next time.
+  if (found.length > 0) cartesiaVoices = found;
+  return found;
 }
 
 const CARTESIA_VERSION = "2026-08-14";

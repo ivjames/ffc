@@ -18,6 +18,7 @@ import {
   listRuns,
   loadQuestions,
   loadVenues,
+  noProviderReason,
   planClips,
   readRun,
   synthesizeAll,
@@ -73,11 +74,10 @@ router.post("/run", async (req, res) => {
     const plan = await buildPlan(req.body ?? {});
     if (plan.error) return res.status(plan.status).json({ ok: false, error: plan.error });
     if (plan.clips.length === 0) {
-      const missing = plan.status.filter((p) => !p.configured).map((p) => p.why);
-      return res.status(400).json({
-        ok: false,
-        error: `no provider is configured — add one of: ${missing.join(", ")}`,
-      });
+      // Not always a missing key: a configured provider with an empty voice
+      // library gets here too, and telling that operator to add a key they
+      // already have sends them to the wrong file.
+      return res.status(400).json({ ok: false, error: noProviderReason(plan.status) });
     }
 
     const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${plan.venue.slug}`;

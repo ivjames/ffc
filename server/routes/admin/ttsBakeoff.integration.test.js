@@ -171,6 +171,29 @@ test("plan prices a run without spending", async () => {
   assert.ok(body.lines.some((l) => /The correct answer is/.test(l.text)));
 });
 
+test("an empty plan blames the provider that came up empty, not a missing key", async () => {
+  const { noProviderReason } = await import("../../lib/ttsBakeoff.js");
+
+  // Nothing configured at all: the keys are the actionable fact.
+  assert.match(
+    noProviderReason([
+      { key: "polly", label: "Polly", configured: false, why: "AWS keys in server/.env" },
+      { key: "cartesia", label: "Cartesia", configured: false, why: "CARTESIA_API_KEY in server/.env" },
+    ]),
+    /no provider is configured — add one of: AWS keys/
+  );
+
+  // The droplet's case: a key IS present and the provider simply had nothing.
+  // Telling this operator to add a key sends them to fix a file that is
+  // already correct, so the note has to win.
+  const reason = noProviderReason([
+    { key: "polly", label: "Polly", configured: false, why: "AWS keys in server/.env" },
+    { key: "cartesia", label: "Cartesia", configured: true, note: "no English voices came back" },
+  ]);
+  assert.match(reason, /Cartesia: no English voices came back/);
+  assert.doesNotMatch(reason, /no provider is configured/);
+});
+
 test("the priced bank is scoped to one venue's org", async () => {
   // The whole reason this endpoint takes a venue: on a multi-tenant box an
   // unscoped read would price — and then synthesize — another client's
