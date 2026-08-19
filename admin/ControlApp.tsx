@@ -47,12 +47,6 @@ const ICON_PATHS = {
       <path d="M8.5 8h2M8.5 12h2M8.5 16h2M16.5 13h.01M16.5 17h.01" />
     </>
   ),
-  newLocation: (
-    <>
-      <path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0z" />
-      <path d="M12 7v6M9 10h6" />
-    </>
-  ),
   announcements: (
     <>
       <path d="m3 11 18-5v12L3 13v-2z" />
@@ -169,6 +163,10 @@ type NavItem = {
   icon: IconName;
   /** Custom active predicate; default is exact match or prefix + '/'. */
   isActive?: (pathname: string) => boolean;
+  /** Hidden from an org_admin. Declared inline rather than appended per
+   *  section, so a super-admin-only item can sit in its right position
+   *  ("Provision site" next to Orgs) instead of always landing last. */
+  superAdminOnly?: boolean;
   /** Set for a destination outside the SPA — today the vision bench, which is
    *  still a server-rendered page. Rendered as a plain <a> (same tab, so the
    *  admin session goes with it) rather than a router Link, which would only
@@ -193,14 +191,14 @@ const NAV_SECTIONS: NavSection[] = [
         to: '/orgs',
         label: 'Orgs',
         icon: 'orgs',
-        // Location detail pages are reached through an org, so keep Orgs lit
-        // there too (but not on the standalone new-location wizard).
-        isActive: (p) =>
-          p === '/orgs' ||
-          p.startsWith('/orgs/') ||
-          (p.startsWith('/locations/') && p !== '/locations/new'),
+        // Every venue screen — detail AND the new-location wizard — is reached
+        // through an org and belongs to one, so Orgs stays lit across all of
+        // them. (The wizard used to be excluded here because it also had its
+        // own top-level nav entry; it no longer does, precisely because a
+        // venue with no org is not a thing worth making easy to create.)
+        isActive: (p) => p === '/orgs' || p.startsWith('/orgs/') || p.startsWith('/locations/'),
       },
-      { to: '/locations/new', label: 'New location', icon: 'newLocation' },
+      { to: '/provision', label: 'Provision site', icon: 'provision', superAdminOnly: true },
       { to: '/archived', label: 'Archived', icon: 'archived' },
     ],
   },
@@ -228,30 +226,25 @@ const NAV_SECTIONS: NavSection[] = [
       // The invoice view (CLAUDE.md cost visibility). Every admin gets it —
       // an org_admin's data is already scoped to their org server-side.
       { to: '/hunt-usage', label: 'Hunt usage', icon: 'usage' },
+      // Landing-page launch signups — a platform-level list.
+      { to: '/signups', label: 'Signups', icon: 'signups', superAdminOnly: true },
+      // Load/soak bot — a platform tool.
+      { to: '/synthetic', label: 'Synthetic', icon: 'synthetic', superAdminOnly: true },
+      // Synthetic arcade traffic (capture + replay) — also a platform tool.
+      { to: '/arcade-bot', label: 'Arcade bot', icon: 'synthetic', superAdminOnly: true },
+      // The benches. The voice bench is a real route; the vision bench is
+      // still a server-rendered page, hence `external`.
+      { to: '/voice-bench', label: 'Voice bench', icon: 'usage', superAdminOnly: true },
+      {
+        to: '/api/admin/vision-bakeoff/ui',
+        label: 'Vision bench',
+        icon: 'photos',
+        superAdminOnly: true,
+        external: true,
+      },
     ],
   },
 ];
-
-// Load/soak bot — a platform tool, so super_admin only.
-const SYNTHETIC_ITEM: NavItem = { to: '/synthetic', label: 'Synthetic', icon: 'synthetic' };
-const ARCADE_BOT_ITEM: NavItem = { to: '/arcade-bot', label: 'Arcade bot', icon: 'synthetic' };
-const VOICE_BENCH_ITEM: NavItem = { to: '/voice-bench', label: 'Voice bench', icon: 'usage' };
-const VISION_BENCH_ITEM: NavItem = {
-  to: '/api/admin/vision-bakeoff/ui',
-  label: 'Vision bench',
-  icon: 'photos',
-  external: true,
-};
-// One-shot site provisioning — creates orgs, so super_admin only.
-const PROVISION_ITEM: NavItem = { to: '/provision', label: 'Provision site', icon: 'provision' };
-// Landing-page launch signups — a platform-level list, so super_admin only.
-const SIGNUPS_ITEM: NavItem = { to: '/signups', label: 'Signups', icon: 'signups' };
-
-// Extra nav items appended per section for super_admins only.
-const SUPER_ADMIN_EXTRAS: Record<string, NavItem[]> = {
-  Venues: [PROVISION_ITEM],
-  Ops: [SIGNUPS_ITEM, SYNTHETIC_ITEM, ARCADE_BOT_ITEM, VOICE_BENCH_ITEM, VISION_BENCH_ITEM],
-};
 
 function itemActive(item: NavItem, pathname: string): boolean {
   if (item.isActive) return item.isActive(pathname);
@@ -455,11 +448,8 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
   useEffect(() => setNavOpen(false), [pathname]);
 
   const sections = isSuperAdmin
-    ? NAV_SECTIONS.map((s) => {
-        const extras = s.label ? SUPER_ADMIN_EXTRAS[s.label] : undefined;
-        return extras ? { ...s, items: [...s.items, ...extras] } : s;
-      })
-    : NAV_SECTIONS;
+    ? NAV_SECTIONS
+    : NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => !i.superAdminOnly) }));
 
   return (
     <div className="min-h-screen lg:flex">
@@ -514,11 +504,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
                       key={item.to}
                       to={item.to}
                       aria-current={active ? 'page' : undefined}
-                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
-                        active
-                          ? 'bg-slate-900 text-white'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      }`}
+                      className={className}
                     >
                       <NavIcon name={item.icon} />
                       {item.label}
@@ -595,7 +581,9 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/orgs" element={<Orgs isSuperAdmin={isSuperAdmin} />} />
-            <Route path="/orgs/:id" element={<OrgDetail isSuperAdmin={isSuperAdmin} />} />
+            {/* Splat, not a bare :id — the org page's tabs (venues/branding/
+                team) are real routes, so each one is linkable and reloadable. */}
+            <Route path="/orgs/:id/*" element={<OrgDetail isSuperAdmin={isSuperAdmin} />} />
             <Route
               path="/locations/new"
               element={<LocationWizard isSuperAdmin={isSuperAdmin} ownOrgId={ownOrgId} />}

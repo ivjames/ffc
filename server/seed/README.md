@@ -2,7 +2,7 @@
 
 ## open-trivia-pack.ndjson.gz
 
-47,710 multiple-choice trivia questions for the live-trivia question bank,
+43,857 multiple-choice trivia questions for the live-trivia question bank,
 built from the **OpenTriviaQA** corpus.
 
 | | |
@@ -47,7 +47,7 @@ own work — the `source` column is what keeps the two apart.
 Gzipped NDJSON. The first line is a header:
 
 ```json
-{"pack":"opentriviaqa","source":"…","license":"CC BY-SA 4.0","upstreamCommit":"…","count":47710}
+{"pack":"opentriviaqa","source":"…","license":"CC BY-SA 4.0","upstreamCommit":"…","count":43857}
 ```
 
 Every line after it is one question, in exactly the shape the admin API
@@ -67,6 +67,174 @@ node scripts/build-trivia-pack.mjs --src /tmp/otqa
 The build is deterministic — no timestamps, and the option shuffle is seeded on
 each prompt — so rebuilding from an unchanged upstream produces a byte-identical
 file and an empty diff.
+
+### Apostrophe repairs
+
+The upstream corpus stripped apostrophes wholesale. Two layers put them back:
+
+1. **Rule repairs** (`repairApostrophes` in `scripts/lib/trivia-pack.mjs`):
+   strings that are only ever a mangled contraction ("dont", "youre") are fixed
+   during the build. The list is deliberately incomplete — "ill", "lets", "its"
+   and friends are real words.
+2. **Judgment repairs** (`scripts/lib/trivia-pack-repairs.ndjson`): possessives
+   ("dogs ears" → "dog's ears") and ambiguous contractions ("Ill" → "I'll"),
+   where only the sentence decides. These were found by a model sweep of every
+   row, each accepted fix independently verified in context, and committed as
+   data. The build applies them last (after sort and shuffle, both seeded on
+   the unrepaired prompt), and `applyPackRepairs` re-checks every entry at
+   apply time: pure apostrophe insertion, unique whole-word match, no dedupe
+   collision, and the repaired row must still pass the admin validator.
+
+### Typo and grammar repairs
+
+`scripts/lib/trivia-pack-typos.ndjson` is a second overlay, same file format,
+applied straight after the apostrophe one — so its entries key rows by the
+*apostrophe-repaired* prompt. It carries three kinds of fix:
+
+- **Misspellings** found by treating the corpus as its own dictionary: a token
+  appearing once or twice that is one edit from a token appearing 25+ times is
+  a candidate, which a model then judged in context. `Flinstones`,
+  `Antartica`, `Hermoine`, `Titantic`, `Vespuci`.
+- **Grammar and wrong-word errors** that only show up on reading: `can weight
+  up to`, `Nuremberg trails`, `does not includes`, `2th to 3th century`,
+  `badly effected their equipment`, plus duplicated words.
+- **Stray double spaces**, collapsed mechanically.
+
+These cannot be insertion-only, so `applyPackTypos` re-checks each entry
+against `isMinorTextEdit`: word count may move by one, character distance
+stays inside a quarter of the span (floor four, ceiling twenty), and a doubled
+word may be dropped. That bounds *blast radius, not meaning* — no string
+metric separates `was`→`were` from `cat`→`dog`, so correctness came from
+independent verification of every entry, and the gate only guarantees an entry
+cannot swap out a question's content.
+
+Two guards hold whole rows back, because the trap is the row rather than the
+string. `looksLikeSpellingQuestion` catches questions that say so. The
+structural one catches the rest: **a choice fix whose result equals another
+choice is refused**, which is what saves `Commercial or mercantile activity.
+(noun)` over four manglings of *business*, and near-miss distractors like
+`Tigon`/`Tigen` and `joie de vivre`/`joie de livre`. Correcting those would
+leave two identical options and no question.
+
+### The missing ampersands, restored
+
+The corpus arrived with **no `&` at all** — 47,710 questions, zero — while
+every other symbol appeared in the hundreds. Each one had been stripped before
+the data reached us (a fresh upstream clone shows the same gaps), leaving a
+double space behind: `Gateman, Goodbury  Graves Funeral Home`, `Mr.  Mrs.
+Smith`, `Paul McCartney  Wings`.
+
+Because *only* `&` went missing — `and` survives tens of thousands of times
+over — every remaining gap is one of two things, and shape cannot tell them
+apart: `Sonny  Cher` is two people, `John  Lithgow` is one. So all 855 gaps
+were judged individually, in context and with the sibling options as evidence,
+and each ampersand call was then confirmed by a second pass:
+
+- **334 restored** into `scripts/lib/trivia-pack-ampersands.ndjson` — Hall &
+  Oates, Earth Wind & Fire, Simon & Garfunkel, Abbott & Costello, Law & Order,
+  Abercrombie & Fitch, Pratt & Whitney, Rowan & Martin's Laugh-In.
+- **370 were only stray spaces** and became whitespace fixes in the typo
+  overlay: `Henny  Youngman`, `Jane  Seymour`, `Thoroughbred  Horse racing`.
+- **151 left exactly as they are**, because the judgment was not clear enough
+  to act on. A gap left alone costs nothing; a wrong `&` splits a person's
+  name in half.
+
+Restoration is faithful to what the contributor typed, not to the canonical
+title: `Green Eggs  Ham` has no `and` in it to have been the original wording,
+so `Green Eggs & Ham` is what was there to restore, whatever the cover of the
+book says.
+
+`isAmpersandRestoration` keeps this honest by permitting exactly one thing —
+one run of blanks replaced by ` & ` — so an entry can never move text, change
+a word, or put an ampersand anywhere upstream did not leave a gap.
+
+`node scripts/repair-trivia-pack.mjs` applies all three committed overlays to
+the pack in place — the no-upstream-checkout path, byte-identical to a full
+rebuild and a no-op when re-run. Each overlay keys rows by the prompt as it
+stands when that overlay runs — apostrophe entries by the unrepaired prompt,
+typo entries by the apostrophe-repaired one, ampersand entries by the
+typo-repaired one — so a rebuild from upstream hits every entry again in the
+same order. A handful of rows remain unrepairable:
+two prompts sit at the validator's 300-character cap (an inserted apostrophe
+would break the length rule), and same-field text like "The dogs saw the dogs
+bone" is skipped as ambiguous by design.
+
+### Short enough to deal
+
+The admin validator's 300-character ceiling is a bound on what the API will
+store, not a judgement about what plays in a venue. A host reads the prompt
+and then every option aloud while a TV shows them, so length is a gameplay
+property — and the corpus's longest entry was a 300-character biography of
+George Burns with a quotation attached, which is a paragraph with a question
+mark rather than a trivia question.
+
+So the build holds rows to what a room can follow:
+
+| | |
+|---|---|
+| `MAX_PROMPT_CHARS` | **180** — drops 2,742 rows (median prompt is 82) |
+| `MAX_CHOICE_CHARS` | **60** — drops a further 1,174 |
+
+3,853 rows in total, 8.1% of the pack, spread evenly at 7–9% of every
+category so none is gutted. Options are capped harder than prompts on
+purpose: there is one prompt and up to six options, all read out, so a wordy
+option costs the room more time than a wordy prompt does.
+
+The bound is applied **after** the repair overlays, never before — restoring
+an apostrophe or an ampersand makes a row longer, so measuring first would
+ship rows that end up over the line. Both `build-trivia-pack.mjs` and
+`repair-trivia-pack.mjs` do it in that order, which is what keeps the two
+paths byte-identical.
+
+Changing either number is a one-line edit in `scripts/lib/trivia-pack.mjs`
+followed by `node scripts/repair-trivia-pack.mjs` — but note that raising a
+bound cannot bring a dropped row back, because the committed pack no longer
+holds it. That needs a rebuild from upstream.
+
+### Getting corrections into a bank that already has the pack
+
+`npm run import:trivia` matches existing rows on the **prompt**. That is the
+right key for "have I seen this question before" and the wrong one for "has
+this question changed", so a corrected pack splits in two on the way in:
+
+| | |
+|---|---|
+| A repair that changed the **prompt** | arrives as a fresh insert; the superseded row is retired by `--prune` |
+| A repair that only changed the **options** | leaves the prompt identical, so the row reads as already present — `--refresh` is what updates it |
+
+Both halves are real. Measured between the pack as it was before any of this
+and the pack as committed — repairs applied *and* over-long rows dropped —
+2,214 rows changed their prompt and 1,526 changed only below it. On a bank
+that already holds the old pack, the whole remediation is:
+
+```sh
+cd server
+npm run import:trivia -- --dry-run              # see the three numbers first
+npm run import:trivia -- --refresh --prune
+```
+
+which inserts 2,214, updates 1,526 and retires 6,067, leaving 43,857 live rows
+that match the pack exactly. Running it again does nothing. The retirements
+outnumber the inserts because `--prune` clears out two groups at once: the
+rows a repair superseded, and the 3,853 dropped for length. A plain run
+reports both outstanding counts rather than silently leaving them, and
+`--refresh` never touches a client's own questions and treats the pack as the
+source of truth only for rows carrying its `source`.
+
+**Retired questions stay retired.** Because the import matches on the prompt,
+a repair that rewrites one produces a row indistinguishable from a brand new
+question: it arrives live, and `--prune` retires the row it replaced. Left
+alone, that hands an operator's decision back — a question deliberately pulled
+off the screen returns the next time somebody fixes its spelling.
+
+`open-trivia-lineage.ndjson`, written beside the pack by the same two scripts,
+is what prevents it: one `{"was": …, "now": …}` line for each of the 2,214
+prompts a repair rewrote that still exists in the pack. The import reads it
+straight after inserting and carries the old row's `archived_at` onto its
+successor. A question the operator never retired is untouched.
+
+On an empty bank none of this applies — the first import loads the corrected
+pack and there is nothing to reconcile.
 
 ### What the build drops, and why
 

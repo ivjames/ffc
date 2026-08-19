@@ -1,7 +1,13 @@
+// Add a venue to an org. Reached from the org's Venues tab (which passes
+// ?orgId=), never from the top-level nav any more: a location's whole identity
+// is "a park belonging to a tenant", and the wizard's old "— unassigned —"
+// default minted venues with org_id null — rows no subdomain resolves to, that
+// no org page lists, and that no org admin can see or fix. An org is required
+// here now, matching what the record actually means.
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, type Location } from './api';
-import { Button, Card, Field, Input, Banner, PageHeader, Select, Spinner, useAsync } from './ui';
+import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Select, Spinner, useAsync } from './ui';
 
 const autoSlug = (v: string) =>
   v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -41,12 +47,18 @@ export default function LocationWizard({
       setErr('Latitude and longitude must be provided together.');
       return;
     }
+    // An org-less venue belongs to no tenant: no subdomain serves it and no
+    // org page lists it, so it is invisible the moment it is created.
+    if (!orgId) {
+      setErr('Pick the org this venue belongs to.');
+      return;
+    }
     setBusy(true);
     try {
       const body: Partial<Location> = {
         name: name.trim(),
         slug: slug || autoSlug(name),
-        orgId: orgId || null,
+        orgId,
         geofenceKm: geofence.trim() ? Number(geofence) : null,
       };
       if (hasLat && hasLng) {
@@ -66,11 +78,16 @@ export default function LocationWizard({
     }
   }
 
+  const orgName = orgs.data?.find((o) => o.id === orgId)?.name ?? null;
+
   return (
     <div className="mx-auto max-w-xl space-y-4">
+      <BackLink to={orgId ? `/orgs/${orgId}/venues` : '/orgs'}>
+        {orgName ? `${orgName} venues` : 'Orgs'}
+      </BackLink>
       <PageHeader
-        title="Onboard a location"
-        description="Creates the venue record; add courses from its detail page afterwards."
+        title="Add a venue"
+        description="Creates the venue record under its org; add courses from its detail page afterwards."
       />
 
       {saved && (
@@ -85,6 +102,9 @@ export default function LocationWizard({
           )}{' '}
           <Link className="underline" to={`/locations/${saved.id}`}>
             Add courses →
+          </Link>{' '}
+          <Link className="underline" to={`/orgs/${orgId}/venues`}>
+            Back to the org →
           </Link>
         </Banner>
       )}
@@ -93,7 +113,10 @@ export default function LocationWizard({
         <form onSubmit={submit} className="space-y-3">
           {err && <Banner kind="error">{err}</Banner>}
 
-          <Field label="Org (owner / franchise)">
+          <Field
+            label="Org (owner / franchise)"
+            hint="Required — the venue is served on this org's subdomain and is only visible to its admins."
+          >
             {!isSuperAdmin ? (
               <div className="px-1 py-1.5 text-sm text-slate-600">
                 {orgs.data?.find((o) => o.id === ownOrgId)?.name ?? 'Your org'}
@@ -102,7 +125,7 @@ export default function LocationWizard({
               <Spinner label="Loading orgs…" />
             ) : (
               <Select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="w-full">
-                <option value="">— unassigned —</option>
+                <option value="">— pick an org —</option>
                 {orgs.data?.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.name}
@@ -135,7 +158,7 @@ export default function LocationWizard({
             <Input value={geofence} onChange={(e) => setGeofence(e.target.value)} inputMode="decimal" />
           </Field>
 
-          <Button type="submit" disabled={busy || !name.trim()}>
+          <Button type="submit" disabled={busy || !name.trim() || !orgId}>
             {busy ? 'Saving…' : 'Create location'}
           </Button>
         </form>

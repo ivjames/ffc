@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from './components';
-import { useApiBuild } from './useApiBuild';
+import { useApiBuild, useUpdateReady } from './useApiBuild';
 import { reloadForUpdate } from '../pwa';
 import Icon from './Icon';
 
@@ -8,15 +8,19 @@ import Icon from './Icon';
 // landed while this app was open on a stale, service-worker-cached bundle), pop
 // a blocking modal that reloads the app onto the fresh build.
 //
+// The mismatch alone doesn't open the modal: useUpdateReady first confirms via
+// the served /version.json that a reload would land on a bundle that matches
+// the API — otherwise a deploy still in flight turns the modal into a reload
+// loop (reload -> same mismatch -> modal again) until the deploy finishes.
+//
 // Suppressed for dev builds (__BUILD_ID__ === 'dev'), where the SW is off and a
 // local API's real SHA would otherwise trigger a false alarm on every save.
 export function UpdateModal() {
   const apiBuild = useApiBuild();
+  const updateReady = useUpdateReady(apiBuild);
   const [reloading, setReloading] = useState(false);
 
-  const mismatch =
-    __BUILD_ID__ !== 'dev' && apiBuild != null && apiBuild !== __BUILD_ID__;
-  if (!mismatch) return null;
+  if (!updateReady) return null;
 
   return (
     <div
