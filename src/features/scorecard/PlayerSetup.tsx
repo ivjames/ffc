@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
@@ -46,8 +46,20 @@ export default function PlayerSetup() {
   // Shared-game hosting needs an account (the joiners don't).
   const [me, setMe] = useState<AppUser | null | 'loading'>('loading');
 
+  // Whether player 1's field has been hand-edited. The prefill must not fire
+  // after that — "empty" alone can't tell an untouched field from one the
+  // player deliberately cleared while the session request was still in flight.
+  const p1Edited = useRef(false);
+
   useEffect(() => {
-    void fetchMe().then(setMe);
+    void fetchMe().then((u) => {
+      setMe(u);
+      // Signed-in players with a saved tag get it prefilled as player 1 — the
+      // same assumption arcade play makes — unless they already typed one.
+      if (u?.defaultTag && !p1Edited.current) {
+        setTags((prev) => (prev[0] === '' ? [u.defaultTag!, ...prev.slice(1)] : prev));
+      }
+    });
   }, []);
 
   const activeTags = useMemo(() => tags.slice(0, count), [tags, count]);
@@ -67,6 +79,7 @@ export default function PlayerSetup() {
   }
 
   function setTag(i: number, raw: string) {
+    if (i === 0) p1Edited.current = true;
     setFormError(null);
     setTags((prev) => {
       const next = [...prev];
