@@ -139,6 +139,30 @@ node scripts/arcade-traffic.mjs --profile arcade-profile.json \
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
 run replayable; `--headed` lets you watch it play.
 
+### From Master Control
+
+Both halves are also driven from the admin: **Master Control → Ops → Arcade
+bot** (super_admin only). Capture and replay are separate processes with their
+own status, live log tail and stop button, so both can run at once.
+
+- Capture writes into `data/arcade-profiles/`, and replay's profile picker reads
+  that directory back — so the two steps chain without touching a shell. The
+  newest profile is preselected.
+- **Capture needs a browser on the API host**, which an API box has no reason to
+  ship. When there isn't one the page says so and the button stays disabled
+  rather than spawning a run that dies on a Playwright stack trace. Capture on a
+  workstation and drop the profile JSON into `data/arcade-profiles/` instead.
+- The venue picker flags venues with game rewards switched off — awards to those
+  come back 403 — and replay always talks to the API over loopback, never out
+  through a proxy or to another host.
+- The capture form shows a pre-flight estimate summed from the bot's own
+  per-game `estRoundMs`, because the games are nowhere near equal: a full
+  one-round pass over all 19 is ~20 minutes, and Go-Karts alone is ~3 min a
+  round against Skee-Ball's ~20s.
+
+The child processes are started with `FFC_EXIT_WITH_PARENT=1` and killed on API
+shutdown, so a bot can't outlive the API that's reporting on it.
+
 To watch it on a machine with no display — CI, a remote dev container — record
 the session instead, since `--headed` has nothing to display to there:
 

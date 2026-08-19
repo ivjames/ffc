@@ -21,6 +21,7 @@ import Hunt from './Hunt';
 import HuntItemDetail from './HuntItemDetail';
 import HuntUsage from './HuntUsage';
 import SyntheticBot from './SyntheticBot';
+import ArcadeBot from './ArcadeBot';
 import Signups from './Signups';
 import ProvisionSite from './ProvisionSite';
 import Account from './Account';
@@ -233,6 +234,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 // Load/soak bot — a platform tool, so super_admin only.
 const SYNTHETIC_ITEM: NavItem = { to: '/synthetic', label: 'Synthetic', icon: 'synthetic' };
+const ARCADE_BOT_ITEM: NavItem = { to: '/arcade-bot', label: 'Arcade bot', icon: 'synthetic' };
 const VOICE_BENCH_ITEM: NavItem = { to: '/voice-bench', label: 'Voice bench', icon: 'usage' };
 const VISION_BENCH_ITEM: NavItem = {
   to: '/api/admin/vision-bakeoff/ui',
@@ -248,7 +250,7 @@ const SIGNUPS_ITEM: NavItem = { to: '/signups', label: 'Signups', icon: 'signups
 // Extra nav items appended per section for super_admins only.
 const SUPER_ADMIN_EXTRAS: Record<string, NavItem[]> = {
   Venues: [PROVISION_ITEM],
-  Ops: [SIGNUPS_ITEM, SYNTHETIC_ITEM, VOICE_BENCH_ITEM, VISION_BENCH_ITEM],
+  Ops: [SIGNUPS_ITEM, SYNTHETIC_ITEM, ARCADE_BOT_ITEM, VOICE_BENCH_ITEM, VISION_BENCH_ITEM],
 };
 
 function itemActive(item: NavItem, pathname: string): boolean {
@@ -613,6 +615,7 @@ function Shell({ user, onLock }: { user: CurrentUser | null; onLock: () => void 
             <Route path="/archived" element={<Archived isSuperAdmin={isSuperAdmin} />} />
             {isSuperAdmin && <Route path="/signups" element={<Signups />} />}
             {isSuperAdmin && <Route path="/synthetic" element={<SyntheticBot />} />}
+            {isSuperAdmin && <Route path="/arcade-bot" element={<ArcadeBot />} />}
             {isSuperAdmin && <Route path="/voice-bench" element={<VoiceBench />} />}
             {isSuperAdmin && <Route path="/provision" element={<ProvisionSite />} />}
             <Route path="*" element={<Overview />} />

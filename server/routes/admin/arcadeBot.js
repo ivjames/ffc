@@ -1,0 +1,273 @@
+// Admin: arcade bot control plane — Master Control → Ops → Arcade bot.
+//   GET  /api/admin/arcade-bot/status    games, profiles, venues, both runners
+//   POST /api/admin/arcade-bot/capture   play the games, write a profile
+//   POST /api/admin/arcade-bot/replay    post the awards a profile implies
+//   POST /api/admin/arcade-bot/stop      {slot} stop capture or replay
+//
+// The bots are scripts/arcade-bot.mjs and scripts/arcade-traffic.mjs (see
+// ARCADE-BOT.md). This surface drives them from the browser; lib/arcadeBotRunner
+// owns the processes.
+//
+// Auth: status is readable by any admin (org-scoped venue list). capture and
+// replay are super_admin only — they are platform tools, not per-venue
+// controls, and replay posts real ticket awards.
+//
+// CAPTURE NEEDS A BROWSER. It drives the player app in headless Chromium, which
+// the API host may not have — an API box has no reason to ship one. Rather than
+// spawn a run that dies with a Playwright stack trace, status reports whether a
+// browser is resolvable and the route refuses with that reason.
+import { Router } from "express";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
+import { pool } from "../../db.js";
+import { orgScope } from "../../lib/adminAuth.js";
+import { GAME_REWARD_GAMES } from "../../lib/gameRewards.js";
+import * as runner from "../../lib/arcadeBotRunner.js";
+
+export const router = Router();
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Profile names are ours to generate, but they are also path segments — keep
+// them boring so a name can never climb out of PROFILE_DIR.
+const PROFILE_RE = /^[A-Za-z0-9._-]+\.json$/;
+
+/** Is a headless browser available for the capture half? */
+function browserStatus() {
+  const envPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  const candidates = [envPath, "/opt/pw-browsers", path.join(process.env.HOME ?? "", ".cache/ms-playwright")];
+  for (const dir of candidates) {
+    if (dir && existsSync(dir)) return { available: true, at: dir };
+  }
+  return {
+    available: false,
+    at: null,
+    reason:
+      "no Playwright browser found on the API host (looked at PLAYWRIGHT_BROWSERS_PATH, " +
+      "/opt/pw-browsers, ~/.cache/ms-playwright). Capture drives a real browser; " +
+      "install one there, or capture on a workstation and upload the profile.",
+  };
+}
+
+/**
+ * The registry games, each with the bot's own per-round time estimate so the
+ * form can show a pre-flight wall-clock figure that matches what the script
+ * will print. The estimates live with the policies (scripts/lib/arcade), which
+ * is a different tree from the API — imported lazily and defensively so a
+ * policy that one day pulls in Playwright at module scope can't take the whole
+ * admin router down with it. Without them the UI falls back to a flat rate.
+ */
+async function loadGames() {
+  try {
+    const reg = await import("../../../scripts/lib/arcade/registry.mjs");
+    const est = new Map(reg.GAMES.map((g) => [g.key, g.estRoundMs]));
+    return GAME_REWARD_GAMES.map((g) => ({ ...g, estRoundMs: est.get(g.key) ?? null }));
+  } catch {
+    return GAME_REWARD_GAMES.map((g) => ({ ...g, estRoundMs: null }));
+  }
+}
+
+function listProfiles() {
+  try {
+    mkdirSync(runner.PROFILE_DIR, { recursive: true });
+    return readdirSync(runner.PROFILE_DIR)
+      .filter((f) => PROFILE_RE.test(f))
+      .map((f) => {
+        const s = statSync(path.join(runner.PROFILE_DIR, f));
+        return { name: f, bytes: s.size, modifiedAt: s.mtime.toISOString() };
+      })
+      .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+  } catch {
+    return [];
+  }
+}
+
+/** Venues this admin may target, with whether game rewards are even on. */
+async function loadVenues(scope) {
+  const res = await pool.query(
+    `select l.id, l.name, o.name as org_name,
+            coalesce((l.pos -> 'loyalty' ->> 'gameRewards')::boolean, false) as game_rewards
+       from location l
+       left join org o on o.id = l.org_id
+      where l.archived_at is null and ($1::uuid is null or l.org_id = $1)
+      order by o.name nulls first, l.name`,
+    [scope]
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    orgName: r.org_name ?? null,
+    gameRewards: r.game_rewards,
+  }));
+}
+
+const int = (v, lo, hi) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= lo && n <= hi ? n : null;
+};
+
+function validateCapture(body) {
+  const rounds = int(body?.rounds, 1, 200);
+  if (rounds === null) return { error: "rounds must be an integer 1..200" };
+  const seed = int(body?.seed ?? 1, 1, 2_000_000);
+  if (seed === null) return { error: "seed must be an integer 1..2000000" };
+  let skill = null;
+  if (body?.skill !== null && body?.skill !== undefined && body?.skill !== "") {
+    const s = Number(body.skill);
+    if (!(s >= 0 && s <= 1)) return { error: "skill must be between 0 and 1" };
+    skill = s;
+  }
+  const games = Array.isArray(body?.games) ? body.games.filter((g) => /^[a-z]+$/.test(g)) : [];
+  return { params: { rounds, seed, skill, games } };
+}
+
+function validateReplay(body) {
+  if (typeof body?.locationId !== "string" || !UUID_RE.test(body.locationId)) {
+    return { error: "locationId must be a uuid" };
+  }
+  if (typeof body?.profile !== "string" || !PROFILE_RE.test(body.profile)) {
+    return { error: "profile must be a captured profile name" };
+  }
+  const plays = int(body?.plays, 1, 5000);
+  if (plays === null) return { error: "plays must be an integer 1..5000" };
+  // The auth rate limit caps new sessions at 10/IP/hour; the script enforces it
+  // too, but refusing here gives the operator the reason in the form.
+  const players = int(body?.players ?? 4, 0, 10);
+  if (players === null) return { error: "players must be an integer 0..10 (auth limit)" };
+  const concurrency = int(body?.concurrency ?? 6, 1, 32);
+  if (concurrency === null) return { error: "concurrency must be an integer 1..32" };
+  const seed = int(body?.seed ?? 1, 1, 2_000_000);
+  if (seed === null) return { error: "seed must be an integer 1..2000000" };
+  const intervalMin = body?.intervalMin ? int(body.intervalMin, 1, 1440) : null;
+  if (body?.intervalMin && intervalMin === null) {
+    return { error: "intervalMin must be an integer 1..1440" };
+  }
+  const sweeps = body?.sweeps ? int(body.sweeps, 1, 1000) : null;
+  if (body?.sweeps && sweeps === null) return { error: "sweeps must be an integer 1..1000" };
+  const games = Array.isArray(body?.games) ? body.games.filter((g) => /^[a-z]+$/.test(g)) : [];
+  return {
+    params: {
+      locationId: body.locationId,
+      profile: body.profile,
+      plays,
+      players,
+      concurrency,
+      seed,
+      intervalMin,
+      sweeps,
+      dryRun: body?.dryRun === true,
+      games,
+    },
+  };
+}
+
+function superOnly(req, res) {
+  if (orgScope(req) !== null) {
+    res.status(403).json({ ok: false, error: "forbidden: super_admin only" });
+    return false;
+  }
+  return true;
+}
+
+// --- Status -----------------------------------------------------------------
+router.get("/status", async (req, res) => {
+  const scope = orgScope(req);
+  try {
+    const [venues, games, awards] = await Promise.all([
+      loadVenues(scope),
+      loadGames(),
+      pool.query(
+        `select count(*)::int as total,
+                count(*) filter (where created_at > now() - interval '24 hours')::int as last24h,
+                coalesce(sum(tickets_awarded), 0)::int as tickets
+           from game_ticket_award
+          where session_id like 'synthetic:%'
+            and ($1::uuid is null or location_id in (select id from location where org_id = $1))`,
+        [scope]
+      ),
+    ]);
+    return res.json({
+      canControl: scope === null,
+      // The bot's policies are keyed by the SERVER registry, and every game in
+      // it has one — so this list is both "what may earn" and "what plays".
+      games,
+      browser: browserStatus(),
+      appBase: process.env.FFC_APP_BASE || "http://127.0.0.1:5173",
+      profiles: listProfiles(),
+      venues,
+      syntheticAwards: awards.rows[0],
+      capture: runner.capture.status(),
+      replay: runner.replay.status(),
+    });
+  } catch (err) {
+    console.error("[admin/arcade-bot] status error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// --- Capture (super_admin) --------------------------------------------------
+router.post("/capture", (req, res) => {
+  if (!superOnly(req, res)) return undefined;
+  const v = validateCapture(req.body);
+  if (v.error) return res.status(400).json({ ok: false, error: v.error });
+
+  const browser = browserStatus();
+  if (!browser.available) return res.status(409).json({ ok: false, error: browser.reason });
+  if (runner.capture.isRunning()) {
+    return res.status(409).json({ ok: false, error: "a capture is already running — stop it first" });
+  }
+
+  mkdirSync(runner.PROFILE_DIR, { recursive: true });
+  const name = `profile-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  const out = path.join(runner.PROFILE_DIR, name);
+  const appBase = process.env.FFC_APP_BASE || "http://127.0.0.1:5173";
+  try {
+    const status = runner.capture.start(
+      runner.CAPTURE_SCRIPT,
+      runner.captureArgs({ ...v.params, out }, appBase),
+      { ...v.params, profile: name }
+    );
+    return res.json({ ok: true, profile: name, runner: status });
+  } catch (err) {
+    return res.status(409).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Replay (super_admin) ---------------------------------------------------
+router.post("/replay", (req, res) => {
+  if (!superOnly(req, res)) return undefined;
+  const v = validateReplay(req.body);
+  if (v.error) return res.status(400).json({ ok: false, error: v.error });
+  if (runner.replay.isRunning()) {
+    return res.status(409).json({ ok: false, error: "a replay is already running — stop it first" });
+  }
+
+  // Resolve inside PROFILE_DIR and verify it stayed there.
+  const profilePath = path.join(runner.PROFILE_DIR, v.params.profile);
+  if (!profilePath.startsWith(runner.PROFILE_DIR + path.sep) || !existsSync(profilePath)) {
+    return res.status(404).json({ ok: false, error: "no such profile" });
+  }
+
+  // Loopback: the child talks to THIS API, never out through a proxy or to
+  // another host.
+  const apiBase = `http://127.0.0.1:${process.env.PORT || 8060}`;
+  try {
+    const status = runner.replay.start(
+      runner.REPLAY_SCRIPT,
+      runner.replayArgs(v.params, profilePath, apiBase),
+      v.params
+    );
+    return res.json({ ok: true, runner: status });
+  } catch (err) {
+    return res.status(409).json({ ok: false, error: err.message });
+  }
+});
+
+// --- Stop (super_admin) -----------------------------------------------------
+router.post("/stop", (req, res) => {
+  if (!superOnly(req, res)) return undefined;
+  const slot = req.body?.slot;
+  if (slot !== "capture" && slot !== "replay") {
+    return res.status(400).json({ ok: false, error: "slot must be 'capture' or 'replay'" });
+  }
+  return res.json({ ok: true, runner: runner[slot].stop() });
+});
