@@ -272,3 +272,75 @@ describe('the mute button', () => {
     expect(spoken).toEqual([]);
   });
 });
+
+// The bug this guards: read-aloud is PERSISTED per device but the browser's
+// unlock is per page load, so a host who switched the voice on at some earlier
+// game arrives with speech enabled and nothing ever primed. Priming only from
+// the toggle meant the room's first phase read silently, and the only way out
+// was flipping the voice off and on — which doesn't even re-read the phase on
+// screen (both trivia screens read a phase once), so the voice appeared to
+// start at the SECOND question.
+describe('priming for a device that already had the voice on', () => {
+  // Fresh module per test: whether this page has primed is module state, and
+  // the whole point of these tests is what happens on a cold page load.
+  async function freshSpeech() {
+    vi.resetModules();
+    const cancel = vi.fn();
+    const spoken: string[] = [];
+    class Utterance {
+      text: string;
+      voice: unknown = null;
+      lang = '';
+      rate = 1;
+      pitch = 1;
+      volume = 1;
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+    vi.stubGlobal('window', {
+      speechSynthesis: { cancel, speak: (u: { text: string }) => spoken.push(u.text), getVoices: () => [] },
+      SpeechSynthesisUtterance: Utterance,
+    });
+    vi.stubGlobal('SpeechSynthesisUtterance', Utterance);
+    const mod = await import('./speech');
+    return { mod, spoken };
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  test('the first tap primes when the voice was already on', async () => {
+    const { mod, spoken } = await freshSpeech();
+    mod.setSpeechEnabled(true); // as if restored from localStorage, no toggle tapped
+    mod.primeSpeechOnce();
+    expect(spoken).toEqual([' ']);
+  });
+
+  test('later taps do not re-prime', async () => {
+    const { mod, spoken } = await freshSpeech();
+    mod.setSpeechEnabled(true);
+    mod.primeSpeechOnce();
+    mod.primeSpeechOnce();
+    mod.primeSpeechOnce();
+    expect(spoken).toEqual([' ']);
+  });
+
+  test('a tap with the voice off stays silent', async () => {
+    const { mod, spoken } = await freshSpeech();
+    mod.setSpeechEnabled(false);
+    mod.primeSpeechOnce();
+    expect(spoken).toEqual([]);
+  });
+
+  test('the toggle still primes, and covers the tap that follows it', async () => {
+    const { mod, spoken } = await freshSpeech();
+    mod.primeSpeech(); // what toggleSpeech(true) does inside the tap
+    mod.setSpeechEnabled(true);
+    expect(spoken).toEqual([' ']);
+    mod.primeSpeechOnce();
+    expect(spoken).toEqual([' ']);
+  });
+});

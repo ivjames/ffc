@@ -12,6 +12,7 @@ import {
   isSpeechEnabled,
   myResultScript,
   primeSpeech,
+  primeSpeechOnce,
   questionScript,
   revealScript,
   setSpeechEnabled,
@@ -327,6 +328,10 @@ export default function TriviaLive() {
   }, [sessionId, stored?.participantToken, snapshot?.session.status, snapshot?.session.currentIndex]);
 
   const doJoin = useCallback(async () => {
+    // Joining is this phone's first tap, and the only one guaranteed to come
+    // before a question is read — a player whose voice was already on from a
+    // previous game has otherwise never primed it (see primeSpeechOnce).
+    primeSpeechOnce();
     setError(null);
     setBusy(true);
     const res = await joinSession({ joinCode, name, isTeam });
@@ -350,6 +355,8 @@ export default function TriviaLive() {
     async (choice: number) => {
       if (!sessionId || !stored) return;
       playClick();
+      // And here, for a phone that rejoined from storage without tapping Join.
+      primeSpeechOnce();
       setPending(choice);
       const res = await submitAnswer(sessionId, stored.participantToken, choice);
       if (!res.ok) {
