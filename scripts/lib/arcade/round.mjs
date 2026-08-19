@@ -34,6 +34,20 @@ async function readShownTickets(page) {
   return Number.isFinite(n) ? n : null;
 }
 
+// How long the END CARD gets to appear after a policy hands back.
+//
+// Not the round budget. Every policy paces ITSELF — a timed game plays out its
+// own clock, an aim game throws all its shots — so by the time play() returns,
+// the only thing left is the last ball landing and the card animating in. A few
+// seconds covers that.
+//
+// It used to reuse the whole 180s round budget here, which made a failure cost
+// TWICE the budget: Go-Karts spent 180s driving without finishing, then this
+// waited another 180s for a card that could not appear because nobody was
+// driving any more. Six minutes to learn one game didn't finish, in a capture
+// where every other game took under a minute.
+const END_CARD_MS = 20_000;
+
 /**
  * Play one round of `game` on `page`.
  * @returns {Promise<{ score: number, tickets: number, ms: number, skill: number }>}
@@ -68,8 +82,11 @@ export async function playRound(page, game, { rng, skill, baseUrl, timeoutMs = 1
 
   // The policy paces itself, but the last shot still has to resolve.
   const again = page.getByRole('button', { name: game.againLabel ?? AGAIN });
-  await again.waitFor({ state: 'visible', timeout: timeoutMs }).catch(() => {
-    throw new RoundError(`${game.key}: round did not finish (no again button)`);
+  await again.waitFor({ state: 'visible', timeout: Math.min(END_CARD_MS, timeoutMs) }).catch(() => {
+    throw new RoundError(
+      `${game.key}: round did not finish — no end card ${Math.round(Math.min(END_CARD_MS, timeoutMs) / 1000)}s ` +
+        `after the policy finished playing (it ran for ${Math.round((Date.now() - t0) / 1000)}s)`,
+    );
   });
 
   // Most end cards put the headline number in `.text-5xl`; a game whose card

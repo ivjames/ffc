@@ -77,12 +77,24 @@ are a known 3×3 grid, so nothing has to be tracked frame to frame; games with
 genuinely moving entities (a duck on a rail, a puck, a pinball) need the
 position recovered from pixels and predicted forward, which is the next step up.
 
-Every game in the server's earning registry now has a policy. Go-Karts is the
-weakest of them: it completes races but its lap times are dominated by barrier
-scraping and the opening wrong-way stall rather than by the skill knob, so its
-expert/beginner ordering is **not** established (78s vs 55–86s). A best lap of
-~6.5s is achievable against the ~25s it turns, so a centred racing line is the
-open work there.
+Every game in the server's earning registry has a policy. **Go-Karts is flaky
+and the number is measured: roughly one round in three finishes.** The failure
+is binary rather than slow — a wedged race sits at "Lap 0 / 3" for the entire
+budget with the clock running and the kart never crossing the line once, while a
+healthy round comes home in 50–70s. It is not the venue banner or an obstructed
+canvas (both checked: the canvas is on top and hit-testable in every attempt),
+so the cause is still open.
+
+Two things make that cost bearable rather than fixing it:
+
+- A race with **no lap completed in 45s** aborts with that reason instead of
+  driving out the full 180s. The ideal lap is ~6.4s and even a bad line comes
+  round inside ~25s, so 45s is already generous.
+- The end card gets a **20s grace**, not the whole round budget. Together these
+  take a wedged Go-Karts round from ~6 minutes to ~50s.
+
+Its expert/beginner ordering is also **not** established. Deselect it in Master
+Control's game picker if you want a capture with no dead weight in it.
 
 Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
@@ -106,9 +118,14 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | Pinball | 8010 mean | 6800 mean | — (high variance) |
 | Bumper Cars | 24–30 | 16–22 | (30s clock) |
 | Bumper Boats | 19–31 | 15–17 | (30s clock) |
-| Go-Karts | 78s | 55–86s | (time — lower is better) |
+| Go-Karts | 51–68s | — | (time — lower is better; ~1 round in 3 finishes) |
 
-Two honest caveats:
+Three honest caveats:
+
+- **A one-round capture has no distribution.** Every percentile equals the score,
+  so the charts render hairlines and replay resamples a single value forever. For
+  shape, capture ~8+ rounds — which for all 19 games is a couple of hours at
+  ~1 round/min, so pick a subset of games or run it overnight.
 
 - **High Striker's headline is the best of five swings**, which compresses
   scores toward 100 regardless of skill. That's the game's shape, not a bot
