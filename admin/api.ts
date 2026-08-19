@@ -585,6 +585,8 @@ export type ArcadeCaptureParams = {
   rounds: number;
   seed: number;
   skill: number | null;
+  /** Concurrent browser pages. Timing games verified unaffected up to 4. */
+  workers: number;
   games: string[];
 };
 

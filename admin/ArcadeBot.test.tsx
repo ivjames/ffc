@@ -179,10 +179,10 @@ describe('ArcadeBot — guards', () => {
   test('the capture estimate sums the per-game round times, not a flat rate', async () => {
     vi.mocked(api.arcadeStatus).mockResolvedValue(status([MIXED]));
     render(<ArcadeBot />);
-    // Default 10 rounds × (19.5s + 180s) = ~33 min, and emphatically not
-    // 10 × 2 games at some uniform pace. The number is its own <strong>, so
-    // match on the paragraph's full text.
+    // Default 10 rounds × (19.5s + 180s) = ~33 min single-file, over the
+    // default 3 workers = 11 min — and emphatically not 10 × 2 games at some
+    // uniform pace. The number is its own <strong>, so match the full text.
     const est = await screen.findByText(/of wall clock/);
-    expect(est.textContent).toMatch(/≈ 20 rounds, roughly 33 min of wall clock/);
+    expect(est.textContent).toMatch(/≈ 20 rounds, roughly 11 min of wall clock/);
   });
 });

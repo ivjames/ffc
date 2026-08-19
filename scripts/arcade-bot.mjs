@@ -59,6 +59,7 @@ function parseArgs(argv) {
     rounds: 6,
     skill: null,
     seed: 1,
+    workers: 1,
     out: null,
     headed: false,
     video: null,
@@ -73,6 +74,7 @@ function parseArgs(argv) {
     else if (k === '--rounds') a.rounds = Number(next());
     else if (k === '--skill') a.skill = Number(next());
     else if (k === '--seed') a.seed = Number(next());
+    else if (k === '--workers') a.workers = Number(next());
     else if (k === '--out') a.out = next();
     else if (k === '--headed') a.headed = true;
     else if (k === '--video') a.video = next();
@@ -107,6 +109,25 @@ const SKILL_FLOOR = {
   gokarts: 120,
 };
 
+/**
+ * Deterministic per-round seed (FNV-1a over seed:game#round).
+ *
+ * Each round gets its OWN rng instead of drawing from one shared stream, which
+ * is what makes parallel capture reproducible at all: with a shared stream the
+ * draws depend on scheduling order, so --seed would mean nothing past
+ * --workers 1. It also fixes a quieter defect the shared stream always had —
+ * adding one game to the list shifted every later game's draws, so two
+ * captures of overlapping game sets never shared a single round.
+ */
+function roundSeed(seed, key, i) {
+  let h = 0x811c9dc5 ^ (seed >>> 0);
+  for (const ch of `${key}#${i}`) {
+    h ^= ch.charCodeAt(0);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) || 1;
+}
+
 const pct = (xs, p) => {
   if (xs.length === 0) return 0;
   const s = [...xs].sort((x, y) => x - y);
@@ -130,37 +151,49 @@ async function main() {
   }
 
   const games = resolve(args.games);
-  const rng = makeRng(args.seed);
+  const workers = Math.max(1, Math.min(Number.isFinite(args.workers) ? args.workers : 1, 8));
 
-  const estMs = games.reduce((t, g) => t + g.estRoundMs * args.rounds, 0);
+  const estMs = games.reduce((t, g) => t + g.estRoundMs * args.rounds, 0) / workers;
   console.log(
-    `arcade-bot: ${games.length} game(s) × ${args.rounds} round(s) — ` +
-      `~${Math.ceil(estMs / 60000)} min estimated, seed ${args.seed}`,
+    `arcade-bot: ${games.length} game(s) × ${args.rounds} round(s)` +
+      (workers > 1 ? ` on ${workers} workers` : '') +
+      ` — ~${Math.ceil(estMs / 60000)} min estimated, seed ${args.seed}`,
   );
   console.log('(no model/API calls — cost is wall clock + one headless browser)\n');
 
   const browser = await chromium.launch({ headless: !args.headed });
-  // --video records the session instead of needing a visible browser, which is
-  // the only way to watch the bot play on a headless box (CI, a remote dev
-  // container). One .webm per page, written when the context closes.
   const viewport = { width: 420, height: 900 };
-  const context = await browser.newContext({
-    viewport,
-    ...(args.video ? { recordVideo: { dir: args.video, size: viewport } } : {}),
-  });
-  const page = await context.newPage();
 
   const profile = { capturedAt: new Date().toISOString(), base: args.base, games: {} };
   const t0 = Date.now();
   let failures = 0;
-
   let unreachable = false;
   let played = 0;
 
-  for (const game of games) {
-    if (unreachable) break;
-    const rows = [];
-    for (let i = 0; i < args.rounds; i++) {
+  // One flat queue of (game, round) jobs, drained by N workers — each worker a
+  // browser CONTEXT with its own page, all inside one Chromium (a page is a
+  // renderer process; a whole browser per worker would triple the memory for
+  // nothing). Rounds land back in their (game, index) slot, so the profile is
+  // identical no matter which worker finished first.
+  const jobs = [];
+  for (const game of games) for (let i = 0; i < args.rounds; i++) jobs.push({ game, i });
+  const rows = new Map(games.map((g) => [g.key, []]));
+  let cursor = 0;
+
+  async function runWorker() {
+    // --video: one .webm per page as before, written when the context closes.
+    const context = await browser.newContext({
+      viewport,
+      ...(args.video ? { recordVideo: { dir: args.video, size: viewport } } : {}),
+    });
+    const page = await context.newPage();
+    while (!unreachable) {
+      const job = jobs[cursor++];
+      if (!job) break;
+      const { game, i } = job;
+      // Every round draws from its OWN seeded rng (see roundSeed) — the only
+      // scheme under which --seed reproduces a run at any worker count.
+      const rng = makeRng(roundSeed(args.seed, game.key, i));
       // --assert-skill compares against EXPERT floors, so it has to play like
       // one: sampling the ordinary player mix would fail a perfectly healthy
       // game whenever no strong round happened to be drawn. An explicit
@@ -168,7 +201,7 @@ async function main() {
       const skill = args.skill ?? (args.assertSkill ? 1 : sampleSkill(rng));
       try {
         const r = await playRound(page, game, { rng, skill, baseUrl: args.base });
-        rows.push(r);
+        rows.get(game.key)[i] = r;
         played++;
         console.log(
           `  ${game.key.padEnd(12)} #${String(i + 1).padStart(2)} ` +
@@ -181,26 +214,28 @@ async function main() {
         // A NETWORK error before anything has ever loaded means we can't reach
         // the app at all — wrong base, DNS, TLS, a proxy in the way. Every
         // remaining round fails identically, so stop rather than spending 19
-        // games proving it. Matching the whole net::ERR_* class beats
-        // enumerating codes: REFUSED, RESET, TIMED_OUT and NAME_NOT_RESOLVED
-        // are all the same "nothing is there" from here.
-        //
-        // Only while NOTHING has succeeded yet, though: once rounds are
-        // landing, a single blip shouldn't kill a long capture.
-        if (played === 0 && /net::ERR_/.test(err.message)) {
-          unreachable = true;
-          break;
-        }
+        // games proving it; net::ERR_* covers REFUSED, RESET, TIMED_OUT and
+        // NAME_NOT_RESOLVED alike. Only while NOTHING has succeeded yet,
+        // though: once rounds are landing, a single blip shouldn't kill a
+        // long capture.
+        if (played === 0 && /net::ERR_/.test(err.message)) unreachable = true;
       }
     }
-    const scores = rows.map((r) => r.score);
+    await context.close(); // finalises any video
+  }
+
+  await Promise.all(Array.from({ length: Math.min(workers, jobs.length) }, () => runWorker()));
+
+  for (const game of games) {
+    const done = (rows.get(game.key) ?? []).filter(Boolean);
+    const scores = done.map((r) => r.score);
     profile.games[game.key] = {
       label: game.label,
-      rounds: rows.length,
+      rounds: done.length,
       // The samples themselves, not just moments: the volume path resamples
       // these directly, so the replayed distribution is the measured one
       // (multi-modal shapes and all) rather than a fitted approximation.
-      samples: rows.map((r) => ({ score: r.score, tickets: r.tickets, skill: Number(r.skill.toFixed(3)) })),
+      samples: done.map((r) => ({ score: r.score, tickets: r.tickets, skill: Number(r.skill.toFixed(3)) })),
       stats: {
         mean: Math.round(mean(scores)),
         p10: pct(scores, 10),
@@ -208,17 +243,16 @@ async function main() {
         p90: pct(scores, 90),
         max: scores.length ? Math.max(...scores) : 0,
         min: scores.length ? Math.min(...scores) : 0,
-        meanRoundMs: Math.round(mean(rows.map((r) => r.ms))),
+        meanRoundMs: Math.round(mean(done.map((r) => r.ms))),
       },
     };
-    const s = profile.games[game.key].stats;
+    const st = profile.games[game.key].stats;
     console.log(
-      `  → ${game.key}: mean ${s.mean}, p10/p50/p90 ${s.p10}/${s.p50}/${s.p90}, ` +
-        `max ${s.max}, ${(s.meanRoundMs / 1000).toFixed(1)}s/round\n`,
+      `  → ${game.key}: mean ${st.mean}, p10/p50/p90 ${st.p10}/${st.p50}/${st.p90}, ` +
+        `max ${st.max}, ${(st.meanRoundMs / 1000).toFixed(1)}s/round`,
     );
   }
 
-  await context.close(); // finalises any video
   await browser.close();
 
   const wall = (Date.now() - t0) / 1000;
@@ -237,7 +271,7 @@ async function main() {
   if (played > 0) {
     const perRound = wall / played;
     console.log(
-      `Throughput: ${(60 / perRound).toFixed(1)} rounds/min/browser — ` +
+      `Throughput: ${(60 / perRound).toFixed(1)} rounds/min on ${workers} worker(s) — ` +
         `a 1000-round capture would take ~${Math.ceil((perRound * 1000) / 60)} min.`,
     );
   }

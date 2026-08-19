@@ -128,7 +128,7 @@ function GamePicker({ games, value, onChange }: {
 export default function ArcadeBot() {
   const { data: status, error, loading, reload } = useAsync(() => api.arcadeStatus(), []);
 
-  const [cap, setCap] = useState({ rounds: 10, seed: 1, skill: '' as string, games: [] as string[] });
+  const [cap, setCap] = useState({ rounds: 10, seed: 1, skill: '' as string, workers: 3, games: [] as string[] });
   const [rep, setRep] = useState({
     locationId: '',
     profile: '',
@@ -209,6 +209,7 @@ export default function ArcadeBot() {
     rounds: cap.rounds,
     seed: cap.seed,
     skill: cap.skill === '' ? null : Number(cap.skill),
+    workers: cap.workers,
     games: cap.games,
   };
   const replayParams: ArcadeReplayParams = {
@@ -238,7 +239,9 @@ export default function ArcadeBot() {
   // the script prints; fall back to a flat minute a round if they didn't load.
   const selected = cap.games.length ? games.filter((g) => cap.games.includes(g.key)) : games;
   const capMinutes =
-    (cap.rounds * selected.reduce((t, g) => t + (g.estRoundMs ?? 60_000), 0)) / 60_000;
+    (cap.rounds * selected.reduce((t, g) => t + (g.estRoundMs ?? 60_000), 0)) /
+    60_000 /
+    Math.max(1, Math.min(cap.workers || 1, 4));
 
   return (
     <div className="space-y-4">
@@ -337,7 +340,7 @@ export default function ArcadeBot() {
           </p>
         )}
 
-        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+        <div className="mt-3 grid gap-4 sm:grid-cols-4">
           <Field label="Rounds per game" hint="1–200. Each round is really played.">
             <Input
               type="number"
@@ -367,6 +370,15 @@ export default function ArcadeBot() {
               min={1}
               value={cap.seed}
               onChange={(e) => setCap((c) => ({ ...c, seed: e.target.valueAsNumber }))}
+            />
+          </Field>
+          <Field label="Workers" hint="Concurrent browser pages (1–4). Same seed, same scores at any count.">
+            <Input
+              type="number"
+              min={1}
+              max={4}
+              value={cap.workers}
+              onChange={(e) => setCap((c) => ({ ...c, workers: e.target.valueAsNumber }))}
             />
           </Field>
         </div>

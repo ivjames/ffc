@@ -154,7 +154,27 @@ node scripts/arcade-traffic.mjs --profile arcade-profile.json \
 ```
 
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
-run replayable; `--headed` lets you watch it play.
+run replayable; `--headed` lets you watch it play; `--workers N` plays N rounds
+at once (own page each, one Chromium — capped at 8; the admin caps at 4 because
+the API host is also serving players).
+
+### Parallel capture is safe, and it was measured, not assumed
+
+The worry was that the timing games — which read the canvas in real time and
+schedule taps off it — would degrade under CPU contention from sibling
+renderers. Measured at expert skill on 4 cores: High Striker still rings 100,
+Axe Throw and Skee-Ball land the same rounds, and Batting Cages (the tightest
+prediction game, 12 ms probes) hits a perfect 40 at 4 workers. Every skill
+floor passes.
+
+Better: per-round scores are **identical at any worker count**. Each round
+draws from its own seeded rng (`roundSeed(seed, game, round)`), so scheduling
+can't touch the draws — the same `--seed` produces the same profile on 1 worker
+or 8. That derivation also fixed a quieter defect: with the old shared stream,
+adding one game to the list shifted every later game's draws.
+
+Measured wall clock, 6 timing-game rounds: 137 s on 1 worker → 49 s on 3
+(2.8×). An 8-round × 19-game capture drops from ~2½ hours to under an hour.
 
 ### Leave the skill knob alone
 

@@ -187,8 +187,12 @@ function validateCapture(body) {
     if (!(s >= 0 && s <= 1)) return { error: "skill must be between 0 and 1" };
     skill = s;
   }
+  // Each worker is a live Chromium page ON THE API HOST, which is also serving
+  // players — cap lower here than the script's own 8.
+  const workers = int(body?.workers ?? 1, 1, 4);
+  if (workers === null) return { error: "workers must be an integer 1..4" };
   const games = Array.isArray(body?.games) ? body.games.filter((g) => /^[a-z]+$/.test(g)) : [];
-  return { params: { rounds, seed, skill, games } };
+  return { params: { rounds, seed, skill, workers, games } };
 }
 
 function validateReplay(body) {

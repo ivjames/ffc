@@ -140,6 +140,7 @@ export const replay = makeSlot("replay");
 export function captureArgs(p, appBase) {
   const args = ["--base", appBase, "--rounds", String(p.rounds), "--seed", String(p.seed)];
   for (const g of p.games ?? []) args.push("--game", g);
+  if (p.workers) args.push("--workers", String(p.workers));
   if (p.skill !== null && p.skill !== undefined) args.push("--skill", String(p.skill));
   if (p.out) args.push("--out", p.out);
   return args;

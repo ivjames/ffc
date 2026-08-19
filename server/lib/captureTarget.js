@@ -106,7 +106,14 @@ async function reach(base) {
   }
 }
 
-async function probeAll(candidates) {
+/**
+ * Probe a candidate list and pick by priority. Exported for tests: the real
+ * candidate list always ends with the dev-server fallback, so a test that
+ * goes through appBaseStatus() inherits whatever happens to be listening on
+ * :5173 — on a dev box with vite up, a "reject the wrong app" test would find
+ * the real app via the fallback and fail. Tests probe exactly their stubs.
+ */
+export async function probeAppBases(candidates) {
   // Probe in parallel, then pick by PRIORITY — so the ordering above decides,
   // not whichever host happened to answer first, and the whole check costs one
   // timeout rather than one per candidate.
@@ -149,7 +156,7 @@ export async function appBaseStatus(orgSlugs = []) {
   const key = candidates.map((c) => c.base).join("|");
   if (cache && cache.key === key && cache.expires > Date.now()) return cache.value;
   if (inFlight) return inFlight;
-  inFlight = probeAll(candidates)
+  inFlight = probeAppBases(candidates)
     .then((value) => {
       cache = { key, value, expires: Date.now() + (value.reachable ? TTL_OK_MS : TTL_FAIL_MS) };
       return value;
