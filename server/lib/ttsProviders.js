@@ -67,6 +67,14 @@ const pollyProvider = {
   // room noise, which is the actual problem in a bar. Comparing generative
   // against neural+DRC alone would conflate engine with compression, so plain
   // neural is the control that says which of the two did the work.
+  // Why a row the operator expected is missing. Silently dropping generative
+  // in a region that cannot serve it looks identical to the bench being
+  // broken, and the region is not something the screen otherwise shows.
+  note: (env) =>
+    GENERATIVE_REGIONS.has(env.AWS_REGION || "us-east-1")
+      ? null
+      : `Generative is not available in ${env.AWS_REGION || "us-east-1"} — neural rows only. ` +
+        `Set AWS_REGION to one of: ${[...GENERATIVE_REGIONS].join(", ")}.`,
   lineup: (env) => [
     ...(GENERATIVE_REGIONS.has(env.AWS_REGION || "us-east-1")
       ? [{ voice: "Stephen", model: "generative", styleLabel: "generative (no DRC)", usdPerM: 30 }]

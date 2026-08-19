@@ -43,7 +43,7 @@ test("a generative region auditions generative against neural, with DRC as the t
   assert.deepEqual(rows.map((r) => r.usdPerM), [30, 16, 16]);
 });
 
-test("a region without generative still gets both neural rows", () => {
+test("a region without generative still gets both neural rows, and says why", () => {
   const rows = polly.lineup(NO_GEN_ENV);
   assert.deepEqual(
     rows.map((r) => r.styleLabel),
@@ -52,6 +52,14 @@ test("a region without generative still gets both neural rows", () => {
   // The point of the region check: never plan a generative request that the
   // region will reject while the rest of the batch bills anyway.
   assert.ok(!rows.some((r) => r.model === "generative"));
+
+  // Dropping the row silently is indistinguishable from a broken bench, so
+  // the reason has to reach the screen. It names the region it found and the
+  // ones that would work.
+  const note = polly.note(NO_GEN_ENV);
+  assert.match(note, /Generative is not available in eu-west-3/);
+  assert.match(note, /us-east-1/);
+  assert.equal(polly.note(GEN_ENV), null, "nothing to explain when all three rows are there");
 });
 
 test("only the DRC row goes out as SSML, and its text is XML-escaped", async () => {

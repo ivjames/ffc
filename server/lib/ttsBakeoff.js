@@ -99,7 +99,17 @@ export async function providerStatus(env = process.env) {
         error = err.message;
       }
     }
-    out.push({ key: p.key, label: p.label, configured, why: p.why, voices, error });
+    out.push({
+      key: p.key,
+      label: p.label,
+      configured,
+      why: p.why,
+      voices,
+      error,
+      // Not an error: the provider is in the run, but part of its lineup is
+      // unavailable here and the screen should say why.
+      note: configured ? (p.note?.(env) ?? null) : null,
+    });
   }
   return out;
 }

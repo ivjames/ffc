@@ -167,7 +167,9 @@ Generative is what the bench ships now:
   bench checks `AWS_REGION` against that list **before** planning, because a
   region that serves neural but not generative rejects every generative request
   while the neural half of a batch still bills. In a non-generative region the
-  lineup falls back to Stephen neural and the row says so.
+  generative row is simply not planned, and the screen says why — naming the
+  region it found and the ones that would work. A row that vanishes without a
+  reason is indistinguishable from a broken bench.
 - **One caveat worth weighing for trivia**: AWS documents an emergency-stop
   mechanism against model hallucination, and says it "could end up cutting a
   word during a generation step". A clipped word in a question read to a room

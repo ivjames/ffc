@@ -791,6 +791,9 @@ export type TtsProviderStatus = {
   why: string;
   voices: { id: string; name: string }[];
   error?: string | null;
+  /** The provider is in the run, but part of its lineup is unavailable here —
+   *  today, Polly generative in a region that does not serve it. */
+  note?: string | null;
 };
 export type TtsPlan = {
   venue: TtsVenue;
