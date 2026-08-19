@@ -19,7 +19,8 @@ import { TEST_DATABASE_URL, ensureSchema, testQuery } from "./test-support/testD
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 
 const { pool } = await import("./db.js");
-const { importPack, setPackArchived, prunePack, readPack, PACK_SOURCE } = await import("./importTriviaPack.js");
+const { importPack, setPackArchived, prunePack, refreshPack, countDrifted, readPack, PACK_SOURCE } =
+  await import("./importTriviaPack.js");
 
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const SOURCE = `test-pack-${stamp}`;
@@ -172,6 +173,93 @@ test("prune retires rows a rebuilt pack has dropped, and nothing else", async ()
   assert.equal(house.rows[0].n, 0);
 
   await setPackArchived(client, { archived: false, source: SOURCE });
+});
+
+test("refresh updates a row the pack corrected without changing its prompt", async () => {
+  // The case --prune cannot reach. A typo fix inside an OPTION leaves the
+  // prompt identical, so the row is "already present" to importPack and the
+  // correction never lands: 1,804 rows in the real pack are exactly this.
+  const corrected = ROWS.map((r) =>
+    r.prompt === ROWS[1].prompt ? { ...r, choices: ["Alpha", "Beta", "Gamma", "Hopper"] } : r
+  );
+
+  const reinsert = await importPack(client, corrected, { source: SOURCE });
+  assert.equal(reinsert.inserted, 0, "prompt is unchanged, so nothing is inserted");
+
+  const before = await testQuery(
+    `select choices from trivia_question where source = $1 and prompt = $2`,
+    [SOURCE, ROWS[1].prompt]
+  );
+  assert.deepEqual(before.rows[0].choices, ["Alpha", "Beta", "Gamma", "Delta"], "still stale");
+
+  assert.equal(await countDrifted(client, corrected, { source: SOURCE }), 1);
+
+  const { updated } = await refreshPack(client, corrected, { source: SOURCE });
+  assert.equal(updated, 1);
+
+  const after = await testQuery(
+    `select choices, answer from trivia_question where source = $1 and prompt = $2`,
+    [SOURCE, ROWS[1].prompt]
+  );
+  assert.deepEqual(after.rows[0].choices, ["Alpha", "Beta", "Gamma", "Hopper"]);
+  assert.equal(after.rows[0].answer, ROWS[1].answer, "the answer index still points where the pack says");
+
+  // Idempotent: the bank now agrees with the pack, so there is nothing to do.
+  assert.equal((await refreshPack(client, corrected, { source: SOURCE })).updated, 0);
+  assert.equal(await countDrifted(client, corrected, { source: SOURCE }), 0);
+
+  // Put the fixture back for the tests that follow.
+  await refreshPack(client, ROWS, { source: SOURCE });
+});
+
+test("refresh leaves a client's own question alone, even at the same prompt", async () => {
+  const hijack = [{ ...ROWS[0], choices: ["Zulu", "Yankee", "Xray", "Whiskey"] }];
+  await refreshPack(client, hijack, { source: SOURCE });
+  const mine = await testQuery(
+    `select choices from trivia_question where org_id = $1 and prompt = $2`,
+    [orgId, ROWS[0].prompt]
+  );
+  assert.deepEqual(mine.rows[0].choices, ["Alpha", "Beta"], "the org's own row is untouched");
+  await refreshPack(client, ROWS, { source: SOURCE });
+});
+
+test("refresh does not resurrect a question an operator retired", async () => {
+  // Retiring a question is a judgement about the question; correcting its
+  // spelling must not put it back on the screen behind the operator's back.
+  await testQuery(`update trivia_question set archived_at = now() where source = $1 and prompt = $2`, [
+    SOURCE,
+    ROWS[2].prompt,
+  ]);
+  const corrected = ROWS.map((r) =>
+    r.prompt === ROWS[2].prompt ? { ...r, choices: ["Alpha", "Beta", "Gamma", "Omega"] } : r
+  );
+  const { updated } = await refreshPack(client, corrected, { source: SOURCE });
+  assert.equal(updated, 1, "the text is still corrected");
+  const after = await testQuery(
+    `select choices, archived_at from trivia_question where source = $1 and prompt = $2`,
+    [SOURCE, ROWS[2].prompt]
+  );
+  assert.deepEqual(after.rows[0].choices, ["Alpha", "Beta", "Gamma", "Omega"]);
+  assert.ok(after.rows[0].archived_at, "but it stays retired");
+
+  await testQuery(`update trivia_question set archived_at = null where source = $1 and prompt = $2`, [
+    SOURCE,
+    ROWS[2].prompt,
+  ]);
+  await refreshPack(client, ROWS, { source: SOURCE });
+});
+
+test("refresh --dry-run reports what it would change and writes nothing", async () => {
+  const corrected = ROWS.map((r) =>
+    r.prompt === ROWS[0].prompt ? { ...r, choices: ["Alpha", "Beta", "Gamma", "Sigma"] } : r
+  );
+  const { updated } = await refreshPack(client, corrected, { source: SOURCE, dryRun: true });
+  assert.equal(updated, 1, "it reports the row it would have touched");
+  const after = await testQuery(
+    `select choices from trivia_question where source = $1 and prompt = $2`,
+    [SOURCE, ROWS[0].prompt]
+  );
+  assert.deepEqual(after.rows[0].choices, ["Alpha", "Beta", "Gamma", "Delta"], "but rolled back");
 });
 
 test("archiving the pack leaves the hand-written House Pack dealing", async () => {

@@ -5,6 +5,7 @@
 //   npm run import:trivia -- --archive    retire every row this import created
 //   npm run import:trivia -- --unarchive  put them back
 //   npm run import:trivia -- --prune      also retire rows the pack has dropped
+//   npm run import:trivia -- --refresh    update rows whose text the pack changed
 //
 // Deliberately NOT wired into `npm run migrate`. The schema seed plants the
 // 57-question House Pack because a venue that switches trivia on needs
@@ -123,6 +124,104 @@ export async function importPack(client, rows, { dryRun = false, source = PACK_S
 }
 
 /**
+ * Bring already-imported rows back in line with the pack's text.
+ *
+ * `importPack` matches on the prompt, which is the right key for "have I
+ * seen this question before" and the wrong one for "has this question
+ * changed". A repair that rewrites a prompt therefore arrives as a fresh
+ * insert (and the superseded row is retired by `--prune`), but a repair that
+ * only touches the OPTIONS leaves the prompt identical — so the row reads as
+ * already present and the correction never lands. That is not hypothetical:
+ * the apostrophe, typo and ampersand overlays fix 1,804 rows that way, and
+ * without this they would sit misspelled in the bank forever.
+ *
+ * So the contract is simple and worth stating: for rows this import owns, the
+ * pack is the source of truth, and `--refresh` makes the bank agree with it.
+ * Scoped to `source` and the platform pack, so a client's own questions are
+ * never touched. `archived_at` and `active` are deliberately left alone — an
+ * operator who retired a question was making an editorial decision about the
+ * question, not about its spelling, and fixing a typo must not quietly put it
+ * back on the screen.
+ *
+ * @param {import("pg").PoolClient} client
+ * @param {object[]} rows
+ * @param {{ dryRun?: boolean, source?: string }} opts
+ * @returns {Promise<{ updated: number }>}
+ */
+export async function refreshPack(client, rows, { dryRun = false, source = PACK_SOURCE } = {}) {
+  let updated = 0;
+  await client.query("begin");
+  try {
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const batch = rows.slice(i, i + BATCH);
+      const result = await client.query(
+        `update trivia_question t
+            set choices = p.choices, answer = p.answer,
+                category = p.category, difficulty = p.difficulty
+           from unnest($1::text[], $2::text[], $3::jsonb[], $4::int[], $5::int[])
+                as p(category, prompt, choices, answer, difficulty)
+          where t.org_id is null and t.source = $6 and t.prompt = p.prompt
+            and (t.choices is distinct from p.choices
+                 or t.answer is distinct from p.answer
+                 or t.category is distinct from p.category
+                 or t.difficulty is distinct from p.difficulty)`,
+        [
+          batch.map((r) => r.category),
+          batch.map((r) => r.prompt),
+          batch.map((r) => JSON.stringify(r.choices)),
+          batch.map((r) => r.answer),
+          batch.map((r) => r.difficulty),
+          source,
+        ]
+      );
+      updated += result.rowCount;
+    }
+    await client.query(dryRun ? "rollback" : "commit");
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  }
+  return { updated };
+}
+
+/**
+ * How many imported rows the pack would change — the number `--refresh` acts on.
+ *
+ * @param {import("pg").PoolClient} client
+ * @param {object[]} rows
+ * @param {{ source?: string }} opts
+ * @returns {Promise<number>}
+ */
+export async function countDrifted(client, rows, { source = PACK_SOURCE } = {}) {
+  let drifted = 0;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const result = await client.query(
+      `select count(*)::int as n
+         from trivia_question t
+         join unnest($1::text[], $2::jsonb[], $3::int[], $4::text[], $5::int[])
+              as p(prompt, choices, answer, category, difficulty)
+           on t.prompt = p.prompt
+        where t.org_id is null and t.source = $6
+          and (t.choices is distinct from p.choices
+               or t.answer is distinct from p.answer
+               or t.category is distinct from p.category
+               or t.difficulty is distinct from p.difficulty)`,
+      [
+        batch.map((r) => r.prompt),
+        batch.map((r) => JSON.stringify(r.choices)),
+        batch.map((r) => r.answer),
+        batch.map((r) => r.category),
+        batch.map((r) => r.difficulty),
+        source,
+      ]
+    );
+    drifted += result.rows[0].n;
+  }
+  return drifted;
+}
+
+/**
  * Retire every row this import created, or put them back.
  *
  * Archives rather than deletes, for two reasons: `archived_at` is already what
@@ -194,6 +293,7 @@ export async function prunePack(client, rows, { dryRun = false, source = PACK_SO
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
+  const refresh = process.argv.includes("--refresh");
   const archive = process.argv.includes("--archive");
   const unarchive = process.argv.includes("--unarchive");
   const prune = process.argv.includes("--prune");
@@ -224,6 +324,27 @@ async function main() {
       `[import-trivia] ${dryRun ? "would insert" : "inserted"} ${inserted}, ` +
         `${alreadyPresent} already in the bank`
     );
+
+    // Before --prune, because pruning is about rows the pack DROPPED and this is
+    // about rows it still has: refreshing first means the counts an operator
+    // reads afterwards describe a bank that already agrees with the pack.
+    if (refresh) {
+      const { updated } = await refreshPack(client, rows, { dryRun });
+      console.log(
+        `[import-trivia] ${dryRun ? "would update" : "updated"} ${updated} rows whose text the pack changed`
+      );
+    } else {
+      // Same reasoning as the --prune notice below: an operator who has just
+      // pulled a corrected pack needs to know that inserting alone does not
+      // fix a question whose PROMPT was already right.
+      const drifted = await countDrifted(client, rows);
+      if (drifted > 0) {
+        console.log(
+          `[import-trivia] ${drifted} imported rows differ from the pack — ` +
+            `re-run with --refresh to update them`
+        );
+      }
+    }
 
     if (prune) {
       const { pruned } = await prunePack(client, rows, { dryRun });

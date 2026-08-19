@@ -159,6 +159,37 @@ two prompts sit at the validator's 300-character cap (an inserted apostrophe
 would break the length rule), and same-field text like "The dogs saw the dogs
 bone" is skipped as ambiguous by design.
 
+### Getting corrections into a bank that already has the pack
+
+`npm run import:trivia` matches existing rows on the **prompt**. That is the
+right key for "have I seen this question before" and the wrong one for "has
+this question changed", so a corrected pack splits in two on the way in:
+
+| | |
+|---|---|
+| A repair that changed the **prompt** | arrives as a fresh insert; the superseded row is retired by `--prune` |
+| A repair that only changed the **options** | leaves the prompt identical, so the row reads as already present — `--refresh` is what updates it |
+
+Both halves are real: between the original pack and the repaired one, 2,565
+prompts changed and 1,804 rows changed only below the prompt. On a bank that
+already holds the old pack, the whole remediation is:
+
+```sh
+cd server
+npm run import:trivia -- --dry-run              # see the three numbers first
+npm run import:trivia -- --refresh --prune
+```
+
+which inserts 2,565, updates 1,804 and retires 2,565, leaving 47,710 live rows
+that match the pack exactly. Running it again does nothing. A plain run
+reports both outstanding counts rather than silently leaving them, and
+`--refresh` never touches a client's own questions, never resurrects a
+question an operator archived, and treats the pack as the source of truth only
+for rows carrying its `source`.
+
+On an empty bank none of this applies — the first import loads the corrected
+pack and there is nothing to reconcile.
+
 ### What the build drops, and why
 
 Of 49,716 source questions, 47,710 survive. The build prints the tally; the
