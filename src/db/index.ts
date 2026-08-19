@@ -118,12 +118,15 @@ function newClientId(): string {
 }
 
 /** Build a fresh, empty active round for the given course + roster (and an
- *  optional team tag — punchlist #4 tier 1). */
+ *  optional team tag — punchlist #4 tier 1). `ownerSlot` marks which seat is
+ *  the phone holder's for the achievements wall (null = just keeping score);
+ *  leaving it undefined keeps the old every-seat reading (see types.ts). */
 export function createLocalRound(
   courseId: string,
   playerTags: string[],
   groupTag: string | null = null,
   pars?: number[],
+  ownerSlot?: number | null,
 ): LocalRound {
   const scores: Record<number, (number | null)[]> = {};
   for (let p = 0; p < playerTags.length; p++) {
@@ -140,6 +143,7 @@ export function createLocalRound(
     syncState: 'active',
     // Snapshot: the live catalog can lose this course (see LocalRound.pars).
     ...(pars ? { pars } : {}),
+    ...(ownerSlot !== undefined ? { ownerSlot } : {}),
   };
 }
 

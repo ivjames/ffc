@@ -1,7 +1,8 @@
 // Admin: the live-trivia question bank.
 //   GET    /api/admin/trivia/questions
-//            ?orgId=&locationId=&category=&includeArchived=&limit=&offset=
+//            ?orgId=&locationId=&category=&q=&includeArchived=&limit=&offset=
 //            -> { questions, total, limit, offset }
+//   GET    /api/admin/trivia/categories        -> { categories: [{category, n}] }
 //   POST   /api/admin/trivia/questions          create/update
 //   POST   /api/admin/trivia/questions/:id/archive
 //   POST   /api/admin/trivia/questions/:id/unarchive
@@ -60,6 +61,14 @@ router.get("/questions", async (req, res) => {
   // Narrowing by category is what makes a paged bank usable — 48,000 rows is
   // not a list anyone scrolls, but "Sports" is 2,819 and "For Kids" is 748.
   const category = typeof req.query.category === "string" && req.query.category ? req.query.category : null;
+  // Substring search over the prompt. Even inside one category the smallest
+  // bucket is 173 rows and the largest is 8,201, so "find me that Lennon
+  // question" is not a scrolling problem — it is a search problem.
+  // Escaped before it reaches LIKE: a host searching "50%" or "Rock_n_Roll"
+  // means those characters literally, not as wildcards.
+  const q = typeof req.query.q === "string" && req.query.q.trim()
+    ? req.query.q.trim().slice(0, 100).replace(/([\\%_])/g, "\\$1")
+    : null;
 
   // A super_admin may narrow to one org; an org_admin is pinned to theirs.
   let orgId = scope;
@@ -78,13 +87,14 @@ router.get("/questions", async (req, res) => {
     const where = `where ($1::uuid is null or org_id = $1 or org_id is null)
                      and ($2::uuid is null or location_id = $2 or location_id is null)
                      and ($3::bool or archived_at is null)
-                     and ($4::text is null or category = $4)`;
-    const filters = [orgId, locationId, includeArchived, category];
+                     and ($4::text is null or category = $4)
+                     and ($5::text is null or prompt ilike '%' || $5 || '%' escape '\\')`;
+    const filters = [orgId, locationId, includeArchived, category, q];
     const [result, counted] = await Promise.all([
       pool.query(
         `select ${COLS} from trivia_question ${where}
           order by org_id nulls last, category, created_at, id
-          limit $5 offset $6`,
+          limit $6 offset $7`,
         [...filters, limit, offset]
       ),
       pool.query(`select count(*)::int as n from trivia_question ${where}`, filters),
@@ -98,6 +108,36 @@ router.get("/questions", async (req, res) => {
     });
   } catch (err) {
     console.error("[admin/trivia] list error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// The category filter's options, with a count each. Derived rather than
+// configured: categories are just a text column, so the imported pack, the
+// House Pack seed and anything a venue types are all equally real, and a
+// hard-coded list would go stale the first time someone invented one.
+router.get("/categories", async (req, res) => {
+  const scope = orgScope(req);
+  let orgId = scope;
+  if (!scope && typeof req.query.orgId === "string" && req.query.orgId) {
+    if (!UUID_RE.test(req.query.orgId)) {
+      return res.status(400).json({ ok: false, error: "orgId must be a uuid" });
+    }
+    orgId = req.query.orgId;
+  }
+  try {
+    // Same visibility rule as the list, so the dropdown can never offer a
+    // category that filters down to nothing.
+    const result = await pool.query(
+      `select category, count(*)::int as n from trivia_question
+        where ($1::uuid is null or org_id = $1 or org_id is null)
+          and archived_at is null
+        group by category order by n desc, category`,
+      [orgId]
+    );
+    return res.json({ ok: true, categories: result.rows });
+  } catch (err) {
+    console.error("[admin/trivia] categories error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });

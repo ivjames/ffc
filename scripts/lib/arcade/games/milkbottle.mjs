@@ -69,7 +69,7 @@ export default {
     const sigma = sigmaFor(skill, 30, 2.5);
 
     for (let i = 0; i < RACKS * THROWS_PER_RACK; i++) {
-      if (await d.page.getByRole('button', { name: 'Play again' }).isVisible().catch(() => false)) {
+      if (await d.page.getByRole('button', { name: /^(Play|Race) again$/ }).isVisible().catch(() => false)) {
         break;
       }
       const aimX = AIM.x + gauss(rng) * sigma;

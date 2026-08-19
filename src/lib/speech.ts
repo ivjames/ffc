@@ -223,6 +223,11 @@ export function stopSpeaking(): void {
   }
 }
 
+// Whether this page has handed the browser a gesture-driven utterance yet.
+// Per page load, not per device: the unlock is a property of the document, so
+// it neither persists across a reload nor needs re-doing within one.
+let primed = false;
+
 /** Unlock audio from inside a user gesture and warm the voice list.
  *
  * iOS refuses to speak unless the first utterance comes from a tap, and every
@@ -237,7 +242,28 @@ export function primeSpeech(): void {
     const u = new SpeechSynthesisUtterance(' ');
     u.volume = 0;
     s.speak(u);
+    primed = true;
   } catch {
     /* nothing to prime */
   }
+}
+
+/**
+ * Prime from a tap that is about to lead to speech, if this page hasn't yet.
+ *
+ * The toggle cannot be the only place that primes, because the SETTING IS
+ * PERSISTED and the unlock is not. A host who switched the voice on last
+ * Thursday arrives with speech already enabled, never touches the switch, and
+ * so never hands the browser its gesture-driven utterance — every line is then
+ * refused until they toggle the voice off and on again. That workaround also
+ * loses the phase that was on screen at the time, because a phase is only ever
+ * read once (the spokenPhase guard on both trivia screens), so the game opens
+ * silently and the voice only appears at the NEXT question.
+ *
+ * Cheap and safe on any tap: it does nothing once primed, nothing while the
+ * voice is off, and what it speaks is a single inaudible space.
+ */
+export function primeSpeechOnce(): void {
+  if (primed || !enabled) return;
+  primeSpeech();
 }

@@ -18,11 +18,17 @@ import {
 //
 // ── Whose achievements are these? ───────────────────────────────────────────
 //
-// The wall is per-device, and what "this device played" means depends on how
-// the round was played:
+// The wall is per-device, and a device belongs to a person — the phone holder.
+// Which seats of a round are theirs depends on how the round was played:
 //
-//   pass-and-play  one phone, one group, everyone's scores typed on it — the
-//                  device IS the group, so every slot counts.
+//   pass-and-play  one phone, one group, everyone's scores typed on it — but
+//                  only the seat the setup screen marked as the holder's
+//                  (LocalRound.ownerSlot) counts. A friend's under-par typed
+//                  on your phone is their win, not yours; it still shows on
+//                  the round summary, like the scorecard. ownerSlot null means
+//                  the holder was only keeping score, so no seat is theirs;
+//                  rounds from before the marker existed keep the old
+//                  every-seat reading — there is nothing to re-judge them by.
 //   shared game    each player is on their own phone with their own wall, and
 //                  every device fetches the same roster — so only this device's
 //                  own slot counts, or one player's ace would unlock the badge
@@ -148,8 +154,15 @@ export function playerRounds(
     const slots = r.playerTags.map((_, i) => i);
     const field = slots.map((i) => r.scores[i] ?? []);
     const fieldTags = slots.map((i) => r.playerTags[i] ?? '');
-    // Shared game: this device speaks only for its own seat (see the header).
-    const owned = r.shared ? [r.shared.slot] : slots;
+    // Shared game: this device speaks only for its own seat. Pass-and-play:
+    // only the seat marked as the phone holder's, when the round recorded one
+    // (see the header). An out-of-range marker owns nothing rather than
+    // guessing.
+    const owned = r.shared
+      ? [r.shared.slot]
+      : r.ownerSlot === undefined
+        ? slots
+        : slots.filter((s) => s === r.ownerSlot);
     for (const slot of owned) {
       const strokes = r.scores[slot];
       if (!strokes) continue;
@@ -386,8 +399,9 @@ function nineUnderPar(r: PlayerRound, start: number): boolean {
 // These read the whole history at once. `rs` arrives sorted oldest-first, and
 // carries one entry PER SEAT — which is the trap these rules have to dodge.
 //
-// A pass-and-play round contributes every seat, so a naive scan over `rs` sees
-// a four-player round as four rounds: "two rounds in a day" would fire on one
+// A pass-and-play round can contribute several seats (every seat, on rounds
+// from before the holder marker existed), so a naive scan over `rs` sees a
+// four-player round as four rounds: "two rounds in a day" would fire on one
 // afternoon foursome, and one player's win would break another's losing streak.
 // So each rule below declares its unit:
 //

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
@@ -10,8 +10,11 @@ import {
   isValidTag,
   TAG_LENGTH,
 } from '../../lib/sanitize';
-import { createLocalRound, putRound } from '../../db';
-import { fetchMe, type AppUser } from '../../lib/authApi';
+import { createLocalRound, getAllRounds, putRound } from '../../db';
+import { useSession } from '../../lib/session';
+import { getMyTag, ownerSeatFor, rememberMyTag } from '../../lib/myTag';
+import { lastRoster, recentTags, recentTeamTags } from '../../lib/recentPlayers';
+import type { LocalRound } from '../../types';
 import { createGame, fetchSnapshot } from '../../lib/gamesApi';
 import { createSharedLocalRound } from '../../lib/sharedMerge';
 import { DEV_MODE } from '../../lib/flags';
@@ -41,16 +44,70 @@ export default function PlayerSetup() {
   const [count, setCount] = useState(2);
   const [tags, setTags] = useState<string[]>(['', '', '', '']);
   const [teamTag, setTeamTag] = useState('');
+  // Which seat is the phone holder's — the seat the achievements wall credits
+  // (LocalRound.ownerSlot). 'auto' until the holder taps a choice themselves.
+  const [ownerChoice, setOwnerChoice] = useState<number | 'none' | 'auto'>('auto');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  // Shared-game hosting needs an account (the joiners don't).
-  const [me, setMe] = useState<AppUser | null | 'loading'>('loading');
+  // The shared session store, not a fresh /api/auth/me: it answers instantly
+  // once any screen has resolved it, and it keeps the last authoritative user
+  // when a check is inconclusive — so a signed-in player who lands here fast,
+  // or offline, still gets their own tag preselected below instead of the
+  // fallback. Hosting a shared game reads it too (the joiners don't need it).
+  const { user: me, known: sessionKnown } = useSession();
+  // The device's round history feeds the "play again with..." suggestions.
+  const [history, setHistory] = useState<LocalRound[]>([]);
+  // The tag this phone last played under (lib/myTag) — read once; this screen
+  // is also one of the places that writes it.
+  const [rememberedTag] = useState(() => getMyTag());
+
+  // Whether player 1's field has been hand-edited. The prefill must not fire
+  // after that — "empty" alone can't tell an untouched field from one the
+  // player deliberately cleared while the session request was still in flight.
+  const p1Edited = useRef(false);
 
   useEffect(() => {
-    void fetchMe().then(setMe);
+    void getAllRounds().then(setHistory);
   }, []);
 
+  // Signed-in players with a saved tag get it prefilled as player 1 — the
+  // same assumption arcade play makes — unless they already typed one. The
+  // session store can resolve after this screen mounts, so this reacts to the
+  // user landing rather than fetching again.
+  useEffect(() => {
+    const saved = me?.defaultTag;
+    if (saved && !p1Edited.current) {
+      setTags((prev) => (prev[0] === '' ? [saved, ...prev.slice(1)] : prev));
+    }
+  }, [me]);
+
   const activeTags = useMemo(() => tags.slice(0, count), [tags, count]);
+  // Suggestions derived from history, never a separate store (lib/recentPlayers).
+  const lastGroup = useMemo(() => lastRoster(history), [history]);
+  const tagChips = useMemo(
+    () => recentTags(history).filter((t) => !activeTags.includes(t)),
+    [history, activeTags],
+  );
+  const teamChips = useMemo(
+    () => recentTeamTags(history).filter((t) => t !== teamTag),
+    [history, teamTag],
+  );
+  // Untapped default for "which player is you": the seat whose tag is the
+  // holder's own — the account's saved tag when signed in, else the tag this
+  // phone last played under. A known holder tag that isn't on the roster means
+  // they're just keeping score. A phone with no idea who holds it defaults to
+  // player 1, the convention the shared-game flow states out loud ("Enter your
+  // own tag (player 1)"). One tap overrides any of it.
+  const autoOwner = useMemo<number | 'none'>(
+    () => ownerSeatFor(activeTags, me?.defaultTag ?? rememberedTag),
+    [me, rememberedTag, activeTags],
+  );
+  // An explicit pick of a seat that a lower player count removed falls back to
+  // the default rather than silently crediting whoever now sits there.
+  const owner =
+    ownerChoice === 'auto' || (typeof ownerChoice === 'number' && ownerChoice >= count)
+      ? autoOwner
+      : ownerChoice;
   // The team tag is optional — empty is fine, but a partial/blocked one isn't.
   const teamErr = teamTag.length === 0 ? null : tagError(teamTag);
   const rosterValid = validateRoster(activeTags).ok && teamErr === null;
@@ -67,10 +124,35 @@ export default function PlayerSetup() {
   }
 
   function setTag(i: number, raw: string) {
+    if (i === 0) p1Edited.current = true;
     setFormError(null);
     setTags((prev) => {
       const next = [...prev];
       next[i] = sanitizeTagInput(raw);
+      return next;
+    });
+  }
+
+  /** One-tap refill of the whole form from the last group on this phone. */
+  function useLastGroup() {
+    if (!lastGroup) return;
+    setFormError(null);
+    setCount(lastGroup.tags.length);
+    setTags([0, 1, 2, 3].map((i) => lastGroup.tags[i] ?? ''));
+    // The WHOLE form is the last group's, team included: a teamless last group
+    // must clear a team tag already typed, or the refilled roster would start
+    // under an unrelated team and land on the TV board's Teams tab.
+    setTeamTag(lastGroup.groupTag ?? '');
+  }
+
+  /** Drop a recent tag into the first empty seat; a full roster ignores it. */
+  function addRecentTag(tag: string) {
+    setFormError(null);
+    setTags((prev) => {
+      const seat = prev.findIndex((t, i) => i < count && t === '');
+      if (seat === -1) return prev;
+      const next = [...prev];
+      next[seat] = tag;
       return next;
     });
   }
@@ -91,7 +173,11 @@ export default function PlayerSetup() {
       activeTags,
       teamTag.length === TAG_LENGTH ? teamTag : null,
       courseById(courseId)?.pars,
+      owner === 'none' ? null : owner,
     );
+    // The holder just told us which tag is theirs — remember it so the picker
+    // (and the shared-game flows) preselect right next time.
+    if (owner !== 'none') rememberMyTag(activeTags[owner]);
     await putRound(round);
     navigate(`/golf/play/${round.clientId}`, { replace: true });
   }
@@ -104,7 +190,7 @@ export default function PlayerSetup() {
       setFormError('Enter your own tag (player 1) to host a shared game');
       return;
     }
-    if (me === 'loading') return;
+    if (!sessionKnown) return; // still resolving — same guard as the old fetch
     if (!me) {
       navigate('/me/account');
       return;
@@ -119,6 +205,8 @@ export default function PlayerSetup() {
       );
       return;
     }
+    // Hosting states "player 1 is your own tag" — that's the holder's tag.
+    rememberMyTag(hostTag);
     // Create returns the bare game; the snapshot fills the roster (just us).
     const snap = await fetchSnapshot(res.game.id, res.participantToken);
     const snapshot = snap.ok
@@ -131,7 +219,9 @@ export default function PlayerSetup() {
 
   // Testing aid — roll a random roster (1..4 players, random tags), start the
   // round, and hand the scorecard an auto-play mode so it walks the course on
-  // arrival. Skips the roster form entirely.
+  // arrival. Skips the roster form entirely. No ownerSlot on purpose: nobody
+  // on a rolled roster is the holder, and the legacy every-seat reading keeps
+  // auto-played rounds useful for exercising the wall.
   async function autoStart(mode: 'slow' | 'fast') {
     if (submitting) return;
     const n = 1 + Math.floor(Math.random() * 4); // 1..4 players
@@ -194,6 +284,72 @@ export default function PlayerSetup() {
           })}
         </div>
 
+        {/* Play again with the same people — suggestions derived from the
+            rounds already on this phone (lib/recentPlayers), so regulars never
+            retype a roster. Chips only offer tags not already entered. */}
+        {lastGroup && (
+          <button
+            onClick={useLastGroup}
+            className="key mt-3 w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-fairway-100"
+          >
+            ↺ Last group: <span className="font-arcade">{lastGroup.tags.join(' · ')}</span>
+            {lastGroup.groupTag && (
+              <span className="text-fairway-100/70">
+                {' '}
+                · Team <span className="font-arcade">{lastGroup.groupTag}</span>
+              </span>
+            )}
+          </button>
+        )}
+        {tagChips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-fairway-100/70">Played here before:</span>
+            {tagChips.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => addRecentTag(tag)}
+                className="key font-arcade rounded-full px-3 py-1.5 text-sm font-bold text-fairway-100"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Whose phone is this? Everyone's scores get typed here, but the
+            achievements wall is the holder's own — a friend's hole-in-one on
+            your phone is their badge, not yours. The round records the
+            holder's seat so detection can tell (lib/achievements/detect). */}
+        <label className="mb-2 mt-6 block text-sm font-semibold text-fairway-100/80">
+          Which player is you?{' '}
+          <span className="font-normal text-fairway-100/70">
+            (achievements on this phone count for your player)
+          </span>
+        </label>
+        <div className="grid grid-cols-4 gap-2">
+          {activeTags.map((tag, i) => (
+            <button
+              key={i}
+              onClick={() => setOwnerChoice(i)}
+              aria-pressed={owner === i}
+              className={`rounded-xl py-3 text-lg font-bold ${
+                owner === i ? 'btn-accent text-fairway-50' : 'key text-fairway-100'
+              }`}
+            >
+              {tag.length === TAG_LENGTH ? tag : `P${i + 1}`}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setOwnerChoice('none')}
+          aria-pressed={owner === 'none'}
+          className={`mt-2 w-full rounded-xl py-2.5 text-sm font-semibold ${
+            owner === 'none' ? 'btn-accent text-fairway-50' : 'key text-fairway-100'
+          }`}
+        >
+          Just keeping score
+        </button>
+
         {/* Optional team tag (punchlist #4 tier 1) — one tag for the whole
             group; the round then also lands on the TV board's Teams tab. */}
         <label className="mb-2 mt-6 block text-sm font-semibold text-fairway-100/80">
@@ -220,6 +376,23 @@ export default function PlayerSetup() {
           />
           {teamErr && <span className="text-sm text-danger">{teamErr}</span>}
         </div>
+        {teamChips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-fairway-100/70">Recent teams:</span>
+            {teamChips.map((team) => (
+              <button
+                key={team}
+                onClick={() => {
+                  setFormError(null);
+                  setTeamTag(team);
+                }}
+                className="key font-arcade rounded-full px-3 py-1.5 text-sm font-bold text-fairway-100"
+              >
+                {team}
+              </button>
+            ))}
+          </div>
+        )}
 
         {formError && <p className="mt-4 text-sm text-danger">{formError}</p>}
 
@@ -235,7 +408,7 @@ export default function PlayerSetup() {
           <Button variant="ghost" onClick={() => void startShared()} disabled={submitting}>
             <Icon name="action.play-together" /> Play together (everyone on their own phone)
           </Button>
-          {!me && me !== 'loading' && (
+          {sessionKnown && !me && (
             <p className="mt-1.5 text-center text-xs text-fairway-100/80">
               Hosting needs a (free) account — friends join without one.
             </p>

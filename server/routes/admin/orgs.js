@@ -1,5 +1,5 @@
 // Admin: orgs (owner/franchise level).
-//   GET    /api/admin/orgs                list orgs (+ live location counts)
+//   GET    /api/admin/orgs                list orgs (+ live venue/admin counts)
 //   POST   /api/admin/orgs               create/update (upsert on id, else slug)
 //   GET    /api/admin/orgs/:id           one org + its locations
 //   PATCH  /api/admin/orgs/:id/branding  replace the white-label branding object
@@ -34,10 +34,16 @@ router.get("/", async (req, res) => {
   const includeArchived = req.query.archived === "1" || req.query.archived === "true";
   const scope = orgScope(req); // null (super_admin) or the org_admin's own org id
   try {
+    // adminCount rides along because "this org has no admin account yet" is a
+    // half-finished-onboarding signal the Orgs list calls out, and counting it
+    // client-side would mean GET /users — which an org_admin cannot call at
+    // all. Counted in a scalar subquery, not a second left join: joining both
+    // locations and admin_user would multiply the rows and inflate each count.
     const result = await pool.query(
       `select o.id, o.name, o.slug, o.status, o.sort_order as "sortOrder",
-              o.branding, o.archived_at as "archivedAt",
-              count(l.id) filter (where l.archived_at is null) as "locationCount"
+              o.branding, o.archived_at as "archivedAt", o.created_at as "createdAt",
+              count(l.id) filter (where l.archived_at is null) as "locationCount",
+              (select count(*) from admin_user u where u.org_id = o.id) as "adminCount"
          from org o
          left join location l on l.org_id = o.id
         where ($1::bool or o.archived_at is null)
@@ -46,7 +52,13 @@ router.get("/", async (req, res) => {
         order by o.sort_order, o.name`,
       [includeArchived, scope]
     );
-    return res.json(result.rows.map((r) => ({ ...r, locationCount: Number(r.locationCount) })));
+    return res.json(
+      result.rows.map((r) => ({
+        ...r,
+        locationCount: Number(r.locationCount),
+        adminCount: Number(r.adminCount),
+      }))
+    );
   } catch (err) {
     console.error("[admin/orgs] list error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });

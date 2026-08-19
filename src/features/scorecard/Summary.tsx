@@ -290,6 +290,32 @@ export default function Summary() {
               </>
             )}
           </Button>
+          {/* Share on behalf of one player — their spotlight card, from the
+              phone that holds the scores. Only offered when there's a group;
+              a solo round IS that player's card already. */}
+          {round.playerTags.length >= 2 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 px-1 py-1">
+              <span className="text-xs text-fairway-100/70">Share one player:</span>
+              {round.playerTags.map((tag, p) => (
+                <button
+                  key={p}
+                  disabled={sharing}
+                  onClick={() => {
+                    setSharing(true);
+                    void shareRound(
+                      round,
+                      course,
+                      locationById(course.locationId)?.name,
+                      p,
+                    ).finally(() => setSharing(false));
+                  }}
+                  className="key font-arcade rounded-full px-3 py-1.5 text-sm font-bold text-fairway-100"
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
           <Button
             variant="ghost"
             onClick={() =>

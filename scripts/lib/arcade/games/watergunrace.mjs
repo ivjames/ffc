@@ -116,7 +116,7 @@ export default {
       // than every cycle (the check is a full locator round trip).
       if (++sinceCheck >= 25) {
         sinceCheck = 0;
-        if (await d.page.getByRole('button', { name: 'Play again' }).isVisible().catch(() => false)) {
+        if (await d.page.getByRole('button', { name: /^(Play|Race) again$/ }).isVisible().catch(() => false)) {
           break;
         }
       }

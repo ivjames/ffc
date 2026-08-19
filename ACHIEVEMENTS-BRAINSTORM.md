@@ -420,11 +420,20 @@ written at the existing shared call sites and never sent anywhere.
 
 ### Decisions worth recording
 
-1. **Whose round is it.** Pass-and-play is one phone holding a whole group, so
-   every seat counts toward that device's wall. A shared multi-device game is
-   the opposite — only this device's seat counts, or one player's ace would
-   unlock the badge on all four phones. Same distinction the retired
-   ticket-claim path drew, for the same reason.
+1. **Whose round is it.** A shared multi-device game counts only this device's
+   seat — one player's ace must not unlock the badge on all four phones. Same
+   distinction the retired ticket-claim path drew, for the same reason.
+   Pass-and-play originally counted every seat ("the device IS the group"),
+   which over-credited the phone holder: a friend's under-par typed on your
+   phone lit up *your* wall. Revised — the setup screen now asks which player
+   is you and records the holder's seat on the round (`LocalRound.ownerSlot`,
+   `null` when they're just keeping score), and only that seat feeds the wall
+   and the server-grant import. The seat defaults to the one matching the
+   signed-in account's default tag, else player 1 — the convention the
+   shared-game host flow already states out loud. Rounds from before the
+   marker keep the every-seat reading (there is nothing to re-judge them by),
+   and the round summary still shows every player's badges, like the
+   scorecard above it.
 2. **What a career rule counts.** Flattening history per seat makes a
    four-player afternoon look like four rounds: "two rounds in a day" fired on a
    single foursome, and one player's win broke another's losing streak. Each

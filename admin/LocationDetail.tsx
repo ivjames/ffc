@@ -661,8 +661,10 @@ export default function LocationDetail() {
 
   return (
     <div className="space-y-4">
-      <BackLink to={location.orgId ? `/orgs/${location.orgId}` : '/orgs'}>
-        {location.orgId ? 'Org' : 'Orgs'}
+      {/* Back to the org's Venues tab, i.e. the list this venue came from —
+          not the org's overview, which is one more click from where you were. */}
+      <BackLink to={location.orgId ? `/orgs/${location.orgId}/venues` : '/orgs'}>
+        {location.orgId ? 'Org venues' : 'Orgs'}
       </BackLink>
       <PageHeader
         title={location.name}

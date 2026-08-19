@@ -890,3 +890,174 @@ test("the network grace outlives the clock that closes the question", async () =
   });
   assert.equal(late.status, 200, "a tap inside the grace is still a tap inside the grace");
 });
+
+// --- Games without any host -------------------------------------------------
+//
+// Two hostless shapes, both driven by the autopilot the room already runs on:
+// an OPEN game is put on the venue's chalkboard (the /sessions/open listing,
+// join code included) for anyone in the bar to walk into; a PRIVATE game — the
+// default — is a room among friends that only the shared code can find.
+
+test("config.open is validated and echoed back, and defaults to private", async () => {
+  const bad = await post(
+    "/api/trivia/sessions",
+    { locationId, questionCount: 3, config: { open: "yes" } },
+    hostCookie
+  );
+  assert.equal(bad.status, 400);
+
+  const { id, joinCode } = await createSession({ config: { open: true } });
+  const { snapshot } = await join(joinCode, "Walk-up");
+  assert.equal(snapshot.session.config.open, true, "the room knows it is open");
+  assert.ok(id);
+
+  const { joinCode: privateCode } = await createSession();
+  const seated = await join(privateCode, "Friend");
+  assert.equal(seated.snapshot.session.config.open, false, "private is the default");
+});
+
+test("the open-games list shows open rooms with their codes, and never private ones", async () => {
+  const open = await createSession({ config: { open: true } });
+  const priv = await createSession();
+  await join(open.joinCode, "Early Bird");
+
+  const res = await fetch(`${baseUrl}/api/trivia/sessions/open?locationId=${locationId}`);
+  assert.equal(res.status, 200);
+  const body = await json(res);
+
+  const listed = body.sessions.find((s) => s.id === open.id);
+  assert.ok(listed, "the open room is on the chalkboard");
+  assert.equal(listed.joinCode, open.joinCode, "listing an open room means handing out its code");
+  assert.equal(listed.status, "lobby");
+  assert.equal(listed.entrantCount, 1);
+  assert.equal(listed.totalQuestions, 3);
+  assert.ok(Number.isInteger(listed.questionSeconds));
+
+  assert.ok(
+    !body.sessions.some((s) => s.id === priv.id),
+    "a private game must never appear — its code is the only way in"
+  );
+});
+
+test("a finished open game leaves the chalkboard", async () => {
+  const { id, hostToken, joinCode } = await createSession({ config: { open: true } });
+  await join(joinCode, "Closer");
+  await post(`/api/trivia/sessions/${id}/end`, { host: hostToken });
+
+  const body = await json(
+    await fetch(`${baseUrl}/api/trivia/sessions/open?locationId=${locationId}`)
+  );
+  assert.ok(!body.sessions.some((s) => s.id === id), "final games are not joinable");
+});
+
+test("the open-games list is a join surface, so it takes the module gate", async () => {
+  await createSession({ config: { open: true } });
+  await testQuery(`update location set modules = $1::jsonb where id = $2`, [
+    JSON.stringify({ arcade: false }),
+    locationId,
+  ]);
+  try {
+    const res = await fetch(`${baseUrl}/api/trivia/sessions/open?locationId=${locationId}`);
+    assert.equal(res.status, 403);
+  } finally {
+    await testQuery(`update location set modules = '{}'::jsonb where id = $1`, [locationId]);
+  }
+});
+
+test("when every entrant has answered, the question closes early instead of running out the clock", async () => {
+  // In a hostless room nobody can tap "close answers", so the time between the
+  // last answer and the deadline is pure dead air. The deadline is pulled
+  // forward to a short beat — never extended — and the ticker makes the actual
+  // transition, exactly as if the clock had run out.
+  const { id, hostToken, joinCode } = await createSession({
+    config: { questionSeconds: 45, revealSeconds: 5, lobbySeconds: 10, speedBonus: false },
+  });
+  const alice = await join(joinCode, "Alice");
+  const bob = await join(joinCode, "Bob");
+  await advance(id, hostToken); // -> question
+
+  const opened = (
+    await testQuery(`select auto_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+
+  await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: alice.participantToken,
+    choice: 0,
+  });
+  const oneIn = (
+    await testQuery(`select auto_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.deepEqual(
+    oneIn.auto_at,
+    opened.auto_at,
+    "one answer of two leaves the clock alone — the other player is still thinking"
+  );
+
+  await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: bob.participantToken,
+    choice: 0,
+  });
+  const allIn = (
+    await testQuery(`select auto_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  const msLeft = new Date(allIn.auto_at).getTime() - Date.now();
+  assert.ok(
+    msLeft < 5000,
+    `everyone answered, so the reveal should be a beat away, not ${msLeft}ms`
+  );
+
+  // And the shortened deadline behaves like any other: the ticker reveals.
+  await expireDeadline(id);
+  await tickAutopilot();
+  const now = (
+    await testQuery(`select status from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.equal(now.status, "reveal");
+});
+
+test("a new entrant mid-question restores a fast-forwarded deadline; a device at an existing seat does not", async () => {
+  // The fast-forward's premise is "everyone has answered". A NEW name on the
+  // board un-fulfills it, so the deadline goes back to the question's natural
+  // close — the countdown the newcomer's screen shows. A second device
+  // sitting down at a seat that already answered changes no count, so it
+  // must not hand a dead question its air back.
+  const { id, hostToken, joinCode } = await createSession({
+    config: { questionSeconds: 45, revealSeconds: 5, lobbySeconds: 10, speedBonus: false },
+  });
+  const table = await join(joinCode, "The Regulars", { isTeam: true });
+  await advance(id, hostToken); // -> question
+
+  await post(`/api/trivia/sessions/${id}/answer`, {
+    participant: table.participantToken,
+    choice: 0,
+  });
+  const shortened = (
+    await testQuery(`select auto_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.ok(
+    new Date(shortened.auto_at).getTime() - Date.now() < 5000,
+    "the only entrant answered, so the deadline was pulled in"
+  );
+
+  // A teammate's phone joins the answered table: same seat, same counts —
+  // the shortened deadline stands.
+  await join(joinCode, "The Regulars", { isTeam: true });
+  const stillShort = (
+    await testQuery(`select auto_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  assert.deepEqual(stillShort.auto_at, shortened.auto_at);
+
+  // A brand-new solo player joins: they haven't answered, so the question is
+  // open again for the time everyone's countdown promised.
+  await join(joinCode, "Walk-in");
+  const restored = (
+    await testQuery(`select auto_at, asked_at from trivia_session where id = $1`, [id])
+  ).rows[0];
+  const msLeft = new Date(restored.auto_at).getTime() - Date.now();
+  assert.ok(msLeft > 30_000, `expected the natural deadline back, got ${msLeft}ms`);
+  const fullMs = new Date(restored.auto_at).getTime() - new Date(restored.asked_at).getTime();
+  assert.ok(
+    fullMs <= 46_500 + 100,
+    `a restore is never an extension past length + grace, got ${fullMs}ms`
+  );
+});

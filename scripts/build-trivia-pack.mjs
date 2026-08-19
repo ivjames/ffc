@@ -14,7 +14,7 @@
 // prompt — so re-running this on an unchanged corpus produces an empty diff
 // and a rebuild after an upstream change only churns the questions that moved.
 import { createWriteStream } from "node:fs";
-import { readdir, readFile, mkdir, stat } from "node:fs/promises";
+import { readdir, readFile, mkdir, stat, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
@@ -25,7 +25,17 @@ import { fileURLToPath } from "node:url";
 import {
   CATEGORY_LABELS,
   REJECT_REASONS,
+  MAX_CHOICE_CHARS,
+  MAX_PROMPT_CHARS,
+  applyPackAmpersands,
+  applyPackRepairs,
+  applyPackTypos,
   decodeMixedUtf8,
+  dropOversized,
+  loadPackAmpersands,
+  loadPackRepairs,
+  loadPackTypos,
+  packPromptLineage,
   parseCategoryFile,
   toPackRow,
 } from "./lib/trivia-pack.mjs";
@@ -33,6 +43,7 @@ import {
 const execFileAsync = promisify(execFile);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const PACK_PATH = join(ROOT, "server", "seed", "open-trivia-pack.ndjson.gz");
+export const LINEAGE_PATH = join(ROOT, "server", "seed", "open-trivia-lineage.ndjson");
 
 const UPSTREAM = "https://github.com/uberspot/OpenTriviaQA";
 const LICENSE = "CC BY-SA 4.0";
@@ -109,6 +120,29 @@ async function main() {
   // question moving between upstream files does not reshuffle the whole file.
   rows.sort((a, b) => (a.category === b.category ? cmp(a.prompt, b.prompt) : cmp(a.category, b.category)));
 
+  // Judgment repairs go on last, after the sort and the shuffle, both of which
+  // are seeded on the unrepaired prompt — so patching the committed pack in
+  // place (scripts/repair-trivia-pack.mjs) and rebuilding from upstream land
+  // on the identical artifact.
+  const repairs = applyPackRepairs(rows, loadPackRepairs());
+  const typos = applyPackTypos(rows, loadPackTypos());
+  const ampersands = applyPackAmpersands(rows, loadPackAmpersands());
+  const skippedByReason = new Map();
+  for (const s of [...repairs.skipped, ...typos.skipped, ...ampersands.skipped]) {
+    skippedByReason.set(s.reason, (skippedByReason.get(s.reason) ?? 0) + 1);
+  }
+
+  // Length is judged last, on the repaired text: restoring an apostrophe or an
+  // ampersand makes a row longer, so measuring before the overlays would keep
+  // rows that end up over the line.
+  const sized = dropOversized(rows);
+  rows.length = 0;
+  rows.push(...sized.kept);
+  // Recount after the drop, or the per-category tally below describes a pack
+  // that was never written.
+  perCategory.clear();
+  for (const row of rows) perCategory.set(row.category, (perCategory.get(row.category) ?? 0) + 1);
+
   const header = {
     pack: "opentriviaqa",
     source: UPSTREAM,
@@ -121,17 +155,37 @@ async function main() {
   const lines = [header, ...rows].map((o) => `${JSON.stringify(o)}\n`);
   await pipeline(Readable.from(lines), createGzip({ level: 9 }), createWriteStream(PACK_PATH));
 
+  // Beside the pack: where each repaired prompt came from, so the importer can
+  // tell a corrected question from a new one. See server/importTriviaPack.js.
+  const present = new Set(rows.map((r) => r.prompt));
+  const lineage = [...packPromptLineage()]
+    .filter(([, now]) => present.has(now))
+    .map(([was, now]) => `${JSON.stringify({ was, now })}\n`)
+    .sort();
+  await writeFile(LINEAGE_PATH, lineage.join(""));
+
   const packed = (await stat(PACK_PATH)).size;
   console.log(`[build-trivia-pack] read ${read} source questions from ${files.length} files`);
   console.log(`[build-trivia-pack] encoding: ${repairedBytes} bytes repaired via CP1252, ${droppedBytes} dropped`);
   for (const reason of REJECT_REASONS) {
     console.log(`[build-trivia-pack]   dropped ${String(rejects[reason]).padStart(5)}  ${reason}`);
   }
+  console.log(`[build-trivia-pack] apostrophe repairs: ${repairs.applied} applied, ${repairs.skipped.length} skipped`);
+  console.log(`[build-trivia-pack] typo repairs: ${typos.applied} applied, ${typos.skipped.length} skipped`);
+  console.log(`[build-trivia-pack] ampersands: ${ampersands.applied} applied, ${ampersands.skipped.length} skipped`);
+  for (const [reason, n] of skippedByReason) {
+    console.log(`[build-trivia-pack]   skipped ${String(n).padStart(5)}  ${reason}`);
+  }
+  console.log(
+    `[build-trivia-pack] too long to deal: ${sized.dropped.length} dropped ` +
+      `(${sized.longPrompt} prompt over ${MAX_PROMPT_CHARS}, ${sized.longChoice} option over ${MAX_CHOICE_CHARS})`
+  );
   console.log(`[build-trivia-pack] kept ${rows.length} questions across ${perCategory.size} categories`);
   for (const [category, n] of [...perCategory].sort((a, b) => b[1] - a[1])) {
     console.log(`[build-trivia-pack]   ${String(n).padStart(5)}  ${category}`);
   }
   console.log(`[build-trivia-pack] wrote ${PACK_PATH} (${(packed / 1e6).toFixed(2)} MB gzipped)`);
+  console.log(`[build-trivia-pack] wrote ${LINEAGE_PATH} (${lineage.length} repaired prompts traced)`);
   console.log("[build-trivia-pack] no model or API calls — this build costs nothing but CPU");
 }
 

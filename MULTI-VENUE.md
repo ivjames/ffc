@@ -149,8 +149,10 @@ subdomain is live
 immediately (the tenant cache is cleared in-process): no SSH, no DNS, no
 cert, no deploy — the wildcard vhost/cert/record already cover every slug.
 Create-only semantics: an existing org/location slug 409s, never overwrites.
-Follow-ups (logo/icon uploads, ticket caps, hunt items) happen on the
-existing org/venue pages.
+It is also the ONLY way to create an org: the Orgs page's "+ New site" opens
+this wizard, and the old bare name+slug form is gone. Follow-ups (logo/icon
+uploads, extra venues, admin accounts, ticket caps, hunt items) happen on the
+org's own tabbed page and its venue pages.
 
 ## 7. Follow-ups
 
@@ -253,16 +255,26 @@ the existing staging FQDN, because the wildcard machinery is domain-agnostic:
 Once the platform is live on its domain, onboarding an operator is Master
 Control work only — target well under an hour:
 
-1. **Org**: Orgs → create (name + slug; the slug IS their subdomain — choose
-   like a permanent identifier, it shouldn't change later).
-2. **Branding**: org page → Branding card — app name, short name, colors,
-   share footer; upload logo marks and the two PWA icons (192/512 PNG).
-3. **Locations**: Location wizard per park — name, slug, coords, geofence
-   radius, timezone, hours; POS config if the venue has CenterEdge.
-4. **Courses**: per location — name, theme, hole count, pars.
-5. **Admin access**: create their `org_admin` account (scoped to the org).
-6. **Verify**: open `https://<slug>.DOMAIN` — their catalog, their branding,
-   their manifest; their admin login sees only their org.
-7. **Hand-off artifacts**: their URL for venue QR codes; their Master Control
+1. **Everything at once**: Orgs → **+ New site** (the Provision site wizard) —
+   org + branding + first venue + courses + the org admin's emailed invite, in
+   one transaction. The slug IS their subdomain: choose it like a permanent
+   identifier, it shouldn't change later. There is deliberately no "create a
+   bare org" path — an org with no branding, no venue and no admin account
+   serves an empty stock-looking site nobody can administer.
+2. **Finish up on the org page** (`/orgs/:id`), which is tabbed by concern.
+   Its Overview tab carries a setup checklist that names whatever is still
+   missing:
+   - **Branding** tab — app name, short name, colors, share footer; upload
+     logo marks and the two PWA icons (192/512 PNG).
+   - **Venues** tab — one venue per park (+ Location): name, slug, coords,
+     geofence radius, timezone, hours; POS config if the venue has CenterEdge.
+     Courses are added from each venue's own page (name, theme, holes, pars).
+   - **Team** tab (super_admin) — their `org_admin` accounts: invite by email
+     (they set their own password from the emailed link), resend a link, or
+     remove access.
+3. **Verify**: open `https://<slug>.DOMAIN` — their catalog, their branding,
+   their manifest; their admin login sees only their org. The org page's
+   header links straight there ("View site").
+4. **Hand-off artifacts**: their URL for venue QR codes; their Master Control
    login; note that geofence enforcement is per-deployment
    (`VITE_GEOFENCE_ENFORCED`) and venue coords must be set before enabling.

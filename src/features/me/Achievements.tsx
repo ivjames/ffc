@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Screen, TopBar, Content } from '../../ui/components';
 import { getActivity, getAllRounds, getEarnedBadges, putEarnedBadges, putRound } from '../../db';
-import { fetchRewards } from '../../sync';
+import { fetchRewards, type RewardRow } from '../../sync';
 import type { LocalRound } from '../../types';
 import { useContentRevision } from '../../data/courses';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
@@ -146,8 +146,9 @@ export default function Achievements() {
  * fails simply stays unmarked and is retried on the next visit.
  *
  * Ownership follows the same rule the detection rules use: a shared game speaks
- * only for this device's seat; pass-and-play speaks for the whole group on the
- * phone.
+ * only for this device's seat, and pass-and-play speaks for the seat marked as
+ * the phone holder's — every seat only on rounds from before that marker
+ * existed, and nobody's when the holder was just keeping score.
  */
 async function importServerGrants(rounds: LocalRound[]): Promise<void> {
   const pending = rounds.filter((r) => r.syncState === 'synced' && r.grantsImportedAt == null);
@@ -156,9 +157,7 @@ async function importServerGrants(rounds: LocalRound[]): Promise<void> {
     pending.map(async (round) => {
       try {
         const rows = await fetchRewards(round.clientId);
-        const slot = round.shared?.slot;
-        const mine = slot == null ? rows : rows.filter((r) => r.playerIndex === slot);
-        await putEarnedBadges(mine.map((r) => r.achievement));
+        await putEarnedBadges(ownedGrants(round, rows).map((r) => r.achievement));
         await putRound({ ...round, grantsImportedAt: Date.now() });
       } catch {
         // Offline, or the server hiccuped. Leave the round unmarked so the next
@@ -167,6 +166,14 @@ async function importServerGrants(rounds: LocalRound[]): Promise<void> {
       }
     }),
   );
+}
+
+/** The grant rows this device's wall may bank (see importServerGrants). */
+function ownedGrants(round: LocalRound, rows: RewardRow[]): RewardRow[] {
+  const slot = round.shared ? round.shared.slot : round.ownerSlot;
+  if (slot === undefined) return rows; // pre-marker pass-and-play: every seat
+  if (slot === null) return []; // the holder was just keeping score
+  return rows.filter((r) => r.playerIndex === slot);
 }
 
 /** Earned badges rise to the top of their section; catalog order otherwise. */

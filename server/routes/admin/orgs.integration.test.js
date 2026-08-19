@@ -132,6 +132,50 @@ test("POST /api/admin/orgs 409s on a slug collision", async () => {
   assert.equal(third.status, 409);
 });
 
+// The Orgs list flags half-finished onboarding ("no venue, no admin account"),
+// which needs both counts to be right at once — a naive second left join would
+// multiply the rows and inflate them.
+test("GET /api/admin/orgs counts venues and admin accounts independently", async () => {
+  const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const created = await (
+    await api("/api/admin/orgs", {
+      method: "POST",
+      body: JSON.stringify({ name: "Counted Org", slug: `counted-org-${stamp}` }),
+    })
+  ).json();
+  const orgId = created.org.id;
+  orgIds.push(orgId);
+
+  const bare = (await (await api("/api/admin/orgs")).json()).find((o) => o.id === orgId);
+  assert.equal(bare.locationCount, 0);
+  assert.equal(bare.adminCount, 0);
+  assert.ok(bare.createdAt, "createdAt is exposed for the org's identity card");
+
+  // Two venues and two accounts: 2 and 2, not 4 and 4.
+  await testQuery(
+    `insert into location (name, slug, org_id) values ($1, $2, $3), ($4, $5, $3)`,
+    [`A ${stamp}`, `a-${stamp}`, orgId, `B ${stamp}`, `b-${stamp}`]
+  );
+  await testQuery(
+    `insert into admin_user (email, role, org_id) values ($1, 'org_admin', $3), ($2, 'org_admin', $3)`,
+    [`one-${stamp}@example.com`, `two-${stamp}@example.com`, orgId]
+  );
+  try {
+    const row = (await (await api("/api/admin/orgs")).json()).find((o) => o.id === orgId);
+    assert.equal(row.locationCount, 2);
+    assert.equal(row.adminCount, 2);
+
+    // An archived venue drops out of locationCount; the accounts are untouched.
+    await testQuery(`update location set archived_at = now() where slug = $1`, [`a-${stamp}`]);
+    const afterArchive = (await (await api("/api/admin/orgs")).json()).find((o) => o.id === orgId);
+    assert.equal(afterArchive.locationCount, 1);
+    assert.equal(afterArchive.adminCount, 2);
+  } finally {
+    await testQuery(`delete from admin_user where org_id = $1`, [orgId]);
+    await testQuery(`delete from location where org_id = $1`, [orgId]);
+  }
+});
+
 test("GET /api/admin/orgs lists orgs with live locationCount, hides archived unless asked", async () => {
   const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const created = await (

@@ -1,259 +1,105 @@
-import { useRef, useState } from 'react';
+// One org — the tenant page. An org IS the customer: its slug is their
+// subdomain, its branding is their app, its venues are their parks, and its
+// admin accounts are their logins. All four used to be either invisible here
+// (the address, the accounts) or buried under a 350-line branding form, so
+// this page is tabbed: identity and lifecycle stay in the header, and each
+// concern gets a deep-linkable route of its own (/orgs/:id/venues, /branding,
+// /team) instead of competing for the same scroll.
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { api, type Branding, type BrandingAssetKind, type Org } from './api';
-import { BackLink, Button, Card, Field, Input, Banner, PageHeader, Pill, Spinner, useAsync, useToast } from './ui';
-import { AppPreview, InstallPreview, ContrastNotes } from './OrgBrandingPreview';
-import { deriveAppIcons } from './appIcon';
+import { api, type AdminUser, type Location, type Org } from './api';
+import {
+  BackLink,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Banner,
+  PageHeader,
+  Pill,
+  Spinner,
+  TabNav,
+  fmtDateTime,
+  useAsync,
+  useToast,
+} from './ui';
+import BrandingCard from './OrgBranding';
+import OrgTeam from './OrgTeam';
+import { orgPlayerHost, orgPlayerUrl } from './platform';
 
-// The platform defaults from MULTI-VENUE.md §2 — shown as placeholders so an
-// empty field visibly means "use the platform default". The logo trio has NO
-// platform default (undefined here): absent means the player app shows no
-// logo anywhere until the org uploads one. The server holds the canonical
-// copy (server/lib/branding.js); this list only feeds placeholders and the
-// color-swatch fallback, so drift is cosmetic, not behavioral.
-export const BRANDING_DEFAULTS = {
-  appName: 'Mini Golf Scorecard',
-  shortName: 'MiniGolf',
-  themeColor: '#15803d',
-  backgroundColor: '#052e16',
-  accentColor: '#38bdf8',
-  logoUrl: undefined,
-  logoBadgeUrl: undefined,
-  logoWordmarkUrl: undefined,
-  icon192Url: '/icons/icon-192.png',
-  icon512Url: '/icons/icon-512.png',
-  shareFooter: 'Come beat this score',
-} satisfies Record<keyof Branding, string | undefined>;
+const autoSlug = (v: string) =>
+  v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
-type BrandingKey = keyof Branding;
-const BRANDING_KEYS = Object.keys(BRANDING_DEFAULTS) as BrandingKey[];
-
-const HEX_RE = /^#[0-9a-fA-F]{6}$/;
-
-/** Editor state → the full-replace PATCH body: only non-empty fields ship.
- *  All-blank collapses to {} — valid, and means "all platform defaults". */
-export function buildBrandingPayload(values: Record<BrandingKey, string>): Branding {
-  const out: Branding = {};
-  for (const key of BRANDING_KEYS) {
-    const v = values[key].trim();
-    if (v !== '') out[key] = v;
-  }
-  return out;
-}
-
-function ColorField({
-  label,
-  value,
-  def,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  def: string;
-  onChange: (v: string) => void;
-}) {
-  // The native swatch needs a valid #rrggbb at all times — while the text is
-  // blank or mid-edit it previews the default instead.
-  const swatch = HEX_RE.test(value.trim()) ? value.trim() : def;
+/** One labelled fact in the identity card. */
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <Field label={label} hint={`Blank = platform default (${def}).`}>
-      <div className="flex items-center gap-2">
-        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={def} />
-        <input
-          type="color"
-          aria-label={`${label} swatch`}
-          value={swatch}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-8 w-10 shrink-0 cursor-pointer rounded-md border border-slate-300 bg-white p-0.5"
-        />
-      </div>
-    </Field>
-  );
-}
-
-/** Tiny logo preview next to a URL field; disappears (rather than showing a
- *  broken-image glyph) if the URL doesn't load. Note "/…" paths resolve
- *  against the admin origin here, so a player-bundle path may not preview —
- *  that's fine, the field is still valid. */
-function LogoPreview({ url }: { url: string }) {
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  if (failedUrl === url) return null;
-  return (
-    <img
-      src={url}
-      alt=""
-      onError={() => setFailedUrl(url)}
-      className="h-8 w-8 shrink-0 rounded bg-slate-100 object-contain ring-1 ring-slate-200"
-    />
-  );
-}
-
-function UrlField({
-  label,
-  value,
-  def,
-  onChange,
-  accept,
-  onUpload,
-}: {
-  label: string;
-  value: string;
-  /** Platform default, or undefined for fields with none (the logo trio). */
-  def: string | undefined;
-  onChange: (v: string) => void;
-  /** File-picker filter for the Upload button (icons are PNG-only). */
-  accept: string;
-  /** Uploads the picked file; the parent fills the field / reports errors. */
-  onUpload: (file: File) => Promise<void>;
-}) {
-  // Per-field busy state: only THIS field's Upload button shows "Uploading…".
-  const [busy, setBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const trimmed = value.trim();
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // let the same file be re-picked after a fix
-    if (!file) return;
-    setBusy(true);
-    try {
-      await onUpload(file);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Field
-      label={label}
-      hint={`"/path" or "https://…", or upload a file. Blank = ${def ?? 'no logo (no platform default)'}.`}
-    >
-      <div className="flex items-center gap-2">
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={def ?? 'No platform default — upload a file or paste a URL'}
-          inputMode="url"
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          accept={accept}
-          className="hidden"
-          aria-label={`${label} file`}
-          onChange={(e) => void onFile(e)}
-        />
-        <Button variant="ghost" disabled={busy} onClick={() => fileRef.current?.click()}>
-          {busy ? 'Uploading…' : 'Upload'}
-        </Button>
-        {trimmed !== '' && <LogoPreview url={trimmed} />}
-      </div>
-    </Field>
-  );
-}
-
-// Branding URL field → the asset kind its Upload button posts.
-const ASSET_KIND_BY_FIELD = {
-  logoUrl: 'logo',
-  logoBadgeUrl: 'logoBadge',
-  logoWordmarkUrl: 'logoWordmark',
-  icon192Url: 'icon192',
-  icon512Url: 'icon512',
-} as const satisfies Partial<Record<BrandingKey, BrandingAssetKind>>;
-type AssetField = keyof typeof ASSET_KIND_BY_FIELD;
-
-// Client-side mirrors of the server caps (server/lib/brandAssets.js), so an
-// obviously-bad pick fails fast without a round trip. The server re-checks.
-const MAX_ASSET_BYTES = 1024 * 1024; // 1 MiB
-const ICON_SIDE: Partial<Record<BrandingAssetKind, number>> = { icon192: 192, icon512: 512 };
-
-/** A titled group of branding fields. The old form was one flat 12-input grid
- *  where "app name" sat beside "icon 512 URL" — grouping is what makes it
- *  possible to find the field you came for. */
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-4">
-      <h3 className="mb-2 border-b border-slate-200 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {title}
-      </h3>
-      <div className="grid grid-cols-2 gap-2">{children}</div>
+    <div className="min-w-0">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm text-slate-800">{children}</dd>
     </div>
   );
 }
 
-function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
-  const [values, setValues] = useState<Record<BrandingKey, string>>(() => {
-    const stored = org.branding ?? {};
-    return Object.fromEntries(BRANDING_KEYS.map((k) => [k, stored[k] ?? ''])) as Record<
-      BrandingKey,
-      string
-    >;
-  });
+/** A setup-checklist line: done, or what to do about it. */
+function CheckRow({ done, label, children }: { done: boolean; label: string; children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2.5 border-t border-slate-100 py-2 first:border-0">
+      <span
+        aria-hidden="true"
+        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+          done ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+        }`}
+      >
+        {done ? '✓' : '!'}
+      </span>
+      <span className="min-w-0 text-sm">
+        <span className="font-medium text-slate-800">{label}</span>
+        <span className="ml-1.5 text-slate-500">{children}</span>
+      </span>
+    </li>
+  );
+}
+
+/** Rename / re-slug / reorder. super_admin only, matching the server's gate on
+ *  POST /orgs. The slug edit is deliberately grim about consequences: it is
+ *  the org's subdomain, so changing it moves the player app to a new address
+ *  and every QR code, bookmark and installed PWA pointing at the old one
+ *  stops resolving to this tenant. */
+function IdentityForm({ org, onSaved }: { org: Org; onSaved: () => void }) {
+  const [name, setName] = useState(org.name);
+  const [slug, setSlug] = useState(org.slug);
+  const [sortOrder, setSortOrder] = useState(String(org.sortOrder));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const toast = useToast();
+  const slugChanged = slug.trim() !== org.slug;
 
-  const set = (key: BrandingKey) => (v: string) => setValues((cur) => ({ ...cur, [key]: v }));
-
-  // Upload handler for one URL field: pre-check (size; PNG-only for the icon
-  // kinds), post the file, then fill the text field with the returned
-  // /api/brand-assets/... URL. Saving is still the explicit Save button —
-  // the upload endpoint never touches org.branding.
-  const [uploading, setUploading] = useState(false);
-  const uploadFor = (key: AssetField) => async (file: File) => {
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
     setErr(null);
-    const kind = ASSET_KIND_BY_FIELD[key];
-    const iconSide = ICON_SIDE[kind];
-    if (iconSide && !(file.type === 'image/png' || /\.png$/i.test(file.name))) {
-      setErr(`The ${iconSide} icon must be a PNG (exactly ${iconSide}×${iconSide}).`);
+    if (
+      slugChanged &&
+      !window.confirm(
+        `Move ${org.name} from ${orgPlayerHost(org.slug)} to ${orgPlayerHost(
+          slug.trim()
+        )}? Existing QR codes, bookmarks and installed apps pointing at the old address will stop reaching this org.`
+      )
+    ) {
       return;
     }
-    if (file.size > MAX_ASSET_BYTES) {
-      setErr('That file is too large (max 1 MiB).');
-      return;
-    }
-    setUploading(true);
-    try {
-      const { url } = await api.uploadBrandingAsset(org.id, kind, file);
-      set(key)(url);
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  // "Use logo" — derive BOTH manifest icons from the logo this org already
-  // uploaded and push them through the same upload endpoint a hand-made file
-  // uses. The icon kinds demand PNG at exactly 192/512 (so the manifest cannot
-  // lie to the installer), which a logo never is; this does that conversion in
-  // the browser rather than teaching the server to resize images. See appIcon.ts.
-  //
-  // The fields are filled, not saved — Save branding stays the one explicit
-  // commit, exactly like a manual upload.
-  const [deriving, setDeriving] = useState(false);
-  async function useLogoAsIcon() {
-    setErr(null);
-    setDeriving(true);
-    try {
-      const background = values.backgroundColor.trim() || BRANDING_DEFAULTS.backgroundColor;
-      const derived = await deriveAppIcons(values.logoUrl.trim(), background);
-      for (const { kind, file } of derived) {
-        const { url } = await api.uploadBrandingAsset(org.id, kind, file);
-        set(kind === 'icon192' ? 'icon192Url' : 'icon512Url')(url);
-      }
-      toast('Icons generated from the logo — review them, then Save branding.');
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setDeriving(false);
-    }
-  }
-
-  async function save() {
-    setErr(null);
     setBusy(true);
     try {
-      await api.updateOrgBranding(org.id, buildBrandingPayload(values));
-      toast('Branding saved.');
+      // Branding is deliberately omitted: the upsert preserves the stored
+      // object when the field is absent, so a rename can never clobber the
+      // Branding tab's work.
+      await api.saveOrg({
+        id: org.id,
+        name: name.trim(),
+        slug: slug.trim(),
+        sortOrder: Number(sortOrder) || 0,
+      });
+      toast('Org saved.');
       onSaved();
     } catch (e) {
       setErr((e as Error).message);
@@ -264,180 +110,236 @@ function BrandingCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
 
   return (
     <Card>
-      <h2 className="mb-1 text-sm font-semibold text-slate-700">Branding</h2>
-      <p className="mb-3 text-xs text-slate-500">
-        White-label overrides for this org's player app (name, colors, logos). Every field is
-        optional — blank means the platform default shown as the placeholder. The logo fields
-        have no platform default: left blank, the player app shows no logo.
-      </p>
-      {err && <Banner kind="error">{err}</Banner>}
-      {/* Two columns: the fields on the left, what they produce on the right.
-          Twelve text inputs alone are unevaluable — nobody can look at two hex
-          codes and say whether the result is legible, or tell from a URL
-          whether they uploaded the wordmark or the badge. */}
-      <div className="mt-3 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <div className="min-w-0">
-          <Section title="Identity">
-            <Field label="App name" hint="PWA install name and document title (1–80 chars).">
-              <Input
-                value={values.appName}
-                onChange={(e) => set('appName')(e.target.value)}
-                placeholder={BRANDING_DEFAULTS.appName}
-              />
-            </Field>
-            <Field label="Short name" hint="Home-screen label (1–30 chars). Phones clip around 12.">
-              <Input
-                value={values.shortName}
-                onChange={(e) => set('shortName')(e.target.value)}
-                placeholder={BRANDING_DEFAULTS.shortName}
-              />
-            </Field>
-            <Field label="Share footer" hint="Tagline on shared score images (1–120 chars).">
-              <Input
-                value={values.shareFooter}
-                onChange={(e) => set('shareFooter')(e.target.value)}
-                placeholder={BRANDING_DEFAULTS.shareFooter}
-              />
-            </Field>
-          </Section>
-
-          <Section title="Colors">
-            <ColorField
-              label="Theme color"
-              value={values.themeColor}
-              def={BRANDING_DEFAULTS.themeColor}
-              onChange={set('themeColor')}
-            />
-            <ColorField
-              label="Background color"
-              value={values.backgroundColor}
-              def={BRANDING_DEFAULTS.backgroundColor}
-              onChange={set('backgroundColor')}
-            />
-            <ColorField
-              label="Accent color"
-              value={values.accentColor}
-              def={BRANDING_DEFAULTS.accentColor}
-              onChange={set('accentColor')}
-            />
-            <div className="col-span-2">
-              <ContrastNotes values={values} />
-            </div>
-          </Section>
-
-          <Section title="Logos">
-            <div className="col-span-2 -mt-1 mb-1 text-xs text-slate-500">
-              No platform default: leave these blank and the player app shows no logo at all
-              (never another client's). PNG, JPEG, WebP or SVG, up to 1 MiB.
-            </div>
-            <UrlField
-              label="Logo (full)"
-              value={values.logoUrl}
-              def={BRANDING_DEFAULTS.logoUrl}
-              onChange={set('logoUrl')}
-              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
-              onUpload={uploadFor('logoUrl')}
-            />
-            <UrlField
-              label="Logo badge (square)"
-              value={values.logoBadgeUrl}
-              def={BRANDING_DEFAULTS.logoBadgeUrl}
-              onChange={set('logoBadgeUrl')}
-              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
-              onUpload={uploadFor('logoBadgeUrl')}
-            />
-            <UrlField
-              label="Logo wordmark (wide)"
-              value={values.logoWordmarkUrl}
-              def={BRANDING_DEFAULTS.logoWordmarkUrl}
-              onChange={set('logoWordmarkUrl')}
-              accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
-              onUpload={uploadFor('logoWordmarkUrl')}
-            />
-          </Section>
-
-          <Section title="App icons">
-            <div className="col-span-2 -mt-1 mb-1 text-xs text-slate-500">
-              PNG only, at exactly the stated size — the per-tenant PWA manifest declares these
-              dimensions, so a mismatch makes the install lie to the phone.
-            </div>
-            <UrlField
-              label="Icon 192×192"
-              value={values.icon192Url}
-              def={BRANDING_DEFAULTS.icon192Url}
-              onChange={set('icon192Url')}
-              accept=".png,image/png"
-              onUpload={uploadFor('icon192Url')}
-            />
-            <UrlField
-              label="Icon 512×512"
-              value={values.icon512Url}
-              def={BRANDING_DEFAULTS.icon512Url}
-              onChange={set('icon512Url')}
-              accept=".png,image/png"
-              onUpload={uploadFor('icon512Url')}
-            />
-          </Section>
-        </div>
-
-        {/* Sticky so the preview stays in view while the operator works down
-            a long form — the whole value is seeing the change as you make it. */}
-        <div className="lg:sticky lg:top-4 lg:self-start">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Live preview
-          </p>
-          <AppPreview values={values} />
-          <div className="mt-3">
-            <InstallPreview values={values} />
-          </div>
-          <p className="mt-2 text-xs text-slate-400">
-            Updates as you type. Nothing is live until you save.
-          </p>
-        </div>
-      </div>
-      <div className="mt-2 flex items-center gap-2">
-        <Button
-          variant="ghost"
-          onClick={useLogoAsIcon}
-          disabled={deriving || busy || uploading || values.logoUrl.trim() === ''}
+      <h2 className="mb-3 text-sm font-semibold text-slate-700">Rename / re-address</h2>
+      <form onSubmit={save} className="space-y-3">
+        {err && <Banner kind="error">{err}</Banner>}
+        <Field label="Name" hint="Shown in Master Control. Safe to change at any time.">
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field
+          label="Slug (subdomain)"
+          hint="Lowercase, hyphenated. This is the org's address — treat it as permanent."
         >
-          {deriving ? 'Generating…' : 'Use logo as app icon'}
+          <Input value={slug} onChange={(e) => setSlug(autoSlug(e.target.value))} />
+        </Field>
+        {slugChanged && (
+          <Banner kind="error">
+            Changing the slug moves the player app to <strong>{orgPlayerHost(slug.trim())}</strong>.
+            Anything pointing at {orgPlayerHost(org.slug)} — printed QR codes, bookmarks, installed
+            home-screen apps — stops reaching this org.
+          </Banner>
+        )}
+        <Field label="Sort order" hint="Lower sorts first in the Orgs list.">
+          {/* Width on a wrapper around the Input, not on the Input (which
+              hard-codes w-full) and not on the Field (which would squeeze the
+              hint into a column two words wide). */}
+          <div className="w-24">
+            <Input
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              inputMode="numeric"
+            />
+          </div>
+        </Field>
+        <Button type="submit" disabled={busy || !name.trim() || !slug.trim()}>
+          {busy ? 'Saving…' : 'Save org'}
         </Button>
-        <span className="text-xs text-slate-500">
-          {values.logoUrl.trim() === ''
-            ? 'Upload a logo first to generate the 192 and 512 icons from it.'
-            : 'Fills both icon fields with squares generated from the logo, on the background color.'}
-        </span>
+      </form>
+    </Card>
+  );
+}
+
+function OverviewTab({
+  org,
+  locations,
+  isSuperAdmin,
+  users,
+  usersLoading,
+  onSaved,
+}: {
+  org: Org;
+  locations: Location[];
+  isSuperAdmin: boolean;
+  users: AdminUser[] | null;
+  usersLoading: boolean;
+  onSaved: () => void;
+}) {
+  const url = orgPlayerUrl(org.slug);
+  const branded = Object.keys(org.branding ?? {}).length;
+  // Only super_admins can read /users at all, so the account check silently
+  // drops off an org_admin's checklist rather than claiming an unknown.
+  const admins = users?.filter((u) => u.orgId === org.id).length ?? 0;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <h2 className="mb-3 text-sm font-semibold text-slate-700">Site</h2>
+        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Fact label="Address">
+            {url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-700 underline hover:text-sky-900"
+              >
+                {orgPlayerHost(org.slug)} ↗
+              </a>
+            ) : (
+              <span className="text-slate-500">{orgPlayerHost(org.slug)}</span>
+            )}
+          </Fact>
+          <Fact label="Status">
+            {org.status === 'suspended' ? (
+              <span className="text-red-700">Suspended — subdomain dark</span>
+            ) : org.archivedAt ? (
+              <span className="text-amber-700">Archived</span>
+            ) : (
+              <span className="text-green-700">Active</span>
+            )}
+          </Fact>
+          <Fact label="Venues">{locations.length}</Fact>
+          <Fact label="Created">{org.createdAt ? fmtDateTime(org.createdAt) : '—'}</Fact>
+        </dl>
+      </Card>
+
+      <Card>
+        <h2 className="mb-1 text-sm font-semibold text-slate-700">Setup</h2>
+        <p className="mb-2 text-xs text-slate-500">
+          What a finished tenant needs (MULTI-VENUE.md §8). Nothing here blocks the site from
+          serving — an unfinished org just serves stock branding.
+        </p>
+        <ul>
+          <CheckRow done={branded > 0} label="Branding">
+            {branded > 0 ? (
+              <>
+                {branded} override{branded === 1 ? '' : 's'} set —{' '}
+                <Link to="branding" className="underline">
+                  edit
+                </Link>
+              </>
+            ) : (
+              <>
+                still on the platform default look —{' '}
+                <Link to="branding" className="underline">
+                  set it up
+                </Link>
+              </>
+            )}
+          </CheckRow>
+          <CheckRow done={locations.length > 0} label="Venues">
+            {locations.length > 0 ? (
+              <>
+                {locations.length} live —{' '}
+                <Link to="venues" className="underline">
+                  manage
+                </Link>
+              </>
+            ) : (
+              <>
+                none yet, so players see an empty catalog —{' '}
+                <Link to="venues" className="underline">
+                  add the first
+                </Link>
+              </>
+            )}
+          </CheckRow>
+          {isSuperAdmin && !usersLoading && (
+            <CheckRow done={admins > 0} label="Admin access">
+              {admins > 0 ? (
+                <>
+                  {admins} account{admins === 1 ? '' : 's'} —{' '}
+                  <Link to="team" className="underline">
+                    manage
+                  </Link>
+                </>
+              ) : (
+                <>
+                  nobody at this org can sign in —{' '}
+                  <Link to="team" className="underline">
+                    invite an admin
+                  </Link>
+                </>
+              )}
+            </CheckRow>
+          )}
+        </ul>
+      </Card>
+
+      {isSuperAdmin && <IdentityForm org={org} onSaved={onSaved} />}
+    </div>
+  );
+}
+
+function VenuesTab({ org, locations }: { org: Org; locations: Location[] }) {
+  const nav = useNavigate();
+  return (
+    <Card>
+      <div className="mb-3 flex items-center gap-2">
+        {/* The tab label already carries the count. */}
+        <h2 className="flex-1 text-sm font-semibold text-slate-700">Venues</h2>
+        <Link to={`/locations/new?orgId=${org.id}`}>
+          <Button>+ Location</Button>
+        </Link>
       </div>
-      <div className="mt-3">
-        {/* Gated on the asset work too, not just `busy`. Saving while an upload
-            or an icon generation is in flight would submit the OLD urls and
-            then unmount this card via onSaved() → reload, orphaning the
-            uploads and dropping their state updates — while the operator still
-            sees a success toast. */}
-        <Button onClick={save} disabled={busy || deriving || uploading}>
-          {busy ? 'Saving…' : 'Save branding'}
-        </Button>
+      {locations.length === 0 && (
+        <EmptyState>
+          No venues yet. Until one exists, {orgPlayerHost(org.slug)} serves an empty catalog.
+        </EmptyState>
+      )}
+      <div className="space-y-2">
+        {locations.map((l) => (
+          <div
+            key={l.id}
+            className="flex items-center gap-3 border-t border-slate-100 py-2 first:border-0"
+          >
+            <button
+              className="flex-1 text-left font-medium text-slate-900 hover:underline"
+              onClick={() => nav(`/locations/${l.id}`)}
+            >
+              {l.name}
+              <span className="ml-2 text-xs text-slate-400">/{l.slug}</span>
+            </button>
+            {!l.lat && <Pill tone="amber">No coordinates</Pill>}
+            {l.tzLabel && <span className="text-xs text-slate-500">{l.tzLabel}</span>}
+          </div>
+        ))}
       </div>
+      <p className="mt-3 text-xs text-slate-500">
+        Archived venues are hidden here — they live on the Archived page, with everything else that
+        was soft-deleted.
+      </p>
     </Card>
   );
 }
 
 export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
-  const { id = '' } = useParams();
-  const nav = useNavigate();
+  const params = useParams();
+  const id = params.id ?? '';
+  // The tab lives in the URL (route is /orgs/:id/*), so a tab is linkable and
+  // survives a reload. An unknown segment falls back to the overview rather
+  // than rendering a blank page.
+  const tab = (params['*'] || '').split('/')[0];
   const toast = useToast();
   // Suspend/unsuspend failures (notably the server's refusal to suspend the
   // default org without ?force=1) need reading, so they land in an inline
   // banner — never silently retried with force.
   const [lifecycleErr, setLifecycleErr] = useState<string | null>(null);
   const { data, error, loading, reload } = useAsync(() => api.getOrg(id), [id]);
+  // Accounts are super_admin-only server-side; asking as an org_admin would
+  // 403 on every org page load, so don't ask. Fetched here rather than in the
+  // Team tab so the Overview checklist reads the same list.
+  const usersReq = useAsync(
+    () => (isSuperAdmin ? api.listUsers() : Promise.resolve([])),
+    [isSuperAdmin]
+  );
 
   if (loading) return <Spinner />;
   if (error) return <Banner kind="error">{error.message}</Banner>;
   if (!data) return null;
   const { org, locations } = data;
   const suspended = org.status === 'suspended';
+  const url = orgPlayerUrl(org.slug);
 
   async function toggleArchive() {
     await api.archiveOrg(id, !org.archivedAt);
@@ -471,16 +373,18 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         title={org.name}
         titleExtra={
           <>
-            <span className="text-xs text-slate-400">/{org.slug}</span>
+            <span className="text-xs text-slate-400">{orgPlayerHost(org.slug)}</span>
             {org.archivedAt && <Pill tone="amber">Archived</Pill>}
             {suspended && <Pill tone="red">Suspended</Pill>}
           </>
         }
         actions={
           <>
-            <Link to={`/locations/new?orgId=${org.id}`}>
-              <Button>+ Location</Button>
-            </Link>
+            {url && (
+              <a href={url} target="_blank" rel="noreferrer">
+                <Button variant="ghost">View site ↗</Button>
+              </a>
+            )}
             {isSuperAdmin && (
               <Button variant={suspended ? 'ghost' : 'danger'} onClick={toggleSuspend}>
                 {suspended ? 'Unsuspend' : 'Suspend'}
@@ -497,28 +401,39 @@ export default function OrgDetail({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
       {lifecycleErr && <Banner kind="error">{lifecycleErr}</Banner>}
 
-      <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">Locations</h2>
-        {locations.length === 0 && <p className="text-sm text-slate-400">No locations under this org yet.</p>}
-        <div className="space-y-2">
-          {locations.map((l) => (
-            <div key={l.id} className="flex items-center gap-3 border-t border-slate-100 py-2 first:border-0">
-              <button
-                className="flex-1 text-left font-medium text-slate-900 hover:underline"
-                onClick={() => nav(`/locations/${l.id}`)}
-              >
-                {l.name}
-                <span className="ml-2 text-xs text-slate-400">/{l.slug}</span>
-              </button>
-              {l.tzLabel && <span className="text-xs text-slate-500">{l.tzLabel}</span>}
-            </div>
-          ))}
-        </div>
-      </Card>
+      <TabNav
+        tabs={[
+          { to: `/orgs/${org.id}`, label: 'Overview', end: true },
+          { to: `/orgs/${org.id}/venues`, label: `Venues (${locations.length})` },
+          { to: `/orgs/${org.id}/branding`, label: 'Branding' },
+          ...(isSuperAdmin ? [{ to: `/orgs/${org.id}/team`, label: 'Team' }] : []),
+        ]}
+      />
 
-      {/* Branding is cosmetic, so unlike archive it's open to the org's own
-          org_admin too (the server enforces scope either way). */}
-      <BrandingCard org={org} onSaved={reload} />
+      {tab === 'venues' ? (
+        <VenuesTab org={org} locations={locations} />
+      ) : tab === 'branding' ? (
+        /* Branding is cosmetic, so unlike archive it's open to the org's own
+           org_admin too (the server enforces scope either way). */
+        <BrandingCard org={org} onSaved={reload} />
+      ) : tab === 'team' && isSuperAdmin ? (
+        <OrgTeam
+          org={org}
+          users={usersReq.data}
+          loading={usersReq.loading}
+          error={usersReq.error}
+          reload={usersReq.reload}
+        />
+      ) : (
+        <OverviewTab
+          org={org}
+          locations={locations}
+          isSuperAdmin={isSuperAdmin}
+          users={usersReq.data}
+          usersLoading={usersReq.loading}
+          onSaved={reload}
+        />
+      )}
     </div>
   );
 }

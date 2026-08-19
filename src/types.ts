@@ -45,6 +45,13 @@ export type LocalRound = {
   // Present only on shared multi-device rounds. Shared rounds never enter the
   // 'pending' push queue — the server finalizes them at completion instead.
   shared?: SharedInfo;
+  // Pass-and-play: which seat is the phone holder's — the only seat the
+  // achievements wall credits (another player's win typed on this phone is
+  // their win, not the holder's). null = the holder was only keeping score, so
+  // no seat is theirs; absent = a round from before this existed, which keeps
+  // its old every-seat reading. Shared rounds ignore it (this device's seat is
+  // shared.slot). Never synced — whose phone this is is a device-side fact.
+  ownerSlot?: number | null;
   // When this round's server-granted achievements were pulled into the local
   // earned set (see features/me/Achievements). Absent = not yet imported, which
   // is what makes the import self-healing: a round the worker synced in the

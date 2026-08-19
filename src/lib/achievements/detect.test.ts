@@ -73,8 +73,10 @@ describe('playerRounds', () => {
     expect(detectEarned([orphan], { catalog: CATALOG, venues: [] }).has('hole_in_one')).toBe(false);
   });
 
-  test('pass-and-play counts every seat; a shared game counts only this device', () => {
+  test('pass-and-play counts the holder seat; a shared game counts only this device', () => {
     const cards = [card(3), card(2)];
+    expect(playerRounds([round(cards, { ownerSlot: 1 })], CATALOG)).toHaveLength(1);
+    // A round from before the marker existed keeps its every-seat reading.
     expect(playerRounds([round(cards)], CATALOG)).toHaveLength(2);
     const shared = round(cards, {
       shared: { gameId: 'g', participantToken: 't', slot: 0 },
@@ -90,8 +92,40 @@ describe('playerRounds', () => {
       shared: { gameId: 'g', participantToken: 't', slot: 0 },
     } as Partial<LocalRound>);
     expect(has([shared], 'hole_in_one')).toBe(false);
-    // The same cards pass-and-play DO count — one device, one group.
+    // The same cards pass-and-play, from before the holder marker existed,
+    // DO count — those rounds carry nothing to re-judge them by.
     expect(has([round([card(3), card(1)])], 'hole_in_one')).toBe(true);
+  });
+
+  test("pass-and-play does not credit another player's win to the phone holder", () => {
+    // The holder is seat 0; seat 1 aces every hole and finishes deep under
+    // par. Their wins show on the summary, not on this wall.
+    const cards = [card(3), card(1)];
+    expect(has([round(cards, { ownerSlot: 0 })], 'hole_in_one')).toBe(false);
+    expect(has([round(cards, { ownerSlot: 0 })], 'under_par')).toBe(false);
+    // ...unless the holder IS that seat,
+    expect(has([round(cards, { ownerSlot: 1 })], 'hole_in_one')).toBe(true);
+    // ...or also earned it on their own card.
+    const bothUnder = [withHoles(2, { 0: 3 }), card(1)];
+    expect(has([round(bothUnder, { ownerSlot: 0 })], 'under_par')).toBe(true);
+    expect(has([round(bothUnder, { ownerSlot: 0 })], 'hole_in_one')).toBe(false);
+  });
+
+  test('field badges follow the holder seat too', () => {
+    // Losing on your own phone is still losing; the winner's badge is theirs.
+    const cards = [card(4), card(3)];
+    expect(has([round(cards, { ownerSlot: 0 })], 'good_sport')).toBe(true);
+    expect(has([round(cards, { ownerSlot: 0 })], 'clean_sweep')).toBe(false);
+    expect(has([round(cards, { ownerSlot: 1 })], 'clean_sweep')).toBe(true);
+    expect(has([round(cards, { ownerSlot: 1 })], 'good_sport')).toBe(false);
+  });
+
+  test('a holder who was just keeping score owns no seat at all', () => {
+    const scoredForTheKids = round([card(1), card(2)], { ownerSlot: null });
+    expect(playerRounds([scoredForTheKids], CATALOG)).toEqual([]);
+    expect(earn([scoredForTheKids]).size).toBe(0);
+    // An out-of-range marker owns nothing rather than guessing a seat.
+    expect(playerRounds([round([card(1)], { ownerSlot: 7 })], CATALOG)).toEqual([]);
   });
 });
 

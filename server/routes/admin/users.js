@@ -3,6 +3,7 @@
 //   GET    /api/admin/users            list (never returns password_hash)
 //   POST   /api/admin/users           create (password optional — omitted = emailed set-password invite)
 //   PATCH  /api/admin/users/:id       edit email/role/orgId, optionally reset password
+//   POST   /api/admin/users/:id/resend-invite  re-mail the set-password link
 //   DELETE /api/admin/users/:id       remove (hard delete — no domain history hangs off an account)
 import { Router } from "express";
 import { pool } from "../../db.js";
@@ -177,6 +178,49 @@ router.patch("/:id", async (req, res) => {
       return res.status(409).json({ ok: false, error: "email already in use" });
     }
     console.error("[admin/users] patch error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// Re-mail a user's set-password link. This exists INSTEAD of pointing the
+// admin UI at the public /password/forgot endpoint, which looks equivalent and
+// is not: minting a token deletes the user's outstanding one
+// (adminPasswordTokens.js — exactly one live link at a time), and the public
+// endpoint must discard the returned link or a guessed email becomes account
+// takeover. Resending through it would therefore kill a link the operator had
+// already relayed by hand and hand back nothing to replace it, while still
+// reporting success. Being super_admin-gated, this route may return the link,
+// exactly as POST /users does for a fresh invite.
+router.post("/:id/resend-invite", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(400).json({ ok: false, error: "bad id" });
+  try {
+    const existing = await pool.query(
+      `select id, email, password_hash is null as "pending" from admin_user where id = $1`,
+      [id]
+    );
+    if (existing.rowCount === 0) return res.status(404).json({ ok: false, error: "not found" });
+    const user = existing.rows[0];
+    // Same rule as /password/forgot: an account that never set a password gets
+    // the 7-day invite again; an active one gets a 2-hour reset.
+    const kind = user.pending ? "invite" : "reset";
+    const { sent, inviteLink } = await sendSetPasswordEmail({
+      req,
+      email: user.email,
+      adminUserId: user.id,
+      kind,
+    });
+    await audit({
+      action: "user.resend_invite",
+      entity: "admin_user",
+      entityId: id,
+      // Boolean only — the audit log must never hold the capability itself.
+      detail: { email: user.email, kind, sent, inviteLinkReturned: inviteLink !== null },
+      actor: actorLabel(req),
+    });
+    return res.json({ ok: true, kind, sent, inviteLink });
+  } catch (err) {
+    console.error("[admin/users] resend error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });

@@ -5,6 +5,7 @@ import JoinQr from '../shared/JoinQr';
 import { useCurrentLocationId } from '../../lib/location';
 import { useSession } from '../../lib/session';
 import { useDeadline, formatCountdown } from './useDeadline';
+import { Setting, Chip } from './triviaSetupControls';
 import { playClick } from '../../lib/sound';
 import {
   estimateSeconds,
@@ -12,6 +13,7 @@ import {
   isSpeechEnabled,
   lobbyScript,
   primeSpeech,
+  primeSpeechOnce,
   questionScript,
   revealScript,
   setSpeechEnabled,
@@ -189,6 +191,11 @@ export default function TriviaHost() {
 
   const start = useCallback(async () => {
     if (!locationId) return;
+    // The tap that opens the room is also this page's chance to unlock the
+    // voice. The switch above is persisted, so a host who turned it on weeks
+    // ago never touches it — and priming only from the switch left the lobby
+    // and the whole first question silent (see primeSpeechOnce).
+    primeSpeechOnce();
     setError(null);
     setBusy(true);
     const res = await createSession({
@@ -218,6 +225,9 @@ export default function TriviaHost() {
   const step = useCallback(async () => {
     if (!host) return;
     playClick();
+    // Also here, for the host who reloaded mid-game: their session was
+    // restored without a tap, so this is the first gesture the page has had.
+    primeSpeechOnce();
     setBusy(true);
     const res = await advance(host.sessionId, host.hostToken);
     setBusy(false);
@@ -546,41 +556,6 @@ export default function TriviaHost() {
         <QuestionCredit />
       </Content>
     </Screen>
-  );
-}
-
-function Setting({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-4">
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-fairway-400">
-        {label}
-      </p>
-      {children}
-    </div>
-  );
-}
-
-function Chip({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={() => {
-        playClick();
-        onClick();
-      }}
-      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-        on ? 'bg-fairway-400 text-fairway-950' : 'border border-fairway-800 text-fairway-100/70'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

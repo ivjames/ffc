@@ -13,13 +13,19 @@
 // this one's cleanup unreliable. The committed pack's own contents are
 // asserted, without a database, in scripts/trivia-pack.test.mjs.
 import { test, before, after } from "node:test";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { TEST_DATABASE_URL, ensureSchema, testQuery } from "./test-support/testDb.js";
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 
 const { pool } = await import("./db.js");
-const { importPack, setPackArchived, prunePack, readPack, PACK_SOURCE } = await import("./importTriviaPack.js");
+const { importPack, setPackArchived, prunePack, refreshPack, countDrifted, carryArchives, readLineage, readPack, PACK_SOURCE } =
+  await import("./importTriviaPack.js");
 
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const SOURCE = `test-pack-${stamp}`;
@@ -174,6 +180,155 @@ test("prune retires rows a rebuilt pack has dropped, and nothing else", async ()
   await setPackArchived(client, { archived: false, source: SOURCE });
 });
 
+test("refresh updates a row the pack corrected without changing its prompt", async () => {
+  // The case --prune cannot reach. A typo fix inside an OPTION leaves the
+  // prompt identical, so the row is "already present" to importPack and the
+  // correction never lands: 1,804 rows in the real pack are exactly this.
+  const corrected = ROWS.map((r) =>
+    r.prompt === ROWS[1].prompt ? { ...r, choices: ["Alpha", "Beta", "Gamma", "Hopper"] } : r
+  );
+
+  const reinsert = await importPack(client, corrected, { source: SOURCE });
+  assert.equal(reinsert.inserted, 0, "prompt is unchanged, so nothing is inserted");
+
+  const before = await testQuery(
+    `select choices from trivia_question where source = $1 and prompt = $2`,
+    [SOURCE, ROWS[1].prompt]
+  );
+  assert.deepEqual(before.rows[0].choices, ["Alpha", "Beta", "Gamma", "Delta"], "still stale");
+
+  assert.equal(await countDrifted(client, corrected, { source: SOURCE }), 1);
+
+  const { updated } = await refreshPack(client, corrected, { source: SOURCE });
+  assert.equal(updated, 1);
+
+  const after = await testQuery(
+    `select choices, answer from trivia_question where source = $1 and prompt = $2`,
+    [SOURCE, ROWS[1].prompt]
+  );
+  assert.deepEqual(after.rows[0].choices, ["Alpha", "Beta", "Gamma", "Hopper"]);
+  assert.equal(after.rows[0].answer, ROWS[1].answer, "the answer index still points where the pack says");
+
+  // Idempotent: the bank now agrees with the pack, so there is nothing to do.
+  assert.equal((await refreshPack(client, corrected, { source: SOURCE })).updated, 0);
+  assert.equal(await countDrifted(client, corrected, { source: SOURCE }), 0);
+
+  // Put the fixture back for the tests that follow.
+  await refreshPack(client, ROWS, { source: SOURCE });
+});
+
+test("refresh leaves a client's own question alone, even at the same prompt", async () => {
+  const hijack = [{ ...ROWS[0], choices: ["Zulu", "Yankee", "Xray", "Whiskey"] }];
+  await refreshPack(client, hijack, { source: SOURCE });
+  const mine = await testQuery(
+    `select choices from trivia_question where org_id = $1 and prompt = $2`,
+    [orgId, ROWS[0].prompt]
+  );
+  assert.deepEqual(mine.rows[0].choices, ["Alpha", "Beta"], "the org's own row is untouched");
+  await refreshPack(client, ROWS, { source: SOURCE });
+});
+
+test("refresh does not resurrect a question an operator retired", async () => {
+  // Retiring a question is a judgement about the question; correcting its
+  // spelling must not put it back on the screen behind the operator's back.
+  await testQuery(`update trivia_question set archived_at = now() where source = $1 and prompt = $2`, [
+    SOURCE,
+    ROWS[2].prompt,
+  ]);
+  const corrected = ROWS.map((r) =>
+    r.prompt === ROWS[2].prompt ? { ...r, choices: ["Alpha", "Beta", "Gamma", "Omega"] } : r
+  );
+  const { updated } = await refreshPack(client, corrected, { source: SOURCE });
+  assert.equal(updated, 1, "the text is still corrected");
+  const after = await testQuery(
+    `select choices, archived_at from trivia_question where source = $1 and prompt = $2`,
+    [SOURCE, ROWS[2].prompt]
+  );
+  assert.deepEqual(after.rows[0].choices, ["Alpha", "Beta", "Gamma", "Omega"]);
+  assert.ok(after.rows[0].archived_at, "but it stays retired");
+
+  await testQuery(`update trivia_question set archived_at = null where source = $1 and prompt = $2`, [
+    SOURCE,
+    ROWS[2].prompt,
+  ]);
+  await refreshPack(client, ROWS, { source: SOURCE });
+});
+
+test("a repaired prompt does not put an operator-retired question back on screen", async () => {
+  // The import matches on the prompt, so a corrected question looks brand new
+  // and arrives live, while --prune retires the row it replaced. Without the
+  // lineage that silently undoes an operator pulling a question off the screen.
+  const was = `${stamp} retired question with a typo?`;
+  const now = `${stamp} retired question with a typo fixed?`;
+  const before = [{ ...row(9), prompt: was }];
+  const after = [{ ...row(9), prompt: now }];
+
+  await importPack(client, before, { source: SOURCE });
+  await testQuery(`update trivia_question set archived_at = now() where source = $1 and prompt = $2`, [
+    SOURCE,
+    was,
+  ]);
+
+  await importPack(client, after, { source: SOURCE });
+  const { carried } = await carryArchives(client, [{ was, now }], { source: SOURCE });
+  await prunePack(client, after, { source: SOURCE });
+
+  assert.equal(carried, 1);
+  const live = await testQuery(
+    `select prompt from trivia_question where source = $1 and prompt = $2 and archived_at is null`,
+    [SOURCE, now]
+  );
+  assert.equal(live.rows.length, 0, "the corrected copy stays retired");
+
+  await testQuery(`delete from trivia_question where source = $1 and prompt = any($2::text[])`, [
+    SOURCE,
+    [was, now],
+  ]);
+});
+
+test("carrying archives leaves a question the operator never retired alone", async () => {
+  const was = `${stamp} live question with a typo?`;
+  const now = `${stamp} live question with a typo fixed?`;
+  await importPack(client, [{ ...row(8), prompt: was }], { source: SOURCE });
+  await importPack(client, [{ ...row(8), prompt: now }], { source: SOURCE });
+
+  const { carried } = await carryArchives(client, [{ was, now }], { source: SOURCE });
+  assert.equal(carried, 0, "nothing to carry from a row that was never archived");
+  const live = await testQuery(
+    `select prompt from trivia_question where source = $1 and prompt = $2 and archived_at is null`,
+    [SOURCE, now]
+  );
+  assert.equal(live.rows.length, 1, "the corrected copy is dealable");
+
+  await testQuery(`delete from trivia_question where source = $1 and prompt = any($2::text[])`, [
+    SOURCE,
+    [was, now],
+  ]);
+});
+
+test("the committed lineage traces every repaired prompt to a row in the pack", async () => {
+  const lineage = await readLineage();
+  assert.ok(lineage.length > 0, "the pack ships a lineage");
+  const { rows } = await readPack();
+  const prompts = new Set(rows.map((r) => r.prompt));
+  const orphans = lineage.filter((l) => !prompts.has(l.now));
+  assert.equal(orphans.length, 0, `every traced prompt exists in the pack, got ${orphans.length} orphans`);
+  assert.equal(lineage.filter((l) => l.was === l.now).length, 0, "only prompts that actually changed");
+});
+
+test("refresh --dry-run reports what it would change and writes nothing", async () => {
+  const corrected = ROWS.map((r) =>
+    r.prompt === ROWS[0].prompt ? { ...r, choices: ["Alpha", "Beta", "Gamma", "Sigma"] } : r
+  );
+  const { updated } = await refreshPack(client, corrected, { source: SOURCE, dryRun: true });
+  assert.equal(updated, 1, "it reports the row it would have touched");
+  const after = await testQuery(
+    `select choices from trivia_question where source = $1 and prompt = $2`,
+    [SOURCE, ROWS[0].prompt]
+  );
+  assert.deepEqual(after.rows[0].choices, ["Alpha", "Beta", "Gamma", "Delta"], "but rolled back");
+});
+
 test("archiving the pack leaves the hand-written House Pack dealing", async () => {
   await setPackArchived(client, { archived: true, source: SOURCE });
   const house = await testQuery(
@@ -184,6 +339,30 @@ test("archiving the pack leaves the hand-written House Pack dealing", async () =
   await setPackArchived(client, { archived: false, source: SOURCE });
 });
 
+test("the CLI explains a missing DATABASE_URL instead of failing at the first query", async () => {
+  // The operator-facing failure modes are worth pinning: this script is run by
+  // hand, rarely, by someone who will not be reading its source.
+  const execFileAsync = promisify(execFile);
+  const script = join(dirname(fileURLToPath(import.meta.url)), "importTriviaPack.js");
+  const env = { ...process.env };
+  delete env.DATABASE_URL;
+  delete env.TEST_DATABASE_URL;
+
+  // Unsetting the variable is not enough on its own: db.js imports
+  // `dotenv/config`, which reads `.env` relative to the working directory and
+  // would hand the child the very value this test is trying to withhold. Run
+  // it somewhere there is no `.env` to find. The script resolves its own paths
+  // from import.meta.url, so the working directory is otherwise irrelevant.
+  const failure = await execFileAsync("node", [script, "--dry-run"], { env, cwd: tmpdir() }).then(
+    () => null,
+    (err) => err
+  );
+  assert.ok(failure, "it exits non-zero rather than pretending to work");
+  assert.equal(failure.code, 1);
+  assert.match(failure.stderr, /DATABASE_URL is not set/);
+  assert.match(failure.stderr, /run this from the server directory/);
+});
+
 test("the committed pack loads, and every row survives the validator on the way in", async () => {
   // readPack re-validates each row and cross-checks the header count, so this
   // is the guard against shipping a pack the importer would choke on halfway.
@@ -191,5 +370,8 @@ test("the committed pack loads, and every row survives the validator on the way 
   assert.equal(header.pack, PACK_SOURCE);
   assert.equal(header.license, "CC BY-SA 4.0");
   assert.equal(rows.length, header.count);
-  assert.ok(rows.length > 45_000, `expected a full pack, got ${rows.length}`);
+  // A floor, not a target: it catches a build that quietly lost half the
+  // corpus. Lowered from 45,000 when the screen-length bounds dropped 3,853
+  // rows a host could not reasonably read out.
+  assert.ok(rows.length > 40_000, `expected a full pack, got ${rows.length}`);
 });

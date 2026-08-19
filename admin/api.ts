@@ -91,10 +91,23 @@ export type Org = {
   status: string;
   sortOrder: number;
   archivedAt: string | null;
+  createdAt?: string;
+  /** List-only rollups (GET /orgs). Absent on the single-org GET. */
   locationCount?: number;
+  adminCount?: number;
   /** Stored branding overrides only (defaults NOT merged in). Optional while
    *  the multi-venue server rollout is in flight. */
   branding?: Branding;
+};
+
+/** A Master Control account. super_admin accounts are platform-wide (orgId
+ *  null); an org_admin is pinned to exactly one org and only ever sees it. */
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: 'super_admin' | 'org_admin';
+  orgId: string | null;
+  createdAt: string;
 };
 
 export type Location = {
@@ -257,6 +270,34 @@ export type RewardSummary = {
 
 // A stored photo-booth picture (the AI-free pipeline — no moderation verdict
 // or people flags exist; staff review IS the moderation).
+// A row in the live-trivia question bank. `source` is null when a person wrote
+// it — by hand here, or in the House Pack seed — and names the bulk import
+// otherwise ('opentriviaqa'), which is what lets the UI mark a row as donated
+// and carry its CC BY-SA credit.
+export type TriviaQuestion = {
+  id: string;
+  orgId: string | null;
+  locationId: string | null;
+  category: string;
+  prompt: string;
+  choices: string[];
+  answer: number;
+  difficulty: number;
+  active: boolean;
+  source: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+};
+
+export type TriviaPage = {
+  questions: TriviaQuestion[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type TriviaCategory = { category: string; n: number };
+
 export type AdminBoothPhoto = {
   id: string;
   locationName: string | null;
@@ -431,6 +472,152 @@ export type SyntheticBotParams = {
   concurrency?: number;
   locationId?: string | null;
   ignoreHours?: boolean;
+};
+
+
+// —— Arcade bot (Ops → Arcade bot) ——————————————————————————————————————————
+// Two halves of one tool: `capture` plays the games in a browser and writes a
+// score profile; `replay` posts the awards that profile implies. They run as
+// independent processes, so each has its own runner state.
+export type ArcadeRunner = {
+  running: boolean;
+  pid: number | null;
+  startedAt: string | null;
+  params: Record<string, unknown> | null;
+  lastExit: { at: string; code: number | null; signal: string | null } | null;
+  logs: { at: string; line: string }[];
+};
+
+/** A profile's summary is what it will REPLAY as: replay draws from the
+ *  recorded samples, so a fixed-skill capture produces that same standard of
+ *  play forever. null when the file couldn't be read as one of ours. */
+export type ArcadeProfileSummary = {
+  games: number;
+  /** The games this profile can actually replay (captured with samples). */
+  gameKeys: string[];
+  samples: number;
+  skillMin: number | null;
+  skillMax: number | null;
+  skillMean: number | null;
+  capturedAt?: string | null;
+};
+
+export type ArcadeProfile = {
+  name: string;
+  bytes: number;
+  modifiedAt: string;
+  summary: ArcadeProfileSummary | null;
+};
+
+export type ArcadeVenue = {
+  id: string;
+  name: string;
+  orgName: string | null;
+  orgSlug: string | null;
+  /** Awards 403 unless BOTH the pos loyalty flag and the gameTickets module
+   *  are on — resolved server-side exactly as the award route does. */
+  gameRewards: boolean;
+};
+
+export type ArcadeStatus = {
+  canControl: boolean;
+  /** The server's earning registry — every one of these has a bot policy.
+   *  estRoundMs is the bot's own per-round estimate (null if unreadable);
+   *  lowerIsBetter marks time-scored games (Go-Karts), where "best" = min. */
+  games: { key: string; label: string; estRoundMs: number | null; lowerIsBetter: boolean }[];
+  /** Capture drives a real browser; an API host may not have one. Null for an
+   *  org-scoped admin — capture is a super_admin tool. */
+  browser: { available: boolean; at: string | null; reason?: string } | null;
+  /** …and it drives the PLAYER APP, which on a deployed box is nginx on a
+   *  per-org vhost, not the dev server. The origin is DERIVED (PLATFORM_FQDN +
+   *  org slug) and probed, so no URL has to be configured by hand; `tried`
+   *  shows the candidates when none answered. Null for an org-scoped admin. */
+  app: {
+    reachable: boolean;
+    base: string | null;
+    status: number | null;
+    why?: string;
+    reason?: string;
+    tried: { base: string; why: string; ok: boolean; detail: string }[];
+  } | null;
+  profiles: ArcadeProfile[];
+  venues: ArcadeVenue[];
+  syntheticAwards: { total: number; last24h: number; tickets: number };
+  capture: ArcadeRunner;
+  replay: ArcadeRunner;
+};
+
+/** A profile's full samples — what /status summarises, for charting. */
+export type ArcadeProfileDetail = {
+  ok: true;
+  name: string;
+  capturedAt: string | null;
+  base: string | null;
+  /** Wall clock + worker count, recorded by newer captures (null on old ones —
+   *  then only aggregate browser time can be shown, and must say so). */
+  wallMs: number | null;
+  workers: number | null;
+  games: {
+    key: string;
+    label: string;
+    rounds: number;
+    stats: { mean: number; p10: number; p50: number; p90: number; max: number; min: number; meanRoundMs: number } | null;
+    samples: { score: number; tickets: number; skill: number | null }[];
+  }[];
+};
+
+/** Synthetic award aggregates — bucketed in SQL, never row-by-row. */
+export type ArcadeTraffic = {
+  ok: true;
+  days: number;
+  /** 'hour' for a short window, 'day' once hours would be thousands of points. */
+  unit: 'hour' | 'day';
+  buckets: { at: string; awards: number; requested: number; awarded: number }[];
+  byGame: {
+    game: string;
+    awards: number;
+    requested: number;
+    /** Confirmed credits only (status='awarded') — a pending row is a
+     *  reservation whose POS credit never settled, not a payment. */
+    awarded: number;
+    capped: number;
+    pending: number;
+  }[];
+  totals: {
+    awards: number;
+    requested: number;
+    awarded: number;
+    /** Unsettled reservations: rows stuck in status='pending'. */
+    pending: number;
+    pending_tickets: number;
+    cards: number;
+    runs: number;
+    capped: number;
+    first_at: string | null;
+    last_at: string | null;
+  };
+};
+
+export type ArcadeCaptureParams = {
+  rounds: number;
+  seed: number;
+  skill: number | null;
+  /** Concurrent browser pages. Timing games verified unaffected up to 4. */
+  workers: number;
+  games: string[];
+};
+
+export type ArcadeReplayParams = {
+  locationId: string;
+  profile: string;
+  plays: number;
+  players: number;
+  concurrency: number;
+  seed: number;
+  intervalMin: number | null;
+  sweeps: number | null;
+  dryRun: boolean;
+  games: string[];
 };
 
 export type SyntheticRunner = {
@@ -687,6 +874,36 @@ export const api = {
   changePassword: (currentPassword: string, newPassword: string) =>
     req<{ ok: true }>('POST', '/me/password', { currentPassword, newPassword }, { quiet401: true }),
 
+  // Master Control accounts. super_admin only, server-side — every one of
+  // these 403s for an org_admin, so the callers gate on the role rather than
+  // rendering a panel that can only fail.
+  listUsers: () => req<AdminUser[]>('GET', '/users'),
+  // Password omitted on purpose: the server emails a set-password invite, so
+  // no operator ever knows (or has to transmit) someone else's password.
+  // `inviteSent: false` means the account exists but the mail failed —
+  // recoverable with "Forgot password", never a reason to retry the create.
+  inviteUser: (user: { email: string; role: AdminUser['role']; orgId: string | null }) =>
+    req<{ ok: true; user: AdminUser; inviteSent?: boolean; inviteLink?: string | null }>(
+      'POST',
+      '/users',
+      user
+    ),
+  updateUser: (id: string, fields: Partial<Pick<AdminUser, 'email' | 'role' | 'orgId'>>) =>
+    req<{ ok: true; user: AdminUser }>('PATCH', `/users/${id}`, fields),
+  // Re-mail a set-password link. NOT the public /password/forgot endpoint:
+  // minting a token kills the user's outstanding one, and the public endpoint
+  // discards the link it generates (it must — it is unauthenticated), so
+  // resending through it would invalidate a hand-relayed link and return
+  // nothing to replace it. This route is super_admin-gated and so may hand the
+  // link back, like the invite. `kind` is 'invite' for an account that never
+  // set a password (7-day link), 'reset' for an active one (2 hours).
+  resendUserInvite: (id: string) =>
+    req<{ ok: true; kind: 'invite' | 'reset'; sent: boolean; inviteLink: string | null }>(
+      'POST',
+      `/users/${id}/resend-invite`
+    ),
+  deleteUser: (id: string) => req<{ ok: true }>('DELETE', `/users/${id}`),
+
   listOrgs: (archived = false) => req<Org[]>('GET', `/orgs${archived ? '?archived=1' : ''}`),
   getOrg: (id: string) => req<{ org: Org; locations: Location[] }>('GET', `/orgs/${id}`),
   saveOrg: (org: Partial<Org>) => req<{ ok: true; org: Org }>('POST', '/orgs', org),
@@ -748,6 +965,40 @@ export const api = {
     req<{ ok: true; announcement: Announcement }>(
       'POST',
       `/announcements/${id}/${archived ? 'archive' : 'unarchive'}`
+    ),
+
+  // Live-trivia question bank. The list is PAGED and returns `total` — the
+  // platform pack alone runs to ~48,000 rows after the OpenTriviaQA import, so
+  // there is no "fetch them all" call here on purpose.
+  listTriviaQuestions: (opts: {
+    category?: string;
+    q?: string;
+    orgId?: string;
+    includeArchived?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.category) p.set('category', opts.category);
+    if (opts.q) p.set('q', opts.q);
+    if (opts.orgId) p.set('orgId', opts.orgId);
+    if (opts.includeArchived) p.set('includeArchived', '1');
+    if (opts.limit !== undefined) p.set('limit', String(opts.limit));
+    if (opts.offset) p.set('offset', String(opts.offset));
+    const s = p.toString();
+    return req<TriviaPage>('GET', `/trivia/questions${s ? `?${s}` : ''}`);
+  },
+  listTriviaCategories: (orgId?: string) =>
+    req<{ categories: TriviaCategory[] }>(
+      'GET',
+      `/trivia/categories${orgId ? `?orgId=${encodeURIComponent(orgId)}` : ''}`
+    ),
+  saveTriviaQuestion: (q: Partial<TriviaQuestion>) =>
+    req<{ ok: true; question: TriviaQuestion }>('POST', '/trivia/questions', q),
+  archiveTriviaQuestion: (id: string, archived: boolean) =>
+    req<{ ok: true; question: TriviaQuestion }>(
+      'POST',
+      `/trivia/questions/${id}/${archived ? 'archive' : 'unarchive'}`
     ),
 
   // Office reporting (punchlist #2).
@@ -970,6 +1221,24 @@ export const api = {
   syntheticStart: (params: SyntheticBotParams) =>
     req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/start', params),
   syntheticStop: () => req<{ ok: true; runner: SyntheticRunner }>('POST', '/synthetic-bot/stop'),
+
+  // Arcade bot. status is org-scoped and readable by any admin; capture/replay
+  // are super_admin only (enforced server-side — the UI just hides them).
+  arcadeStatus: () => req<ArcadeStatus>('GET', '/arcade-bot/status'),
+  arcadeCapture: (params: ArcadeCaptureParams) =>
+    req<{ ok: true; profile: string; runner: ArcadeRunner }>('POST', '/arcade-bot/capture', params),
+  arcadeReplay: (params: ArcadeReplayParams) =>
+    req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/replay', params),
+  arcadeProfile: (name: string) =>
+    req<ArcadeProfileDetail>('GET', `/arcade-bot/profile/${encodeURIComponent(name)}`),
+  arcadeTraffic: (days: number) => req<ArcadeTraffic>('GET', `/arcade-bot/traffic?days=${days}`),
+  arcadeRecheckBrowser: () =>
+    req<{ ok: true; browser: ArcadeStatus['browser']; app: ArcadeStatus['app'] }>(
+      'POST',
+      '/arcade-bot/recheck-browser'
+    ),
+  arcadeStop: (slot: 'capture' | 'replay') =>
+    req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/stop', { slot }),
 
   // Voice bench — Polly bake-off for live trivia's read-aloud. `plan` prices a
   // run and spends nothing; `run` is the one that bills.

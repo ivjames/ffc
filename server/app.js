@@ -92,6 +92,16 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, build: BUILD_ID });
 });
 
+// Body-parsing health check. The GET above proves the process is up; this
+// proves it can PARSE A JSON BODY, which the GET cannot see: iconv-lite (under
+// body-parser) requires its encodings tables lazily on the first decode, so a
+// node_modules missing them boots clean, answers every GET, and turns every
+// JSON POST into an HTML 400 before any route runs. The deploy's health gate
+// (bin/ffc api_health) posts here so that server never goes live.
+app.post("/api/health", (req, res) => {
+  res.json({ ok: true, build: BUILD_ID, parsed: typeof req.body === "object" && req.body !== null });
+});
+
 // Uploaded org branding assets (logos/icons — routes/admin/orgs.js writes
 // them). Living under /api/ means the existing nginx /api proxy carries these
 // on EVERY tenant subdomain with zero nginx changes. Filenames are content-

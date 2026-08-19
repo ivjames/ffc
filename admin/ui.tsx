@@ -8,7 +8,7 @@ import type {
   TextareaHTMLAttributes,
 } from 'react';
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 
 // Master Control operates in a single HQ/operator timezone (Pacific), distinct
 // from each venue's own tz (which drives that venue's leaderboard). Every
@@ -187,6 +187,32 @@ export function Segmented<T extends string>({
         >
           {o.label}
         </button>
+      ))}
+    </div>
+  );
+}
+
+/** Routed tab row for a detail page. Same look as Segmented, but every tab is
+ *  a real link: a tab is then deep-linkable, bookmarkable, survives a reload
+ *  and answers the back button — which matters once a tab holds a form you
+ *  can be sent to ("go set their branding"). `end` marks the index tab so it
+ *  lights only on its own exact path, not on every child route. */
+export function TabNav({ tabs }: { tabs: { to: string; label: string; end?: boolean }[] }) {
+  return (
+    <div className="inline-flex gap-1 rounded-lg bg-slate-200/70 p-1">
+      {tabs.map((t) => (
+        <NavLink
+          key={t.to}
+          to={t.to}
+          end={t.end}
+          className={({ isActive }) =>
+            `rounded-md px-3 py-1 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 ${
+              isActive ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`
+          }
+        >
+          {t.label}
+        </NavLink>
       ))}
     </div>
   );
