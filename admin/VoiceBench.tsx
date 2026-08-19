@@ -177,6 +177,18 @@ export default function VoiceBench() {
 
   async function synthesize() {
     if (!plan) return price(venueId, questions);
+    // Half a spend bug each: submitting the live controls could bill a venue
+    // that was never priced, and submitting a stale plan.asked bills the
+    // selection the operator just moved OFF while the screen shows the new
+    // one. So spend only when the priced request is the one on screen, and
+    // otherwise reprice instead of guessing which of the two the click meant.
+    if (plan.asked.locationId !== venueId || plan.asked.questions !== questions) {
+      // Refuse rather than reprice: changing a control already started one,
+      // and a second call here would only race it. If that one fails, plan
+      // goes null and the branch above turns this button back into the retry.
+      setStatus('Selection changed — pricing it. Synthesize again to spend.');
+      return;
+    }
     setBusy(true);
     setError(null);
     setStatus('Synthesizing… (a few seconds)');
