@@ -154,7 +154,11 @@ async function main() {
   const t0 = Date.now();
   let failures = 0;
 
+  let unreachable = false;
+  let played = 0;
+
   for (const game of games) {
+    if (unreachable) break;
     const rows = [];
     for (let i = 0; i < args.rounds; i++) {
       // --assert-skill compares against EXPERT floors, so it has to play like
@@ -165,6 +169,7 @@ async function main() {
       try {
         const r = await playRound(page, game, { rng, skill, baseUrl: args.base });
         rows.push(r);
+        played++;
         console.log(
           `  ${game.key.padEnd(12)} #${String(i + 1).padStart(2)} ` +
             `skill ${skill.toFixed(2)}  score ${String(r.score).padStart(5)}  ` +
@@ -173,6 +178,19 @@ async function main() {
       } catch (err) {
         failures++;
         console.log(`  ${game.key.padEnd(12)} #${String(i + 1).padStart(2)} FAILED: ${err.message}`);
+        // A NETWORK error before anything has ever loaded means we can't reach
+        // the app at all — wrong base, DNS, TLS, a proxy in the way. Every
+        // remaining round fails identically, so stop rather than spending 19
+        // games proving it. Matching the whole net::ERR_* class beats
+        // enumerating codes: REFUSED, RESET, TIMED_OUT and NAME_NOT_RESOLVED
+        // are all the same "nothing is there" from here.
+        //
+        // Only while NOTHING has succeeded yet, though: once rounds are
+        // landing, a single blip shouldn't kill a long capture.
+        if (played === 0 && /net::ERR_/.test(err.message)) {
+          unreachable = true;
+          break;
+        }
       }
     }
     const scores = rows.map((r) => r.score);
@@ -204,7 +222,17 @@ async function main() {
   await browser.close();
 
   const wall = (Date.now() - t0) / 1000;
-  const played = Object.values(profile.games).reduce((n, g) => n + g.rounds, 0);
+
+  if (unreachable) {
+    console.error(
+      `\n  ✗ Could not reach the app at ${args.base} — stopped before playing anything.\n` +
+        '    Capture opens the PLAYER APP: the Vite dev server (npm run dev) on a dev\n' +
+        '    box, nginx on a deployed one — never the API port. A refusal means the\n' +
+        '    wrong origin; a reset or timeout usually means DNS, TLS, or a proxy that\n' +
+        '    the browser (unlike curl) is not going through. Pass --base <origin>, or\n' +
+        '    set PLATFORM_FQDN / FFC_APP_BASE so the admin can derive it.',
+    );
+  }
   console.log(`Played ${played} round(s) in ${wall.toFixed(0)}s` + (failures ? `, ${failures} failed` : ''));
   if (played > 0) {
     const perRound = wall / played;
@@ -214,7 +242,11 @@ async function main() {
     );
   }
 
-  if (args.out) {
+  if (args.out && played === 0) {
+    // Writing a zero-round profile just leaves a file that every replay has to
+    // refuse. The run already failed; don't make it litter too.
+    console.error(`  (no rounds played — no profile written to ${args.out})`);
+  } else if (args.out) {
     writeFileSync(args.out, JSON.stringify(profile, null, 2));
     console.log(`Wrote profile → ${args.out}`);
   }

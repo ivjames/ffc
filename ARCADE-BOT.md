@@ -163,10 +163,39 @@ own status, live log tail and stop button, so both can run at once.
 - Capture writes into `data/arcade-profiles/`, and replay's profile picker reads
   that directory back — so the two steps chain without touching a shell. The
   newest profile is preselected.
+- **Capture opens the player app, not the API** — the Vite dev server on a dev
+  box, nginx on a deployed one. The origin is **derived, not configured**:
+  `PLATFORM_FQDN` plus the org slugs give the player vhosts (`<slug>.<fqdn>`,
+  the same hosts `bin/ffc` renders and prints as *"Player app: …"*), so a normal
+  deploy needs no setting at all. Order tried: `FFC_APP_BASE` → `PUBLIC_APP_URL`
+  → derived org vhosts (default org first) → the dev server; the first that
+  answers wins, and the admin shows which one and what else it tried. Pointed
+  somewhere dead, a run otherwise fails its way through all 19 games and writes
+  a profile with zero rounds in it.
+- The probe asks whether **the player app** is there, not whether *something* is
+  serving: it fetches a real player route (`/arcade/skeeball`, which also proves
+  SPA fallback) and looks for markers only that app carries. The API answers a
+  JSON 404 and the admin site answers a perfectly good 200 — both would pass a
+  bare reachability check, and then every game would fail on a missing canvas,
+  which isn't a `net::ERR_*` and so slips past the run's own fail-fast.
 - **Capture needs a browser on the API host**, which an API box has no reason to
-  ship. When there isn't one the page says so and the button stays disabled
-  rather than spawning a run that dies on a Playwright stack trace. Capture on a
-  workstation and drop the profile JSON into `data/arcade-profiles/` instead.
+  ship. When there isn't one the page says so — with the command to fix it — and
+  the button stays disabled rather than spawning a run that dies on a Playwright
+  stack trace. Capture on a workstation and drop the profile JSON into
+  `data/arcade-profiles/` instead, or install one:
+
+  ```bash
+  cd /var/www/ffc && npx playwright install --with-deps chromium
+  ```
+
+  The npm package ships with the repo (a deploy's root `npm ci` includes dev
+  dependencies), but the **browser binaries download separately and no deploy
+  step fetches them** — so a fresh box has the library and not the browser.
+  That check LAUNCHES a browser rather than looking for a directory: the
+  directory version passed on a box whose `~/.cache/ms-playwright` existed but
+  held no usable build, which is exactly the failure it was there to prevent.
+  Answers are cached (30 min when available, 1 min when not) and **Re-check**
+  forces a fresh probe after installing.
 - The venue picker flags venues with game rewards switched off — awards to those
   come back 403 — and replay always talks to the API over loopback, never out
   through a proxy or to another host.

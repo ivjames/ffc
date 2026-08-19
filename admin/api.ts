@@ -524,9 +524,21 @@ export type ArcadeStatus = {
   /** The server's earning registry — every one of these has a bot policy.
    *  estRoundMs is the bot's own per-round estimate (null if unreadable). */
   games: { key: string; label: string; estRoundMs: number | null }[];
-  /** Capture drives a real browser; an API host may not have one. */
-  browser: { available: boolean; at: string | null; reason?: string };
-  appBase: string;
+  /** Capture drives a real browser; an API host may not have one. Null for an
+   *  org-scoped admin — capture is a super_admin tool. */
+  browser: { available: boolean; at: string | null; reason?: string } | null;
+  /** …and it drives the PLAYER APP, which on a deployed box is nginx on a
+   *  per-org vhost, not the dev server. The origin is DERIVED (PLATFORM_FQDN +
+   *  org slug) and probed, so no URL has to be configured by hand; `tried`
+   *  shows the candidates when none answered. Null for an org-scoped admin. */
+  app: {
+    reachable: boolean;
+    base: string | null;
+    status: number | null;
+    why?: string;
+    reason?: string;
+    tried: { base: string; why: string; ok: boolean; detail: string }[];
+  } | null;
   profiles: ArcadeProfile[];
   venues: ArcadeVenue[];
   syntheticAwards: { total: number; last24h: number; tickets: number };
@@ -1144,6 +1156,11 @@ export const api = {
     req<{ ok: true; profile: string; runner: ArcadeRunner }>('POST', '/arcade-bot/capture', params),
   arcadeReplay: (params: ArcadeReplayParams) =>
     req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/replay', params),
+  arcadeRecheckBrowser: () =>
+    req<{ ok: true; browser: ArcadeStatus['browser']; app: ArcadeStatus['app'] }>(
+      'POST',
+      '/arcade-bot/recheck-browser'
+    ),
   arcadeStop: (slot: 'capture' | 'replay') =>
     req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/stop', { slot }),
 
