@@ -44,6 +44,14 @@ function skillBlurb(p: ArcadeProfile): { text: string; fixed: boolean } | null {
   };
 }
 
+/** Pull a trailing shell command off the browser-probe reason, so the UI can
+ *  show it as something to copy rather than as prose. */
+function splitCommand(reason: string): [string, string | null] {
+  const at = reason.search(/(cd |npm ci|npx )/);
+  if (at < 0) return [reason, null];
+  return [reason.slice(0, at).replace(/[:\s]+$/, ''), reason.slice(at).trim()];
+}
+
 /** Shared runner header + log tail for either slot. */
 function RunnerPanel({ runner, onStop, canControl, busy }: {
   runner: ArcadeRunner;
@@ -274,7 +282,31 @@ export default function ArcadeBot() {
         {!browser.available && (
           <div className="mt-3">
             <Banner kind="error">
-              <strong>No browser on this host — capture is unavailable.</strong> {browser.reason}
+              <strong>No browser on this host — capture is unavailable.</strong>{' '}
+              {/* The reason usually ends in a shell command. Split it onto its own
+                  line so it can be copied without picking it out of a sentence. */}
+              {(() => {
+                const [prose, cmd] = splitCommand(browser.reason ?? '');
+                return (
+                  <>
+                    {prose}
+                    {cmd && (
+                      <code className="mt-2 block overflow-x-auto rounded bg-red-100 px-2 py-1 text-xs">
+                        {cmd}
+                      </code>
+                    )}
+                  </>
+                );
+              })()}
+              <div className="mt-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => run(() => api.arcadeRecheckBrowser(), setCapErr, 're-check')}
+                  disabled={busy}
+                >
+                  {busy ? 'Checking…' : 'Re-check'}
+                </Button>
+              </div>
             </Banner>
           </div>
         )}

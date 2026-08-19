@@ -3,6 +3,7 @@
 //   POST /api/admin/arcade-bot/capture   play the games, write a profile
 //   POST /api/admin/arcade-bot/replay    post the awards a profile implies
 //   POST /api/admin/arcade-bot/stop      {slot} stop capture or replay
+//   POST /api/admin/arcade-bot/recheck-browser  re-probe, ignoring the cache
 //
 // The bots are scripts/arcade-bot.mjs and scripts/arcade-traffic.mjs (see
 // ARCADE-BOT.md). This surface drives them from the browser; lib/arcadeBotRunner
@@ -13,9 +14,11 @@
 // controls, and replay posts real ticket awards.
 //
 // CAPTURE NEEDS A BROWSER. It drives the player app in headless Chromium, which
-// the API host may not have — an API box has no reason to ship one. Rather than
-// spawn a run that dies with a Playwright stack trace, status reports whether a
-// browser is resolvable and the route refuses with that reason.
+// the API host may not have — an API box has no reason to ship one, and the
+// binaries download separately from the npm package so no deploy step fetches
+// them. Rather than spawn a run that dies with a Playwright stack trace, status
+// LAUNCHES one (lib/browserProbe.js, cached) and the route refuses with the
+// reason and the install command.
 import { Router } from "express";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -24,6 +27,7 @@ import { orgScope } from "../../lib/adminAuth.js";
 import { GAME_REWARD_GAMES } from "../../lib/gameRewards.js";
 import { moduleLive } from "../../lib/modules.js";
 import * as runner from "../../lib/arcadeBotRunner.js";
+import { browserStatus, resetBrowserStatus } from "../../lib/browserProbe.js";
 
 export const router = Router();
 
@@ -31,23 +35,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Profile names are ours to generate, but they are also path segments — keep
 // them boring so a name can never climb out of PROFILE_DIR.
 const PROFILE_RE = /^[A-Za-z0-9._-]+\.json$/;
-
-/** Is a headless browser available for the capture half? */
-function browserStatus() {
-  const envPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
-  const candidates = [envPath, "/opt/pw-browsers", path.join(process.env.HOME ?? "", ".cache/ms-playwright")];
-  for (const dir of candidates) {
-    if (dir && existsSync(dir)) return { available: true, at: dir };
-  }
-  return {
-    available: false,
-    at: null,
-    reason:
-      "no Playwright browser found on the API host (looked at PLAYWRIGHT_BROWSERS_PATH, " +
-      "/opt/pw-browsers, ~/.cache/ms-playwright). Capture drives a real browser; " +
-      "install one there, or capture on a workstation and upload the profile.",
-  };
-}
 
 /**
  * The registry games, each with the bot's own per-round time estimate so the
@@ -237,9 +224,10 @@ function superOnly(req, res) {
 router.get("/status", async (req, res) => {
   const scope = orgScope(req);
   try {
-    const [venues, games, awards] = await Promise.all([
+    const [venues, games, browser, awards] = await Promise.all([
       loadVenues(scope),
       loadGames(),
+      browserStatus(),
       pool.query(
         `select count(*)::int as total,
                 count(*) filter (where created_at > now() - interval '24 hours')::int as last24h,
@@ -255,7 +243,7 @@ router.get("/status", async (req, res) => {
       // The bot's policies are keyed by the SERVER registry, and every game in
       // it has one — so this list is both "what may earn" and "what plays".
       games,
-      browser: browserStatus(),
+      browser,
       appBase: process.env.FFC_APP_BASE || "http://127.0.0.1:5173",
       profiles: listProfiles(),
       venues,
@@ -270,12 +258,12 @@ router.get("/status", async (req, res) => {
 });
 
 // --- Capture (super_admin) --------------------------------------------------
-router.post("/capture", (req, res) => {
+router.post("/capture", async (req, res) => {
   if (!superOnly(req, res)) return undefined;
   const v = validateCapture(req.body);
   if (v.error) return res.status(400).json({ ok: false, error: v.error });
 
-  const browser = browserStatus();
+  const browser = await browserStatus();
   if (!browser.available) return res.status(409).json({ ok: false, error: browser.reason });
   if (runner.capture.isRunning()) {
     return res.status(409).json({ ok: false, error: "a capture is already running — stop it first" });
@@ -379,6 +367,16 @@ router.post("/replay", async (req, res) => {
   } catch (err) {
     return res.status(409).json({ ok: false, error: err.message });
   }
+});
+
+// --- Re-probe the browser (super_admin) -------------------------------------
+// The probe's answer is cached, which is right for a page that polls every 4s
+// and wrong for the one moment it matters: an operator who has just run the
+// install command and wants to know NOW. Drop the cache and launch again.
+router.post("/recheck-browser", async (req, res) => {
+  if (!superOnly(req, res)) return undefined;
+  resetBrowserStatus();
+  return res.json({ ok: true, browser: await browserStatus() });
 });
 
 // --- Stop (super_admin) -----------------------------------------------------

@@ -164,9 +164,23 @@ own status, live log tail and stop button, so both can run at once.
   that directory back — so the two steps chain without touching a shell. The
   newest profile is preselected.
 - **Capture needs a browser on the API host**, which an API box has no reason to
-  ship. When there isn't one the page says so and the button stays disabled
-  rather than spawning a run that dies on a Playwright stack trace. Capture on a
-  workstation and drop the profile JSON into `data/arcade-profiles/` instead.
+  ship. When there isn't one the page says so — with the command to fix it — and
+  the button stays disabled rather than spawning a run that dies on a Playwright
+  stack trace. Capture on a workstation and drop the profile JSON into
+  `data/arcade-profiles/` instead, or install one:
+
+  ```bash
+  cd /var/www/ffc && npx playwright install --with-deps chromium
+  ```
+
+  The npm package ships with the repo (a deploy's root `npm ci` includes dev
+  dependencies), but the **browser binaries download separately and no deploy
+  step fetches them** — so a fresh box has the library and not the browser.
+  That check LAUNCHES a browser rather than looking for a directory: the
+  directory version passed on a box whose `~/.cache/ms-playwright` existed but
+  held no usable build, which is exactly the failure it was there to prevent.
+  Answers are cached (30 min when available, 1 min when not) and **Re-check**
+  forces a fresh probe after installing.
 - The venue picker flags venues with game rewards switched off — awards to those
   come back 403 — and replay always talks to the API over loopback, never out
   through a proxy or to another host.

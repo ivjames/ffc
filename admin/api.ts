@@ -1144,6 +1144,8 @@ export const api = {
     req<{ ok: true; profile: string; runner: ArcadeRunner }>('POST', '/arcade-bot/capture', params),
   arcadeReplay: (params: ArcadeReplayParams) =>
     req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/replay', params),
+  arcadeRecheckBrowser: () =>
+    req<{ ok: true; browser: ArcadeStatus['browser'] }>('POST', '/arcade-bot/recheck-browser'),
   arcadeStop: (slot: 'capture' | 'replay') =>
     req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/stop', { slot }),
 
