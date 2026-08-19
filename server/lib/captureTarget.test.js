@@ -1,6 +1,7 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { appBaseCandidates } from "./captureTarget.js";
+import { createServer } from "node:http";
+import { appBaseCandidates, appBaseStatus, resetAppBaseStatus } from "./captureTarget.js";
 
 // The capture base is DERIVED, not configured: PLATFORM_FQDN plus an org slug
 // is the player-app vhost (bin/ffc renders `<slug>.$FQDN` and prints
@@ -83,4 +84,94 @@ test("candidates are de-duplicated and each says where it came from", () => {
   assert.equal(cands.filter((c) => c.base === "https://bullwinkles.ffc.lab980.com").length, 1);
   assert.equal(cands[0].why, "PUBLIC_APP_URL");
   assert.ok(cands.every((c) => typeof c.why === "string" && c.why.length > 0));
+});
+
+// --- Is the thing that answered actually the player app? ---------------------
+// "Something served HTTP 200" is not the question. Pointed at the API or the
+// admin site, `page.goto` gets a perfectly good response and every game then
+// fails on a missing canvas — errors that are NOT net::ERR_*, so they slip past
+// the run's fail-fast and burn ~15s per game. These use a local stub server, so
+// no real browser or outbound network is involved.
+
+/** A throwaway HTTP server; returns its origin and a close(). */
+async function stub(handler) {
+  const server = createServer(handler);
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const { port } = server.address();
+  return { base: `http://127.0.0.1:${port}`, close: () => new Promise((r) => server.close(r)) };
+}
+
+const PLAYER_HTML =
+  '<!doctype html><html><head><link rel="manifest" href="/api/manifest.webmanifest" />' +
+  "<script>localStorage.getItem('ffc-skin')</script></head><body><div id=\"root\"></div></body></html>";
+const ADMIN_HTML = '<!doctype html><html><head><title>Master Control — FFC</title></head>' +
+  '<body><div id="root"></div></body></html>';
+
+test("the player app is accepted", async () => {
+  const s = await stub((req, res) => {
+    assert.equal(req.url, "/arcade/skeeball"); // a real player route, not /
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(PLAYER_HTML);
+  });
+  process.env.FFC_APP_BASE = s.base;
+  resetAppBaseStatus();
+  const r = await appBaseStatus([]);
+  assert.equal(r.reachable, true);
+  assert.equal(r.base, s.base);
+  await s.close();
+});
+
+test("the API is rejected — a JSON 404 is not the player app", async () => {
+  const s = await stub((req, res) => {
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: "not found" }));
+  });
+  process.env.FFC_APP_BASE = s.base;
+  resetAppBaseStatus();
+  const r = await appBaseStatus([]);
+  assert.equal(r.reachable, false);
+  assert.match(r.reason, /isn't the player app/);
+  await s.close();
+});
+
+test("the ADMIN app is rejected even though it answers 200", async () => {
+  // The sharpest case: same shape, same status, same #root div — only the
+  // player-specific markers tell them apart.
+  const s = await stub((req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(ADMIN_HTML);
+  });
+  process.env.FFC_APP_BASE = s.base;
+  resetAppBaseStatus();
+  const r = await appBaseStatus([]);
+  assert.equal(r.reachable, false);
+  assert.equal(r.tried[0].detail, "not the player app");
+  await s.close();
+});
+
+test("a redirect to the app is a pass", async () => {
+  const app = await stub((req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(PLAYER_HTML);
+  });
+  const front = await stub((req, res) => {
+    res.writeHead(301, { location: app.base + req.url });
+    res.end();
+  });
+  process.env.FFC_APP_BASE = front.base;
+  resetAppBaseStatus();
+  const r = await appBaseStatus([]);
+  assert.equal(r.reachable, true);
+  await front.close();
+  await app.close();
+});
+
+test("nothing answering reads differently from the wrong thing answering", async () => {
+  // Port 1 is not listening; the distinction matters because the fixes differ.
+  process.env.FFC_APP_BASE = "http://127.0.0.1:1";
+  resetAppBaseStatus();
+  const r = await appBaseStatus([]);
+  assert.equal(r.reachable, false);
+  assert.match(r.reason, /no player app is answering/);
+  assert.doesNotMatch(r.reason, /isn't the player app/);
 });

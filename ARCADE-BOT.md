@@ -172,6 +172,12 @@ own status, live log tail and stop button, so both can run at once.
   answers wins, and the admin shows which one and what else it tried. Pointed
   somewhere dead, a run otherwise fails its way through all 19 games and writes
   a profile with zero rounds in it.
+- The probe asks whether **the player app** is there, not whether *something* is
+  serving: it fetches a real player route (`/arcade/skeeball`, which also proves
+  SPA fallback) and looks for markers only that app carries. The API answers a
+  JSON 404 and the admin site answers a perfectly good 200 — both would pass a
+  bare reachability check, and then every game would fail on a missing canvas,
+  which isn't a `net::ERR_*` and so slips past the run's own fail-fast.
 - **Capture needs a browser on the API host**, which an API box has no reason to
   ship. When there isn't one the page says so — with the command to fix it — and
   the button stays disabled rather than spawning a run that dies on a Playwright

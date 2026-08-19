@@ -26,6 +26,22 @@ const TTL_FAIL_MS = 30_000;
 
 const DEV_BASE = "http://127.0.0.1:5173";
 
+// A real player route, not `/`. It proves the two things capture needs: that
+// something is serving, AND that deep SPA paths fall back to index.html — the
+// bot navigates straight to /arcade/<game> and never touches the root.
+const PROBE_PATH = "/arcade/skeeball";
+
+// Markers that identify THE PLAYER APP specifically. "Something answered HTTP"
+// is not the question: point this at the API and a JSON 404 would pass, capture
+// would be enabled, and every game would then fail on a missing canvas — errors
+// that are not net::ERR_* and so slip past the run's fail-fast, burning ~15s per
+// game. Both markers live in index.html and survive the build; neither appears
+// in the admin bundle, so an admin vhost is rejected too.
+const APP_MARKERS = ["/api/manifest.webmanifest", "ffc-skin"];
+// index.html is ~2KB. Anything vastly larger is not it, and is not worth
+// reading into the API process to find out.
+const MAX_BODY_BYTES = 512 * 1024;
+
 const strip = (u) => String(u || "").trim().replace(/\/$/, "");
 
 /**
@@ -69,14 +85,21 @@ let inFlight = null;
 
 async function reach(base) {
   try {
-    const res = await fetch(base, {
+    // `follow`, not `manual`: a deployed vhost may 301 http→https or apex→org,
+    // and landing on the app after a redirect is a pass.
+    const res = await fetch(base + PROBE_PATH, {
       method: "GET",
-      redirect: "manual",
+      redirect: "follow",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    // Any HTTP answer means something is serving here. Content is not our
-    // business: a redirect or a 404 at the root can still be a working SPA
-    // host, and the run itself will say so far more precisely than we can.
+    if (res.status >= 400) return { ok: false, why: `HTTP ${res.status}`, answered: true };
+
+    const len = Number(res.headers.get("content-length") || 0);
+    if (len > MAX_BODY_BYTES) return { ok: false, why: "not the player app", answered: true };
+    const body = (await res.text()).slice(0, MAX_BODY_BYTES);
+    if (!APP_MARKERS.some((m) => body.includes(m))) {
+      return { ok: false, why: "not the player app", answered: true };
+    }
     return { ok: true, status: res.status };
   } catch (err) {
     return { ok: false, why: String(err?.cause?.code || err?.name || err?.message || err) };
@@ -92,20 +115,28 @@ async function probeAll(candidates) {
     base: c.base,
     why: c.why,
     ok: results[i].ok,
+    answered: results[i].answered === true,
     detail: results[i].ok ? `HTTP ${results[i].status}` : results[i].why,
   }));
 
   const hit = tried.find((t) => t.ok);
   if (hit) return { reachable: true, base: hit.base, status: null, why: hit.why, tried };
 
+  // "Something answered but it wasn't the app" is a different mistake from
+  // "nothing answered", and it has a different fix — so say which.
+  const wrongApp = tried.some((t) => t.answered);
   return {
     reachable: false,
     base: candidates[0]?.base ?? null,
     status: null,
     tried,
     reason:
-      "no player app is answering. Capture opens the PLAYER APP — the Vite dev server on a dev " +
-      "box, nginx on a deployed one — never the API port. Tried: " +
+      (wrongApp
+        ? "no player app found. Something is serving, but it isn't the player app — the API and " +
+          "the admin site both answer without being it. "
+        : "no player app is answering. ") +
+      "Capture opens the PLAYER APP — the Vite dev server on a dev box, nginx on a deployed one — " +
+      `never the API port. Tried ${PROBE_PATH} on: ` +
       tried.map((t) => `${t.base} (${t.detail})`).join(", ") +
       ". Set PLATFORM_FQDN so the org vhosts can be derived, or FFC_APP_BASE to point this tool " +
       "at a specific origin.",
