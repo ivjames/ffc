@@ -64,12 +64,19 @@ tokens* (plus $0.60/M text input). At ~6 audio tokens per text token, and
 against measured read lengths, that lands near **$18/M characters** — more than
 `tts-1`'s flat $15.
 
-**`<say-as interpret-as="characters">` is unsupported on Polly neural voices.**
+**`<say-as interpret-as="characters">` is unsupported on Polly *neural* voices
+— and only neural.**
 AWS synthesizes the affected sentence with the *standard* voice and **still
 bills it at the neural rate**. The join code is exactly where you would reach
 for spell-out, so it would arrive in a worse voice than the rest of the game.
-`lobbyScript` spells it with commas instead — that is the correct technique
-here, not a workaround to remove.
+`lobbyScript` spells it with commas instead — the correct technique for the
+browser voice that ships today, and for any neural row.
+
+On **generative**, `<say-as>` is Full availability, so this trap does not apply
+there; AWS's wording is specific to neural voices. Cartesia has `<spell>`, which
+does the same job. OpenAI has no markup at all and can only be *asked* to spell
+it out. Worth an audition before assuming the commas are the best any of them
+can do.
 
 **Caching rights decide the architecture.** A provider that forbids keeping the
 audio turns the per-bank costing above into a per-game bill *and* puts venue
@@ -102,14 +109,27 @@ on screen as skipped, so "only one column showed up" is never ambiguous.
 
 | provider | row(s) | rate used | exact? |
 | --- | --- | --- | --- |
-| **Polly** | Stephen, generative engine | $30/M | yes — the API returns `RequestCharacters` |
+| **Polly** | Stephen ×3: generative, neural, neural + DRC | $30/M gen, $16/M neural | yes — the API returns `RequestCharacters` |
 | **OpenAI** | `gpt-4o-mini-tts` / `ash`, plain **and** with host direction | ~$18/M | **estimated** — billed in audio tokens |
 | **Cartesia** | `sonic-3.5`, up to 2 discovered English voices | ~$50/M | **estimated** — billed in credits |
 
-**Polly is one row on purpose.** Ten variants were auditioned — Joanna, Matthew
-and Ruth across neural and generative, with and without newscaster and DRC —
-and **Stephen generative** won by ear. The rest are a `git log` away; carrying
-them forward only made every run cost more and take longer to listen through.
+**Polly is one voice on purpose, but three rows.** Ten variants were auditioned
+— Joanna, Matthew and Ruth across neural and generative, with and without
+newscaster and DRC — and **Stephen** won by ear. The other voices are a
+`git log` away.
+
+Stephen exists on **both** engines, which is what makes the third row worth
+paying for. Generative reads better but supports no DRC; neural is flatter but
+DRC lifts quiet consonants over room noise, which is the actual problem in a
+bar. Comparing generative against neural+DRC alone would conflate the engine
+with the compression, so plain neural is the control that says which of the two
+did the work. Three clips of ~150 characters is under a cent.
+
+The DRC row is the only clip in the whole bench sent as **SSML**
+(`<speak><amazon:effect name="drc">…</amazon:effect></speak>`), which means its
+text has to be XML-escaped — a bare `&` in a band or film name is a 400 from
+Polly, not a mispronunciation. SSML tags are not billed, and the estimate uses
+the unwrapped character count, so the wrapper costs nothing either way.
 
 **OpenAI is here for `instructions`.** It is the only provider in the lineup
 that takes free-text direction on accent, emotion and pace, so both of its rows
@@ -139,13 +159,17 @@ Generative is what the bench ships now:
 - **$30/M against neural's $16.** A 5,000-question bank: $28 once, versus $15.
   Still not the deciding factor.
 - **No newscaster, no DRC** — generative supports neither. It is expressive
-  without markup rather than because of it, so those knobs stop applying.
+  without markup rather than because of it, so those knobs stop applying. DRC
+  is the one worth mourning: it is the only tag that fights room noise, and
+  giving it up is the real cost of the engine. Hence the neural + DRC row.
 - **Region-limited**: us-east-1, us-west-2, eu-central-1/2, eu-west-2,
   ca-central-1, and several ap-* regions. Not every region Polly serves. The
   bench checks `AWS_REGION` against that list **before** planning, because a
   region that serves neural but not generative rejects every generative request
   while the neural half of a batch still bills. In a non-generative region the
-  lineup falls back to Stephen neural and the row says so.
+  generative row is simply not planned, and the screen says why — naming the
+  region it found and the ones that would work. A row that vanishes without a
+  reason is indistinguishable from a broken bench.
 - **One caveat worth weighing for trivia**: AWS documents an emergency-stop
   mechanism against model hallucination, and says it "could end up cutting a
   word during a generation step". A clipped word in a question read to a room

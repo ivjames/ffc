@@ -240,6 +240,9 @@ export default function VoiceBench() {
   // identical to "not configured" on screen, and it is a different fix.
   const unconfigured = (plan?.providers ?? []).filter((p) => !p.configured);
   const broken = (plan?.providers ?? []).filter((p) => p.configured && p.error);
+  // A row missing for a reason the screen can fix beats a row missing silently,
+  // which is indistinguishable from the bench being broken.
+  const notes = (plan?.providers ?? []).filter((p) => p.configured && p.note);
   const anyEstimated = Object.values(plan?.byProvider ?? {}).some((e) => e.estimated);
 
   return (
@@ -316,6 +319,11 @@ export default function VoiceBench() {
               {unconfigured.map((p) => `${p.label} (set ${p.why})`).join(', ')}.
             </p>
           )}
+          {notes.map((p) => (
+            <p key={p.key} className="mt-1 text-sm text-slate-500">
+              {p.label}: {p.note}
+            </p>
+          ))}
           {broken.length > 0 && (
             <p className="mt-1 text-sm text-red-700">
               Configured but not answering, so skipped:{' '}
