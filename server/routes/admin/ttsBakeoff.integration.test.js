@@ -24,6 +24,33 @@ process.env.APP_TOKEN = "tts-bakeoff-test-token";
 
 const { app } = await import("../../app.js");
 
+// Everything below runs AFTER that import on purpose. app.js pulls in
+// dotenv/config, which fills any variable this file has left unset from
+// server/.env — so scrubbing before the import scrubs nothing on a box that
+// has one, and the keys come straight back. That is not academic: with
+// provider keys in server/.env it put another provider in the priced plan and
+// let the "refuses without credentials" test reach synthesis, which on a real
+// key means a deploy gate that spends money.
+//
+// The provider lineup is decided by the environment, so the environment has to
+// be declared here rather than inherited. Reading whatever the box happens to
+// export made this file pass on a dev container that had AWS keys in its
+// ambient environment and fail the deploy gate on the droplet, which has none.
+//
+// Fake Polly credentials are safe: planning never calls AWS — `configured` is
+// a truthiness check and the lineup is pure — and the one test that hits /run
+// deletes them first. The other two keys are removed rather than faked,
+// because a configured Cartesia key makes providerStatus fetch its voice list,
+// and a deploy gate must not depend on a third party answering.
+//
+// Providers read process.env at call time, so setting it after the import is
+// enough — nothing has been read yet.
+process.env.AWS_ACCESS_KEY_ID = "test-access-key-id";
+process.env.AWS_SECRET_ACCESS_KEY = "test-secret-access-key";
+process.env.AWS_REGION = "us-east-1";
+delete process.env.OPENAI_API_KEY;
+delete process.env.CARTESIA_API_KEY;
+
 let baseUrl, close;
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 let orgAId, orgBId, locAId, locBId;
@@ -124,8 +151,12 @@ test("plan prices a run without spending", async () => {
   assert.ok(body.clips > 0, "it plans clips");
   assert.ok(body.chars > 0, "with billable characters");
   assert.ok(body.usd > 0 && body.usd < 1, `a sane price, got ${body.usd}`);
-  // Priced per provider, since they cost different amounts.
-  assert.ok(Object.keys(body.byProvider).length > 0, "priced per provider");
+  // Priced per provider, since they cost different amounts. Polly alone,
+  // because this file configures Polly alone — if another provider shows up
+  // here, the run is reading credentials from the box instead of the test.
+  assert.deepEqual(Object.keys(body.byProvider), ["Polly"]);
+  // Three Stephen rows per line: generative, neural, neural + DRC.
+  assert.equal(body.clips, body.lines.length * 3);
   // Every provider is accounted for, configured or not, so the screen can say
   // which key is missing instead of quietly showing fewer columns.
   assert.deepEqual(
