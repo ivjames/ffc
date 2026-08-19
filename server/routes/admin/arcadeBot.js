@@ -50,10 +50,15 @@ const PROFILE_RE = /^[A-Za-z0-9._-]+\.json$/;
 async function loadGames() {
   try {
     const reg = await import("../../../scripts/lib/arcade/registry.mjs");
-    const est = new Map(reg.GAMES.map((g) => [g.key, g.estRoundMs]));
-    return GAME_REWARD_GAMES.map((g) => ({ ...g, estRoundMs: est.get(g.key) ?? null }));
+    const meta = new Map(reg.GAMES.map((g) => [g.key, g]));
+    return GAME_REWARD_GAMES.map((g) => ({
+      ...g,
+      estRoundMs: meta.get(g.key)?.estRoundMs ?? null,
+      // Go-Karts scores a TIME — charts must know which direction "best" is.
+      lowerIsBetter: meta.get(g.key)?.lowerIsBetter === true,
+    }));
   } catch {
-    return GAME_REWARD_GAMES.map((g) => ({ ...g, estRoundMs: null }));
+    return GAME_REWARD_GAMES.map((g) => ({ ...g, estRoundMs: null, lowerIsBetter: false }));
   }
 }
 
@@ -318,6 +323,11 @@ router.get("/profile/:name", (req, res) => {
       name,
       capturedAt: typeof doc?.capturedAt === "string" ? doc.capturedAt : null,
       base: typeof doc?.base === "string" ? doc.base : null,
+      // Wall clock and worker count, recorded by newer captures. Without them
+      // the UI can only sum per-round times, which is aggregate BROWSER time —
+      // 3x the wall on 3 workers — and must be labelled as such.
+      wallMs: Number.isFinite(doc?.wallMs) ? doc.wallMs : null,
+      workers: Number.isFinite(doc?.workers) ? doc.workers : null,
       games,
     });
   } catch (err) {
@@ -343,23 +353,47 @@ router.get("/traffic", async (req, res) => {
   const scopeSql = "and ($2::uuid is null or location_id in (select id from location where org_id = $2))";
   const where = `where session_id like 'synthetic:%' and created_at > now() - ($1 || ' days')::interval ${scopeSql}`;
 
+  // "Paid" means CONFIRMED: a pending row's tickets_awarded is a reservation
+  // whose POS credit never settled (routes/gameRewards.js), so counting it as
+  // paid overstates payments exactly when the vendor is failing — mirror the
+  // status='awarded' filter routes/admin/gameRewards.js already uses.
+  const paid = `coalesce(sum(tickets_awarded) filter (where status = 'awarded'), 0)::int`;
+
   try {
     const [buckets, byGame, totals] = await Promise.all([
+      // Every bucket in the window, awards or not: rows only where awards
+      // exist would butt two runs days apart against each other and hide the
+      // quiet stretch between them.
       pool.query(
-        `select date_trunc('${unit}', created_at) as at,
-                count(*)::int as awards,
-                coalesce(sum(tickets_requested), 0)::int as requested,
-                coalesce(sum(tickets_awarded), 0)::int as awarded
-           from game_ticket_award ${where}
-          group by 1 order by 1`,
+        `with slots as (
+           select generate_series(
+                    date_trunc('${unit}', now() - ($1 || ' days')::interval),
+                    date_trunc('${unit}', now()),
+                    interval '1 ${unit}') as at
+         ),
+         agg as (
+           select date_trunc('${unit}', created_at) as at,
+                  count(*)::int as awards,
+                  coalesce(sum(tickets_requested), 0)::int as requested,
+                  ${paid} as awarded
+             from game_ticket_award ${where}
+            group by 1
+         )
+         select s.at,
+                coalesce(a.awards, 0)::int as awards,
+                coalesce(a.requested, 0)::int as requested,
+                coalesce(a.awarded, 0)::int as awarded
+           from slots s left join agg a using (at)
+          order by s.at`,
         [String(days), scope]
       ),
       pool.query(
         `select game,
                 count(*)::int as awards,
                 coalesce(sum(tickets_requested), 0)::int as requested,
-                coalesce(sum(tickets_awarded), 0)::int as awarded,
-                count(*) filter (where status = 'daily_cap')::int as capped
+                ${paid} as awarded,
+                count(*) filter (where status = 'daily_cap')::int as capped,
+                count(*) filter (where status = 'pending')::int as pending
            from game_ticket_award ${where}
           group by 1 order by awarded desc, game`,
         [String(days), scope]
@@ -367,7 +401,9 @@ router.get("/traffic", async (req, res) => {
       pool.query(
         `select count(*)::int as awards,
                 coalesce(sum(tickets_requested), 0)::int as requested,
-                coalesce(sum(tickets_awarded), 0)::int as awarded,
+                ${paid} as awarded,
+                coalesce(sum(tickets_awarded) filter (where status = 'pending'), 0)::int as pending_tickets,
+                count(*) filter (where status = 'pending')::int as pending,
                 count(distinct player_id)::int as cards,
                 count(distinct split_part(session_id, ':', 2))::int as runs,
                 count(*) filter (where status = 'daily_cap')::int as capped,

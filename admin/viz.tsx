@@ -83,14 +83,22 @@ export function StatTile({ label, value, sub }: { label: string; value: string; 
   );
 }
 
+/**
+ * Pre-normalised: 0..1 where 1 is that game's BEST round, whichever direction
+ * best points. The caller owns the direction, because only it knows which games
+ * score a time (Go-Karts) — normalising raw values by max here would label the
+ * slowest race "best".
+ */
 export type RangeRow = {
   key: string;
   label: string;
-  lo: number; // p10
-  mid: number; // p50
-  hi: number; // p90
-  max: number; // best round
-  n: number;
+  relLo: number;
+  relMid: number;
+  relHi: number;
+  /** Right-column figure (the median, as the game scores it). */
+  midText: string;
+  /** Native <title> tooltip — carries the raw percentiles and direction. */
+  title: string;
 };
 
 // These row charts are HTML, not SVG, on purpose. A viewBox scales its text
@@ -115,16 +123,14 @@ export function RangeBars({ rows }: { rows: RangeRow[] }) {
   return (
     <div className="space-y-1.5">
       {rows.map((r) => {
-        const p = (v: number) => (r.max > 0 ? Math.min(100, (v / r.max) * 100) : 0);
-        const lo = p(r.lo);
-        const hi = p(r.hi);
-        const mid = p(r.mid);
-        const title = `${r.label} — p10 ${fmt(r.lo)}, p50 ${fmt(r.mid)}, p90 ${fmt(r.hi)}, best ${fmt(r.max)} (${r.n} rounds)`;
+        const pc = (v: number) => Math.min(100, Math.max(0, v * 100));
+        const lo = pc(Math.min(r.relLo, r.relHi));
+        const hi = pc(Math.max(r.relLo, r.relHi));
         return (
-          <div key={r.key} className="flex items-center gap-2 text-xs" title={title}>
+          <div key={r.key} className="flex items-center gap-2 text-xs" title={r.title}>
             <span className="w-28 shrink-0 truncate text-right text-slate-700">{r.label}</span>
             <span className="relative h-2.5 flex-1">
-              {/* track: the full 0→best span, so a narrow spread reads as narrow */}
+              {/* track: the full worst→best span, so a narrow spread reads as narrow */}
               <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2" style={{ background: VIZ.axis }} />
               <span
                 className="absolute inset-y-0 rounded-[4px]"
@@ -132,10 +138,10 @@ export function RangeBars({ rows }: { rows: RangeRow[] }) {
               />
               <span
                 className="absolute -inset-y-0.5 w-[2px] rounded-full"
-                style={{ left: `calc(${mid}% - 1px)`, background: VIZ.accent }}
+                style={{ left: `calc(${pc(r.relMid)}% - 1px)`, background: VIZ.accent }}
               />
             </span>
-            <span className="w-12 shrink-0 text-right tabular-nums text-slate-500">{fmt(r.mid)}</span>
+            <span className="w-12 shrink-0 text-right tabular-nums text-slate-500">{r.midText}</span>
           </div>
         );
       })}

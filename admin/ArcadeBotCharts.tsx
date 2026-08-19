@@ -45,40 +45,66 @@ function bucketLabel(iso: string, unit: 'hour' | 'day') {
 
 // --- Capture -----------------------------------------------------------------
 
-function CaptureCharts({ profile }: { profile: ArcadeProfile }) {
+function CaptureCharts({
+  profile,
+  lowerIsBetter,
+}: {
+  profile: ArcadeProfile;
+  lowerIsBetter: (key: string) => boolean;
+}) {
   const { data, error, loading } = useAsync(() => api.arcadeProfile(profile.name), [profile.name]);
+
+  // "Best" points DOWN for a time-scored game (Go-Karts): its best round is
+  // stats.min, and normalising by max would label the slowest race best. rel()
+  // maps a score to 0..1 with 1 = best in either direction (best/v inverts a
+  // time so faster plots higher).
+  const bestOf = (g: { key: string; stats: { min: number; max: number } | null }) =>
+    g.stats ? (lowerIsBetter(g.key) ? g.stats.min : g.stats.max) : 0;
+  const relOf = (key: string, best: number) => (v: number) =>
+    best <= 0 || v <= 0 ? 0 : lowerIsBetter(key) ? Math.min(1, best / v) : Math.min(1, v / best);
 
   const rows = useMemo<RangeRow[]>(() => {
     if (!data) return [];
     return data.games
       .filter((g) => g.stats && g.rounds > 0)
-      .map((g) => ({
-        key: g.key,
-        label: g.label,
-        lo: g.stats!.p10,
-        mid: g.stats!.p50,
-        hi: g.stats!.p90,
-        max: g.stats!.max,
-        n: g.rounds,
-      }))
+      .map((g) => {
+        const st = g.stats!;
+        const best = bestOf(g);
+        const rel = relOf(g.key, best);
+        const low = lowerIsBetter(g.key);
+        return {
+          key: g.key,
+          label: g.label,
+          relLo: rel(low ? st.p90 : st.p10),
+          relMid: rel(st.p50),
+          relHi: rel(low ? st.p10 : st.p90),
+          midText: fmt(st.p50),
+          title:
+            `${g.label} — p10 ${fmt(st.p10)}, p50 ${fmt(st.p50)}, p90 ${fmt(st.p90)}, ` +
+            `best ${fmt(best)} (${g.rounds} rounds${low ? ', lower is better' : ''})`,
+        };
+      })
       // Widest spread first: the games whose distribution actually has shape are
       // the interesting ones, and a flat row at the bottom is its own signal.
-      .sort((a, b) => (b.hi - b.lo) / (b.max || 1) - (a.hi - a.lo) / (a.max || 1));
+      .sort((a, b) => Math.abs(b.relHi - b.relLo) - Math.abs(a.relHi - a.relLo));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   const points = useMemo(() => {
     if (!data) return [];
     return data.games.flatMap((g) => {
-      const best = g.stats?.max ?? 0;
+      const best = bestOf(g);
       if (best <= 0) return [];
+      const rel = relOf(g.key, best);
       return g.samples
         .filter((s) => s.skill !== null)
         .map((s) => ({
           skill: s.skill as number,
-          rel: Math.min(1, s.score / best),
+          rel: rel(s.score),
           title: `${g.label} — skill ${(s.skill as number).toFixed(2)} → ${fmt(s.score)} (${s.tickets} tickets)`,
         }));
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   const totalRounds = data?.games.reduce((n, g) => n + g.rounds, 0) ?? 0;
@@ -105,13 +131,24 @@ function CaptureCharts({ profile }: { profile: ArcadeProfile }) {
           )}
           sub="mean, before server caps"
         />
-        <StatTile
-          label="Capture cost"
-          value={`${Math.round(
-            data.games.reduce((t, g) => t + (g.stats?.meanRoundMs ?? 0) * g.rounds, 0) / 60000
-          )} min`}
-          sub="wall clock, no model spend"
-        />
+        {data.wallMs !== null ? (
+          <StatTile
+            label="Capture cost"
+            value={`${Math.max(1, Math.round(data.wallMs / 60000))} min`}
+            sub={`wall clock on ${data.workers ?? 1} worker${(data.workers ?? 1) === 1 ? '' : 's'}`}
+          />
+        ) : (
+          // An older profile records only per-round times. Their sum is
+          // aggregate BROWSER time — workers x the wall on a parallel capture —
+          // so it must not be captioned "wall clock".
+          <StatTile
+            label="Capture cost"
+            value={`${Math.round(
+              data.games.reduce((t, g) => t + (g.stats?.meanRoundMs ?? 0) * g.rounds, 0) / 60000
+            )} min`}
+            sub="browser time, summed across workers"
+          />
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
@@ -160,15 +197,16 @@ function CaptureCharts({ profile }: { profile: ArcadeProfile }) {
             <tbody>
               {rows.map((r) => {
                 const g = data.games.find((x) => x.key === r.key);
+                if (!g?.stats) return null;
                 return (
                   <tr key={r.key}>
-                    <Td>{r.label}</Td>
-                    <Td className="tabular-nums">{fmt(r.n)}</Td>
-                    <Td className="tabular-nums">{fmt(r.lo)}</Td>
-                    <Td className="tabular-nums">{fmt(r.mid)}</Td>
-                    <Td className="tabular-nums">{fmt(r.hi)}</Td>
-                    <Td className="tabular-nums">{fmt(r.max)}</Td>
-                    <Td className="tabular-nums">{((g?.stats?.meanRoundMs ?? 0) / 1000).toFixed(1)}</Td>
+                    <Td>{r.label}{lowerIsBetter(r.key) ? ' (time)' : ''}</Td>
+                    <Td className="tabular-nums">{fmt(g.rounds)}</Td>
+                    <Td className="tabular-nums">{fmt(g.stats.p10)}</Td>
+                    <Td className="tabular-nums">{fmt(g.stats.p50)}</Td>
+                    <Td className="tabular-nums">{fmt(g.stats.p90)}</Td>
+                    <Td className="tabular-nums">{fmt(bestOf(g))}</Td>
+                    <Td className="tabular-nums">{(g.stats.meanRoundMs / 1000).toFixed(1)}</Td>
                   </tr>
                 );
               })}
@@ -203,7 +241,14 @@ function TrafficCharts({ days, gameLabel }: { days: number; gameLabel: (k: strin
     <div className="space-y-5">
       <div className="grid gap-2 sm:grid-cols-4">
         <StatTile label="Awards posted" value={fmt(totals.awards)} sub={`${totals.runs} run${totals.runs === 1 ? '' : 's'}`} />
-        <StatTile label="Tickets paid" value={fmt(totals.awarded)} sub={`of ${fmt(totals.requested)} requested`} />
+        <StatTile
+          label="Tickets paid"
+          value={fmt(totals.awarded)}
+          sub={
+            `of ${fmt(totals.requested)} requested` +
+            (totals.pending > 0 ? ` · ${fmt(totals.pending_tickets)} pending (unconfirmed)` : '')
+          }
+        />
         <StatTile
           label="Clamped by the server"
           value={pct(clamped, totals.requested)}
@@ -281,7 +326,7 @@ export default function ArcadeBotCharts({
   games,
 }: {
   profiles: ArcadeProfile[];
-  games: { key: string; label: string }[];
+  games: { key: string; label: string; lowerIsBetter?: boolean }[];
 }) {
   const [name, setName] = useState('');
   const [days, setDays] = useState(7);
@@ -312,7 +357,14 @@ export default function ArcadeBotCharts({
               ))}
             </Select>
           </div>
-          <div className="mt-3">{chosen && <CaptureCharts profile={chosen} />}</div>
+          <div className="mt-3">
+            {chosen && (
+              <CaptureCharts
+                profile={chosen}
+                lowerIsBetter={(k) => games.find((g) => g.key === k)?.lowerIsBetter === true}
+              />
+            )}
+          </div>
         </>
       )}
 

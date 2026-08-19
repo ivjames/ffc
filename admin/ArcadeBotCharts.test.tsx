@@ -11,6 +11,7 @@ vi.mock('./api', () => ({
 const GAMES = [
   { key: 'skeeball', label: 'Skee-Ball' },
   { key: 'darts', label: 'Darts' },
+  { key: 'gokarts', label: 'Go-Karts', lowerIsBetter: true },
 ];
 
 const LISTED: ArcadeProfile[] = [
@@ -27,6 +28,8 @@ const DETAIL: ArcadeProfileDetail = {
   name: 'mixed.json',
   capturedAt: '2026-08-19T01:35:55.000Z',
   base: 'https://bullwinkles.example',
+  wallMs: 120_000,
+  workers: 3,
   games: [
     {
       key: 'skeeball',
@@ -61,13 +64,15 @@ const TRAFFIC: ArcadeTraffic = {
     { at: '2026-08-19T00:00:00.000Z', awards: 70, requested: 2844, awarded: 1731 },
   ],
   byGame: [
-    { game: 'skeeball', awards: 125, requested: 3204, awarded: 2041, capped: 46 },
-    { game: 'darts', awards: 61, requested: 3640, awarded: 2090, capped: 26 },
+    { game: 'skeeball', awards: 125, requested: 3204, awarded: 2041, capped: 46, pending: 0 },
+    { game: 'darts', awards: 61, requested: 3640, awarded: 2090, capped: 26, pending: 0 },
   ],
   totals: {
     awards: 186,
     requested: 6844,
     awarded: 4131,
+    pending: 0,
+    pending_tickets: 0,
     cards: 11,
     runs: 10,
     capped: 72,
@@ -131,6 +136,35 @@ describe('ArcadeBotCharts — the numbers the charts encode', () => {
     expect(api.arcadeTraffic).toHaveBeenCalledWith(7);
     await userEvent.selectOptions(screen.getByDisplayValue('last 7 days'), '1');
     await waitFor(() => expect(api.arcadeTraffic).toHaveBeenCalledWith(1));
+  });
+
+  test('a time-scored game calls its FASTEST round best, not its slowest', async () => {
+    // Go-Karts scores elapsed seconds. Normalising by max would label the
+    // slowest race "best" and flip the skill scatter's meaning.
+    vi.mocked(api.arcadeProfile).mockResolvedValue({
+      ...DETAIL,
+      games: [
+        {
+          key: 'gokarts',
+          label: 'Go-Karts',
+          rounds: 2,
+          stats: { mean: 60, p10: 48, p50: 60, p90: 72, max: 72, min: 48, meanRoundMs: 60_000 },
+          samples: [
+            { score: 48, tickets: 12, skill: 0.9 },
+            { score: 72, tickets: 8, skill: 0.3 },
+          ],
+        },
+      ],
+    });
+    render(<ArcadeBotCharts profiles={LISTED} games={GAMES} />);
+    const row = await screen.findByTitle(/Go-Karts — p10 48/);
+    expect(row.title).toMatch(/best 48/); // min, because lower is better
+    expect(row.title).toMatch(/lower is better/);
+
+    // And the table's Best column agrees.
+    const summaries = screen.getAllByText(/Table view/);
+    await userEvent.click(summaries[0]);
+    await waitFor(() => expect(screen.getByText('Go-Karts (time)')).toBeInTheDocument());
   });
 
   test('no profiles at all: the capture half stays quiet, the replay half still renders', async () => {

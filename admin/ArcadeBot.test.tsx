@@ -49,8 +49,8 @@ function status(profiles: ArcadeProfile[]): ArcadeStatus {
   return {
     canControl: true,
     games: [
-      { key: 'skeeball', label: 'Skee-Ball', estRoundMs: 19_500 },
-      { key: 'gokarts', label: 'Go-Karts', estRoundMs: 180_000 },
+      { key: 'skeeball', label: 'Skee-Ball', estRoundMs: 19_500, lowerIsBetter: false },
+      { key: 'gokarts', label: 'Go-Karts', estRoundMs: 180_000, lowerIsBetter: true },
     ],
     browser: { available: true, at: '/opt/pw-browsers' },
     app: { reachable: true, base: 'http://127.0.0.1:5173', status: 200, why: 'dev server', tried: [] },
@@ -70,6 +70,8 @@ beforeEach(() => {
     name: 'mixed.json',
     capturedAt: null,
     base: null,
+    wallMs: null,
+    workers: null,
     games: [],
   });
   vi.mocked(api.arcadeTraffic).mockReset().mockResolvedValue({
@@ -79,7 +81,8 @@ beforeEach(() => {
     buckets: [],
     byGame: [],
     totals: {
-      awards: 0, requested: 0, awarded: 0, cards: 0, runs: 0, capped: 0, first_at: null, last_at: null,
+      awards: 0, requested: 0, awarded: 0, pending: 0, pending_tickets: 0,
+      cards: 0, runs: 0, capped: 0, first_at: null, last_at: null,
     },
   });
 });

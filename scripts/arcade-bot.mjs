@@ -276,6 +276,12 @@ async function main() {
     );
   }
 
+  // Recorded so the admin can show real wall clock: summing per-round times
+  // gives aggregate BROWSER time, which is workers x the wall on a parallel
+  // capture.
+  profile.wallMs = Date.now() - t0;
+  profile.workers = workers;
+
   if (args.out && played === 0) {
     // Writing a zero-round profile just leaves a file that every replay has to
     // refuse. The run already failed; don't make it litter too.
