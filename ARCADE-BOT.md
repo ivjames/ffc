@@ -163,12 +163,15 @@ own status, live log tail and stop button, so both can run at once.
 - Capture writes into `data/arcade-profiles/`, and replay's profile picker reads
   that directory back — so the two steps chain without touching a shell. The
   newest profile is preselected.
-- **Capture opens the player app, not the API.** That's the Vite dev server on a
-  dev box and nginx on a deployed one, so the base defaults to `PUBLIC_APP_URL`
-  (what the API already builds emailed links from) with `FFC_APP_BASE` as an
-  override. It is probed like the browser is: pointed somewhere dead, a run
-  otherwise connection-refuses its way through all 19 games and writes a profile
-  with zero rounds in it.
+- **Capture opens the player app, not the API** — the Vite dev server on a dev
+  box, nginx on a deployed one. The origin is **derived, not configured**:
+  `PLATFORM_FQDN` plus the org slugs give the player vhosts (`<slug>.<fqdn>`,
+  the same hosts `bin/ffc` renders and prints as *"Player app: …"*), so a normal
+  deploy needs no setting at all. Order tried: `FFC_APP_BASE` → `PUBLIC_APP_URL`
+  → derived org vhosts (default org first) → the dev server; the first that
+  answers wins, and the admin shows which one and what else it tried. Pointed
+  somewhere dead, a run otherwise fails its way through all 19 games and writes
+  a profile with zero rounds in it.
 - **Capture needs a browser on the API host**, which an API box has no reason to
   ship. When there isn't one the page says so — with the command to fix it — and
   the button stays disabled rather than spawning a run that dies on a Playwright

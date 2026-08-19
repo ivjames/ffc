@@ -202,7 +202,7 @@ export default function ArcadeBot() {
   if (error && !status) return <Banner kind="error">{error.message}</Banner>;
   if (!status) return null;
 
-  const { canControl, browser, app, appBase, profiles, venues, games, syntheticAwards } = status;
+  const { canControl, browser, app, profiles, venues, games, syntheticAwards } = status;
 
   const captureParams: ArcadeCaptureParams = {
     rounds: cap.rounds,
@@ -276,17 +276,19 @@ export default function ArcadeBot() {
       <Card>
         <div className="flex items-center gap-2">
           <h2 className="font-medium">1 · Capture a profile</h2>
-          <span className="text-xs text-slate-500">plays the games for real, in {appBase}</span>
+          <span className="text-xs text-slate-500">
+            plays the games for real{app?.reachable && app.base ? `, in ${app.base}` : ''}
+          </span>
         </div>
 
-        {!browser.available && (
+        {browser && !browser.available && (
           <div className="mt-3">
             <Banner kind="error">
               <strong>No browser on this host — capture is unavailable.</strong>{' '}
               {/* The reason usually ends in a shell command. Split it onto its own
                   line so it can be copied without picking it out of a sentence. */}
               {(() => {
-                const [prose, cmd] = splitCommand(browser.reason ?? '');
+                const [prose, cmd] = splitCommand(browser?.reason ?? '');
                 return (
                   <>
                     {prose}
@@ -310,7 +312,7 @@ export default function ArcadeBot() {
             </Banner>
           </div>
         )}
-        {!app.reachable && (
+        {app && !app.reachable && (
           <div className="mt-3">
             <Banner kind="error">
               <strong>The player app isn’t answering — capture is unavailable.</strong>{' '}
@@ -327,9 +329,10 @@ export default function ArcadeBot() {
             </Banner>
           </div>
         )}
-        {browser.available && app.reachable && (
+        {browser?.available && app?.reachable && (
           <p className="mt-2 text-xs text-slate-500">
-            Browser at <code>{browser.at}</code> · app answering at <code>{app.base}</code>.
+            Browser at <code>{browser.at}</code> · app answering at <code>{app.base}</code>
+            {app.why ? ` (${app.why})` : ''}.
           </p>
         )}
 
@@ -388,8 +391,8 @@ export default function ArcadeBot() {
               onClick={() => run(() => api.arcadeCapture(captureParams), setCapErr, 'capture')}
               disabled={
                 busy ||
-                !browser.available ||
-                !app.reachable ||
+                !browser?.available ||
+                !app?.reachable ||
                 status.capture.running ||
                 !Number.isInteger(cap.rounds)
               }

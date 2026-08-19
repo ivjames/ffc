@@ -28,7 +28,7 @@ import { GAME_REWARD_GAMES } from "../../lib/gameRewards.js";
 import { moduleLive } from "../../lib/modules.js";
 import * as runner from "../../lib/arcadeBotRunner.js";
 import { browserStatus, resetBrowserStatus } from "../../lib/browserProbe.js";
-import { appBaseStatus, captureAppBase, resetAppBaseStatus } from "../../lib/captureTarget.js";
+import { appBaseStatus, resetAppBaseStatus } from "../../lib/captureTarget.js";
 
 export const router = Router();
 
@@ -153,6 +153,22 @@ async function loadVenues(scope) {
   }));
 }
 
+/**
+ * Live org slugs, best-guess order. These are the labels of the player-app
+ * vhosts (`<slug>.<PLATFORM_FQDN>`), which is how the capture base gets derived
+ * instead of hand-configured.
+ */
+async function loadOrgSlugs() {
+  try {
+    const res = await pool.query(
+      `select slug from org where archived_at is null and status = 'active' order by sort_order, name`
+    );
+    return res.rows.map((r) => r.slug).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 const int = (v, lo, hi) => {
   const n = Number(v);
   return Number.isInteger(n) && n >= lo && n <= hi ? n : null;
@@ -228,8 +244,10 @@ router.get("/status", async (req, res) => {
     const [venues, games, browser, app, awards] = await Promise.all([
       loadVenues(scope),
       loadGames(),
-      browserStatus(),
-      appBaseStatus(),
+      // Capture is super_admin-only, and the probe's tried-list names other
+      // orgs' hostnames — so neither runs for an org-scoped admin.
+      scope === null ? browserStatus() : Promise.resolve(null),
+      scope === null ? loadOrgSlugs().then(appBaseStatus) : Promise.resolve(null),
       pool.query(
         `select count(*)::int as total,
                 count(*) filter (where created_at > now() - interval '24 hours')::int as last24h,
@@ -246,7 +264,6 @@ router.get("/status", async (req, res) => {
       // it has one — so this list is both "what may earn" and "what plays".
       games,
       browser,
-      appBase: captureAppBase(),
       app,
       profiles: listProfiles(),
       venues,
@@ -270,7 +287,7 @@ router.post("/capture", async (req, res) => {
   if (!browser.available) return res.status(409).json({ ok: false, error: browser.reason });
   // The app has to be up too. Without this the run connection-refuses its way
   // through every game and writes a profile with no rounds in it.
-  const app = await appBaseStatus();
+  const app = await appBaseStatus(await loadOrgSlugs());
   if (!app.reachable) return res.status(409).json({ ok: false, error: app.reason });
   if (runner.capture.isRunning()) {
     return res.status(409).json({ ok: false, error: "a capture is already running — stop it first" });
@@ -279,7 +296,8 @@ router.post("/capture", async (req, res) => {
   mkdirSync(runner.PROFILE_DIR, { recursive: true });
   const name = `profile-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   const out = path.join(runner.PROFILE_DIR, name);
-  const appBase = captureAppBase();
+  // The origin that actually answered, not a configured guess.
+  const appBase = app.base;
   try {
     const status = runner.capture.start(
       runner.CAPTURE_SCRIPT,
@@ -384,7 +402,7 @@ router.post("/recheck-browser", async (req, res) => {
   if (!superOnly(req, res)) return undefined;
   resetBrowserStatus();
   resetAppBaseStatus();
-  const [browser, app] = await Promise.all([browserStatus(), appBaseStatus()]);
+  const [browser, app] = await Promise.all([browserStatus(), loadOrgSlugs().then(appBaseStatus)]);
   return res.json({ ok: true, browser, app });
 });
 
