@@ -249,6 +249,35 @@ describe('importing server-granted badges', () => {
     expect(server.calls).toHaveLength(0);
   });
 
+  it("takes only the phone holder's seat from a pass-and-play round", async () => {
+    rounds.current = [
+      syncedRound({
+        clientId: 'pnp-1',
+        playerTags: ['JIM', 'AVA'],
+        scores: { 0: Array(18).fill(3), 1: Array(18).fill(3) },
+        ownerSlot: 0,
+      }),
+    ];
+    server.grants = [
+      { playerIndex: 0, playerTag: 'JIM', achievement: 'first_find' },
+      { playerIndex: 1, playerTag: 'AVA', achievement: 'hunt_master' },
+    ];
+    renderWall();
+    await waitFor(() => expect(saved.keys).toContain('first_find'));
+    // AVA's badge on JIM's phone is AVA's, not JIM's.
+    expect(saved.keys).not.toContain('hunt_master');
+  });
+
+  it('banks nothing for a holder who was just keeping score, but still marks the round', async () => {
+    rounds.current = [syncedRound({ clientId: 'pnp-2', ownerSlot: null })];
+    server.grants = [{ playerIndex: 0, playerTag: 'AVA', achievement: 'hunt_master' }];
+    renderWall();
+    await waitFor(() =>
+      expect(stored.rounds.at(-1)?.grantsImportedAt).toEqual(expect.any(Number)),
+    );
+    expect(saved.keys).not.toContain('hunt_master');
+  });
+
   it("takes only this device's seat from a shared game", async () => {
     rounds.current = [
       syncedRound({

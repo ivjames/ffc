@@ -41,6 +41,9 @@ export default function PlayerSetup() {
   const [count, setCount] = useState(2);
   const [tags, setTags] = useState<string[]>(['', '', '', '']);
   const [teamTag, setTeamTag] = useState('');
+  // Which seat is the phone holder's — the seat the achievements wall credits
+  // (LocalRound.ownerSlot). 'auto' until the holder taps a choice themselves.
+  const [ownerChoice, setOwnerChoice] = useState<number | 'none' | 'auto'>('auto');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   // Shared-game hosting needs an account (the joiners don't).
@@ -51,6 +54,23 @@ export default function PlayerSetup() {
   }, []);
 
   const activeTags = useMemo(() => tags.slice(0, count), [tags, count]);
+  // Untapped default for "which player is you": the seat whose tag matches the
+  // signed-in account's default tag — and if that tag isn't on the roster, the
+  // holder is just keeping score. Signed out there's nothing to match against,
+  // so player 1, the same convention the shared-game flow states out loud
+  // ("Enter your own tag (player 1)"). One tap overrides any of it.
+  const autoOwner = useMemo<number | 'none'>(() => {
+    const defaultTag = me !== 'loading' ? me?.defaultTag : null;
+    if (!defaultTag) return 0;
+    const seat = activeTags.findIndex((t) => t === defaultTag);
+    return seat === -1 ? 'none' : seat;
+  }, [me, activeTags]);
+  // An explicit pick of a seat that a lower player count removed falls back to
+  // the default rather than silently crediting whoever now sits there.
+  const owner =
+    ownerChoice === 'auto' || (typeof ownerChoice === 'number' && ownerChoice >= count)
+      ? autoOwner
+      : ownerChoice;
   // The team tag is optional — empty is fine, but a partial/blocked one isn't.
   const teamErr = teamTag.length === 0 ? null : tagError(teamTag);
   const rosterValid = validateRoster(activeTags).ok && teamErr === null;
@@ -91,6 +111,7 @@ export default function PlayerSetup() {
       activeTags,
       teamTag.length === TAG_LENGTH ? teamTag : null,
       courseById(courseId)?.pars,
+      owner === 'none' ? null : owner,
     );
     await putRound(round);
     navigate(`/golf/play/${round.clientId}`, { replace: true });
@@ -131,7 +152,9 @@ export default function PlayerSetup() {
 
   // Testing aid — roll a random roster (1..4 players, random tags), start the
   // round, and hand the scorecard an auto-play mode so it walks the course on
-  // arrival. Skips the roster form entirely.
+  // arrival. Skips the roster form entirely. No ownerSlot on purpose: nobody
+  // on a rolled roster is the holder, and the legacy every-seat reading keeps
+  // auto-played rounds useful for exercising the wall.
   async function autoStart(mode: 'slow' | 'fast') {
     if (submitting) return;
     const n = 1 + Math.floor(Math.random() * 4); // 1..4 players
@@ -193,6 +216,40 @@ export default function PlayerSetup() {
             );
           })}
         </div>
+
+        {/* Whose phone is this? Everyone's scores get typed here, but the
+            achievements wall is the holder's own — a friend's hole-in-one on
+            your phone is their badge, not yours. The round records the
+            holder's seat so detection can tell (lib/achievements/detect). */}
+        <label className="mb-2 mt-6 block text-sm font-semibold text-fairway-100/80">
+          Which player is you?{' '}
+          <span className="font-normal text-fairway-100/70">
+            (achievements on this phone count for your player)
+          </span>
+        </label>
+        <div className="grid grid-cols-4 gap-2">
+          {activeTags.map((tag, i) => (
+            <button
+              key={i}
+              onClick={() => setOwnerChoice(i)}
+              aria-pressed={owner === i}
+              className={`rounded-xl py-3 text-lg font-bold ${
+                owner === i ? 'btn-accent text-fairway-50' : 'key text-fairway-100'
+              }`}
+            >
+              {tag.length === TAG_LENGTH ? tag : `P${i + 1}`}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => setOwnerChoice('none')}
+          aria-pressed={owner === 'none'}
+          className={`mt-2 w-full rounded-xl py-2.5 text-sm font-semibold ${
+            owner === 'none' ? 'btn-accent text-fairway-50' : 'key text-fairway-100'
+          }`}
+        >
+          Just keeping score
+        </button>
 
         {/* Optional team tag (punchlist #4 tier 1) — one tag for the whole
             group; the round then also lands on the TV board's Teams tab. */}
