@@ -10,6 +10,10 @@ vi.mock('./api', () => ({
     arcadeCapture: vi.fn(),
     arcadeReplay: vi.fn(),
     arcadeStop: vi.fn(),
+    // The page also mounts the charts section, which fetches on its own. These
+    // tests are about the CONTROLS, so the charts just need to not throw.
+    arcadeProfile: vi.fn(),
+    arcadeTraffic: vi.fn(),
   },
 }));
 
@@ -61,6 +65,23 @@ function status(profiles: ArcadeProfile[]): ArcadeStatus {
 beforeEach(() => {
   vi.mocked(api.arcadeStatus).mockReset();
   vi.mocked(api.arcadeReplay).mockReset().mockResolvedValue({ ok: true, runner: IDLE });
+  vi.mocked(api.arcadeProfile).mockReset().mockResolvedValue({
+    ok: true,
+    name: 'mixed.json',
+    capturedAt: null,
+    base: null,
+    games: [],
+  });
+  vi.mocked(api.arcadeTraffic).mockReset().mockResolvedValue({
+    ok: true,
+    days: 7,
+    unit: 'day',
+    buckets: [],
+    byGame: [],
+    totals: {
+      awards: 0, requested: 0, awarded: 0, cards: 0, runs: 0, capped: 0, first_at: null, last_at: null,
+    },
+  });
 });
 
 describe('ArcadeBot — a profile advertises the skill it will replay as', () => {

@@ -215,6 +215,27 @@ own status, live log tail and stop button, so both can run at once.
   `pos.loyalty.gameRewards` flag AND a live `gameTickets` module. Checking only
   the flag called a venue enabled while every award 403'd.
 
+### What it produced
+
+A third section charts both halves against live API data — so it shows that
+box's runs, not a snapshot.
+
+- **From the capture** — score spread per game (p10–p90 with a median tick) and
+  skill against outcome, one dot per round. Scores are normalised to each game's
+  own best, because a Skee-Ball 780 and a Darts 370 share no scale; that makes
+  the *shape* comparable, which is the real question — a mixed field of players,
+  or one machine playing the same round over and over. A rising scatter means the
+  skill knob reaches the game; a flat one is a finding about the game.
+- **From the replay** — awards over time, and tickets **paid vs clamped** per
+  game, which is where the per-round ceiling and per-card daily cap stop being a
+  footnote and become a visible gap.
+
+One hue does the magnitude work: 19 games would need 19 colors, which no reader
+can tell apart and which would bury the point. The only two-color chart is
+paid-vs-clamped, where identity *is* the subject — that pair is validated against
+the admin's white card surface (worst CVD ΔE 21.3, normal-vision 31.9, both ≥3:1).
+Each half carries a table view, so no value is reachable only by hovering.
+
 The child processes are started with `FFC_EXIT_WITH_PARENT=1` and killed on API
 shutdown, so a bot can't outlive the API that's reporting on it. Both halves run
 `watchParentOrExit` (`scripts/lib/parentWatchdog.mjs`), which polls `process.ppid`

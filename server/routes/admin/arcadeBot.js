@@ -2,6 +2,8 @@
 //   GET  /api/admin/arcade-bot/status    games, profiles, venues, both runners
 //   POST /api/admin/arcade-bot/capture   play the games, write a profile
 //   POST /api/admin/arcade-bot/replay    post the awards a profile implies
+//   GET  /api/admin/arcade-bot/profile/:name   a profile's samples, for charts
+//   GET  /api/admin/arcade-bot/traffic         synthetic award aggregates
 //   POST /api/admin/arcade-bot/stop      {slot} stop capture or replay
 //   POST /api/admin/arcade-bot/recheck-browser  re-probe browser + app, no cache
 //
@@ -273,6 +275,123 @@ router.get("/status", async (req, res) => {
     });
   } catch (err) {
     console.error("[admin/arcade-bot] status error:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+});
+
+// --- What a profile actually recorded ----------------------------------------
+// The summary in /status answers "which profile is this?"; charting the capture
+// needs the SAMPLES — every round's score, tickets and the skill it was played
+// at. Same name guard and containment check as replay: a profile name is a path
+// segment, and it never gets to climb out of PROFILE_DIR.
+router.get("/profile/:name", (req, res) => {
+  const name = req.params.name;
+  if (!PROFILE_RE.test(name)) return res.status(400).json({ ok: false, error: "bad profile name" });
+  const full = path.join(runner.PROFILE_DIR, name);
+  if (!full.startsWith(runner.PROFILE_DIR + path.sep) || !existsSync(full)) {
+    return res.status(404).json({ ok: false, error: "no such profile" });
+  }
+  try {
+    if (statSync(full).size > MAX_PROFILE_BYTES) {
+      return res.status(413).json({ ok: false, error: "profile too large to chart" });
+    }
+    const doc = JSON.parse(readFileSync(full, "utf8"));
+    const games = Object.entries(doc?.games ?? {})
+      .map(([key, g]) => ({
+        key,
+        label: g?.label ?? key,
+        rounds: g?.samples?.length ?? 0,
+        stats: g?.stats ?? null,
+        samples: (g?.samples ?? []).map((x) => ({
+          score: Number(x?.score) || 0,
+          tickets: Number(x?.tickets) || 0,
+          skill: typeof x?.skill === "number" ? x.skill : null,
+        })),
+      }))
+      .filter((g) => g.rounds > 0);
+    return res.json({
+      ok: true,
+      name,
+      capturedAt: typeof doc?.capturedAt === "string" ? doc.capturedAt : null,
+      base: typeof doc?.base === "string" ? doc.base : null,
+      games,
+    });
+  } catch (err) {
+    console.error("[admin/arcade-bot] profile read failed:", err);
+    return res.status(422).json({ ok: false, error: "could not read that profile" });
+  }
+});
+
+// --- What the replay actually paid -------------------------------------------
+// Aggregated in SQL, not shipped row-by-row: a long run is tens of thousands of
+// awards and the charts only ever need buckets. Org-scoped like the rest of
+// status, and restricted to our own reserved session ids so real player awards
+// never appear in a synthetic-traffic chart.
+router.get("/traffic", async (req, res) => {
+  const scope = orgScope(req);
+  const days = int(req.query.days ?? 7, 1, 90);
+  if (days === null) return res.status(400).json({ ok: false, error: "days must be 1..90" });
+  // Hour buckets for a short window (a run is minutes long and would be one bar
+  // a day otherwise); day buckets once the window is wide enough that hours
+  // would be thousands of near-empty points.
+  const unit = days <= 3 ? "hour" : "day";
+
+  const scopeSql = "and ($2::uuid is null or location_id in (select id from location where org_id = $2))";
+  const where = `where session_id like 'synthetic:%' and created_at > now() - ($1 || ' days')::interval ${scopeSql}`;
+
+  try {
+    const [buckets, byGame, totals] = await Promise.all([
+      pool.query(
+        `select date_trunc('${unit}', created_at) as at,
+                count(*)::int as awards,
+                coalesce(sum(tickets_requested), 0)::int as requested,
+                coalesce(sum(tickets_awarded), 0)::int as awarded
+           from game_ticket_award ${where}
+          group by 1 order by 1`,
+        [String(days), scope]
+      ),
+      pool.query(
+        `select game,
+                count(*)::int as awards,
+                coalesce(sum(tickets_requested), 0)::int as requested,
+                coalesce(sum(tickets_awarded), 0)::int as awarded,
+                count(*) filter (where status = 'daily_cap')::int as capped
+           from game_ticket_award ${where}
+          group by 1 order by awarded desc, game`,
+        [String(days), scope]
+      ),
+      pool.query(
+        `select count(*)::int as awards,
+                coalesce(sum(tickets_requested), 0)::int as requested,
+                coalesce(sum(tickets_awarded), 0)::int as awarded,
+                count(distinct player_id)::int as cards,
+                count(distinct split_part(session_id, ':', 2))::int as runs,
+                count(*) filter (where status = 'daily_cap')::int as capped,
+                min(created_at) as first_at,
+                max(created_at) as last_at
+           from game_ticket_award ${where}`,
+        [String(days), scope]
+      ),
+    ]);
+    return res.json({
+      ok: true,
+      days,
+      unit,
+      buckets: buckets.rows.map((r) => ({
+        at: r.at.toISOString(),
+        awards: r.awards,
+        requested: r.requested,
+        awarded: r.awarded,
+      })),
+      byGame: byGame.rows,
+      totals: {
+        ...totals.rows[0],
+        first_at: totals.rows[0]?.first_at ? totals.rows[0].first_at.toISOString() : null,
+        last_at: totals.rows[0]?.last_at ? totals.rows[0].last_at.toISOString() : null,
+      },
+    });
+  } catch (err) {
+    console.error("[admin/arcade-bot] traffic error:", err);
     return res.status(500).json({ ok: false, error: "internal error" });
   }
 });

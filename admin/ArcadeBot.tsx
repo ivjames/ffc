@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type ArcadeProfile, type ArcadeRunner, type ArcadeCaptureParams, type ArcadeReplayParams } from './api';
 import { Banner, Button, Card, Field, Input, PageHeader, Pill, Select, Spinner, fmtDateTime, useAsync } from './ui';
+import ArcadeBotCharts from './ArcadeBotCharts';
 
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
 
@@ -625,6 +626,8 @@ export default function ArcadeBot() {
           />
         </div>
       </Card>
+
+      <ArcadeBotCharts profiles={profiles} games={games} />
     </div>
   );
 }
