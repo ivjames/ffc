@@ -16,6 +16,7 @@ import { test, before, after } from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { TEST_DATABASE_URL, ensureSchema, testQuery } from "./test-support/testDb.js";
@@ -347,7 +348,12 @@ test("the CLI explains a missing DATABASE_URL instead of failing at the first qu
   delete env.DATABASE_URL;
   delete env.TEST_DATABASE_URL;
 
-  const failure = await execFileAsync("node", [script, "--dry-run"], { env }).then(
+  // Unsetting the variable is not enough on its own: db.js imports
+  // `dotenv/config`, which reads `.env` relative to the working directory and
+  // would hand the child the very value this test is trying to withhold. Run
+  // it somewhere there is no `.env` to find. The script resolves its own paths
+  // from import.meta.url, so the working directory is otherwise irrelevant.
+  const failure = await execFileAsync("node", [script, "--dry-run"], { env, cwd: tmpdir() }).then(
     () => null,
     (err) => err
   );
