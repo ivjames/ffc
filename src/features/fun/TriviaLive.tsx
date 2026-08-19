@@ -388,6 +388,9 @@ export default function TriviaLive() {
   const startNow = useCallback(async () => {
     if (!owner || !sessionId || startBusy) return;
     playClick();
+    // The owner's tap that opens question 1 — the last gesture before the
+    // first thing worth reading aloud, for a room restored without a join.
+    primeSpeechOnce();
     // Held busy through success, not just the round trip: /advance moves
     // whatever phase it finds, so a second tap landing after the first
     // response but before the SSE frame would push question 1 straight to its
