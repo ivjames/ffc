@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
 import CourseTheme from '../../ui/CourseTheme';
@@ -61,9 +61,25 @@ export default function PlayerSetup() {
   // is also one of the places that writes it.
   const [rememberedTag] = useState(() => getMyTag());
 
+  // Whether player 1's field has been hand-edited. The prefill must not fire
+  // after that — "empty" alone can't tell an untouched field from one the
+  // player deliberately cleared while the session request was still in flight.
+  const p1Edited = useRef(false);
+
   useEffect(() => {
     void getAllRounds().then(setHistory);
   }, []);
+
+  // Signed-in players with a saved tag get it prefilled as player 1 — the
+  // same assumption arcade play makes — unless they already typed one. The
+  // session store can resolve after this screen mounts, so this reacts to the
+  // user landing rather than fetching again.
+  useEffect(() => {
+    const saved = me?.defaultTag;
+    if (saved && !p1Edited.current) {
+      setTags((prev) => (prev[0] === '' ? [saved, ...prev.slice(1)] : prev));
+    }
+  }, [me]);
 
   const activeTags = useMemo(() => tags.slice(0, count), [tags, count]);
   // Suggestions derived from history, never a separate store (lib/recentPlayers).
@@ -108,6 +124,7 @@ export default function PlayerSetup() {
   }
 
   function setTag(i: number, raw: string) {
+    if (i === 0) p1Edited.current = true;
     setFormError(null);
     setTags((prev) => {
       const next = [...prev];
