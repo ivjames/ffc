@@ -403,8 +403,8 @@ screen(id="arcade", name="Arcade hub",
 # ════════════════════════════════════════════════════════════ 15. ARCADE PUTT (fills)
 screen(id="putt", name="Arcade Putt",
  body=dev(bar("Arcade Putt") +
-   el(lab("Mode picker precedes play — “Choose your game” · 🏁 9-Hole · ♾️ Endless",12), cls="s1", n=1, mt=0, r=16, pad="12px 14px", margin_left="16px", margin_right="16px") +
-   el(sp("Hole n / 9",14,700) + f'<span style="margin-left:auto">{lab("Par · Strokes",14)}</span>', cls="rowc", n=2, pad="12px 16px 8px", border="none", flexnone=True) +
+   el(lab("Course picker precedes play — “Choose your course” · 4 course cards (🏁 label / blurb / “9 holes · par n”) · ♾️ Endless (ghost)",12), cls="s1", n=1, mt=0, r=16, pad="12px 14px", margin_left="16px", margin_right="16px") +
+   el(sp("Hole n / 9 · course",14,700) + f'<span style="margin-left:auto">{lab("Par · Strokes",14)}</span>', cls="rowc", n=2, pad="12px 16px 8px", border="none", flexnone=True) +
    el(lab("Canvas playfield — drag-to-aim slingshot; ball, cup+flag, bumpers, greens, hazards, splash.",12), cls="fill", n=3, grow=True, margin="0 16px", r=16) +
    el(lab("hint line",13), cls="ctr", h=40, border="none", flexnone=True) +
    el(btn("Next hole → / See scorecard → (after sinking)", primary=True, mt=0) +
