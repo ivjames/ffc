@@ -19,11 +19,18 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-/** Render the round as a share image. Resolves to a PNG blob. */
+// 1..4 players, so four entries cover every place.
+const ORDINALS = ['1ST', '2ND', '3RD', '4TH'];
+
+/** Render the round as a share image. Resolves to a PNG blob. `focusSlot`
+ *  shares on behalf of one player: their card takes the spotlight — placed,
+ *  not just the winner celebrated — while the full field stays below, so the
+ *  image still tells the whole round's story. */
 export async function renderShareImage(
   round: LocalRound,
   course: CourseSeed,
   locationName: string | undefined,
+  focusSlot?: number,
 ): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -36,6 +43,11 @@ export async function renderShareImage(
     .map((tag, p) => ({ tag, p, total: playerTotal(round.scores[p] ?? []) }))
     .sort((a, b) => a.total - b.total);
   const winnerSet = new Set(winners(round.scores, round.playerTags.length));
+  // An out-of-range focus renders the plain group card rather than guessing.
+  const focus =
+    focusSlot != null && focusSlot >= 0 && focusSlot < round.playerTags.length
+      ? focusSlot
+      : null;
 
   // --- Background: deep green felt with an accent glow top-left.
   ctx.fillStyle = '#0c1f16';
@@ -87,13 +99,24 @@ export async function renderShareImage(
   roundRect(ctx, 80, y, W - 160, heroH, 28);
   ctx.stroke();
 
-  const hero = ranked.filter((r) => winnerSet.has(r.p));
+  // The hero card: the winner(s) — or, sharing for one player, that player
+  // with their honest place ("3RD PLACE" is still their round to share).
+  const hero =
+    focus == null ? ranked.filter((r) => winnerSet.has(r.p)) : ranked.filter((r) => r.p === focus);
+  const heroWon = winnerSet.has(hero[0].p);
+  // Tie-aware place: two players on 50 are both 1ST, the next is 3RD.
+  const place = ranked.filter((r) => r.total < hero[0].total).length;
+  const heroLabel = heroWon
+    ? winnerSet.size > 1
+      ? 'TIED FOR THE WIN'
+      : 'WINNER'
+    : `${ORDINALS[place]} PLACE`;
   ctx.font = '700 30px system-ui, sans-serif';
   ctx.fillStyle = '#8aa595';
-  ctx.fillText(hero.length > 1 ? 'TIED FOR THE WIN' : 'WINNER', W / 2, y + 55);
+  ctx.fillText(heroLabel, W / 2, y + 55);
   ctx.font = '900 96px system-ui, sans-serif';
   ctx.fillStyle = '#ffffff';
-  const heroLine = `🏆 ${hero.map((r) => r.tag).join(' · ')}`;
+  const heroLine = `${heroWon ? '🏆' : '⛳️'} ${hero.map((r) => r.tag).join(' · ')}`;
   ctx.fillText(heroLine, W / 2, y + 150, W - 220);
   ctx.font = '600 36px system-ui, sans-serif';
   ctx.fillStyle = '#b8cfc0';
@@ -110,6 +133,13 @@ export async function renderShareImage(
     roundRect(ctx, 80, y, W - 160, rowH - 16, 20);
     ctx.fillStyle = winnerSet.has(row.p) ? `${course.accent}2e` : 'rgba(255,255,255,0.05)';
     ctx.fill();
+    // The spotlighted player's row gets an accent outline, win or lose.
+    if (row.p === focus) {
+      roundRect(ctx, 80, y, W - 160, rowH - 16, 20);
+      ctx.strokeStyle = course.accent;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
 
     ctx.textAlign = 'left';
     ctx.font = '800 44px system-ui, sans-serif';
@@ -154,12 +184,18 @@ export async function shareRound(
   round: LocalRound,
   course: CourseSeed,
   locationName: string | undefined,
+  focusSlot?: number,
 ): Promise<'shared' | 'downloaded'> {
-  const blob = await renderShareImage(round, course, locationName);
-  const file = new File([blob], 'mini-golf-round.png', { type: 'image/png' });
+  const blob = await renderShareImage(round, course, locationName, focusSlot);
+  // Sharing for one player names the file and title after them, so a card
+  // saved on the holder's phone for a friend stays findable.
+  const focusTag = focusSlot != null ? round.playerTags[focusSlot] : undefined;
+  const name = focusTag ? `mini-golf-${focusTag}.png` : 'mini-golf-round.png';
+  const title = focusTag ? `${focusTag}'s Mini Golf round` : 'Mini Golf round';
+  const file = new File([blob], name, { type: 'image/png' });
   if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'Mini Golf round' });
+      await navigator.share({ files: [file], title });
       return 'shared';
     } catch (err) {
       // AbortError = the player closed the sheet — not a failure to recover from.
@@ -170,7 +206,7 @@ export async function shareRound(
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'mini-golf-round.png';
+  a.download = name;
   a.click();
   URL.revokeObjectURL(url);
   return 'downloaded';

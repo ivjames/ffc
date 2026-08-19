@@ -10,8 +10,11 @@ import {
   isValidTag,
   TAG_LENGTH,
 } from '../../lib/sanitize';
-import { createLocalRound, putRound } from '../../db';
+import { createLocalRound, getAllRounds, putRound } from '../../db';
 import { fetchMe, type AppUser } from '../../lib/authApi';
+import { getMyTag, ownerSeatFor, rememberMyTag } from '../../lib/myTag';
+import { lastRoster, recentTags, recentTeamTags } from '../../lib/recentPlayers';
+import type { LocalRound } from '../../types';
 import { createGame, fetchSnapshot } from '../../lib/gamesApi';
 import { createSharedLocalRound } from '../../lib/sharedMerge';
 import { DEV_MODE } from '../../lib/flags';
@@ -48,23 +51,38 @@ export default function PlayerSetup() {
   const [formError, setFormError] = useState<string | null>(null);
   // Shared-game hosting needs an account (the joiners don't).
   const [me, setMe] = useState<AppUser | null | 'loading'>('loading');
+  // The device's round history feeds the "play again with..." suggestions.
+  const [history, setHistory] = useState<LocalRound[]>([]);
+  // The tag this phone last played under (lib/myTag) — read once; this screen
+  // is also one of the places that writes it.
+  const [rememberedTag] = useState(() => getMyTag());
 
   useEffect(() => {
     void fetchMe().then(setMe);
+    void getAllRounds().then(setHistory);
   }, []);
 
   const activeTags = useMemo(() => tags.slice(0, count), [tags, count]);
-  // Untapped default for "which player is you": the seat whose tag matches the
-  // signed-in account's default tag — and if that tag isn't on the roster, the
-  // holder is just keeping score. Signed out there's nothing to match against,
-  // so player 1, the same convention the shared-game flow states out loud
-  // ("Enter your own tag (player 1)"). One tap overrides any of it.
+  // Suggestions derived from history, never a separate store (lib/recentPlayers).
+  const lastGroup = useMemo(() => lastRoster(history), [history]);
+  const tagChips = useMemo(
+    () => recentTags(history).filter((t) => !activeTags.includes(t)),
+    [history, activeTags],
+  );
+  const teamChips = useMemo(
+    () => recentTeamTags(history).filter((t) => t !== teamTag),
+    [history, teamTag],
+  );
+  // Untapped default for "which player is you": the seat whose tag is the
+  // holder's own — the account's saved tag when signed in, else the tag this
+  // phone last played under. A known holder tag that isn't on the roster means
+  // they're just keeping score. A phone with no idea who holds it defaults to
+  // player 1, the convention the shared-game flow states out loud ("Enter your
+  // own tag (player 1)"). One tap overrides any of it.
   const autoOwner = useMemo<number | 'none'>(() => {
-    const defaultTag = me !== 'loading' ? me?.defaultTag : null;
-    if (!defaultTag) return 0;
-    const seat = activeTags.findIndex((t) => t === defaultTag);
-    return seat === -1 ? 'none' : seat;
-  }, [me, activeTags]);
+    const accountTag = me !== 'loading' ? me?.defaultTag : null;
+    return ownerSeatFor(activeTags, accountTag ?? rememberedTag);
+  }, [me, rememberedTag, activeTags]);
   // An explicit pick of a seat that a lower player count removed falls back to
   // the default rather than silently crediting whoever now sits there.
   const owner =
@@ -95,6 +113,27 @@ export default function PlayerSetup() {
     });
   }
 
+  /** One-tap refill of the whole form from the last group on this phone. */
+  function useLastGroup() {
+    if (!lastGroup) return;
+    setFormError(null);
+    setCount(lastGroup.tags.length);
+    setTags([0, 1, 2, 3].map((i) => lastGroup.tags[i] ?? ''));
+    if (lastGroup.groupTag) setTeamTag(lastGroup.groupTag);
+  }
+
+  /** Drop a recent tag into the first empty seat; a full roster ignores it. */
+  function addRecentTag(tag: string) {
+    setFormError(null);
+    setTags((prev) => {
+      const seat = prev.findIndex((t, i) => i < count && t === '');
+      if (seat === -1) return prev;
+      const next = [...prev];
+      next[seat] = tag;
+      return next;
+    });
+  }
+
   async function start() {
     const check = validateRoster(activeTags);
     if (!check.ok) {
@@ -113,6 +152,9 @@ export default function PlayerSetup() {
       courseById(courseId)?.pars,
       owner === 'none' ? null : owner,
     );
+    // The holder just told us which tag is theirs — remember it so the picker
+    // (and the shared-game flows) preselect right next time.
+    if (owner !== 'none') rememberMyTag(activeTags[owner]);
     await putRound(round);
     navigate(`/golf/play/${round.clientId}`, { replace: true });
   }
@@ -140,6 +182,8 @@ export default function PlayerSetup() {
       );
       return;
     }
+    // Hosting states "player 1 is your own tag" — that's the holder's tag.
+    rememberMyTag(hostTag);
     // Create returns the bare game; the snapshot fills the roster (just us).
     const snap = await fetchSnapshot(res.game.id, res.participantToken);
     const snapshot = snap.ok
@@ -217,6 +261,38 @@ export default function PlayerSetup() {
           })}
         </div>
 
+        {/* Play again with the same people — suggestions derived from the
+            rounds already on this phone (lib/recentPlayers), so regulars never
+            retype a roster. Chips only offer tags not already entered. */}
+        {lastGroup && (
+          <button
+            onClick={useLastGroup}
+            className="key mt-3 w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-fairway-100"
+          >
+            ↺ Last group: <span className="font-arcade">{lastGroup.tags.join(' · ')}</span>
+            {lastGroup.groupTag && (
+              <span className="text-fairway-100/70">
+                {' '}
+                · Team <span className="font-arcade">{lastGroup.groupTag}</span>
+              </span>
+            )}
+          </button>
+        )}
+        {tagChips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-fairway-100/70">Played here before:</span>
+            {tagChips.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => addRecentTag(tag)}
+                className="key font-arcade rounded-full px-3 py-1.5 text-sm font-bold text-fairway-100"
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Whose phone is this? Everyone's scores get typed here, but the
             achievements wall is the holder's own — a friend's hole-in-one on
             your phone is their badge, not yours. The round records the
@@ -277,6 +353,23 @@ export default function PlayerSetup() {
           />
           {teamErr && <span className="text-sm text-danger">{teamErr}</span>}
         </div>
+        {teamChips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-fairway-100/70">Recent teams:</span>
+            {teamChips.map((team) => (
+              <button
+                key={team}
+                onClick={() => {
+                  setFormError(null);
+                  setTeamTag(team);
+                }}
+                className="key font-arcade rounded-full px-3 py-1.5 text-sm font-bold text-fairway-100"
+              >
+                {team}
+              </button>
+            ))}
+          </div>
+        )}
 
         {formError && <p className="mt-4 text-sm text-danger">{formError}</p>}
 

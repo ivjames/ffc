@@ -5,6 +5,7 @@ import { sanitizeTagInput, tagError, TAG_LENGTH } from '../../lib/sanitize';
 import { fetchMe } from '../../lib/authApi';
 import { joinGame } from '../../lib/gamesApi';
 import { createSharedLocalRound } from '../../lib/sharedMerge';
+import { getMyTag, rememberMyTag } from '../../lib/myTag';
 import { getRound, markActivity, putRound } from '../../db';
 
 // Join a shared game by code (QR deep link lands here as /join?code=XXXXXX).
@@ -27,10 +28,15 @@ export default function JoinGame() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Prefill the tag for signed-in players who saved one.
+  // Prefill the holder's tag: the account's saved tag wins, else the tag this
+  // phone last played under (lib/myTag). Never overwrite something typed.
   useEffect(() => {
+    const remembered = getMyTag();
+    if (remembered) setTag((prev) => (prev === '' ? remembered : prev));
     void fetchMe().then((me) => {
-      if (me?.defaultTag) setTag((prev) => (prev === '' ? me.defaultTag! : prev));
+      if (me?.defaultTag) {
+        setTag((prev) => (prev === '' || prev === remembered ? me.defaultTag! : prev));
+      }
     });
   }, []);
 
@@ -61,6 +67,8 @@ export default function JoinGame() {
     // reads wrong, and it errs toward not granting, which is the right way to
     // be wrong about a badge.
     if (res.slot !== 0) void markActivity('social', 'join'); // achievements (device-local)
+    // The tag just claimed a seat FROM THIS PHONE — that's the holder's tag.
+    rememberMyTag(tag);
     const clientId = `shared:${res.snapshot.game.id}`;
     // Rejoin on a device that already mirrors this game: keep the local state
     // (scores survive), just refresh the credentials.
