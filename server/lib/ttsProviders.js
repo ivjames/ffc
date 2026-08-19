@@ -158,27 +158,49 @@ const openaiProvider = {
 // (comma-separated) to pin specific ones.
 let cartesiaVoices = null;
 
+/** `language` is deprecated in their API and may be absent, with the locale
+ *  now on `accents`. Keep a voice when either says English, and keep one that
+ *  says nothing at all rather than filtering the whole list down to nothing. */
+function isEnglish(voice) {
+  if (Array.isArray(voice.accents) && voice.accents.length > 0) {
+    return voice.accents.some((a) => String(a?.locale ?? a?.accent ?? a).startsWith("en"));
+  }
+  return !voice.language || String(voice.language).startsWith("en");
+}
+
 export async function loadCartesiaVoices(env) {
-  if (cartesiaVoices) return cartesiaVoices;
+  // Deliberately `?.length` and not a plain truthiness check: an empty array is
+  // truthy, so caching one would pin "no voices" for the life of the process.
+  // The note this produces tells the operator to go add a voice — that advice
+  // is worthless if repricing afterwards still reads a cached empty list.
+  if (cartesiaVoices?.length) return cartesiaVoices;
   const pinned = (env.CARTESIA_VOICE_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
   if (pinned.length > 0) {
     cartesiaVoices = pinned.map((id) => ({ id, name: id.slice(0, 8) }));
     return cartesiaVoices;
   }
-  const res = await fetch("https://api.cartesia.ai/voices", {
+  // An explicit limit rather than the default page: the default can come back
+  // empty on an account with no voices of its own, and an empty list is not an
+  // error — it just quietly produces no rows.
+  const res = await fetch("https://api.cartesia.ai/voices?limit=100", {
     headers: {
       authorization: `Bearer ${env.CARTESIA_API_KEY}`,
       "Cartesia-Version": CARTESIA_VERSION,
     },
   });
-  if (!res.ok) throw new Error(`Cartesia voices ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Cartesia voices ${res.status}${detail ? `: ${detail.slice(0, 120)}` : ""}`);
+  }
   const body = await res.json();
   const all = Array.isArray(body) ? body : (body.data ?? []);
-  cartesiaVoices = all
-    .filter((v) => !v.language || v.language.startsWith("en"))
+  const found = all
+    .filter(isEnglish)
     .slice(0, 2)
     .map((v) => ({ id: v.id, name: v.name ?? v.id.slice(0, 8) }));
-  return cartesiaVoices;
+  // Only a real answer is worth keeping; an empty one is re-asked next time.
+  if (found.length > 0) cartesiaVoices = found;
+  return found;
 }
 
 const CARTESIA_VERSION = "2026-08-14";
@@ -194,6 +216,13 @@ const cartesiaProvider = {
   configured: (env) => Boolean(env.CARTESIA_API_KEY),
   why: "CARTESIA_API_KEY in server/.env",
   discover: loadCartesiaVoices,
+  // The key works and the request succeeded — there were simply no voices to
+  // read with. Silence here is what made an empty plan look like a broken
+  // bench rather than an account with nothing in its voice library.
+  emptyNote:
+    "the key works, but GET /voices returned no English voices — add a voice " +
+    "in the Cartesia dashboard, or set CARTESIA_VOICE_IDS in server/.env to " +
+    "pin voice ids.",
   lineup: (env, voices = []) =>
     voices.map((v) => ({
       voice: v.id,

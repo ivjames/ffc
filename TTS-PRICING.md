@@ -148,6 +148,18 @@ specific ones with `CARTESIA_VOICE_IDS`. If the key is present but the API
 refuses it, the bench reports the error and **skips the provider** rather than
 planning clips that would fail halfway through a billed run.
 
+Note that `language` is deprecated in their API and may be absent, with the
+locale now on `accents` — the filter reads both, and keeps a voice that
+declares neither rather than filtering the list down to nothing.
+
+**An empty voice library is not an error.** A valid key on an account with no
+voices answers `200` with `{"data": []}`, which produces zero rows while every
+health signal stays green — an empty plan that reads as a broken bench. Any
+provider that is configured, raised no error, and still contributed nothing now
+carries a note saying so, on screen and in the CLI pre-flight. Cartesia's names
+both ways out: add a voice in their dashboard, or pin ids with
+`CARTESIA_VOICE_IDS`.
+
 ## The generative engine
 
 Neural read as "meh" the first time it was auditioned on real questions, which

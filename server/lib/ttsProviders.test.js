@@ -24,7 +24,7 @@ mock.module("@aws-sdk/client-polly", {
   },
 });
 
-const { providerByKey } = await import("./ttsProviders.js");
+const { providerByKey, loadCartesiaVoices } = await import("./ttsProviders.js");
 const polly = providerByKey("polly");
 
 const GEN_ENV = { AWS_REGION: "us-east-1" };
@@ -89,4 +89,49 @@ test("billing comes from the API's own count, not the wrapped SSML length", asyn
     GEN_ENV
   );
   assert.equal(billed, 42, "RequestCharacters, which excludes the SSML tags");
+});
+
+// --- Cartesia voice discovery -----------------------------------------------
+// The droplet's failure mode: the key is valid, GET /voices answers 200, and
+// the account simply has no voices. Nothing throws, so the provider reports
+// itself healthy while contributing zero rows.
+
+const cartesia = providerByKey("cartesia");
+
+test("English is decided by accents, since language is deprecated and may be absent", () => {
+  const rows = cartesia.lineup({}, [{ id: "abc", name: "Ada" }]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].voiceLabel, "Ada");
+  assert.equal(rows[0].model, "sonic-3.5");
+});
+
+test("no voices means no rows, and the provider carries the reason", () => {
+  assert.deepEqual(cartesia.lineup({}, []), []);
+  // Not an error — an empty library is a valid 200. The note is what keeps an
+  // empty plan from reading as a broken bench, and it names both ways out.
+  assert.match(cartesia.emptyNote, /CARTESIA_VOICE_IDS/);
+  assert.match(cartesia.emptyNote, /Cartesia dashboard/);
+});
+
+test("an empty voice list is never cached, so adding a voice takes effect on the next price", async () => {
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    // Empty first, populated second — the operator followed the advice.
+    const data = calls.length === 1 ? [] : [{ id: "voice-uuid", name: "Ada", accents: [{ locale: "en-US" }] }];
+    return { ok: true, json: async () => ({ data, has_more: false }) };
+  };
+  try {
+    const env = { CARTESIA_API_KEY: "k" };
+    assert.deepEqual(await loadCartesiaVoices(env), [], "nothing to offer yet");
+    const second = await loadCartesiaVoices(env);
+    assert.equal(calls.length, 2, "it asked again rather than trusting a cached empty list");
+    assert.deepEqual(second, [{ id: "voice-uuid", name: "Ada" }]);
+    // A real answer IS cached — the point is not to re-ask forever.
+    await loadCartesiaVoices(env);
+    assert.equal(calls.length, 2, "and stopped asking once there was an answer");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

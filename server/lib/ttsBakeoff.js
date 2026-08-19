@@ -149,7 +149,32 @@ export async function planClips(lines, env = process.env) {
       }
     }
   }
+  // A provider that is configured, raised no error, and still contributed
+  // nothing is the worst of the three states: the screen shows one fewer
+  // column with no reason given, and a plan of zero clips looks like a broken
+  // bench. Whatever it is, say it.
+  for (const state of status) {
+    if (!state.configured || state.error || state.note) continue;
+    if (clips.some((c) => c.provider === state.key)) continue;
+    state.note = providerByKey(state.key)?.emptyNote ?? "configured, but it offered no voices to audition.";
+  }
   return { clips, status };
+}
+
+/** Why a plan came out empty, in the operator's terms.
+ *
+ *  "No provider is configured" is the wrong answer when one IS configured and
+ *  simply had nothing to offer — it sends the operator to server/.env to fix a
+ *  key that is already there, instead of to the reason the bench just worked
+ *  out for them. A configured provider that cannot contribute is always the
+ *  more actionable fact, so it wins. */
+export function noProviderReason(status) {
+  const blocked = status
+    .filter((p) => p.configured && (p.error || p.note))
+    .map((p) => `${p.label}: ${p.error ?? p.note}`);
+  if (blocked.length > 0) return `nothing to synthesize — ${blocked.join("; ")}`;
+  const missing = status.filter((p) => !p.configured).map((p) => p.why);
+  return `no provider is configured — add one of: ${missing.join(", ")}`;
 }
 
 /** Priced per clip: the providers cost different amounts, and a blended

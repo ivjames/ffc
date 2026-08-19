@@ -21,6 +21,7 @@ import {
   linesFor,
   loadQuestions,
   loadVenues,
+  noProviderReason,
   planClips,
   synthesizeAll,
 } from "../server/lib/ttsBakeoff.js";
@@ -91,7 +92,13 @@ async function main() {
     console.log(`  venue       ${venue.name}${venue.orgName ? ` (${venue.orgName})` : ""}`);
     console.log(`  questions   ${bank.length}, spread shortest to longest`);
     for (const p of status) {
-      const state = !p.configured ? `skipped — set ${p.why}` : p.error ? `skipped — ${p.error}` : "in";
+      const state = !p.configured
+        ? `skipped — set ${p.why}`
+        : p.error
+          ? `skipped — ${p.error}`
+          : p.note
+            ? `no rows — ${p.note}`
+            : "in";
       console.log(`  ${p.label.padEnd(11)} ${state}`);
     }
     console.log(`  clips       ${est.clips}`);
@@ -111,9 +118,7 @@ async function main() {
       return;
     }
     if (clips.length === 0) {
-      console.error(`\nNo provider is configured. Add one of these to server/.env:`);
-      for (const p of status.filter((p) => !p.configured)) console.error(`  ${p.why}`);
-      console.error("");
+      console.error(`\n${noProviderReason(status)}\n`);
       process.exitCode = 1;
       return;
     }
