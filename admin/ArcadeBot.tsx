@@ -162,6 +162,19 @@ export default function ArcadeBot() {
     [status, rep.profile]
   );
 
+  // Switching profiles can strand a game the new one never captured. Drop
+  // those rather than sending a selection the server will reject.
+  const chosenKeys = chosenProfile?.summary?.gameKeys;
+  const chosenKeysSig = chosenKeys?.join(',') ?? '';
+  useEffect(() => {
+    if (!chosenKeys) return;
+    setRep((r) => {
+      const kept = r.games.filter((g) => chosenKeys.includes(g));
+      return kept.length === r.games.length ? r : { ...r, games: kept };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenKeysSig]);
+
   async function run(fn: () => Promise<unknown>, setErr: (m: string | null) => void, what: string) {
     setBusy(true);
     setErr(null);
@@ -201,6 +214,14 @@ export default function ArcadeBot() {
     dryRun: rep.dryRun,
     games: rep.games,
   };
+
+  // The games the chosen profile can actually replay, labelled from the
+  // registry. An unknown key (a profile from an older registry) still shows,
+  // under its raw key, rather than vanishing from a list that claims to be
+  // complete.
+  const replayable = (chosenProfile?.summary?.gameKeys ?? []).map(
+    (k) => games.find((g) => g.key === k) ?? { key: k, label: k, estRoundMs: null }
+  );
 
   // A capture's wall clock is the honest number to show: the browser plays every
   // round for real, and the games are nowhere near equal (Skee-Ball ~20s a round,
@@ -489,7 +510,15 @@ export default function ArcadeBot() {
 
         <div className="mt-3">
           <div className="text-sm font-medium text-slate-700">Games</div>
-          <GamePicker games={games} value={rep.games} onChange={(g) => setRep((r) => ({ ...r, games: g }))} />
+          {/* Only what THIS profile captured. Offering the whole registry let
+              you pick a game the profile has no samples for, which makes
+              arcade-traffic throw "profile has no game" and exit having posted
+              nothing. */}
+          <GamePicker
+            games={replayable}
+            value={rep.games}
+            onChange={(g) => setRep((r) => ({ ...r, games: g }))}
+          />
         </div>
 
         <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">

@@ -50,6 +50,7 @@ import { writeFileSync } from 'node:fs';
 import { BY_KEY, GAMES, UNSUPPORTED, resolve } from './lib/arcade/registry.mjs';
 import { playRound } from './lib/arcade/round.mjs';
 import { makeRng, sampleSkill } from './lib/arcade/skill.mjs';
+import { watchParentOrExit } from './lib/parentWatchdog.mjs';
 
 function parseArgs(argv) {
   const a = {
@@ -114,6 +115,10 @@ const pct = (xs, p) => {
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
 async function main() {
+  // Spawned by the admin control plane? Then die when it does — a capture
+  // holds a browser open for minutes at a time, which is exactly the kind of
+  // orphan nobody notices. No-op when run by hand.
+  watchParentOrExit('arcade-bot');
   const args = parseArgs(process.argv);
 
   if (args.list) {

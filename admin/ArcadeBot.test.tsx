@@ -26,19 +26,19 @@ const MIXED: ArcadeProfile = {
   name: 'mixed.json',
   bytes: 900,
   modifiedAt: '2026-08-19T01:35:54.000Z',
-  summary: { games: 1, samples: 10, skillMin: 0.3, skillMax: 0.74, skillMean: 0.51 },
+  summary: { games: 1, gameKeys: ['skeeball'], samples: 10, skillMin: 0.3, skillMax: 0.74, skillMean: 0.51 },
 };
 const EXPERT: ArcadeProfile = {
   name: 'expert.json',
   bytes: 800,
   modifiedAt: '2026-08-19T00:32:07.000Z',
-  summary: { games: 2, samples: 12, skillMin: 1, skillMax: 1, skillMean: 1 },
+  summary: { games: 2, gameKeys: ['skeeball', 'gokarts'], samples: 12, skillMin: 1, skillMax: 1, skillMean: 1 },
 };
 const EMPTY: ArcadeProfile = {
   name: 'empty.json',
   bytes: 300,
   modifiedAt: '2026-08-18T00:00:00.000Z',
-  summary: { games: 1, samples: 0, skillMin: null, skillMax: null, skillMean: null },
+  summary: { games: 1, gameKeys: [], samples: 0, skillMin: null, skillMax: null, skillMean: null },
 };
 
 function status(profiles: ArcadeProfile[]): ArcadeStatus {
@@ -51,7 +51,7 @@ function status(profiles: ArcadeProfile[]): ArcadeStatus {
     browser: { available: true, at: '/opt/pw-browsers' },
     appBase: 'http://127.0.0.1:5173',
     profiles,
-    venues: [{ id: 'loc-1', name: 'Upland', orgName: null, gameRewards: true }],
+    venues: [{ id: 'loc-1', name: 'Upland', orgName: null, orgSlug: null, gameRewards: true }],
     syntheticAwards: { total: 10, last24h: 4, tickets: 300 },
     capture: IDLE,
     replay: IDLE,
@@ -101,6 +101,32 @@ describe('ArcadeBot — guards', () => {
     render(<ArcadeBot />);
     expect(await screen.findByText(/recorded 0 rounds/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Start dry run/i })).toBeDisabled();
+  });
+
+  test('the replay game picker offers only what the profile captured', async () => {
+    // Picking a game the profile has no samples for makes arcade-traffic throw
+    // "profile has no game" and exit having posted nothing.
+    vi.mocked(api.arcadeStatus).mockResolvedValue(status([MIXED]));
+    render(<ArcadeBot />);
+    await screen.findByText(/Player mix:/);
+    // Capture's picker lists the whole registry; replay's lists the profile's.
+    expect(screen.getAllByLabelText('Skee-Ball')).toHaveLength(2);
+    expect(screen.getAllByLabelText('Go-Karts')).toHaveLength(1);
+  });
+
+  test('switching to a narrower profile drops a now-invalid game selection', async () => {
+    // EXPERT holds both games, MIXED only skeeball.
+    vi.mocked(api.arcadeStatus).mockResolvedValue(status([EXPERT, MIXED]));
+    render(<ArcadeBot />);
+    await screen.findByText(/fixed skill of/);
+
+    // Tick Go-Karts in the REPLAY picker (the second one on the page).
+    const gokarts = screen.getAllByLabelText('Go-Karts');
+    await userEvent.click(gokarts[gokarts.length - 1]);
+    await waitFor(() => expect(screen.getByText(/1 selected/)).toBeInTheDocument());
+
+    await userEvent.selectOptions(screen.getByLabelText(/Profile/i), 'mixed.json');
+    await waitFor(() => expect(screen.queryByText(/1 selected/)).not.toBeInTheDocument());
   });
 
   test('capture is refused, with the reason, when the host has no browser', async () => {

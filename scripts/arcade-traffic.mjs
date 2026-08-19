@@ -89,6 +89,14 @@
 //                      cards cannot be fabricated (a real vendor)
 //   --cards-file F     file of card numbers, one per line (blank/# lines skipped)
 //   --email-domain D   where synthetic accounts live (default example.com)
+//   --tenant-host H    the host the API should resolve the TENANT from. A venue
+//                      outside the default org needs its org's subdomain, even
+//                      when the connection goes to an ip/loopback address, or
+//                      link and award reject the location as foreign. Sent as
+//                      X-Forwarded-Host: node's fetch IGNORES a `host` header
+//                      (a forbidden header name) and sends the connection host
+//                      regardless, so setting that would silently do nothing.
+//                      Express honours the forwarded one under `trust proxy`.
 //   --cookie C         use an existing session cookie instead of signing in,
 //                      repeatable — for deployments with mail configured
 //   --game KEY         restrict to these games, repeatable (default: all in profile)
@@ -107,6 +115,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { makeRng } from './lib/arcade/skill.mjs';
+import { watchParentOrExit } from './lib/parentWatchdog.mjs';
 
 function parseArgs(argv) {
   const a = {
@@ -121,6 +130,7 @@ function parseArgs(argv) {
     vendorBase: process.env.CENTEREDGE_API_BASE || 'http://127.0.0.1:8070/api/v1',
     vendorToken: process.env.CENTEREDGE_API_TOKEN || 'ce-mock-dev-token',
     emailDomain: 'example.com',
+    tenantHost: null,
     cookies: [],
     games: [],
     intervalMin: null,
@@ -144,6 +154,7 @@ function parseArgs(argv) {
     else if (k === '--vendor-token') a.vendorToken = next();
     else if (k === '--cards-file') a.cardsFile = next();
     else if (k === '--email-domain') a.emailDomain = next();
+    else if (k === '--tenant-host') a.tenantHost = next();
     else if (k === '--cookie') a.cookies.push(next());
     else if (k === '--game') a.games.push(next());
     else if (k === '--interval-min') a.intervalMin = Number(next());
@@ -220,11 +231,15 @@ async function fabricateCard(base, token, label) {
  * failed — a card the vendor does not know fails HERE, before any award is
  * posted, which is where a bad pool should surface.
  */
-async function mintPlayer(api, locationId, cardNumber, email) {
+async function mintPlayer(api, locationId, cardNumber, email, tenantHost) {
   const post = async (path, body, cookie) => {
     const res = await fetch(`${api}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tenantHost ? { 'x-forwarded-host': tenantHost } : {}),
+        ...(cookie ? { cookie } : {}),
+      },
       body: JSON.stringify(body),
     });
     return { res, data: await res.json().catch(() => ({})) };
@@ -284,6 +299,10 @@ function printCleanup(runId, realCards) {
 }
 
 async function main() {
+  // Spawned by the admin control plane? Then die when it does. A replay with
+  // --interval-min and no --sweeps runs forever, so an orphaned one keeps
+  // posting awards long after anything is watching it.
+  watchParentOrExit('arcade-traffic');
   const args = parseArgs(process.argv);
   const profile = JSON.parse(readFileSync(args.profile, 'utf8'));
   const rng = makeRng(args.seed);
@@ -322,7 +341,19 @@ async function main() {
   const cache = existsSync(args.sessionsFile)
     ? JSON.parse(readFileSync(args.sessionsFile, 'utf8'))
     : { sessions: [] };
-  const cached = Array.isArray(cache.sessions) ? cache.sessions : [];
+  const allCached = Array.isArray(cache.sessions) ? cache.sessions : [];
+
+  // A CACHED SESSION BELONGS TO THE VENUE IT WAS MINTED AT. The account's card
+  // is linked through user_card_link at one location, so reusing it against a
+  // different venue posts awards from a session with no card there — and the
+  // count still satisfies --players, so no replacement is minted either. Keep
+  // only this venue's entries; the rest stay in the file for their own venue.
+  // Entries written before this was recorded carry no locationId and can't be
+  // placed, so they are not reused (they'd be a coin flip) — say so rather than
+  // dropping them quietly.
+  const cached = allCached.filter((c) => c.locationId === args.location);
+  const unplaceable = allCached.filter((c) => !c.locationId).length;
+  const otherVenues = allCached.length - cached.length - unplaceable;
 
   const havePlayers =
     cards.length > 0 || args.cookies.length > 0 || args.players > 0 || cached.length > 0;
@@ -340,6 +371,10 @@ async function main() {
     args.players ? `${args.players} fabricated` : '',
   ].filter(Boolean).join(' + ') || 'none';
   console.log(`  players   ${poolDesc}`);
+  // Say what the cache held but couldn't lend HERE, before the refusal below —
+  // "no players" next to a file full of sessions is otherwise baffling.
+  if (otherVenues) console.log(`  cache     ${otherVenues} session(s) belong to other venues — not reused`);
+  if (unplaceable) console.log(`  cache     ${unplaceable} session(s) predate venue tracking — not reused`);
   if (ageDays > 30) {
     console.log('  ⚠ profile is over 30 days old — re-capture before trusting these scores');
   }
@@ -348,7 +383,8 @@ async function main() {
     console.error(
       '\n  ✗ No players. The award route resolves the card from the SIGNED-IN\n' +
         '    SESSION, not the request body, so every post without one is a 401.\n' +
-        `    Nothing cached in ${args.sessionsFile} either. Pass --players N to\n` +
+        `    Nothing usable cached in ${args.sessionsFile} either (a cached\n` +
+        '    session belongs to the venue it was minted at). Pass --players N to\n' +
         '    fabricate a pool, --card <number> / --cards-file <file> to sign\n' +
         '    accounts in against existing cards, --cookie <c> to reuse real\n' +
         '    sessions, or --dry-run to inspect payloads without posting.',
@@ -422,16 +458,16 @@ async function main() {
       const card =
         toLink[i] ??
         (await fabricateCard(args.vendorBase, args.vendorToken, `Synthetic ${runId}-${i + 1}`));
-      const cookie = await mintPlayer(args.api, args.location, card, email);
+      const cookie = await mintPlayer(args.api, args.location, card, email, args.tenantHost);
       sessions.push(cookie);
-      minted.push({ email, card, cookie });
+      minted.push({ email, card, cookie, locationId: args.location });
       console.log(`  signed in ${email} -> card ${card}`);
     } catch (err) {
       console.error(`  ✗ ${err.message}`);
       // Keep whatever DID sign in: those sessions are real, and discarding them
       // would burn the hour's auth budget for nothing.
       if (minted.length) {
-        writeFileSync(args.sessionsFile, JSON.stringify({ sessions: [...cached, ...minted] }, null, 2));
+        writeFileSync(args.sessionsFile, JSON.stringify({ sessions: [...allCached, ...minted] }, null, 2));
         console.error(`    (kept ${minted.length} session(s) in ${args.sessionsFile})`);
       }
       process.exitCode = 1;
@@ -441,7 +477,7 @@ async function main() {
   if (minted.length) {
     writeFileSync(
       args.sessionsFile,
-      JSON.stringify({ sessions: [...cached, ...minted] }, null, 2),
+      JSON.stringify({ sessions: [...allCached, ...minted] }, null, 2),
     );
     console.log(`  cached ${minted.length} new session(s) -> ${args.sessionsFile}`);
   }
@@ -476,7 +512,11 @@ async function main() {
       try {
         const res = await fetch(`${args.api}/api/game-rewards/award`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', cookie },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(args.tenantHost ? { 'x-forwarded-host': args.tenantHost } : {}),
+            cookie,
+          },
           body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => ({}));

@@ -165,6 +165,10 @@ export function replayArgs(p, profilePath, apiBase) {
     String(p.seed),
     "--yes",
   ];
+  // The server resolves the TENANT from the request host, and this connection
+  // goes to loopback — so a venue outside the default org needs its org's
+  // subdomain sent explicitly or link/award reject the location as foreign.
+  if (p.tenantHost) args.push("--tenant-host", p.tenantHost);
   if (p.intervalMin) args.push("--interval-min", String(p.intervalMin));
   if (p.sweeps) args.push("--sweeps", String(p.sweeps));
   if (p.dryRun) args.push("--dry-run");

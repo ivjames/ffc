@@ -179,8 +179,18 @@ own status, live log tail and stop button, so both can run at once.
   1.00`. A profile that recorded 0 rounds (a capture whose app went down
   mid-run still writes one) is refused rather than replayed as silence.
 
+- The replay game list is the chosen profile's, not the registry's: a game the
+  profile never captured makes `arcade-traffic` exit with "profile has no game"
+  having posted nothing, so the picker doesn't offer it and the route refuses it.
+- "Game rewards on" means what the award route means by it — the venue's
+  `pos.loyalty.gameRewards` flag AND a live `gameTickets` module. Checking only
+  the flag called a venue enabled while every award 403'd.
+
 The child processes are started with `FFC_EXIT_WITH_PARENT=1` and killed on API
-shutdown, so a bot can't outlive the API that's reporting on it.
+shutdown, so a bot can't outlive the API that's reporting on it. Both halves run
+`watchParentOrExit` (`scripts/lib/parentWatchdog.mjs`), which polls `process.ppid`
+and exits on reparenting — that is the half that covers an API SIGKILL or crash,
+where no parent handler gets to run.
 
 To watch it on a machine with no display — CI, a remote dev container — record
 the session instead, since `--headed` has nothing to display to there:
@@ -206,7 +216,19 @@ POST /api/game-rewards/award {locationId, game, tickets, sessionId}
 `--players N` fabricates N cards at the loyalty vendor and signs an account in
 for each, so no card list is needed. `N` is the pool SIZE, not "mint N more":
 cached sessions count toward it and are reused first, so `--players 0` against
-a warm cache runs with no auth calls at all. Against a real vendor — which issues cards
+a warm cache runs with no auth calls at all.
+
+**A cached session belongs to the venue it was minted at.** The account's card
+is linked through `user_card_link` at one location, so the cache records the
+venue and only lends entries back to that same venue — one file holds pools for
+several venues without one venue's sessions posting cardless awards at another.
+
+**A venue outside the default org needs `--tenant-host <org-slug>`.** The server
+resolves the tenant from the request host, so an ip/loopback address lands on
+the default-org fallback and both link and award reject the location as foreign.
+(It travels as `X-Forwarded-Host` — node's `fetch` silently drops a `host`
+header and sends the connection host regardless.) Master Control fills this in
+from the venue's org. Against a real vendor — which issues cards
 at a counter, not over an API — pass existing numbers with `--card` /
 `--cards-file` instead. Either way a card the vendor doesn't know fails at link
 time, before anything is posted.

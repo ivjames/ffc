@@ -50,6 +50,26 @@ test("replayArgs: players 0 is passed through (reuse cached sessions only)", () 
   assert.equal(args[args.indexOf("--players") + 1], "0");
 });
 
+test("replayArgs: --tenant-host rides along when the venue's org needs it", () => {
+  // Loopback resolves the tenant to the default org, so a venue elsewhere has
+  // to name its org or link/award reject the location as foreign.
+  const args = replayArgs(
+    { locationId: "l", plays: 1, players: 1, concurrency: 1, seed: 1, tenantHost: "northstar.ffc.example", games: [] },
+    "/p",
+    "http://x"
+  );
+  assert.equal(args[args.indexOf("--tenant-host") + 1], "northstar.ffc.example");
+
+  // A venue with no org keeps the default-org fallback, which is what covers
+  // org-less legacy rows — so no flag at all.
+  const bare = replayArgs(
+    { locationId: "l", plays: 1, players: 1, concurrency: 1, seed: 1, tenantHost: null, games: [] },
+    "/p",
+    "http://x"
+  );
+  assert.ok(!bare.includes("--tenant-host"));
+});
+
 test("replayArgs: optional flags appear only when set", () => {
   const bare = replayArgs(
     { locationId: "l", plays: 1, players: 1, concurrency: 1, seed: 1, intervalMin: null, sweeps: null, dryRun: false, games: [] },

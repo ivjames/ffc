@@ -22,6 +22,7 @@ import path from "node:path";
 import { pool } from "../../db.js";
 import { orgScope } from "../../lib/adminAuth.js";
 import { GAME_REWARD_GAMES } from "../../lib/gameRewards.js";
+import { moduleLive } from "../../lib/modules.js";
 import * as runner from "../../lib/arcadeBotRunner.js";
 
 export const router = Router();
@@ -83,19 +84,26 @@ function summarizeProfile(file) {
     if (statSync(file).size > MAX_PROFILE_BYTES) return null;
     const doc = JSON.parse(readFileSync(file, "utf8"));
     const skills = [];
-    let games = 0;
-    for (const g of Object.values(doc?.games ?? {})) {
-      games += 1;
-      for (const s of g?.samples ?? []) {
+    // Only games with samples can be replayed — arcade-traffic throws
+    // "profile has no game" on one that was captured empty.
+    const gameKeys = [];
+    for (const [key, g] of Object.entries(doc?.games ?? {})) {
+      const samples = g?.samples ?? [];
+      if (samples.length > 0) gameKeys.push(key);
+      for (const s of samples) {
         if (typeof s?.skill === "number" && Number.isFinite(s.skill)) skills.push(s.skill);
       }
     }
+    const games = Object.keys(doc?.games ?? {}).length;
     if (games === 0) return null;
-    if (skills.length === 0) return { games, samples: 0, skillMin: null, skillMax: null, skillMean: null };
+    if (skills.length === 0) {
+      return { games, gameKeys, samples: 0, skillMin: null, skillMax: null, skillMean: null };
+    }
     const min = Math.min(...skills);
     const max = Math.max(...skills);
     return {
       games,
+      gameKeys,
       samples: skills.length,
       skillMin: min,
       skillMax: max,
@@ -128,11 +136,20 @@ function listProfiles() {
   }
 }
 
-/** Venues this admin may target, with whether game rewards are even on. */
+/**
+ * Venues this admin may target, with whether an award would actually be
+ * accepted there. That is TWO conditions, not one: routes/gameRewards.js
+ * requires `pos.loyalty.gameRewards` AND `moduleLive(loc, "gameTickets")`, so
+ * reading only the pos flag calls a venue enabled when the module is switched
+ * off and every award 403s. Resolve it exactly the way the award route does.
+ *
+ * The org slug rides along because the child addresses the API over loopback,
+ * where the tenant would otherwise resolve to the default org (see the replay
+ * handler).
+ */
 async function loadVenues(scope) {
   const res = await pool.query(
-    `select l.id, l.name, o.name as org_name,
-            coalesce((l.pos -> 'loyalty' ->> 'gameRewards')::boolean, false) as game_rewards
+    `select l.id, l.name, l.pos, l.modules, o.name as org_name, o.slug as org_slug
        from location l
        left join org o on o.id = l.org_id
       where l.archived_at is null and ($1::uuid is null or l.org_id = $1)
@@ -143,7 +160,8 @@ async function loadVenues(scope) {
     id: r.id,
     name: r.name,
     orgName: r.org_name ?? null,
-    gameRewards: r.game_rewards,
+    orgSlug: r.org_slug ?? null,
+    gameRewards: r.pos?.loyalty?.gameRewards === true && moduleLive(r, "gameTickets"),
   }));
 }
 
@@ -279,8 +297,32 @@ router.post("/capture", (req, res) => {
   }
 });
 
+/**
+ * The host the child must present so the venue resolves to ITS org.
+ *
+ * The child connects to loopback, and lib/tenant.js resolves the tenant from
+ * the request host — `127.0.0.1` matches no org slug, so it lands on the
+ * default-org fallback, and findTenantLocation then rejects any venue outside
+ * that org as foreign. resolveTenant tries an exact slug match on the first
+ * host label BEFORE any platform-domain logic, so sending the org's own
+ * subdomain resolves via='host' to exactly that org — on a deployment with
+ * PLATFORM_FQDN set and on a dev box without it alike.
+ *
+ * The child sends this as X-Forwarded-Host, which app.js honours via
+ * `trust proxy`; a literal `host` header can't be used because node's fetch
+ * drops it (forbidden header name) and sends the connection host anyway.
+ *
+ * A venue with no org keeps the fallback (which is what covers org-less legacy
+ * rows), so it gets no header at all.
+ */
+function tenantHost(orgSlug) {
+  if (!orgSlug) return null;
+  const platform = (process.env.PLATFORM_FQDN || "").trim().toLowerCase();
+  return platform ? `${orgSlug}.${platform}` : orgSlug;
+}
+
 // --- Replay (super_admin) ---------------------------------------------------
-router.post("/replay", (req, res) => {
+router.post("/replay", async (req, res) => {
   if (!superOnly(req, res)) return undefined;
   const v = validateReplay(req.body);
   if (v.error) return res.status(400).json({ ok: false, error: v.error });
@@ -294,13 +336,43 @@ router.post("/replay", (req, res) => {
     return res.status(404).json({ ok: false, error: "no such profile" });
   }
 
+  // A game the profile never captured makes arcade-traffic throw "profile has
+  // no game" and exit without posting anything — refuse here, where the
+  // operator can still see which games this profile actually holds.
+  const summary = summarizeProfile(profilePath);
+  if (!summary || summary.samples === 0) {
+    return res.status(409).json({
+      ok: false,
+      error: "that profile recorded no rounds — capture one before replaying",
+    });
+  }
+  const missing = v.params.games.filter((g) => !summary.gameKeys.includes(g));
+  if (missing.length) {
+    return res.status(400).json({
+      ok: false,
+      error: `profile has no ${missing.join(", ")} — it holds ${summary.gameKeys.join(", ")}`,
+    });
+  }
+
+  let tenantHostValue = null;
+  try {
+    const org = await pool.query(
+      `select o.slug from location l left join org o on o.id = l.org_id where l.id = $1`,
+      [v.params.locationId]
+    );
+    tenantHostValue = tenantHost(org.rows[0]?.slug);
+  } catch (err) {
+    console.error("[admin/arcade-bot] tenant lookup failed:", err);
+    return res.status(500).json({ ok: false, error: "internal error" });
+  }
+
   // Loopback: the child talks to THIS API, never out through a proxy or to
-  // another host.
+  // another host. The tenant rides in the Host header instead (above).
   const apiBase = `http://127.0.0.1:${process.env.PORT || 8060}`;
   try {
     const status = runner.replay.start(
       runner.REPLAY_SCRIPT,
-      runner.replayArgs(v.params, profilePath, apiBase),
+      runner.replayArgs({ ...v.params, tenantHost: tenantHostValue }, profilePath, apiBase),
       v.params
     );
     return res.json({ ok: true, runner: status });

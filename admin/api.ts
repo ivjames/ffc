@@ -493,6 +493,8 @@ export type ArcadeRunner = {
  *  play forever. null when the file couldn't be read as one of ours. */
 export type ArcadeProfileSummary = {
   games: number;
+  /** The games this profile can actually replay (captured with samples). */
+  gameKeys: string[];
   samples: number;
   skillMin: number | null;
   skillMax: number | null;
@@ -511,7 +513,9 @@ export type ArcadeVenue = {
   id: string;
   name: string;
   orgName: string | null;
-  /** Awards 403 unless the venue sells the gameRewards add-on. */
+  orgSlug: string | null;
+  /** Awards 403 unless BOTH the pos loyalty flag and the gameTickets module
+   *  are on — resolved server-side exactly as the award route does. */
   gameRewards: boolean;
 };
 
