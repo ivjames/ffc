@@ -3,7 +3,7 @@
 // the player at the controls (the arcade convention), so it lands prefilled in
 // player 1's field — while guests and tagless accounts still start blank.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import PlayerSetup from './PlayerSetup';
 
@@ -62,6 +62,20 @@ describe('PlayerSetup', () => {
     renderSetup();
     // fetchMe resolves in a microtask; drain it before asserting nothing moved.
     await vi.waitFor(() => expect(fetchMe).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(tagInput('Player 1 tag').value).toBe('');
+  });
+
+  it('does not overwrite a field the player edited while the session was loading', async () => {
+    // A slow /me: the player types into (or clears) player 1 before it lands.
+    let resolveMe!: (u: unknown) => void;
+    fetchMe.mockReturnValue(new Promise((r) => (resolveMe = r)));
+    renderSetup();
+    fireEvent.change(tagInput('Player 1 tag'), { target: { value: 'ZZ9' } });
+    fireEvent.change(tagInput('Player 1 tag'), { target: { value: '' } });
+    resolveMe({ id: 'u1', email: 'a@b.c', displayName: null, defaultTag: 'IVJ' });
+    // Let the fetchMe continuation run — the deliberate clear must survive it.
+    await Promise.resolve();
     await Promise.resolve();
     expect(tagInput('Player 1 tag').value).toBe('');
   });
