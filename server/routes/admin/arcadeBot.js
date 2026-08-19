@@ -3,7 +3,7 @@
 //   POST /api/admin/arcade-bot/capture   play the games, write a profile
 //   POST /api/admin/arcade-bot/replay    post the awards a profile implies
 //   POST /api/admin/arcade-bot/stop      {slot} stop capture or replay
-//   POST /api/admin/arcade-bot/recheck-browser  re-probe, ignoring the cache
+//   POST /api/admin/arcade-bot/recheck-browser  re-probe browser + app, no cache
 //
 // The bots are scripts/arcade-bot.mjs and scripts/arcade-traffic.mjs (see
 // ARCADE-BOT.md). This surface drives them from the browser; lib/arcadeBotRunner
@@ -28,6 +28,7 @@ import { GAME_REWARD_GAMES } from "../../lib/gameRewards.js";
 import { moduleLive } from "../../lib/modules.js";
 import * as runner from "../../lib/arcadeBotRunner.js";
 import { browserStatus, resetBrowserStatus } from "../../lib/browserProbe.js";
+import { appBaseStatus, captureAppBase, resetAppBaseStatus } from "../../lib/captureTarget.js";
 
 export const router = Router();
 
@@ -224,10 +225,11 @@ function superOnly(req, res) {
 router.get("/status", async (req, res) => {
   const scope = orgScope(req);
   try {
-    const [venues, games, browser, awards] = await Promise.all([
+    const [venues, games, browser, app, awards] = await Promise.all([
       loadVenues(scope),
       loadGames(),
       browserStatus(),
+      appBaseStatus(),
       pool.query(
         `select count(*)::int as total,
                 count(*) filter (where created_at > now() - interval '24 hours')::int as last24h,
@@ -244,7 +246,8 @@ router.get("/status", async (req, res) => {
       // it has one — so this list is both "what may earn" and "what plays".
       games,
       browser,
-      appBase: process.env.FFC_APP_BASE || "http://127.0.0.1:5173",
+      appBase: captureAppBase(),
+      app,
       profiles: listProfiles(),
       venues,
       syntheticAwards: awards.rows[0],
@@ -265,6 +268,10 @@ router.post("/capture", async (req, res) => {
 
   const browser = await browserStatus();
   if (!browser.available) return res.status(409).json({ ok: false, error: browser.reason });
+  // The app has to be up too. Without this the run connection-refuses its way
+  // through every game and writes a profile with no rounds in it.
+  const app = await appBaseStatus();
+  if (!app.reachable) return res.status(409).json({ ok: false, error: app.reason });
   if (runner.capture.isRunning()) {
     return res.status(409).json({ ok: false, error: "a capture is already running — stop it first" });
   }
@@ -272,7 +279,7 @@ router.post("/capture", async (req, res) => {
   mkdirSync(runner.PROFILE_DIR, { recursive: true });
   const name = `profile-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   const out = path.join(runner.PROFILE_DIR, name);
-  const appBase = process.env.FFC_APP_BASE || "http://127.0.0.1:5173";
+  const appBase = captureAppBase();
   try {
     const status = runner.capture.start(
       runner.CAPTURE_SCRIPT,
@@ -376,7 +383,9 @@ router.post("/replay", async (req, res) => {
 router.post("/recheck-browser", async (req, res) => {
   if (!superOnly(req, res)) return undefined;
   resetBrowserStatus();
-  return res.json({ ok: true, browser: await browserStatus() });
+  resetAppBaseStatus();
+  const [browser, app] = await Promise.all([browserStatus(), appBaseStatus()]);
+  return res.json({ ok: true, browser, app });
 });
 
 // --- Stop (super_admin) -----------------------------------------------------

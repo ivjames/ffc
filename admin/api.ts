@@ -526,6 +526,9 @@ export type ArcadeStatus = {
   games: { key: string; label: string; estRoundMs: number | null }[];
   /** Capture drives a real browser; an API host may not have one. */
   browser: { available: boolean; at: string | null; reason?: string };
+  /** …and it drives the PLAYER APP, which on a deployed box is nginx, not the
+   *  dev server. Probed, because a wrong base fails 19 times otherwise. */
+  app: { reachable: boolean; base: string; status: number | null; reason?: string };
   appBase: string;
   profiles: ArcadeProfile[];
   venues: ArcadeVenue[];
@@ -1145,7 +1148,10 @@ export const api = {
   arcadeReplay: (params: ArcadeReplayParams) =>
     req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/replay', params),
   arcadeRecheckBrowser: () =>
-    req<{ ok: true; browser: ArcadeStatus['browser'] }>('POST', '/arcade-bot/recheck-browser'),
+    req<{ ok: true; browser: ArcadeStatus['browser']; app: ArcadeStatus['app'] }>(
+      'POST',
+      '/arcade-bot/recheck-browser'
+    ),
   arcadeStop: (slot: 'capture' | 'replay') =>
     req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/stop', { slot }),
 

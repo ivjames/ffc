@@ -202,7 +202,7 @@ export default function ArcadeBot() {
   if (error && !status) return <Banner kind="error">{error.message}</Banner>;
   if (!status) return null;
 
-  const { canControl, browser, appBase, profiles, venues, games, syntheticAwards } = status;
+  const { canControl, browser, app, appBase, profiles, venues, games, syntheticAwards } = status;
 
   const captureParams: ArcadeCaptureParams = {
     rounds: cap.rounds,
@@ -310,9 +310,26 @@ export default function ArcadeBot() {
             </Banner>
           </div>
         )}
-        {browser.available && (
+        {!app.reachable && (
+          <div className="mt-3">
+            <Banner kind="error">
+              <strong>The player app isn’t answering — capture is unavailable.</strong>{' '}
+              {app.reason}
+              <div className="mt-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => run(() => api.arcadeRecheckBrowser(), setCapErr, 're-check')}
+                  disabled={busy}
+                >
+                  {busy ? 'Checking…' : 'Re-check'}
+                </Button>
+              </div>
+            </Banner>
+          </div>
+        )}
+        {browser.available && app.reachable && (
           <p className="mt-2 text-xs text-slate-500">
-            Browser found at <code>{browser.at}</code>.
+            Browser at <code>{browser.at}</code> · app answering at <code>{app.base}</code>.
           </p>
         )}
 
@@ -369,7 +386,13 @@ export default function ArcadeBot() {
           <div className="mt-3 flex items-center gap-2">
             <Button
               onClick={() => run(() => api.arcadeCapture(captureParams), setCapErr, 'capture')}
-              disabled={busy || !browser.available || status.capture.running || !Number.isInteger(cap.rounds)}
+              disabled={
+                busy ||
+                !browser.available ||
+                !app.reachable ||
+                status.capture.running ||
+                !Number.isInteger(cap.rounds)
+              }
             >
               {status.capture.running ? 'Capture running…' : 'Start capture'}
             </Button>

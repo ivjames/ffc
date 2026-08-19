@@ -154,7 +154,10 @@ async function main() {
   const t0 = Date.now();
   let failures = 0;
 
+  let unreachable = false;
+
   for (const game of games) {
+    if (unreachable) break;
     const rows = [];
     for (let i = 0; i < args.rounds; i++) {
       // --assert-skill compares against EXPERT floors, so it has to play like
@@ -173,6 +176,13 @@ async function main() {
       } catch (err) {
         failures++;
         console.log(`  ${game.key.padEnd(12)} #${String(i + 1).padStart(2)} FAILED: ${err.message}`);
+        // Nothing is serving the app. Every remaining round will fail the same
+        // way, so stop rather than spending 19 games proving it — and say what
+        // the base actually was, since a wrong --base is the usual cause.
+        if (/ERR_CONNECTION_REFUSED|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_TIMED_OUT/.test(err.message)) {
+          unreachable = true;
+          break;
+        }
       }
     }
     const scores = rows.map((r) => r.score);
@@ -205,6 +215,14 @@ async function main() {
 
   const wall = (Date.now() - t0) / 1000;
   const played = Object.values(profile.games).reduce((n, g) => n + g.rounds, 0);
+  if (unreachable) {
+    console.error(
+      `\n  ✗ Nothing is serving the app at ${args.base} — stopped after the first round.\n` +
+        '    Capture opens the PLAYER APP, which is the Vite dev server (npm run dev)\n' +
+        '    on a dev box and nginx on a deployed one — never the API port. Pass\n' +
+        '    --base <origin>, or set PUBLIC_APP_URL / FFC_APP_BASE for the admin.',
+    );
+  }
   console.log(`Played ${played} round(s) in ${wall.toFixed(0)}s` + (failures ? `, ${failures} failed` : ''));
   if (played > 0) {
     const perRound = wall / played;
@@ -214,7 +232,11 @@ async function main() {
     );
   }
 
-  if (args.out) {
+  if (args.out && played === 0) {
+    // Writing a zero-round profile just leaves a file that every replay has to
+    // refuse. The run already failed; don't make it litter too.
+    console.error(`  (no rounds played — no profile written to ${args.out})`);
+  } else if (args.out) {
     writeFileSync(args.out, JSON.stringify(profile, null, 2));
     console.log(`Wrote profile → ${args.out}`);
   }

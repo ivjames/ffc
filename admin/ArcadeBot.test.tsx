@@ -49,6 +49,7 @@ function status(profiles: ArcadeProfile[]): ArcadeStatus {
       { key: 'gokarts', label: 'Go-Karts', estRoundMs: 180_000 },
     ],
     browser: { available: true, at: '/opt/pw-browsers' },
+    app: { reachable: true, base: 'http://127.0.0.1:5173', status: 200 },
     appBase: 'http://127.0.0.1:5173',
     profiles,
     venues: [{ id: 'loc-1', name: 'Upland', orgName: null, orgSlug: null, gameRewards: true }],
@@ -127,6 +128,17 @@ describe('ArcadeBot — guards', () => {
 
     await userEvent.selectOptions(screen.getByLabelText(/Profile/i), 'mixed.json');
     await waitFor(() => expect(screen.queryByText(/1 selected/)).not.toBeInTheDocument());
+  });
+
+  test('capture is refused, with the reason, when the player app is unreachable', async () => {
+    // Capture opens the player app, not the API. On a deployed box that's
+    // nginx; pointed at a dev port it connection-refuses every game in turn.
+    const s = status([MIXED]);
+    s.app = { reachable: false, base: 'http://127.0.0.1:5173', status: null, reason: 'nothing is listening at http://127.0.0.1:5173' };
+    vi.mocked(api.arcadeStatus).mockResolvedValue(s);
+    render(<ArcadeBot />);
+    expect(await screen.findByText(/nothing is listening/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Start capture/i })).toBeDisabled();
   });
 
   test('capture is refused, with the reason, when the host has no browser', async () => {
