@@ -313,7 +313,19 @@ async function main() {
       if (id && !id.startsWith('#')) cards.push(id);
     }
   }
-  const havePlayers = cards.length > 0 || args.cookies.length > 0 || args.players > 0;
+  // Load the cached pool HERE, before the pre-flight summary — not after it.
+  // Cached sessions are players: they cost no auth calls, which is the whole
+  // reason the cache exists. Reading it later meant `--players 0` refused to
+  // start against a warm pool ("No players") even though the pool was sitting
+  // right there, so the documented "a warm run costs no auth calls at all"
+  // path was unreachable.
+  const cache = existsSync(args.sessionsFile)
+    ? JSON.parse(readFileSync(args.sessionsFile, 'utf8'))
+    : { sessions: [] };
+  const cached = Array.isArray(cache.sessions) ? cache.sessions : [];
+
+  const havePlayers =
+    cards.length > 0 || args.cookies.length > 0 || args.players > 0 || cached.length > 0;
   const realCards = havePlayers;
 
   console.log(`arcade-traffic — run ${runId}`);
@@ -324,6 +336,7 @@ async function main() {
   const poolDesc = [
     args.cookies.length ? `${args.cookies.length} supplied session(s)` : '',
     cards.length ? `${cards.length} given card(s)` : '',
+    cached.length ? `${cached.length} cached` : '',
     args.players ? `${args.players} fabricated` : '',
   ].filter(Boolean).join(' + ') || 'none';
   console.log(`  players   ${poolDesc}`);
@@ -335,9 +348,10 @@ async function main() {
     console.error(
       '\n  ✗ No players. The award route resolves the card from the SIGNED-IN\n' +
         '    SESSION, not the request body, so every post without one is a 401.\n' +
-        '    Pass --card <number> (repeatable) or --cards-file <file> to sign\n' +
-        '    synthetic accounts in, --cookie <c> to reuse real sessions, or\n' +
-        '    --dry-run to inspect payloads without posting.',
+        `    Nothing cached in ${args.sessionsFile} either. Pass --players N to\n` +
+        '    fabricate a pool, --card <number> / --cards-file <file> to sign\n' +
+        '    accounts in against existing cards, --cookie <c> to reuse real\n' +
+        '    sessions, or --dry-run to inspect payloads without posting.',
     );
     process.exitCode = 1;
     return;
@@ -373,12 +387,8 @@ async function main() {
     if (!ok) return console.log('aborted.');
   }
 
-  // Reuse cached sessions first — they cost no auth calls, which is the only
+  // Cached sessions go in front: they cost no auth calls, which is the only
   // way a pool larger than the hourly limit is reachable at all.
-  const cache = existsSync(args.sessionsFile)
-    ? JSON.parse(readFileSync(args.sessionsFile, 'utf8'))
-    : { sessions: [] };
-  const cached = Array.isArray(cache.sessions) ? cache.sessions : [];
   const sessions = [...args.cookies, ...cached.map((c) => c.cookie)];
   if (cached.length) console.log(`  reusing ${cached.length} cached session(s) from ${args.sessionsFile}`);
 

@@ -475,7 +475,24 @@ export type ArcadeRunner = {
   logs: { at: string; line: string }[];
 };
 
-export type ArcadeProfile = { name: string; bytes: number; modifiedAt: string };
+/** A profile's summary is what it will REPLAY as: replay draws from the
+ *  recorded samples, so a fixed-skill capture produces that same standard of
+ *  play forever. null when the file couldn't be read as one of ours. */
+export type ArcadeProfileSummary = {
+  games: number;
+  samples: number;
+  skillMin: number | null;
+  skillMax: number | null;
+  skillMean: number | null;
+  capturedAt?: string | null;
+};
+
+export type ArcadeProfile = {
+  name: string;
+  bytes: number;
+  modifiedAt: string;
+  summary: ArcadeProfileSummary | null;
+};
 
 export type ArcadeVenue = {
   id: string;

@@ -17,7 +17,7 @@
 // spawn a run that dies with a Playwright stack trace, status reports whether a
 // browser is resolvable and the route refuses with that reason.
 import { Router } from "express";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { pool } from "../../db.js";
 import { orgScope } from "../../lib/adminAuth.js";
@@ -66,14 +66,61 @@ async function loadGames() {
   }
 }
 
+/** Refuse to parse anything that isn't plausibly one of our profiles. */
+const MAX_PROFILE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * What a profile will actually replay as. Replay draws from the recorded
+ * samples, so a profile captured at a FIXED skill produces that same standard
+ * of play forever — capture at `--skill 1` once and every synthetic award is a
+ * perfect round, which is not what an arcade looks like. Each sample carries
+ * the skill it was played at, so summarise the spread and let the picker say
+ * so out loud. Unreadable or hand-dropped files still list (replay validates
+ * them itself); they just carry no summary.
+ */
+function summarizeProfile(file) {
+  try {
+    if (statSync(file).size > MAX_PROFILE_BYTES) return null;
+    const doc = JSON.parse(readFileSync(file, "utf8"));
+    const skills = [];
+    let games = 0;
+    for (const g of Object.values(doc?.games ?? {})) {
+      games += 1;
+      for (const s of g?.samples ?? []) {
+        if (typeof s?.skill === "number" && Number.isFinite(s.skill)) skills.push(s.skill);
+      }
+    }
+    if (games === 0) return null;
+    if (skills.length === 0) return { games, samples: 0, skillMin: null, skillMax: null, skillMean: null };
+    const min = Math.min(...skills);
+    const max = Math.max(...skills);
+    return {
+      games,
+      samples: skills.length,
+      skillMin: min,
+      skillMax: max,
+      skillMean: skills.reduce((a, b) => a + b, 0) / skills.length,
+      capturedAt: typeof doc?.capturedAt === "string" ? doc.capturedAt : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function listProfiles() {
   try {
     mkdirSync(runner.PROFILE_DIR, { recursive: true });
     return readdirSync(runner.PROFILE_DIR)
       .filter((f) => PROFILE_RE.test(f))
       .map((f) => {
-        const s = statSync(path.join(runner.PROFILE_DIR, f));
-        return { name: f, bytes: s.size, modifiedAt: s.mtime.toISOString() };
+        const full = path.join(runner.PROFILE_DIR, f);
+        const s = statSync(full);
+        return {
+          name: f,
+          bytes: s.size,
+          modifiedAt: s.mtime.toISOString(),
+          summary: summarizeProfile(full),
+        };
       })
       .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
   } catch {

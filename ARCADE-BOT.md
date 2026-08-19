@@ -139,6 +139,21 @@ node scripts/arcade-traffic.mjs --profile arcade-profile.json \
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
 run replayable; `--headed` lets you watch it play.
 
+### Leave the skill knob alone
+
+**The default — no `--skill` at all — is the right one for traffic.** It draws
+each round's ability from a player population (`sampleSkill`): a bell around
+0.5 with a thin good tail, because most arcade play is casual. A measured
+10-round Skee-Ball capture came out skill 0.30–0.74, mean 0.51, scoring 50–360
+against an expert's 780 — about 15 tickets an award rather than 89.
+
+`--skill 1` exists for the regression harness (`--assert-skill`, below), not
+for generating traffic. It matters because **a profile is a recording**: replay
+resamples the captured rounds, so a profile captured at a fixed skill pays that
+same standard of play forever. Master Control's profile picker labels each
+profile with the skill spread it will replay as, and says so out loud when one
+is fixed.
+
 ### From Master Control
 
 Both halves are also driven from the admin: **Master Control → Ops → Arcade
@@ -159,6 +174,10 @@ own status, live log tail and stop button, so both can run at once.
   per-game `estRoundMs`, because the games are nowhere near equal: a full
   one-round pass over all 19 is ~20 minutes, and Go-Karts alone is ~3 min a
   round against Skee-Ball's ~20s.
+- Each profile is listed with its game/round counts and the skill spread it
+  will replay as — `skill 0.30–0.74 (mean 0.51)` or a flagged `fixed skill
+  1.00`. A profile that recorded 0 rounds (a capture whose app went down
+  mid-run still writes one) is refused rather than replayed as silence.
 
 The child processes are started with `FFC_EXIT_WITH_PARENT=1` and killed on API
 shutdown, so a bot can't outlive the API that's reporting on it.
@@ -185,7 +204,9 @@ POST /api/game-rewards/award {locationId, game, tickets, sessionId}
 ```
 
 `--players N` fabricates N cards at the loyalty vendor and signs an account in
-for each, so no card list is needed. Against a real vendor — which issues cards
+for each, so no card list is needed. `N` is the pool SIZE, not "mint N more":
+cached sessions count toward it and are reused first, so `--players 0` against
+a warm cache runs with no auth calls at all. Against a real vendor — which issues cards
 at a counter, not over an API — pass existing numbers with `--card` /
 `--cards-file` instead. Either way a card the vendor doesn't know fails at link
 time, before anything is posted.

@@ -14,7 +14,7 @@
 // status/logs. See ARCADE-BOT.md for the design and server/routes/admin/
 // arcadeBot.js for the control plane.
 import { useEffect, useMemo, useState } from 'react';
-import { api, type ArcadeRunner, type ArcadeCaptureParams, type ArcadeReplayParams } from './api';
+import { api, type ArcadeProfile, type ArcadeRunner, type ArcadeCaptureParams, type ArcadeReplayParams } from './api';
 import { Banner, Button, Card, Field, Input, PageHeader, Pill, Select, Spinner, fmtDateTime, useAsync } from './ui';
 
 const fmtInt = (n: number) => Math.round(n).toLocaleString();
@@ -28,8 +28,20 @@ function uptime(startedAt: string | null): string {
   return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m ${String(s).padStart(2, '0')}s`;
 }
 
-function fmtBytes(n: number): string {
-  return n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+/** How a profile will replay: the skill its rounds were actually played at.
+ *  Replay draws from the recorded samples, so this is a property of the file,
+ *  not of the replay knobs — a fixed-skill capture pays that same standard of
+ *  play forever. */
+function skillBlurb(p: ArcadeProfile): { text: string; fixed: boolean } | null {
+  const s = p.summary;
+  if (!s || s.skillMean === null || s.skillMin === null || s.skillMax === null) return null;
+  // A single round is trivially "fixed" — don't call that out as one.
+  const fixed = s.skillMax - s.skillMin < 0.01 && s.samples > 1;
+  if (fixed) return { text: `fixed skill ${s.skillMin.toFixed(2)}`, fixed: true };
+  return {
+    text: `skill ${s.skillMin.toFixed(2)}–${s.skillMax.toFixed(2)} (mean ${s.skillMean.toFixed(2)})`,
+    fixed: false,
+  };
 }
 
 /** Shared runner header + log tail for either slot. */
@@ -145,6 +157,10 @@ export default function ArcadeBot() {
     () => status?.venues.find((v) => v.id === rep.locationId) ?? null,
     [status, rep.locationId]
   );
+  const chosenProfile = useMemo(
+    () => status?.profiles.find((p) => p.name === rep.profile) ?? null,
+    [status, rep.profile]
+  );
 
   async function run(fn: () => Promise<unknown>, setErr: (m: string | null) => void, what: string) {
     setBusy(true);
@@ -257,7 +273,10 @@ export default function ArcadeBot() {
               onChange={(e) => setCap((c) => ({ ...c, rounds: e.target.valueAsNumber }))}
             />
           </Field>
-          <Field label="Skill" hint="Blank samples a player mix; 0–1 fixes ability.">
+          <Field
+            label="Skill"
+            hint="Leave blank — that samples a real player mix. 0–1 pins every round to one ability (1 = the regression floor)."
+          >
             <Input
               type="number"
               min={0}
@@ -343,7 +362,12 @@ export default function ArcadeBot() {
               <option value="">Select a profile…</option>
               {profiles.map((p) => (
                 <option key={p.name} value={p.name}>
-                  {p.name} · {fmtDateTime(p.modifiedAt)} · {fmtBytes(p.bytes)}
+                  {p.name} · {fmtDateTime(p.modifiedAt)}
+                  {p.summary
+                    ? ` · ${p.summary.games} game${p.summary.games === 1 ? '' : 's'}, ` +
+                      `${p.summary.samples} round${p.summary.samples === 1 ? '' : 's'}`
+                    : ''}
+                  {skillBlurb(p) ? ` · ${skillBlurb(p)!.text}` : ''}
                 </option>
               ))}
             </Select>
@@ -364,6 +388,34 @@ export default function ArcadeBot() {
             </Select>
           </Field>
         </div>
+
+        {chosenProfile?.summary?.samples === 0 && (
+          <div className="mt-3">
+            <Banner kind="error">
+              <strong>This profile recorded 0 rounds</strong> — there is nothing for replay to draw
+              from. A capture writes its profile even when every round failed (the app being down
+              mid-run does it), so re-capture rather than replaying this one.
+            </Banner>
+          </div>
+        )}
+
+        {chosenProfile &&
+          (() => {
+            const b = skillBlurb(chosenProfile);
+            if (!b) return null;
+            return b.fixed ? (
+              <p className="mt-3 text-xs text-amber-700">
+                This profile was captured at a <strong>fixed skill of {b.text.replace('fixed skill ', '')}</strong>,
+                so every award it replays is that same standard of play — fine for load, wrong for
+                traffic that should look like an arcade. Capture with the skill field blank for a
+                player mix.
+              </p>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500">
+                Player mix: {b.text} across {chosenProfile.summary?.samples ?? 0} captured rounds.
+              </p>
+            );
+          })()}
 
         {venue && !venue.gameRewards && (
           <div className="mt-3">
@@ -465,6 +517,7 @@ export default function ArcadeBot() {
                 status.replay.running ||
                 !rep.profile ||
                 !rep.locationId ||
+                chosenProfile?.summary?.samples === 0 ||
                 !Number.isInteger(rep.plays)
               }
             >
