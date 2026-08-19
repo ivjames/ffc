@@ -1,71 +1,17 @@
 // Polly voice bake-off — the shared engine behind the CLI script and the
-// Master Control page.
+// Master Control screen.
 //
-// Lives here rather than in scripts/ for two reasons: @aws-sdk/client-polly is
-// a server dependency (node resolves it relative to the importing file, and
-// scripts/ has no node_modules of its own), and the server is where real
-// pre-synthesis will live once a voice is chosen. scripts/tts-bakeoff.mjs is a
-// thin CLI over this.
+// Provider-agnostic: lib/ttsProviders.js owns what each service can be asked
+// for and how to call it, this owns picking the questions, pricing a run,
+// storing it and replaying it. Adding a provider is one adapter, not a fork.
 //
-// Nothing here spends money except synthesizeAll(). planClips() and
-// estimate() price a run so a caller can show the bill before committing to
-// it — the house rule for anything that makes a batch of API calls.
+// Nothing here spends except synthesizeAll(). planClips() and estimate() price
+// a run so a caller can show the bill before committing to it — the house rule
+// for anything that makes a batch of API calls.
 import { mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly";
+import { PROVIDERS, providerByKey } from "./ttsProviders.js";
 import { lobbyScript, questionScript, revealScript } from "./triviaSpeechScript.js";
-
-// $ per 1M characters, by engine. Re-verify at build time — cheap TTS tiers
-// churn (TTS-PRICING.md).
-export const NEURAL_USD_PER_M = 16;
-// Generative runs in a SUBSET of Polly's regions. A region that serves neural
-// but not generative does not degrade — it rejects every generative request
-// while the neural half of the same batch synthesizes and bills, handing the
-// operator a half-failed run they already approved an estimate for. So the
-// lineup is decided against the configured region up front, and the estimate
-// only ever prices what can actually run.
-export const GENERATIVE_REGIONS = new Set([
-  "us-east-1", "us-west-2", "eu-central-1", "eu-central-2", "eu-west-2",
-  "ca-central-1", "ap-northeast-1", "ap-northeast-2", "ap-southeast-1", "ap-southeast-2",
-]);
-
-export function generativeAvailable(env = process.env) {
-  return GENERATIVE_REGIONS.has(env.AWS_REGION || "us-east-1");
-}
-
-export const ENGINES = {
-  neural: { label: "neural", usdPerM: 16 },
-  // The billion-parameter model: markedly more human, and priced accordingly.
-  // Worth auditioning the moment neural reads as "meh", which is the usual
-  // verdict on it for anything performed rather than announced.
-  generative: { label: "generative", usdPerM: 30 },
-};
-
-// `newscaster` marks the voices AWS documents as supporting the news speaking
-// style ON THE NEURAL ENGINE. Asking for it on any other voice — or on
-// generative, which does not support it at all — is an API error, not a silent
-// downgrade. Generative also has no DRC, by design: it is expressive without
-// markup rather than because of it.
-export const VOICES = [
-  { id: "Joanna", engines: ["neural", "generative"], newscaster: true },
-  { id: "Matthew", engines: ["neural", "generative"], newscaster: true },
-  // Generative-only in this lineup, to hear two more voices without doubling
-  // the number of clips anyone has to sit through.
-  { id: "Ruth", engines: ["generative"], newscaster: false },
-  { id: "Stephen", engines: ["generative"], newscaster: false },
-];
-
-// plain      — the neural voice as-is, the baseline.
-// newscaster — an announcer register, the closest Polly has to "reads to a
-//              room for a living".
-// +drc       — dynamic range compression: lifts the quiet parts so consonants
-//              survive a noisy bar. No equivalent exists in the browser voice
-//              the app falls back to.
-export const STYLES = [
-  { key: "plain", label: "plain", newscaster: false, drc: false },
-  { key: "news", label: "newscaster", newscaster: true, drc: false },
-  { key: "news-drc", label: "newscaster + DRC", newscaster: true, drc: true },
-];
 
 /** Where runs are stored. Inside the release dir by default, so a deploy
  *  clears old auditions; point TTS_BAKEOFF_DIR at $APP_DIR/shared/... to keep
@@ -136,107 +82,103 @@ export function linesFor(questions) {
   return lines;
 }
 
-// --- SSML -------------------------------------------------------------------
+// --- planning ---------------------------------------------------------------
 
-/** Wrap plain text for one style. SSML tags are NOT billed, so the markup is
- *  free — only the words inside count against the bill. */
-export function ssmlFor(text, style) {
-  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  let inner = escaped;
-  if (style.drc) inner = `<amazon:effect name="drc">${inner}</amazon:effect>`;
-  if (style.newscaster) inner = `<amazon:domain name="news">${inner}</amazon:domain>`;
-  return `<speak>${inner}</speak>`;
+/** Which providers can actually run, and why the others cannot — so the screen
+ *  can say "no OPENAI_API_KEY" instead of silently showing two columns. */
+export async function providerStatus(env = process.env) {
+  const out = [];
+  for (const p of PROVIDERS) {
+    const configured = p.configured(env);
+    let voices = [];
+    let error = null;
+    if (configured && p.discover) {
+      try {
+        voices = await p.discover(env);
+      } catch (err) {
+        error = err.message;
+      }
+    }
+    out.push({ key: p.key, label: p.label, configured, why: p.why, voices, error });
+  }
+  return out;
 }
 
 /** Every clip a run would make, priced before anything is spent. */
-export function planClips(lines, { generative = true } = {}) {
+export async function planClips(lines, env = process.env) {
+  const status = await providerStatus(env);
   const clips = [];
   for (const line of lines) {
-    for (const voice of VOICES) {
-      for (const engine of voice.engines) {
-        if (engine === "generative" && !generative) continue;
-        // Only neural takes the speaking styles; generative is plain because
-        // that is all it supports.
-        const styles = engine === "neural" ? STYLES : [STYLES[0]];
-        for (const style of styles) {
-          if (style.newscaster && !voice.newscaster) continue;
-          clips.push({
-            lineLabel: line.label,
-            text: line.text,
-            voice: voice.id,
-            engine,
-            styleKey: style.key,
-            styleLabel: engine === "generative" ? "generative" : style.label,
-            chars: line.text.length,
-            usdPerM: ENGINES[engine].usdPerM,
-            ssml: ssmlFor(line.text, style),
-            file: `${voice.id}-${engine}-${style.key}-${line.label.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.mp3`,
-          });
-        }
+    for (const p of PROVIDERS) {
+      const state = status.find((s) => s.key === p.key);
+      if (!state?.configured || state.error) continue;
+      for (const row of p.lineup(env, state.voices)) {
+        clips.push({
+          lineLabel: line.label,
+          text: line.text,
+          provider: p.key,
+          providerLabel: p.label,
+          voice: row.voice,
+          voiceLabel: row.voiceLabel ?? row.voice,
+          model: row.model,
+          styleLabel: row.styleLabel,
+          instructions: row.instructions,
+          chars: line.text.length,
+          usdPerM: row.usdPerM ?? p.usdPerM,
+          estimated: Boolean(p.estimated),
+          file: `${p.key}-${(row.voiceLabel ?? row.voice).slice(0, 12)}-${row.styleLabel.replace(/[^a-z0-9]+/gi, "-")}-${line.label.replace(/[^a-z0-9]+/gi, "-")}.mp3`.toLowerCase(),
+        });
       }
     }
   }
-  return clips;
+  return { clips, status };
 }
 
-/** Priced per clip, because the engines cost different amounts — a blended
- *  "characters × one rate" would understate a run that is mostly generative. */
+/** Priced per clip: the providers cost different amounts, and a blended
+ *  "characters times one rate" would misreport whichever way the mix leans. */
 export function estimate(clips) {
   const chars = clips.reduce((n, c) => n + c.chars, 0);
-  const usd = clips.reduce((n, c) => n + (c.chars / 1e6) * (c.usdPerM ?? NEURAL_USD_PER_M), 0);
-  const byEngine = {};
+  const usd = clips.reduce((n, c) => n + (c.chars / 1e6) * c.usdPerM, 0);
+  const byProvider = {};
   for (const c of clips) {
-    const e = (byEngine[c.engine] ??= { clips: 0, chars: 0, usd: 0 });
+    const e = (byProvider[c.providerLabel] ??= { clips: 0, chars: 0, usd: 0, estimated: c.estimated });
     e.clips += 1;
     e.chars += c.chars;
-    e.usd += (c.chars / 1e6) * (c.usdPerM ?? NEURAL_USD_PER_M);
+    e.usd += (c.chars / 1e6) * c.usdPerM;
   }
-  return { clips: clips.length, chars, usd, byEngine };
+  return { clips: clips.length, chars, usd, byProvider };
 }
 
 // --- synthesis (the only part that spends) ----------------------------------
 
-/** Neural is 8 tps with a burst of 10, so a handful at a time with backoff
- *  keeps a whole run inside one polite burst instead of collecting
- *  ThrottlingExceptions. */
+/** Polly neural/generative is 8 tps; the others are happier but nothing here
+ *  is in a hurry, so one modest cap keeps every provider inside a polite
+ *  burst. */
 const CONCURRENCY = 4;
 
-async function one(polly, clip, outDir) {
-  for (let attempt = 0; attempt < 5; attempt++) {
+async function one(clip, outDir, env) {
+  const provider = providerByKey(clip.provider);
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const res = await polly.send(
-        new SynthesizeSpeechCommand({
-          Engine: clip.engine ?? "neural",
-          VoiceId: clip.voice,
-          OutputFormat: "mp3",
-          TextType: "ssml",
-          Text: clip.ssml,
-        })
-      );
-      const audio = Buffer.from(await res.AudioStream.transformToByteArray());
+      const { audio, billed } = await provider.synth(clip, env);
       writeFileSync(join(outDir, clip.file), audio);
-      const { ssml, ...rest } = clip;
-      // RequestCharacters is the API's own count of what it billed — not our
-      // estimate. Falls back to the plain-text length if a response omits it.
-      const billed = res.RequestCharacters ?? clip.chars;
-      return { ...rest, bytes: audio.length, billed, usd: (billed / 1e6) * (clip.usdPerM ?? NEURAL_USD_PER_M) };
+      const { instructions, ...rest } = clip;
+      return { ...rest, bytes: audio.length, billed, usd: (billed / 1e6) * clip.usdPerM };
     } catch (err) {
-      const retryable = err.name === "ThrottlingException" || err.$metadata?.httpStatusCode >= 500;
-      if (!retryable || attempt === 4) {
-        const { ssml, ...rest } = clip;
-        return { ...rest, error: `${err.name}: ${err.message}` };
+      const retryable = /throttl|429|rate|timeout|5\d\d/i.test(err.message ?? "");
+      if (!retryable || attempt === 3) {
+        const { instructions, ...rest } = clip;
+        return { ...rest, error: err.message };
       }
-      await new Promise((r) => setTimeout(r, 250 * 2 ** attempt));
+      await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
     }
   }
 }
 
-/** Synthesize every clip into `runDir`, writing a manifest beside them.
- *  Returns { runId, clips, billed, usd, errors }. */
+/** Synthesize every clip into `runDir`, writing a manifest beside them. */
 export async function synthesizeAll(clips, { runId, root = bakeoffDir(), env = process.env, meta = {} }) {
   const outDir = join(root, runId);
   mkdirSync(outDir, { recursive: true });
-  const polly = new PollyClient({ region: env.AWS_REGION || "us-east-1" });
 
   const results = [];
   let next = 0;
@@ -244,7 +186,7 @@ export async function synthesizeAll(clips, { runId, root = bakeoffDir(), env = p
     Array.from({ length: Math.min(CONCURRENCY, clips.length) }, async () => {
       while (next < clips.length) {
         const i = next++;
-        results[i] = await one(polly, clips[i], outDir);
+        results[i] = await one(clips[i], outDir, env);
       }
     })
   );

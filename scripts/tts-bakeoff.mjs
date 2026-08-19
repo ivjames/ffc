@@ -1,4 +1,4 @@
-// Polly voice bake-off, from the command line.
+// Voice bake-off, from the command line.
 //
 //   cd /var/www/ffc/server && npm run tts:bakeoff -- --location upland
 //   cd /var/www/ffc/server && npm run tts:bakeoff -- --location upland --yes
@@ -9,15 +9,13 @@
 // judged on the tablet you host from, and files on the droplet are not
 // listenable. A run made here shows up there under "replay a past run".
 //
-// A bare run prices the batch and spends nothing. --yes synthesizes, and the
-// report uses the API's own RequestCharacters rather than an estimate.
+// A bare run prices the batch and spends nothing. --yes synthesizes. Which
+// providers take part is decided by which keys are in server/.env; the ones
+// missing a key are named in the pre-flight rather than silently skipped.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  ENGINES,
-  STYLES,
-  VOICES,
   bakeoffDir,
   estimate,
   linesFor,
@@ -35,8 +33,9 @@ const flag = (name, dflt = null) => {
 };
 const has = (name) => args.includes(`--${name}`);
 
-// server/.env is the only place the AWS key should live: on the droplet, in a
-// file the app already reads, never in a cloud environment variable or a chat.
+// server/.env is the only place provider keys should live: on the droplet, in
+// a file the app already reads, never in a cloud environment variable or a
+// chat.
 function loadEnv() {
   try {
     for (const line of readFileSync(join(ROOT, "server", ".env"), "utf8").split("\n")) {
@@ -85,20 +84,25 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    const clips = planClips(linesFor(bank));
+    const { clips, status } = await planClips(linesFor(bank));
     const est = estimate(clips);
 
-    console.log(`\nPolly bake-off — pre-flight`);
+    console.log(`\nVoice bake-off — pre-flight`);
     console.log(`  venue       ${venue.name}${venue.orgName ? ` (${venue.orgName})` : ""}`);
     console.log(`  questions   ${bank.length}, spread shortest to longest`);
-    console.log(`  voices      ${VOICES.map((v) => `${v.id} (${v.engines.join("+")})`).join(", ")}`);
-    console.log(`  styles      ${STYLES.map((s) => s.label).join(", ")} — neural only`);
+    for (const p of status) {
+      const state = !p.configured ? `skipped — set ${p.why}` : p.error ? `skipped — ${p.error}` : "in";
+      console.log(`  ${p.label.padEnd(11)} ${state}`);
+    }
     console.log(`  clips       ${est.clips}`);
     console.log(`  billable    ${est.chars.toLocaleString()} characters`);
-    // Per engine, because they are priced differently and a single blended
+    // Per provider, because they are priced differently and a single blended
     // rate would misreport whichever way the mix leans.
-    for (const [name, e] of Object.entries(est.byEngine)) {
-      console.log(`    ${name.padEnd(11)}${e.clips} clips, ${e.chars.toLocaleString()} chars, $${e.usd.toFixed(4)} at $${ENGINES[name].usdPerM}/M`);
+    for (const [name, e] of Object.entries(est.byProvider)) {
+      console.log(
+        `    ${name.padEnd(11)}${e.clips} clips, ${e.chars.toLocaleString()} chars, ` +
+          `$${e.usd.toFixed(4)}${e.estimated ? " (estimated — billed in tokens/credits)" : ""}`
+      );
     }
     console.log(`  estimate    $${est.usd.toFixed(4)}`);
 
@@ -106,9 +110,10 @@ async function main() {
       console.log(`\nNothing spent. Re-run with --yes to synthesize.\n`);
       return;
     }
-    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-      console.error(`\nNo AWS credentials. Add to server/.env:`);
-      console.error(`  AWS_ACCESS_KEY_ID=...\n  AWS_SECRET_ACCESS_KEY=...\n  AWS_REGION=us-east-1\n`);
+    if (clips.length === 0) {
+      console.error(`\nNo provider is configured. Add one of these to server/.env:`);
+      for (const p of status.filter((p) => !p.configured)) console.error(`  ${p.why}`);
+      console.error("");
       process.exitCode = 1;
       return;
     }
@@ -121,7 +126,7 @@ async function main() {
     });
 
     console.log(`\nDone.`);
-    console.log(`  billed      ${run.billed.toLocaleString()} characters (AWS RequestCharacters)`);
+    console.log(`  billed      ${run.billed.toLocaleString()} characters`);
     console.log(`  cost        $${run.usd.toFixed(4)}`);
     if (run.errors) console.log(`  failed      ${run.errors} clip(s)`);
     console.log(`  files       ${join(bakeoffDir(), runId)}`);

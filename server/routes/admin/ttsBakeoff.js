@@ -12,9 +12,7 @@ import { Router } from "express";
 import { pool } from "../../db.js";
 import { isSuperAdmin } from "../../lib/adminAuth.js";
 import {
-  NEURAL_USD_PER_M,
   bakeoffDir,
-  generativeAvailable,
   estimate,
   linesFor,
   listRuns,
@@ -59,11 +57,9 @@ router.post("/plan", async (req, res) => {
       venue: plan.venue,
       lines: plan.lines.map((l) => ({ label: l.label, text: l.text })),
       ...estimate(plan.clips),
-      usdPerM: NEURAL_USD_PER_M,
-      // Named so the page can say why generative is missing rather than
-      // leaving the operator to wonder where half the lineup went.
-      generative: plan.generative,
-      region: process.env.AWS_REGION || "us-east-1",
+      // So the screen can say "no OPENAI_API_KEY" rather than silently
+      // showing one column where the operator expected three.
+      providers: plan.status,
     });
   } catch (err) {
     console.error("[tts-bakeoff] plan error:", err);
@@ -74,14 +70,15 @@ router.post("/plan", async (req, res) => {
 /** Synthesize. THIS is the one that bills. */
 router.post("/run", async (req, res) => {
   try {
-    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-      return res.status(400).json({
-        ok: false,
-        error: "no AWS credentials — add AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY to server/.env",
-      });
-    }
     const plan = await buildPlan(req.body ?? {});
     if (plan.error) return res.status(plan.status).json({ ok: false, error: plan.error });
+    if (plan.clips.length === 0) {
+      const missing = plan.status.filter((p) => !p.configured).map((p) => p.why);
+      return res.status(400).json({
+        ok: false,
+        error: `no provider is configured — add one of: ${missing.join(", ")}`,
+      });
+    }
 
     const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${plan.venue.slug}`;
     const run = await synthesizeAll(plan.clips, {
@@ -138,11 +135,6 @@ async function buildPlan({ locationId, questions }) {
   });
   if (bank.length === 0) return { error: "no active questions in this venue's bank", status: 409 };
   const lines = linesFor(bank);
-  const generative = generativeAvailable();
-  return {
-    venue,
-    lines,
-    generative,
-    clips: planClips(lines, { generative }),
-  };
+  const { clips, status } = await planClips(lines);
+  return { venue, lines, clips, status };
 }
