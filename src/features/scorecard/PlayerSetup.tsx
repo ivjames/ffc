@@ -11,7 +11,7 @@ import {
   TAG_LENGTH,
 } from '../../lib/sanitize';
 import { createLocalRound, getAllRounds, putRound } from '../../db';
-import { fetchMe, type AppUser } from '../../lib/authApi';
+import { useSession } from '../../lib/session';
 import { getMyTag, ownerSeatFor, rememberMyTag } from '../../lib/myTag';
 import { lastRoster, recentTags, recentTeamTags } from '../../lib/recentPlayers';
 import type { LocalRound } from '../../types';
@@ -49,8 +49,12 @@ export default function PlayerSetup() {
   const [ownerChoice, setOwnerChoice] = useState<number | 'none' | 'auto'>('auto');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  // Shared-game hosting needs an account (the joiners don't).
-  const [me, setMe] = useState<AppUser | null | 'loading'>('loading');
+  // The shared session store, not a fresh /api/auth/me: it answers instantly
+  // once any screen has resolved it, and it keeps the last authoritative user
+  // when a check is inconclusive — so a signed-in player who lands here fast,
+  // or offline, still gets their own tag preselected below instead of the
+  // fallback. Hosting a shared game reads it too (the joiners don't need it).
+  const { user: me, known: sessionKnown } = useSession();
   // The device's round history feeds the "play again with..." suggestions.
   const [history, setHistory] = useState<LocalRound[]>([]);
   // The tag this phone last played under (lib/myTag) — read once; this screen
@@ -58,7 +62,6 @@ export default function PlayerSetup() {
   const [rememberedTag] = useState(() => getMyTag());
 
   useEffect(() => {
-    void fetchMe().then(setMe);
     void getAllRounds().then(setHistory);
   }, []);
 
@@ -79,10 +82,10 @@ export default function PlayerSetup() {
   // they're just keeping score. A phone with no idea who holds it defaults to
   // player 1, the convention the shared-game flow states out loud ("Enter your
   // own tag (player 1)"). One tap overrides any of it.
-  const autoOwner = useMemo<number | 'none'>(() => {
-    const accountTag = me !== 'loading' ? me?.defaultTag : null;
-    return ownerSeatFor(activeTags, accountTag ?? rememberedTag);
-  }, [me, rememberedTag, activeTags]);
+  const autoOwner = useMemo<number | 'none'>(
+    () => ownerSeatFor(activeTags, me?.defaultTag ?? rememberedTag),
+    [me, rememberedTag, activeTags],
+  );
   // An explicit pick of a seat that a lower player count removed falls back to
   // the default rather than silently crediting whoever now sits there.
   const owner =
@@ -119,7 +122,10 @@ export default function PlayerSetup() {
     setFormError(null);
     setCount(lastGroup.tags.length);
     setTags([0, 1, 2, 3].map((i) => lastGroup.tags[i] ?? ''));
-    if (lastGroup.groupTag) setTeamTag(lastGroup.groupTag);
+    // The WHOLE form is the last group's, team included: a teamless last group
+    // must clear a team tag already typed, or the refilled roster would start
+    // under an unrelated team and land on the TV board's Teams tab.
+    setTeamTag(lastGroup.groupTag ?? '');
   }
 
   /** Drop a recent tag into the first empty seat; a full roster ignores it. */
@@ -167,7 +173,7 @@ export default function PlayerSetup() {
       setFormError('Enter your own tag (player 1) to host a shared game');
       return;
     }
-    if (me === 'loading') return;
+    if (!sessionKnown) return; // still resolving — same guard as the old fetch
     if (!me) {
       navigate('/me/account');
       return;
@@ -385,7 +391,7 @@ export default function PlayerSetup() {
           <Button variant="ghost" onClick={() => void startShared()} disabled={submitting}>
             <Icon name="action.play-together" /> Play together (everyone on their own phone)
           </Button>
-          {!me && me !== 'loading' && (
+          {sessionKnown && !me && (
             <p className="mt-1.5 text-center text-xs text-fairway-100/80">
               Hosting needs a (free) account — friends join without one.
             </p>
