@@ -213,6 +213,13 @@ npm run import:trivia -- --dry-run              # see the three numbers first
 npm run import:trivia -- --refresh --prune
 ```
 
+A run that leaves either group outstanding says so in a block at the very end,
+naming the flags and the command to repeat — the per-category tally in front of
+it is forty lines long, and a notice printed where it is discovered scrolls off
+before the operator looks up. The script also refuses to start with an
+unhelpful stack trace: a missing `node_modules` or `DATABASE_URL` is reported
+as the one-line fix it is.
+
 which inserts 2,214, updates 1,526 and retires 6,067, leaving 43,857 live rows
 that match the pack exactly. Running it again does nothing. The retirements
 outnumber the inserts because `--prune` clears out two groups at once: the

@@ -22,7 +22,6 @@ import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pool } from "./db.js";
 import { normalizeQuestion } from "./lib/triviaLive.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -357,6 +356,37 @@ export async function prunePack(client, rows, { dryRun = false, source = PACK_SO
   }
 }
 
+/**
+ * Load the pg pool, or explain what to do about it.
+ *
+ * `db.js` pulls in `pg` at module load, so importing it at the top of this
+ * file turns a missing `node_modules` into a raw ERR_MODULE_NOT_FOUND stack
+ * trace before a single line here runs — which is what an operator saw, and
+ * which tells them nothing about the fix. Deferring the import is what buys
+ * the chance to say it plainly.
+ */
+async function connectPool() {
+  let pool;
+  try {
+    ({ pool } = await import("./db.js"));
+  } catch (err) {
+    if (err?.code === "ERR_MODULE_NOT_FOUND") {
+      const here = dirname(fileURLToPath(import.meta.url));
+      console.error("[import-trivia] the server's dependencies are not installed here.");
+      console.error(`[import-trivia]   cd ${here} && npm ci --omit=dev`);
+      console.error("[import-trivia] (this is the same install `ffc deploy` runs, so it is safe to repeat)");
+      process.exit(1);
+    }
+    throw err;
+  }
+  if (!process.env.DATABASE_URL) {
+    console.error("[import-trivia] DATABASE_URL is not set, so there is no bank to import into.");
+    console.error("[import-trivia] it is normally read from the server's .env — run this from the server directory.");
+    process.exit(1);
+  }
+  return pool;
+}
+
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
   const refresh = process.argv.includes("--refresh");
@@ -364,6 +394,7 @@ async function main() {
   const unarchive = process.argv.includes("--unarchive");
   const prune = process.argv.includes("--prune");
   const started = Date.now();
+  const pool = await connectPool();
   const client = await pool.connect();
   try {
     if (archive || unarchive) {
@@ -372,6 +403,12 @@ async function main() {
       console.log(`[import-trivia] ${dryRun ? `would have ${verb}` : verb} ${changed} pack questions`);
       return;
     }
+
+    // Anything a plain run leaves undone. Reported at the very end rather than
+    // where it is discovered: the per-category tally is forty lines long, so a
+    // notice printed before it scrolls off and the operator walks away with a
+    // half-corrected bank believing it is done.
+    const outstanding = [];
 
     const { header, rows } = await readPack();
     console.log(`[import-trivia] pack: ${rows.length} questions from ${header.source}`);
@@ -417,12 +454,7 @@ async function main() {
       // pulled a corrected pack needs to know that inserting alone does not
       // fix a question whose PROMPT was already right.
       const drifted = await countDrifted(client, rows);
-      if (drifted > 0) {
-        console.log(
-          `[import-trivia] ${drifted} imported rows differ from the pack — ` +
-            `re-run with --refresh to update them`
-        );
-      }
+      if (drifted > 0) outstanding.push([drifted, "differ from the pack", "--refresh"]);
     }
 
     if (prune) {
@@ -441,12 +473,7 @@ async function main() {
             )`,
         [rows.map((r) => r.prompt), PACK_SOURCE]
       );
-      if (stale.rows[0].n > 0) {
-        console.log(
-          `[import-trivia] ${stale.rows[0].n} imported rows are no longer in the pack — ` +
-            `re-run with --prune to retire them`
-        );
-      }
+      if (stale.rows[0].n > 0) outstanding.push([stale.rows[0].n, "are no longer in the pack", "--prune"]);
     }
 
     const byCategory = await client.query(
@@ -458,6 +485,16 @@ async function main() {
       console.log(`[import-trivia]   ${String(n).padStart(5)}  ${category}`);
     }
     console.log(`[import-trivia] done in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    if (outstanding.length) {
+      const flags = outstanding.map(([, , flag]) => flag).join(" ");
+      console.log("[import-trivia] ");
+      console.log("[import-trivia] *** THIS BANK IS NOT YET FULLY UPDATED ***");
+      for (const [n, what, flag] of outstanding) {
+        console.log(`[import-trivia]   ${n} imported rows ${what} — ${flag} would fix them`);
+      }
+      console.log(`[import-trivia]   re-run:  npm run import:trivia -- ${flags}`);
+      console.log("[import-trivia] ");
+    }
     // Per the house rule on reporting spend for bulk operations: this one makes
     // no model or API calls at all. Zero tokens, zero dollars — the corpus was
     // parsed and filtered at build time and ships as a committed file.
