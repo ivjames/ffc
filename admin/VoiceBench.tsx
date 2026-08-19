@@ -15,8 +15,13 @@ import {
   useObjectUrl,
 } from './ui';
 
-// Master Control → Ops → Voice bench. Amazon Polly reading this venue's real
-// questions, so a voice is chosen by ear rather than from a spec sheet.
+// Master Control → Ops → Voice bench. Every configured TTS provider reading
+// this venue's real questions, so a voice is chosen by ear rather than from a
+// spec sheet.
+//
+// Which providers appear is decided by which keys are in server/.env. The
+// missing ones are named on screen rather than silently absent, because "only
+// one column showed up" is indistinguishable from a bug otherwise.
 //
 // This was a server-rendered page outside the SPA, copied from the vision
 // bench's shape. That made it unfindable (no nav entry) and unlike every other
@@ -43,7 +48,7 @@ function ClipPlayer({ runId, file }: { runId: string; file: string }) {
   return <audio controls preload="none" src={url} className="h-8 w-full max-w-[240px]" />;
 }
 
-/** One line of the game, with every voice/engine/style that read it.
+/** One line of the game, with every provider/voice/style that read it.
  *
  *  Collapsed by default past the first: a run is seventy clips, and mounting
  *  seventy players means seventy authenticated fetches at once on a tablet.
@@ -78,8 +83,8 @@ function LineSection({
           <Table size="xs">
             <thead>
               <tr>
+                <Th>Provider</Th>
                 <Th>Voice</Th>
-                <Th>Engine</Th>
                 <Th>Style</Th>
                 <Th>Listen</Th>
                 <Th align="right">Chars</Th>
@@ -88,8 +93,8 @@ function LineSection({
             <tbody>
               {clips.map((c) => (
                 <tr key={c.file}>
-                  <Td>{c.voice}</Td>
-                  <Td>{c.engine}</Td>
+                  <Td>{c.providerLabel}</Td>
+                  <Td>{c.voiceLabel ?? c.voice}</Td>
                   <Td>{c.styleLabel}</Td>
                   <Td>
                     {c.error ? (
@@ -217,15 +222,20 @@ export default function VoiceBench() {
     if (!byLine.has(c.lineLabel)) byLine.set(c.lineLabel, []);
     byLine.get(c.lineLabel)!.push(c);
   }
-  const split = Object.entries(plan?.byEngine ?? {})
-    .map(([name, e]) => `${e.clips} ${name} ($${e.usd.toFixed(4)})`)
+  const split = Object.entries(plan?.byProvider ?? {})
+    .map(([name, e]) => `${e.clips} ${name} ($${e.usd.toFixed(4)}${e.estimated ? ' est.' : ''})`)
     .join(' + ');
+  // A key that is present but rejected is worth saying out loud: it looks
+  // identical to "not configured" on screen, and it is a different fix.
+  const unconfigured = (plan?.providers ?? []).filter((p) => !p.configured);
+  const broken = (plan?.providers ?? []).filter((p) => p.configured && p.error);
+  const anyEstimated = Object.values(plan?.byProvider ?? {}).some((e) => e.estimated);
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Voice bench"
-        description="Amazon Polly reading this venue's real questions, so live trivia's read-aloud voice is chosen by ear. Play it on the tablet you host from, through the speaker the room hears — a voice that reads well on a laptop can vanish over a PA."
+        description="Every configured TTS provider reading this venue's real questions, so live trivia's read-aloud voice is chosen by ear. Play it on the tablet you host from, through the speaker the room hears — a voice that reads well on a laptop can vanish over a PA."
       />
 
       {error && <Banner kind="error">{error}</Banner>}
@@ -285,10 +295,22 @@ export default function VoiceBench() {
           </div>
           <p className="mt-1 text-sm text-slate-500">
             {split && `${split}. `}
-            {plan.generative === false && `Generative is not available in ${plan.region} — neural only. `}
-            Neural is $16/M, generative $30/M. Nothing spent yet; the first 1M neural characters a
-            month are free for the first 12 months.
+            Nothing spent yet — Synthesize is what bills.
+            {anyEstimated &&
+              ' Rows marked “est.” are our arithmetic: those providers bill in tokens or credits, not characters.'}
           </p>
+          {unconfigured.length > 0 && (
+            <p className="mt-1 text-sm text-slate-500">
+              Not in this run:{' '}
+              {unconfigured.map((p) => `${p.label} (set ${p.why})`).join(', ')}.
+            </p>
+          )}
+          {broken.length > 0 && (
+            <p className="mt-1 text-sm text-red-700">
+              Configured but not answering, so skipped:{' '}
+              {broken.map((p) => `${p.label} — ${p.error}`).join('; ')}.
+            </p>
+          )}
         </Card>
       )}
 
@@ -298,7 +320,9 @@ export default function VoiceBench() {
             <div className="tabular-nums">
               Billed: <strong>{run.billed.toLocaleString()} characters</strong> —{' '}
               <strong>${run.usd.toFixed(4)}</strong>{' '}
-              <span className="text-sm text-slate-500">(AWS RequestCharacters, not an estimate)</span>
+              <span className="text-sm text-slate-500">
+                (Polly reports what it billed; the others are counted characters)
+              </span>
             </div>
             <p className="mt-1 text-sm text-slate-500">
               {run.clips.length} clips

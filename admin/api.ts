@@ -582,32 +582,51 @@ function fileToBase64(file: File): Promise<string> {
 
 // --- Endpoints --------------------------------------------------------------
 
-// --- Voice bench (Polly TTS bake-off) ---------------------------------------
-// super_admin only; /run spends on the AWS key in the server's environment.
+// --- Voice bench (multi-provider TTS bake-off) -------------------------------
+// super_admin only; /run spends on whichever provider keys are in server/.env.
 export type TtsVenue = { id: string; name: string; slug: string; orgId: string | null; orgName: string | null };
 export type TtsLine = { label: string; text: string };
-export type TtsEngineTotals = { clips: number; chars: number; usd: number };
+export type TtsProviderTotals = {
+  clips: number;
+  chars: number;
+  usd: number;
+  /** True when the provider publishes no per-character rate, so the dollar
+   *  figure is our arithmetic rather than theirs. */
+  estimated: boolean;
+};
+/** Why a provider is or is not in this run. `configured` false means the key
+ *  is missing (`why` names it); `error` means the key is there but the
+ *  provider would not answer, so it is skipped rather than billed. */
+export type TtsProviderStatus = {
+  key: string;
+  label: string;
+  configured: boolean;
+  why: string;
+  voices: { id: string; name: string }[];
+  error?: string | null;
+};
 export type TtsPlan = {
   venue: TtsVenue;
   lines: TtsLine[];
   clips: number;
   chars: number;
   usd: number;
-  byEngine: Record<string, TtsEngineTotals>;
-  usdPerM: number;
-  /** False when AWS_REGION has no generative engine — the lineup is neural
-   *  only, and the estimate already reflects that. */
-  generative: boolean;
-  region: string;
+  byProvider: Record<string, TtsProviderTotals>;
+  providers: TtsProviderStatus[];
 };
 export type TtsClip = {
   lineLabel: string;
   text: string;
+  provider: string;
+  providerLabel: string;
   voice: string;
-  engine: string;
+  voiceLabel: string;
+  model: string;
   styleLabel: string;
   file: string;
   chars: number;
+  usdPerM: number;
+  estimated?: boolean;
   billed?: number;
   usd?: number;
   error?: string;

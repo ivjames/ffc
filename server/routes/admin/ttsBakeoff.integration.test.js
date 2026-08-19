@@ -116,7 +116,17 @@ test("plan prices a run without spending", async () => {
   assert.ok(body.clips > 0, "it plans clips");
   assert.ok(body.chars > 0, "with billable characters");
   assert.ok(body.usd > 0 && body.usd < 1, `a sane price, got ${body.usd}`);
-  assert.equal(body.usdPerM, 16);
+  // Priced per provider, since they cost different amounts.
+  assert.ok(Object.keys(body.byProvider).length > 0, "priced per provider");
+  // Every provider is accounted for, configured or not, so the screen can say
+  // which key is missing instead of quietly showing fewer columns.
+  assert.deepEqual(
+    body.providers.map((p) => p.key).sort(),
+    ["cartesia", "openai", "polly"]
+  );
+  for (const p of body.providers) {
+    if (!p.configured) assert.match(p.why, /server\/\.env/);
+  }
   // The lines are the ones a game actually says.
   assert.match(body.lines[0].text, /Live trivia is starting/);
   assert.ok(body.lines.some((l) => /The correct answer is/.test(l.text)));
