@@ -17,6 +17,7 @@
 // what a first run didn't, and an operator who archived the pack and changed
 // their mind gets it back with --unarchive.
 import { createReadStream } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createGunzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
@@ -26,6 +27,7 @@ import { normalizeQuestion } from "./lib/triviaLive.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const PACK_PATH = join(__dirname, "seed", "open-trivia-pack.ndjson.gz");
+export const LINEAGE_PATH = join(__dirname, "seed", "open-trivia-lineage.ndjson");
 
 /** The `source` value stamped on every row this import writes. */
 export const PACK_SOURCE = "opentriviaqa";
@@ -121,6 +123,70 @@ export async function importPack(client, rows, { dryRun = false, source = PACK_S
     throw err;
   }
   return { inserted, alreadyPresent: rows.length - inserted };
+}
+
+/**
+ * Where each repaired prompt came from, written beside the pack by the build.
+ *
+ * @returns {Promise<{was: string, now: string}[]>}
+ */
+export async function readLineage(path = LINEAGE_PATH) {
+  let text;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    // An older pack shipped without one. Not fatal: it only means archives
+    // cannot be carried across a rename, which is how this used to behave.
+    return [];
+  }
+  return text.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+}
+
+/**
+ * Keep a retired question retired when a repair rewrites its prompt.
+ *
+ * The import matches on the prompt, so a corrected question is indistinguishable
+ * from a brand new one: it arrives as a fresh insert with `archived_at` null,
+ * and `--prune` then retires the row it replaced. The net effect, without this,
+ * is that an operator who deliberately pulled a question off the screen finds
+ * it back on the screen the next time somebody fixes its spelling — their
+ * decision silently undone by a typo fix.
+ *
+ * The lineage beside the pack is what closes that gap. For every prompt a
+ * repair rewrote, this carries the old row's `archived_at` onto the new one.
+ *
+ * Run AFTER `importPack`, so the successor row exists to carry it to.
+ *
+ * @param {import("pg").PoolClient} client
+ * @param {{was: string, now: string}[]} lineage
+ * @param {{ dryRun?: boolean, source?: string }} opts
+ * @returns {Promise<{ carried: number }>}
+ */
+export async function carryArchives(client, lineage, { dryRun = false, source = PACK_SOURCE } = {}) {
+  let carried = 0;
+  await client.query("begin");
+  try {
+    for (let i = 0; i < lineage.length; i += BATCH) {
+      const batch = lineage.slice(i, i + BATCH);
+      const result = await client.query(
+        `update trivia_question t
+            set archived_at = prior.archived_at
+           from unnest($1::text[], $2::text[]) as p(was, now)
+           join trivia_question prior
+             on prior.prompt = p.was and prior.org_id is null and prior.source = $3
+          where t.prompt = p.now and t.org_id is null and t.source = $3
+            and prior.archived_at is not null
+            and t.archived_at is null`,
+        [batch.map((l) => l.was), batch.map((l) => l.now), source]
+      );
+      carried += result.rowCount;
+    }
+    await client.query(dryRun ? "rollback" : "commit");
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  }
+  return { carried };
 }
 
 /**
@@ -324,6 +390,19 @@ async function main() {
       `[import-trivia] ${dryRun ? "would insert" : "inserted"} ${inserted}, ` +
         `${alreadyPresent} already in the bank`
     );
+
+    // Immediately after the insert, so a question an operator retired stays
+    // retired even when a repair gave it a new prompt and therefore a new row.
+    const lineage = await readLineage();
+    if (lineage.length) {
+      const { carried } = await carryArchives(client, lineage, { dryRun });
+      if (carried > 0) {
+        console.log(
+          `[import-trivia] ${dryRun ? "would keep" : "kept"} ${carried} operator-retired questions retired ` +
+            `across a repaired prompt`
+        );
+      }
+    }
 
     // Before --prune, because pruning is about rows the pack DROPPED and this is
     // about rows it still has: refreshing first means the counts an operator

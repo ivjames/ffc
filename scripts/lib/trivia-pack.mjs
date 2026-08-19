@@ -621,6 +621,71 @@ export function looksLikeSpellingQuestion(row) {
 }
 
 /**
+ * Trace each original prompt to the prompt it ends up with.
+ *
+ * The overlays are chained: apostrophe entries key rows by the prompt as it
+ * came out of the build, typo entries by the apostrophe-repaired prompt, and
+ * ampersand entries by the typo-repaired one. Replaying those keys in order
+ * reconstructs where every corrected question went.
+ *
+ * The importer needs this because it matches rows on the prompt, so a repair
+ * that rewrote a prompt looks like a brand new question and arrives as a fresh
+ * insert. Without a lineage, an operator's decision to retire a question is
+ * silently undone the next time its wording is corrected.
+ *
+ * @returns {Map<string, string>} original prompt -> final prompt, for the
+ *   prompts that actually changed.
+ */
+export function packPromptLineage({ repairs, typos, ampersands } = {}) {
+  const stage = (entries, from) => {
+    // Only prompt edits move a row's identity; a choice edit leaves the key be.
+    const byPrompt = new Map();
+    for (const e of entries) {
+      if (e.f !== "p") continue;
+      if (!byPrompt.has(e.q)) byPrompt.set(e.q, []);
+      byPrompt.get(e.q).push(e);
+    }
+    const out = new Map();
+    for (const [original, current] of from) {
+      const edits = byPrompt.get(current);
+      if (!edits) {
+        out.set(original, current);
+        continue;
+      }
+      // Applied in file order against the running text, exactly as applyEdits
+      // does, so a row carrying two fixes lands on the same string here.
+      let text = current;
+      for (const e of edits) {
+        const at = text.indexOf(e.b);
+        if (at === -1 || text.indexOf(e.b, at + 1) !== -1) continue;
+        text = text.slice(0, at) + e.a + text.slice(at + e.b.length);
+      }
+      out.set(original, text);
+    }
+    return out;
+  };
+
+  const seed = new Map();
+  for (const e of repairs ?? loadPackRepairs()) {
+    if (e.f === "p") seed.set(e.q, e.q);
+  }
+  let lineage = stage(repairs ?? loadPackRepairs(), seed);
+  // Later stages can also be the first to touch a prompt, so their keys join in.
+  for (const [entries, loader] of [[typos, loadPackTypos], [ampersands, loadPackAmpersands]]) {
+    const list = entries ?? loader();
+    const reached = new Set(lineage.values());
+    for (const e of list) {
+      if (e.f === "p" && !reached.has(e.q) && !lineage.has(e.q)) lineage.set(e.q, e.q);
+    }
+    lineage = stage(list, lineage);
+  }
+
+  const changed = new Map();
+  for (const [was, now] of lineage) if (was !== now) changed.set(was, now);
+  return changed;
+}
+
+/**
  * How much question fits on a screen a room is reading from.
  *
  * The admin validator's 300-character ceiling is a sanity bound on what the

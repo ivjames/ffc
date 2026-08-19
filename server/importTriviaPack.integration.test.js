@@ -19,7 +19,7 @@ import { TEST_DATABASE_URL, ensureSchema, testQuery } from "./test-support/testD
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 
 const { pool } = await import("./db.js");
-const { importPack, setPackArchived, prunePack, refreshPack, countDrifted, readPack, PACK_SOURCE } =
+const { importPack, setPackArchived, prunePack, refreshPack, countDrifted, carryArchives, readLineage, readPack, PACK_SOURCE } =
   await import("./importTriviaPack.js");
 
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -247,6 +247,68 @@ test("refresh does not resurrect a question an operator retired", async () => {
     ROWS[2].prompt,
   ]);
   await refreshPack(client, ROWS, { source: SOURCE });
+});
+
+test("a repaired prompt does not put an operator-retired question back on screen", async () => {
+  // The import matches on the prompt, so a corrected question looks brand new
+  // and arrives live, while --prune retires the row it replaced. Without the
+  // lineage that silently undoes an operator pulling a question off the screen.
+  const was = `${stamp} retired question with a typo?`;
+  const now = `${stamp} retired question with a typo fixed?`;
+  const before = [{ ...row(9), prompt: was }];
+  const after = [{ ...row(9), prompt: now }];
+
+  await importPack(client, before, { source: SOURCE });
+  await testQuery(`update trivia_question set archived_at = now() where source = $1 and prompt = $2`, [
+    SOURCE,
+    was,
+  ]);
+
+  await importPack(client, after, { source: SOURCE });
+  const { carried } = await carryArchives(client, [{ was, now }], { source: SOURCE });
+  await prunePack(client, after, { source: SOURCE });
+
+  assert.equal(carried, 1);
+  const live = await testQuery(
+    `select prompt from trivia_question where source = $1 and prompt = $2 and archived_at is null`,
+    [SOURCE, now]
+  );
+  assert.equal(live.rows.length, 0, "the corrected copy stays retired");
+
+  await testQuery(`delete from trivia_question where source = $1 and prompt = any($2::text[])`, [
+    SOURCE,
+    [was, now],
+  ]);
+});
+
+test("carrying archives leaves a question the operator never retired alone", async () => {
+  const was = `${stamp} live question with a typo?`;
+  const now = `${stamp} live question with a typo fixed?`;
+  await importPack(client, [{ ...row(8), prompt: was }], { source: SOURCE });
+  await importPack(client, [{ ...row(8), prompt: now }], { source: SOURCE });
+
+  const { carried } = await carryArchives(client, [{ was, now }], { source: SOURCE });
+  assert.equal(carried, 0, "nothing to carry from a row that was never archived");
+  const live = await testQuery(
+    `select prompt from trivia_question where source = $1 and prompt = $2 and archived_at is null`,
+    [SOURCE, now]
+  );
+  assert.equal(live.rows.length, 1, "the corrected copy is dealable");
+
+  await testQuery(`delete from trivia_question where source = $1 and prompt = any($2::text[])`, [
+    SOURCE,
+    [was, now],
+  ]);
+});
+
+test("the committed lineage traces every repaired prompt to a row in the pack", async () => {
+  const lineage = await readLineage();
+  assert.ok(lineage.length > 0, "the pack ships a lineage");
+  const { rows } = await readPack();
+  const prompts = new Set(rows.map((r) => r.prompt));
+  const orphans = lineage.filter((l) => !prompts.has(l.now));
+  assert.equal(orphans.length, 0, `every traced prompt exists in the pack, got ${orphans.length} orphans`);
+  assert.equal(lineage.filter((l) => l.was === l.now).length, 0, "only prompts that actually changed");
 });
 
 test("refresh --dry-run reports what it would change and writes nothing", async () => {

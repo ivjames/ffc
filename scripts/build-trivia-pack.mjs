@@ -14,7 +14,7 @@
 // prompt — so re-running this on an unchanged corpus produces an empty diff
 // and a rebuild after an upstream change only churns the questions that moved.
 import { createWriteStream } from "node:fs";
-import { readdir, readFile, mkdir, stat } from "node:fs/promises";
+import { readdir, readFile, mkdir, stat, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
@@ -35,6 +35,7 @@ import {
   loadPackAmpersands,
   loadPackRepairs,
   loadPackTypos,
+  packPromptLineage,
   parseCategoryFile,
   toPackRow,
 } from "./lib/trivia-pack.mjs";
@@ -42,6 +43,7 @@ import {
 const execFileAsync = promisify(execFile);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const PACK_PATH = join(ROOT, "server", "seed", "open-trivia-pack.ndjson.gz");
+export const LINEAGE_PATH = join(ROOT, "server", "seed", "open-trivia-lineage.ndjson");
 
 const UPSTREAM = "https://github.com/uberspot/OpenTriviaQA";
 const LICENSE = "CC BY-SA 4.0";
@@ -153,6 +155,15 @@ async function main() {
   const lines = [header, ...rows].map((o) => `${JSON.stringify(o)}\n`);
   await pipeline(Readable.from(lines), createGzip({ level: 9 }), createWriteStream(PACK_PATH));
 
+  // Beside the pack: where each repaired prompt came from, so the importer can
+  // tell a corrected question from a new one. See server/importTriviaPack.js.
+  const present = new Set(rows.map((r) => r.prompt));
+  const lineage = [...packPromptLineage()]
+    .filter(([, now]) => present.has(now))
+    .map(([was, now]) => `${JSON.stringify({ was, now })}\n`)
+    .sort();
+  await writeFile(LINEAGE_PATH, lineage.join(""));
+
   const packed = (await stat(PACK_PATH)).size;
   console.log(`[build-trivia-pack] read ${read} source questions from ${files.length} files`);
   console.log(`[build-trivia-pack] encoding: ${repairedBytes} bytes repaired via CP1252, ${droppedBytes} dropped`);
@@ -174,6 +185,7 @@ async function main() {
     console.log(`[build-trivia-pack]   ${String(n).padStart(5)}  ${category}`);
   }
   console.log(`[build-trivia-pack] wrote ${PACK_PATH} (${(packed / 1e6).toFixed(2)} MB gzipped)`);
+  console.log(`[build-trivia-pack] wrote ${LINEAGE_PATH} (${lineage.length} repaired prompts traced)`);
   console.log("[build-trivia-pack] no model or API calls — this build costs nothing but CPU");
 }
 

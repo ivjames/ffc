@@ -10,6 +10,7 @@
 // Entries key rows by their unrepaired prompt, so running this twice is a
 // no-op — the second pass matches nothing.
 import { createReadStream, createWriteStream } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { createGunzip, createGzip } from "node:zlib";
 import { createInterface } from "node:readline";
 import { pipeline } from "node:stream/promises";
@@ -19,11 +20,12 @@ import {
   applyPackRepairs,
   applyPackTypos,
   dropOversized,
+  packPromptLineage,
   loadPackAmpersands,
   loadPackRepairs,
   loadPackTypos,
 } from "./lib/trivia-pack.mjs";
-import { PACK_PATH } from "./build-trivia-pack.mjs";
+import { LINEAGE_PATH, PACK_PATH } from "./build-trivia-pack.mjs";
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
@@ -79,8 +81,14 @@ async function main() {
     console.log("[repair-trivia-pack] dry run — pack not written");
     return;
   }
+  // The lineage is derived from the overlay files, not from whether the pack
+  // needed changing, so it is rewritten even on a run that applies nothing —
+  // otherwise a fresh checkout could ship a pack and a stale sidecar.
+  const traced = await writeLineage(sized.kept);
+  console.log(`[repair-trivia-pack] wrote ${LINEAGE_PATH} (${traced} repaired prompts traced)`);
+
   if (!applied && !sized.dropped.length) {
-    console.log("[repair-trivia-pack] nothing applied — pack left untouched");
+    console.log("[repair-trivia-pack] pack already current — left untouched");
     return;
   }
 
@@ -88,6 +96,23 @@ async function main() {
   await pipeline(Readable.from(out), createGzip({ level: 9 }), createWriteStream(PACK_PATH));
   console.log(`[repair-trivia-pack] wrote ${PACK_PATH}`);
   console.log("[repair-trivia-pack] no model or API calls — applying committed repairs costs nothing but CPU");
+}
+
+/**
+ * Record where every repaired prompt ended up, for the importer.
+ *
+ * Only prompts that changed AND still exist in the pack: a question dropped
+ * for length has no successor to carry anything to.
+ */
+async function writeLineage(kept) {
+  const present = new Set(kept.map((r) => r.prompt));
+  const lines = [];
+  for (const [was, now] of packPromptLineage()) {
+    if (present.has(now)) lines.push(`${JSON.stringify({ was, now })}\n`);
+  }
+  lines.sort();
+  await writeFile(LINEAGE_PATH, lines.join(""));
+  return lines.length;
 }
 
 main().catch((err) => {

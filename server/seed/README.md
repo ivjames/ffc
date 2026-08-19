@@ -202,9 +202,10 @@ this question changed", so a corrected pack splits in two on the way in:
 | A repair that changed the **prompt** | arrives as a fresh insert; the superseded row is retired by `--prune` |
 | A repair that only changed the **options** | leaves the prompt identical, so the row reads as already present — `--refresh` is what updates it |
 
-Both halves are real: between the original pack and the repaired one, 2,565
-prompts changed and 1,804 rows changed only below the prompt. On a bank that
-already holds the old pack, the whole remediation is:
+Both halves are real. Measured between the pack as it was before any of this
+and the pack as committed — repairs applied *and* over-long rows dropped —
+2,214 rows changed their prompt and 1,526 changed only below it. On a bank
+that already holds the old pack, the whole remediation is:
 
 ```sh
 cd server
@@ -212,12 +213,25 @@ npm run import:trivia -- --dry-run              # see the three numbers first
 npm run import:trivia -- --refresh --prune
 ```
 
-which inserts 2,565, updates 1,804 and retires 2,565, leaving 47,710 live rows
-that match the pack exactly. Running it again does nothing. A plain run
+which inserts 2,214, updates 1,526 and retires 6,067, leaving 43,857 live rows
+that match the pack exactly. Running it again does nothing. The retirements
+outnumber the inserts because `--prune` clears out two groups at once: the
+rows a repair superseded, and the 3,853 dropped for length. A plain run
 reports both outstanding counts rather than silently leaving them, and
-`--refresh` never touches a client's own questions, never resurrects a
-question an operator archived, and treats the pack as the source of truth only
-for rows carrying its `source`.
+`--refresh` never touches a client's own questions and treats the pack as the
+source of truth only for rows carrying its `source`.
+
+**Retired questions stay retired.** Because the import matches on the prompt,
+a repair that rewrites one produces a row indistinguishable from a brand new
+question: it arrives live, and `--prune` retires the row it replaced. Left
+alone, that hands an operator's decision back — a question deliberately pulled
+off the screen returns the next time somebody fixes its spelling.
+
+`open-trivia-lineage.ndjson`, written beside the pack by the same two scripts,
+is what prevents it: one `{"was": …, "now": …}` line for each of the 2,214
+prompts a repair rewrote that still exists in the pack. The import reads it
+straight after inserting and carries the old row's `archived_at` onto its
+successor. A question the operator never retired is untouched.
 
 On an empty bank none of this applies — the first import loads the corrected
 pack and there is nothing to reconcile.
