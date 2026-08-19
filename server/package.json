@@ -11,7 +11,8 @@
     "start": "node index.js",
     "migrate": "node migrate.js",
     "import:trivia": "node importTriviaPack.js",
-    "test": "node --experimental-test-module-mocks --test",
+    "_comment_test": "Concurrency scales with the box: node --test defaults to availableParallelism()-1 (3 workers on a 4-core dev machine), but these tests are dominated by Postgres round trips and process startup rather than CPU, so they idle. Measured on 4 cores, 710 tests: 58.0s at the default, 35.3s at 8, 30.6s at 12, 31.9s at 16 — so ~3x cores, capped, and never below the old default. Peak node RSS was ~1.8GB at 12, which is why this is derived from the machine rather than pinned: the deploy gate runs this suite on a droplet. Override with TEST_CONCURRENCY; if the substitution itself fails the || falls back to 8, because this script is the deploy gate and must not break on an odd host.",
+    "test": "node --experimental-test-module-mocks --test --test-concurrency=$(node -p \"process.env.TEST_CONCURRENCY || Math.max(3, Math.min(16, ((require('node:os').availableParallelism ? require('node:os').availableParallelism() : require('node:os').cpus().length) * 3)))\" || echo 8)",
     "tts:bakeoff": "node ../scripts/tts-bakeoff.mjs"
   },
   "dependencies": {

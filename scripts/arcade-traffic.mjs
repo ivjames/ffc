@@ -315,7 +315,13 @@ async function main() {
     if (!g) throw new Error(`profile has no game "${k}"`);
     const usable = g.samples.filter((s) => s.tickets >= 1);
     if (!usable.length) {
-      console.warn(`  (skipping ${k}: no sample earned a ticket)`);
+      // Two different stories, and the fix differs: a game the capture never
+      // managed to play at all, versus one that played and scored nothing.
+      console.warn(
+        g.samples.length === 0
+          ? `  (skipping ${k}: the capture recorded no rounds for it)`
+          : `  (skipping ${k}: ${g.samples.length} round(s) captured, none earned a ticket)`,
+      );
       continue;
     }
     pools.push({ key: k, label: g.label, samples: usable });

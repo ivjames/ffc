@@ -522,8 +522,9 @@ export type ArcadeVenue = {
 export type ArcadeStatus = {
   canControl: boolean;
   /** The server's earning registry — every one of these has a bot policy.
-   *  estRoundMs is the bot's own per-round estimate (null if unreadable). */
-  games: { key: string; label: string; estRoundMs: number | null }[];
+   *  estRoundMs is the bot's own per-round estimate (null if unreadable);
+   *  lowerIsBetter marks time-scored games (Go-Karts), where "best" = min. */
+  games: { key: string; label: string; estRoundMs: number | null; lowerIsBetter: boolean }[];
   /** Capture drives a real browser; an API host may not have one. Null for an
    *  org-scoped admin — capture is a super_admin tool. */
   browser: { available: boolean; at: string | null; reason?: string } | null;
@@ -546,10 +547,63 @@ export type ArcadeStatus = {
   replay: ArcadeRunner;
 };
 
+/** A profile's full samples — what /status summarises, for charting. */
+export type ArcadeProfileDetail = {
+  ok: true;
+  name: string;
+  capturedAt: string | null;
+  base: string | null;
+  /** Wall clock + worker count, recorded by newer captures (null on old ones —
+   *  then only aggregate browser time can be shown, and must say so). */
+  wallMs: number | null;
+  workers: number | null;
+  games: {
+    key: string;
+    label: string;
+    rounds: number;
+    stats: { mean: number; p10: number; p50: number; p90: number; max: number; min: number; meanRoundMs: number } | null;
+    samples: { score: number; tickets: number; skill: number | null }[];
+  }[];
+};
+
+/** Synthetic award aggregates — bucketed in SQL, never row-by-row. */
+export type ArcadeTraffic = {
+  ok: true;
+  days: number;
+  /** 'hour' for a short window, 'day' once hours would be thousands of points. */
+  unit: 'hour' | 'day';
+  buckets: { at: string; awards: number; requested: number; awarded: number }[];
+  byGame: {
+    game: string;
+    awards: number;
+    requested: number;
+    /** Confirmed credits only (status='awarded') — a pending row is a
+     *  reservation whose POS credit never settled, not a payment. */
+    awarded: number;
+    capped: number;
+    pending: number;
+  }[];
+  totals: {
+    awards: number;
+    requested: number;
+    awarded: number;
+    /** Unsettled reservations: rows stuck in status='pending'. */
+    pending: number;
+    pending_tickets: number;
+    cards: number;
+    runs: number;
+    capped: number;
+    first_at: string | null;
+    last_at: string | null;
+  };
+};
+
 export type ArcadeCaptureParams = {
   rounds: number;
   seed: number;
   skill: number | null;
+  /** Concurrent browser pages. Timing games verified unaffected up to 4. */
+  workers: number;
   games: string[];
 };
 
@@ -1156,6 +1210,9 @@ export const api = {
     req<{ ok: true; profile: string; runner: ArcadeRunner }>('POST', '/arcade-bot/capture', params),
   arcadeReplay: (params: ArcadeReplayParams) =>
     req<{ ok: true; runner: ArcadeRunner }>('POST', '/arcade-bot/replay', params),
+  arcadeProfile: (name: string) =>
+    req<ArcadeProfileDetail>('GET', `/arcade-bot/profile/${encodeURIComponent(name)}`),
+  arcadeTraffic: (days: number) => req<ArcadeTraffic>('GET', `/arcade-bot/traffic?days=${days}`),
   arcadeRecheckBrowser: () =>
     req<{ ok: true; browser: ArcadeStatus['browser']; app: ArcadeStatus['app'] }>(
       'POST',

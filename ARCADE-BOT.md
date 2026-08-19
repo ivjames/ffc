@@ -77,12 +77,24 @@ are a known 3×3 grid, so nothing has to be tracked frame to frame; games with
 genuinely moving entities (a duck on a rail, a puck, a pinball) need the
 position recovered from pixels and predicted forward, which is the next step up.
 
-Every game in the server's earning registry now has a policy. Go-Karts is the
-weakest of them: it completes races but its lap times are dominated by barrier
-scraping and the opening wrong-way stall rather than by the skill knob, so its
-expert/beginner ordering is **not** established (78s vs 55–86s). A best lap of
-~6.5s is achievable against the ~25s it turns, so a centred racing line is the
-open work there.
+Every game in the server's earning registry has a policy. **Go-Karts is flaky
+and the number is measured: roughly one round in three finishes.** The failure
+is binary rather than slow — a wedged race sits at "Lap 0 / 3" for the entire
+budget with the clock running and the kart never crossing the line once, while a
+healthy round comes home in 50–70s. It is not the venue banner or an obstructed
+canvas (both checked: the canvas is on top and hit-testable in every attempt),
+so the cause is still open.
+
+Two things make that cost bearable rather than fixing it:
+
+- A race with **no lap completed in 45s** aborts with that reason instead of
+  driving out the full 180s. The ideal lap is ~6.4s and even a bad line comes
+  round inside ~25s, so 45s is already generous.
+- The end card gets a **20s grace**, not the whole round budget. Together these
+  take a wedged Go-Karts round from ~6 minutes to ~50s.
+
+Its expert/beginner ordering is also **not** established. Deselect it in Master
+Control's game picker if you want a capture with no dead weight in it.
 
 Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 
@@ -106,9 +118,14 @@ Measured, expert vs beginner (`--skill 1` vs `--skill 0.15`):
 | Pinball | 8010 mean | 6800 mean | — (high variance) |
 | Bumper Cars | 24–30 | 16–22 | (30s clock) |
 | Bumper Boats | 19–31 | 15–17 | (30s clock) |
-| Go-Karts | 78s | 55–86s | (time — lower is better) |
+| Go-Karts | 51–68s | — | (time — lower is better; ~1 round in 3 finishes) |
 
-Two honest caveats:
+Three honest caveats:
+
+- **A one-round capture has no distribution.** Every percentile equals the score,
+  so the charts render hairlines and replay resamples a single value forever. For
+  shape, capture ~8+ rounds — which for all 19 games is a couple of hours at
+  ~1 round/min, so pick a subset of games or run it overnight.
 
 - **High Striker's headline is the best of five swings**, which compresses
   scores toward 100 regardless of skill. That's the game's shape, not a bot
@@ -137,7 +154,27 @@ node scripts/arcade-traffic.mjs --profile arcade-profile.json \
 ```
 
 `--skill N` fixes ability instead of sampling a player mix; `--seed N` makes a
-run replayable; `--headed` lets you watch it play.
+run replayable; `--headed` lets you watch it play; `--workers N` plays N rounds
+at once (own page each, one Chromium — capped at 8; the admin caps at 4 because
+the API host is also serving players).
+
+### Parallel capture is safe, and it was measured, not assumed
+
+The worry was that the timing games — which read the canvas in real time and
+schedule taps off it — would degrade under CPU contention from sibling
+renderers. Measured at expert skill on 4 cores: High Striker still rings 100,
+Axe Throw and Skee-Ball land the same rounds, and Batting Cages (the tightest
+prediction game, 12 ms probes) hits a perfect 40 at 4 workers. Every skill
+floor passes.
+
+Better: per-round scores are **identical at any worker count**. Each round
+draws from its own seeded rng (`roundSeed(seed, game, round)`), so scheduling
+can't touch the draws — the same `--seed` produces the same profile on 1 worker
+or 8. That derivation also fixed a quieter defect: with the old shared stream,
+adding one game to the list shifted every later game's draws.
+
+Measured wall clock, 6 timing-game rounds: 137 s on 1 worker → 49 s on 3
+(2.8×). An 8-round × 19-game capture drops from ~2½ hours to under an hour.
 
 ### Leave the skill knob alone
 
@@ -214,6 +251,27 @@ own status, live log tail and stop button, so both can run at once.
 - "Game rewards on" means what the award route means by it — the venue's
   `pos.loyalty.gameRewards` flag AND a live `gameTickets` module. Checking only
   the flag called a venue enabled while every award 403'd.
+
+### What it produced
+
+A third section charts both halves against live API data — so it shows that
+box's runs, not a snapshot.
+
+- **From the capture** — score spread per game (p10–p90 with a median tick) and
+  skill against outcome, one dot per round. Scores are normalised to each game's
+  own best, because a Skee-Ball 780 and a Darts 370 share no scale; that makes
+  the *shape* comparable, which is the real question — a mixed field of players,
+  or one machine playing the same round over and over. A rising scatter means the
+  skill knob reaches the game; a flat one is a finding about the game.
+- **From the replay** — awards over time, and tickets **paid vs clamped** per
+  game, which is where the per-round ceiling and per-card daily cap stop being a
+  footnote and become a visible gap.
+
+One hue does the magnitude work: 19 games would need 19 colors, which no reader
+can tell apart and which would bury the point. The only two-color chart is
+paid-vs-clamped, where identity *is* the subject — that pair is validated against
+the admin's white card surface (worst CVD ΔE 21.3, normal-vision 31.9, both ≥3:1).
+Each half carries a table view, so no value is reachable only by hovering.
 
 The child processes are started with `FFC_EXIT_WITH_PARENT=1` and killed on API
 shutdown, so a bot can't outlive the API that's reporting on it. Both halves run

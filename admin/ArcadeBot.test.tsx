@@ -10,6 +10,10 @@ vi.mock('./api', () => ({
     arcadeCapture: vi.fn(),
     arcadeReplay: vi.fn(),
     arcadeStop: vi.fn(),
+    // The page also mounts the charts section, which fetches on its own. These
+    // tests are about the CONTROLS, so the charts just need to not throw.
+    arcadeProfile: vi.fn(),
+    arcadeTraffic: vi.fn(),
   },
 }));
 
@@ -45,8 +49,8 @@ function status(profiles: ArcadeProfile[]): ArcadeStatus {
   return {
     canControl: true,
     games: [
-      { key: 'skeeball', label: 'Skee-Ball', estRoundMs: 19_500 },
-      { key: 'gokarts', label: 'Go-Karts', estRoundMs: 180_000 },
+      { key: 'skeeball', label: 'Skee-Ball', estRoundMs: 19_500, lowerIsBetter: false },
+      { key: 'gokarts', label: 'Go-Karts', estRoundMs: 180_000, lowerIsBetter: true },
     ],
     browser: { available: true, at: '/opt/pw-browsers' },
     app: { reachable: true, base: 'http://127.0.0.1:5173', status: 200, why: 'dev server', tried: [] },
@@ -61,6 +65,26 @@ function status(profiles: ArcadeProfile[]): ArcadeStatus {
 beforeEach(() => {
   vi.mocked(api.arcadeStatus).mockReset();
   vi.mocked(api.arcadeReplay).mockReset().mockResolvedValue({ ok: true, runner: IDLE });
+  vi.mocked(api.arcadeProfile).mockReset().mockResolvedValue({
+    ok: true,
+    name: 'mixed.json',
+    capturedAt: null,
+    base: null,
+    wallMs: null,
+    workers: null,
+    games: [],
+  });
+  vi.mocked(api.arcadeTraffic).mockReset().mockResolvedValue({
+    ok: true,
+    days: 7,
+    unit: 'day',
+    buckets: [],
+    byGame: [],
+    totals: {
+      awards: 0, requested: 0, awarded: 0, pending: 0, pending_tickets: 0,
+      cards: 0, runs: 0, capped: 0, first_at: null, last_at: null,
+    },
+  });
 });
 
 describe('ArcadeBot — a profile advertises the skill it will replay as', () => {
@@ -158,10 +182,10 @@ describe('ArcadeBot — guards', () => {
   test('the capture estimate sums the per-game round times, not a flat rate', async () => {
     vi.mocked(api.arcadeStatus).mockResolvedValue(status([MIXED]));
     render(<ArcadeBot />);
-    // Default 10 rounds × (19.5s + 180s) = ~33 min, and emphatically not
-    // 10 × 2 games at some uniform pace. The number is its own <strong>, so
-    // match on the paragraph's full text.
+    // Default 10 rounds × (19.5s + 180s) = ~33 min single-file, over the
+    // default 3 workers = 11 min — and emphatically not 10 × 2 games at some
+    // uniform pace. The number is its own <strong>, so match the full text.
     const est = await screen.findByText(/of wall clock/);
-    expect(est.textContent).toMatch(/≈ 20 rounds, roughly 33 min of wall clock/);
+    expect(est.textContent).toMatch(/≈ 20 rounds, roughly 11 min of wall clock/);
   });
 });

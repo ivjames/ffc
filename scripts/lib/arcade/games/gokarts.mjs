@@ -69,6 +69,13 @@ const DIRECTION = 1;
 // No lap gained in this long means we are going the wrong way (or stuck), so
 // reverse. A clean lap is ~6.5s, so this waits out a bad one without thrashing.
 const LAP_STALL_MS = 13_000;
+// A race that has not completed a SINGLE lap by now is wedged, not slow: the
+// ideal lap is ~6.4s and even a bad line comes round inside ~25s. Measured
+// failures sit at "Lap 0 / 3" for the entire 180s budget with the clock
+// running, so driving on just burns three minutes to reach the same answer.
+// Give up and say so — the capture loses one game instead of one game plus
+// six minutes.
+const NO_LAP_ABORT_MS = 45_000;
 
 export default {
   key: 'gokarts',
@@ -173,7 +180,8 @@ export default {
       }
     }
 
-    const deadline = Date.now() + this.estRoundMs;
+    const started = Date.now();
+    const deadline = started + this.estRoundMs;
     let sinceCheck = 0;
     let lapsSeen = -1;
     let lapAt = Date.now();
@@ -194,6 +202,14 @@ export default {
         } else if (Date.now() - lapAt > LAP_STALL_MS) {
           heading += Math.PI; // about-face and try the other way
           lapAt = Date.now();
+        }
+        // Still on the opening lap long past the point where the about-face
+        // should have rescued it: this one is not going to finish.
+        if (laps <= 0 && Date.now() - started > NO_LAP_ABORT_MS) {
+          throw new Error(
+            `gokarts: no lap completed in ${Math.round(NO_LAP_ABORT_MS / 1000)}s — the kart is wedged ` +
+              '(the race clock runs, the lap counter never leaves 0). Known flaky; see ARCADE-BOT.md.',
+          );
         }
       }
 

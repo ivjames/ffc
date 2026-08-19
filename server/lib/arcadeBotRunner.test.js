@@ -19,6 +19,13 @@ test("captureArgs: skill 0 is a real value, not 'unset'", () => {
   assert.equal(args[args.indexOf("--skill") + 1], "0");
 });
 
+test("captureArgs: --workers rides along when set, absent when not", () => {
+  const on = captureArgs({ rounds: 1, seed: 1, skill: null, workers: 3, games: [] }, "http://x");
+  assert.equal(on[on.indexOf("--workers") + 1], "3");
+  const off = captureArgs({ rounds: 1, seed: 1, skill: null, games: [] }, "http://x");
+  assert.ok(!off.includes("--workers"));
+});
+
 test("captureArgs: one --game per selected game, plus --out", () => {
   const args = captureArgs(
     { rounds: 2, seed: 1, skill: 1, games: ["skeeball", "darts"], out: "/tmp/p.json" },
