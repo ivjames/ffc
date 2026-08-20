@@ -4,7 +4,7 @@ import { apiUrl } from '../../sync';
 import { posFor, type PosCapabilities } from './index';
 
 // Game ticket awards — the one place mini-games touch the ticket economy.
-// Games call awardGameTickets() from their end screen (via the GameTicketAward
+// Games call awardGameTickets() from their end screen (via the GameAwards
 // component in features/fun); everything vendor- and venue-specific is
 // resolved here: the venue must have the gameRewards add-on (which requires
 // a loyalty integration), the device must have a linked rewards card, and

@@ -13,6 +13,7 @@ import { shareRound } from './shareImage';
 import { playFanfare } from '../../lib/sound';
 import type { CourseSeed, LocalRound } from '../../types';
 import Icon from '../../ui/Icon';
+import BadgeUnlocks from '../../ui/BadgeUnlocks';
 import { ACHIEVEMENTS_BY_KEY } from '../../lib/achievements/catalog';
 import type { DrawnIcon } from '../../ui/icons/registry';
 import {
@@ -271,6 +272,14 @@ export default function Summary() {
             adoption bonuses. */}
         <RewardsCard rewards={rewards} />
 
+        {/* Badges this DEVICE can prove (scoring, secrets, career streaks) —
+            surfaced the moment the round completes rather than waiting for the
+            next visit to the wall. A first-ever ace can appear in both cards:
+            RewardsCard is the round's server grants for every player, this is
+            this device's own wall lighting up. Gated on completedAt so the
+            detection judges the finished round, not the in-progress one. */}
+        {round.completedAt != null && <BadgeUnlocks sessionId={round.clientId} />}
+
         <div className="mt-4 space-y-2">
           <Button
             variant="ghost"
@@ -434,10 +443,15 @@ function NineGrid({
 // ownership rule — every player's badge shows on every device in the round,
 // exactly like the scorecard above it.
 function RewardsCard({ rewards }: { rewards: RewardRow[] }) {
+  const navigate = useNavigate();
   if (rewards.length === 0) return null;
   return (
-    <div
-      className="surface animate-pop-in mt-4 rounded-3xl border border-fairway-500/40 p-4"
+    // The whole card is a door to the wall — a badge worth showing here is a
+    // badge worth showing in its collection.
+    <button
+      type="button"
+      onClick={() => navigate('/me/achievements')}
+      className="surface animate-pop-in mt-4 block w-full rounded-3xl border border-fairway-500/40 p-4 text-left transition-transform active:translate-y-px"
       style={{ '--i': 1 } as CSSProperties}
     >
       <div className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.25em] text-fairway-400">
@@ -471,7 +485,10 @@ function RewardsCard({ rewards }: { rewards: RewardRow[] }) {
           );
         })}
       </div>
-    </div>
+      <div className="mt-3 text-center text-xs font-semibold text-fairway-400">
+        See all achievements ›
+      </div>
+    </button>
   );
 }
 

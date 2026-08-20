@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
@@ -617,7 +617,7 @@ export default function BattingCages() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (2 tickets per run — a home run pays 8). */}
-          <GameTicketAward game="battingcages" tickets={total * 2} sessionId={sessionId} />
+          <GameAwards game="battingcages" tickets={total * 2} sessionId={sessionId} />
           <GameHighScore game="battingcages" score={total} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={restart} sound="none">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo, logoReady } from './logo';
@@ -805,7 +805,7 @@ export default function ShootingGallery() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 4 points, capped at 100). */}
-          <GameTicketAward
+          <GameAwards
             game="shootinggallery"
             tickets={Math.min(100, Math.round(score / 4))}
             sessionId={sessionId}

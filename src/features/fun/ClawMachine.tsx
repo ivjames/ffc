@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
@@ -1191,7 +1191,7 @@ export default function ClawMachine() {
           {/* POS add-on: now that the grip is a deterministic skill rubric, the
               claw earns tickets like the other skill games — 1 per prize point
               (a perfect five-grab run tops out at 80, under the server cap). */}
-          <GameTicketAward
+          <GameAwards
             game="clawmachine"
             tickets={Math.min(100, score)}
             sessionId={sessionId}

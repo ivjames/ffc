@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { recordLap } from './lapBest';
 import { useFitCanvas } from './useFitCanvas';
@@ -998,7 +998,7 @@ export default function GoKarts() {
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (pace-tiered: within 1.5× the flat-out ideal 40, 2× 25, 2.75× 15,
               slower 8). */}
-          <GameTicketAward
+          <GameAwards
             game="gokarts"
             tickets={pace <= 1.5 ? 40 : pace <= 2 ? 25 : pace <= 2.75 ? 15 : 8}
             sessionId={sessionId}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
@@ -889,7 +889,7 @@ export default function BumperArena({ theme }: { theme: BumperTheme }) {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (2 tickets per bump, capped at 100). */}
-          <GameTicketAward
+          <GameAwards
             game={theme.kind === 'car' ? 'bumpercars' : 'bumperboats'}
             tickets={Math.min(score * 2, 100)}
             sessionId={sessionId}

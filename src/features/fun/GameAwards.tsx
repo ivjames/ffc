@@ -5,28 +5,32 @@ import { usePos } from '../../lib/pos';
 import { useLinkedPlayerId } from '../../lib/rewardsCard';
 import { useSession } from '../../lib/session';
 import { markActivity } from '../../db';
+import BadgeUnlocks from '../../ui/BadgeUnlocks';
 import Icon from '../../ui/Icon';
 
-// Drop-in ticket-award banner for a mini-game's end screen. Self-gating:
-// renders nothing unless this venue sells the gameRewards add-on. With a
-// linked card it credits `tickets` once per `sessionId` (generate a fresh id
-// per round; it's the idempotency key, so re-mounts can't double-credit);
-// without one it nudges toward /rewards instead. Usage:
+// Drop-in awards block for a mini-game's end screen — achievements first, then
+// tickets. Usage:
 //
-//   <GameTicketAward game="trivia" tickets={score * 5} sessionId={sessionId} />
+//   <GameAwards game="trivia" tickets={score * 5} sessionId={sessionId} />
 //
-// It is also where a round of ANY arcade game gets recorded for the
-// achievements wall (lib/achievements). That happens before the ticket gating
-// below, so it works at venues without the rewards add-on and for signed-out
-// players — the tally is device-local and never leaves the phone. Pass `feat`
-// to note something the round achieved that the ticket count can't express.
+// This is where a round of ANY arcade game gets recorded for the achievements
+// wall (lib/achievements), and where anything that recording just unlocked is
+// shown (ui/BadgeUnlocks) — deliberately above every ticket gate, so both work
+// at venues without the rewards add-on and for signed-out players. The tally is
+// device-local and never leaves the phone. Pass `feat` to note something the
+// round achieved that the ticket count can't express.
+//
+// The ticket half is self-gating: it renders nothing unless this venue sells
+// the gameRewards add-on. With a linked card it credits `tickets` once per
+// `sessionId` (generate a fresh id per round; it's the idempotency key, so
+// re-mounts can't double-credit); without one it nudges toward /rewards.
 
 // The server's hard per-round ceiling (lib/gameRewards.js HARD_MAX_PER_ROUND).
 // Mirrored here so a monster round on an uncapped formula (e.g. batting
 // cages' total*2) never PROMISES more than the award proxy will pay.
 const MAX_PER_ROUND = 100;
 
-export default function GameTicketAward({
+export default function GameAwards({
   game,
   tickets: rawTickets,
   sessionId,
@@ -39,27 +43,40 @@ export default function GameTicketAward({
   feat?: string;
 }) {
   const tickets = Math.min(MAX_PER_ROUND, rawTickets);
+  return (
+    <>
+      <BadgeUnlocks
+        sessionId={sessionId}
+        mark={async () => {
+          await markActivity('game', game, tickets);
+          // The PLATFORM ceiling, not this game's own: most games top out below
+          // it, and there is no per-game maximum on the client to compare
+          // against. The badge is worded to match (Big Payout, not "maxed out
+          // this game").
+          if (tickets >= MAX_PER_ROUND) await markActivity('feat', 'ticket-ceiling');
+          if (feat) await markActivity('feat', feat);
+        }}
+      />
+      <TicketAward game={game} tickets={tickets} sessionId={sessionId} />
+    </>
+  );
+}
+
+function TicketAward({
+  game,
+  tickets,
+  sessionId,
+}: {
+  game: string;
+  tickets: number;
+  sessionId: string;
+}) {
   const navigate = useNavigate();
   const { gameRewards } = usePos();
   const playerId = useLinkedPlayerId();
   const signedIn = useSession().user != null;
   const [outcome, setOutcome] = useState<GameAwardOutcome | null>(null);
   const attempted = useRef<string | null>(null);
-  const recorded = useRef<string | null>(null);
-
-  // Record the round for the achievements wall. Deliberately above every gate:
-  // playing a game counts whether or not this venue sells tickets. Keyed on
-  // sessionId so a re-mounted end screen doesn't count the round twice.
-  useEffect(() => {
-    if (recorded.current === sessionId) return;
-    recorded.current = sessionId;
-    void markActivity('game', game, tickets);
-    // The PLATFORM ceiling, not this game's own: most games top out below it,
-    // and there is no per-game maximum on the client to compare against. The
-    // badge is worded to match (Big Payout, not "maxed out this game").
-    if (tickets >= MAX_PER_ROUND) void markActivity('feat', 'ticket-ceiling');
-    if (feat) void markActivity('feat', feat);
-  }, [game, tickets, sessionId, feat]);
 
   useEffect(() => {
     if (!gameRewards || !playerId || tickets < 1) return;

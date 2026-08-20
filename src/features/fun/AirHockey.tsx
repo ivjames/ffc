@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo, logoReady } from './logo';
@@ -631,7 +631,7 @@ export default function AirHockey() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (5 tickets per goal + 15 for the win). */}
-          <GameTicketAward game="airhockey" tickets={you * 5 + (won ? 15 : 0)} sessionId={sessionId} />
+          <GameAwards game="airhockey" tickets={you * 5 + (won ? 15 : 0)} sessionId={sessionId} />
           <GameHighScore game="airhockey" score={you - cpu} sessionId={sessionId} />
           <div className="mt-8">
             <Button onClick={start} sound="none">

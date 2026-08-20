@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo, logoReady } from './logo';
@@ -770,7 +770,7 @@ export default function HighStriker() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (half the best swing's 0–100 power, +10 for ringing the bell). */}
-          <GameTicketAward
+          <GameAwards
             game="highstriker"
             tickets={Math.round(best / 2) + (best >= 100 ? 10 : 0)}
             sessionId={sessionId}

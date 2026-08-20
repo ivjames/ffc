@@ -13,7 +13,7 @@ import { activeChallengeFor, clearActiveChallenge } from '../../lib/activeChalle
 import { playChallenge, sideLabel, type ChallengeView } from '../../lib/challengesApi';
 
 // Drop-in high-score board for a mini-game's end screen. Same shape and same
-// self-gating contract as <GameTicketAward>: mount it with the round's score
+// self-gating contract as <GameAwards>: mount it with the round's score
 // and a per-round session id, and it handles the rest.
 //
 //   <GameHighScore game="skeeball" score={total} sessionId={sessionId} />

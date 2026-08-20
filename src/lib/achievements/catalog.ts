@@ -222,7 +222,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { key: 'big_payout', label: 'Big Payout', how: 'Earn a hundred tickets from a single arcade round.', icon: 'award.ticket', category: 'arcade', local: true },
   { key: 'regular_player', label: 'Frequent Flyer', how: 'Play fifty arcade rounds.', icon: 'state.timer', category: 'arcade', local: true },
   { key: 'trivia_buff', label: 'Trivia Buff', how: 'Answer every trivia question correctly.', icon: 'game.trivia', category: 'arcade', local: true },
-  // Per-game skill feats. Each game reports its own through GameTicketAward's
+  // Per-game skill feats. Each game reports its own through GameAwards's
   // `feat` prop, because only that game knows what the moment was.
   { key: 'turkey', label: 'Turkey', how: 'Bowl three strikes in a row.', icon: 'game.bowling', category: 'arcade', local: true },
   { key: 'bullseye', label: 'Bullseye', how: 'Land a dart in the inner bull.', icon: 'game.darts', category: 'arcade', local: true },
