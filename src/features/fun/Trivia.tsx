@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Screen, TopBar, Content, Button, BrandMark } from '../../ui/components';
 import { TRIVIA, type TriviaQuestion } from '../../data/funContent';
 import { playClick, playDing, playBuzz, playFanfare } from '../../lib/sound';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import Icon from '../../ui/Icon';
 
@@ -104,7 +104,7 @@ export default function Trivia() {
             <BrandMark className="mt-1 h-4 w-40 text-fairway-400" />
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round. */}
-          <GameTicketAward
+          <GameAwards
             game="trivia"
             tickets={score * TICKETS_PER_CORRECT}
             sessionId={sessionId}

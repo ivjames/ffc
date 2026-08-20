@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo, logoReady } from './logo';
@@ -1334,7 +1334,7 @@ export default function Bowling() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (1 ticket per 3 points — a perfect 300 pays 100). */}
-          <GameTicketAward
+          <GameAwards
             game="bowling"
             tickets={Math.round(score / 3)}
             sessionId={sessionId}

@@ -7,7 +7,7 @@ import Icon from '../../ui/Icon';
 
 // "Your order is in the kitchen" re-entry point — placed orders otherwise
 // have their id only in the /food/order/:id URL, so navigating away would
-// orphan them. Self-gating like GameTicketAward: renders nothing unless this
+// orphan them. Self-gating like GameAwards: renders nothing unless this
 // venue has the ordering integration AND this device placed an order
 // recently. Dropped onto Home and the Food screen.
 

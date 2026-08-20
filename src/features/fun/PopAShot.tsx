@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Screen, TopBar, Content, Button } from '../../ui/components';
-import GameTicketAward from './GameTicketAward';
+import GameAwards from './GameAwards';
 import GameHighScore from './GameHighScore';
 import { useFitCanvas } from './useFitCanvas';
 import { drawLogo } from './logo';
@@ -829,7 +829,7 @@ export default function PopAShot() {
           </div>
           {/* POS add-on: venues with gameRewards credit tickets for the round
               (3 tickets per 2 points, capped at 100). */}
-          <GameTicketAward
+          <GameAwards
             game="popashot"
             tickets={Math.min(100, Math.round(score * 1.5))}
             sessionId={sessionId}
