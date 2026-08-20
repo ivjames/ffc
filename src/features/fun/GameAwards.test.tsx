@@ -9,17 +9,18 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactElement } from 'react';
-import type { ActivityMark } from '../../types';
+import type { ActivityMark, LocalRound } from '../../types';
 
 // In-memory stand-ins for the device stores, with a real markActivity so the
 // record-then-detect sequencing is exercised end to end.
 const db = vi.hoisted(() => ({
+  rounds: [] as LocalRound[],
   activity: new Map<string, ActivityMark>(),
   banked: [] as { key: string; earnedAt: number }[],
   saved: [] as string[],
 }));
 vi.mock('../../db', () => ({
-  getAllRounds: () => Promise.resolve([]),
+  getAllRounds: () => Promise.resolve([...db.rounds]),
   getActivity: () => Promise.resolve([...db.activity.values()]),
   getEarnedBadges: () => Promise.resolve([...db.banked]),
   putEarnedBadges: (keys: string[]) => {
@@ -62,6 +63,7 @@ vi.mock('../../lib/pos', () => ({ usePos: () => ({ gameRewards: pos.gameRewards 
 vi.mock('../../lib/pos/gameRewards', () => ({ awardGameTickets: () => Promise.resolve(null) }));
 
 import GameAwards from './GameAwards';
+import BadgeUnlocks from '../../ui/BadgeUnlocks';
 
 const renderAwards = (ui: ReactElement) =>
   render(
@@ -74,6 +76,7 @@ const renderAwards = (ui: ReactElement) =>
   );
 
 beforeEach(() => {
+  db.rounds = [];
   db.activity.clear();
   db.banked = [];
   db.saved = [];
@@ -157,6 +160,28 @@ describe('GameAwards badge surfacing', () => {
     expect(db.activity.get('feat:bullseye')?.count).toBe(1);
   });
 
+  it('backfills provable history silently, showing only what this round unlocked', async () => {
+    // A device with history but an empty bank (the player never opened the
+    // wall): the finish screen must not dump every historically-provable badge
+    // as "just unlocked" — only what THIS round earned.
+    for (const [id, kind, name] of [
+      ['game:darts', 'game', 'darts'],
+      ['feat:bullseye', 'feat', 'bullseye'],
+    ] as const) {
+      db.activity.set(id, { id, kind, name, count: 1, best: 0, firstAt: 1, lastAt: 1 });
+    }
+    renderAwards(
+      <GameAwards game="whackamole" tickets={30} sessionId="s7" feat="mole-streak" />,
+    );
+    await waitFor(() => expect(screen.getByText('Mole Patrol')).toBeInTheDocument());
+    // History-provable badges are banked for the wall, but not shown here.
+    expect(db.saved).toContain('arcade_rookie');
+    expect(db.saved).toContain('bullseye');
+    expect(screen.queryByText('Arcade Rookie')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bullseye')).not.toBeInTheDocument();
+    expect(screen.getByText(/Achievement unlocked/i)).toBeInTheDocument();
+  });
+
   it('keeps the ticket nudge working beside the badges', async () => {
     // gameRewards venue, no linked card: the badge card and the link-your-card
     // nudge both render — composing the two must not gate the badges.
@@ -166,5 +191,42 @@ describe('GameAwards badge surfacing', () => {
     );
     await waitFor(() => expect(screen.getByText('Mole Patrol')).toBeInTheDocument());
     expect(screen.getByText(/link your rewards card/i)).toBeInTheDocument();
+  });
+});
+
+// The golf summary mounts BadgeUnlocks directly, naming the just-finished
+// round as the event via newRoundId so the before-pass judges the history
+// without it.
+describe('BadgeUnlocks newRoundId (golf summary)', () => {
+  const aceRound = (clientId: string): LocalRound => {
+    const card: (number | null)[] = Array(18).fill(3);
+    card[4] = 1;
+    return {
+      clientId,
+      courseId: 'gone', // not in the (empty) mocked catalog — pars snapshot wins
+      pars: Array(18).fill(3),
+      playerTags: ['ACE'],
+      scores: { 0: card },
+      createdAt: 1,
+      completedAt: 1,
+      syncState: 'synced',
+    } as LocalRound;
+  };
+
+  it('surfaces what the new round itself proves', async () => {
+    db.rounds = [aceRound('new')];
+    renderAwards(<BadgeUnlocks sessionId="new" newRoundId="new" />);
+    await waitFor(() => expect(screen.getByText('Hole-in-One')).toBeInTheDocument());
+    expect(db.saved).toContain('hole_in_one');
+  });
+
+  it('does not re-show badges older rounds already proved', async () => {
+    // The old round already proves the ace, so the new one must not re-show it
+    // — though it still banks, and genuinely new CAREER badges (two rounds in
+    // one day, a déjà-vu total…) that only exist once both rounds do may show.
+    db.rounds = [aceRound('old'), aceRound('new')];
+    renderAwards(<BadgeUnlocks sessionId="new" newRoundId="new" />);
+    await waitFor(() => expect(db.saved).toContain('hole_in_one'));
+    expect(screen.queryByText('Hole-in-One')).not.toBeInTheDocument();
   });
 });

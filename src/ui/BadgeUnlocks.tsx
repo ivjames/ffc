@@ -19,9 +19,19 @@ import Icon from './Icon';
 //
 //   <BadgeUnlocks sessionId={sessionId} mark={async () => { …markActivity… }} />
 //
-// `mark` (optional) records the activity the round produced and is awaited
-// BEFORE detection reads the activity store — two sibling effects racing over
-// IndexedDB would sometimes judge the round before its own feat landed.
+// Detection runs TWICE — once on the state before this event, once after — and
+// only the difference is shown. The banked set can't stand in for "before": a
+// device with plenty of history whose player never opened the wall has an
+// empty bank, and judging against it would dump every historically-provable
+// badge onto one unrelated finish screen as "just unlocked". Everything the
+// before-pass proves is still banked, just silently — surfacing it was always
+// the wall's job.
+//
+// The event is described by the props: `mark` (optional) records the activity
+// this round produced, awaited between the two passes — two sibling effects
+// racing over IndexedDB would sometimes judge the round before its own feat
+// landed. `newRoundId` (optional) names the stored round that IS the event
+// (the golf summary), so the before-pass judges the history without it.
 // `sessionId` is the once-only key: a re-render or StrictMode's double effect
 // can't re-mark or re-detect the same round.
 //
@@ -30,10 +40,13 @@ import Icon from './Icon';
 export default function BadgeUnlocks({
   sessionId,
   mark,
+  newRoundId,
 }: {
   sessionId: string;
-  /** Record this round's activity marks; awaited before detection runs. */
+  /** Record this round's activity marks; awaited between the two passes. */
   mark?: () => Promise<void>;
+  /** The stored round this event IS — excluded from the before-pass. */
+  newRoundId?: string;
 }) {
   const navigate = useNavigate();
   const signedIn = useSession().user != null;
@@ -45,8 +58,7 @@ export default function BadgeUnlocks({
     if (ran.current === sessionId) return;
     ran.current = sessionId;
     void (async () => {
-      await mark?.();
-      const [rounds, activity, banked] = await Promise.all([
+      const [rounds, activityBefore, banked] = await Promise.all([
         getAllRounds(),
         getActivity(),
         getEarnedBadges(),
@@ -55,22 +67,28 @@ export default function BadgeUnlocks({
       // Same context the wall uses, so the two can never disagree about what
       // just unlocked. detectEarned unions in `alreadyEarned`, so the meta
       // badges ("earn twenty others") count what's banked too.
-      const all = detectEarned(rounds, {
-        activity,
-        app: { installed: isStandalone(), signedIn, carded },
-        alreadyEarned: [...known],
-      });
-      const freshKeys = [...all].filter((k) => !known.has(k));
+      const app = { installed: isStandalone(), signedIn, carded };
+      const before = detectEarned(
+        newRoundId ? rounds.filter((r) => r.clientId !== newRoundId) : rounds,
+        { activity: activityBefore, app, alreadyEarned: [...known] },
+      );
+      await mark?.();
+      // Only the activity store can have changed between the passes.
+      const activity = mark ? await getActivity() : activityBefore;
+      const all = detectEarned(rounds, { activity, app, alreadyEarned: [...known] });
+      // Bank EVERYTHING newly provable — the badge is earned whether or not
+      // this render survives — but show only what this event unlocked.
+      const toBank = [...all].filter((k) => !known.has(k));
+      if (toBank.length > 0) await putEarnedBadges(toBank);
+      const freshKeys = [...all].filter((k) => !before.has(k));
       if (freshKeys.length === 0) return;
-      // Bank first: the badge is earned whether or not this render survives.
-      await putEarnedBadges(freshKeys);
       setFresh(
         freshKeys
           .map((k) => ACHIEVEMENTS_BY_KEY.get(k))
           .filter((a): a is Achievement => a != null),
       );
     })();
-  }, [sessionId, mark, signedIn, carded]);
+  }, [sessionId, mark, newRoundId, signedIn, carded]);
 
   if (fresh.length === 0) return null;
 

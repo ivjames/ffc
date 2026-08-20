@@ -277,8 +277,12 @@ export default function Summary() {
             next visit to the wall. A first-ever ace can appear in both cards:
             RewardsCard is the round's server grants for every player, this is
             this device's own wall lighting up. Gated on completedAt so the
-            detection judges the finished round, not the in-progress one. */}
-        {round.completedAt != null && <BadgeUnlocks sessionId={round.clientId} />}
+            detection judges the finished round, not the in-progress one;
+            newRoundId marks this round as the event, so only what IT newly
+            proves is surfaced. */}
+        {round.completedAt != null && (
+          <BadgeUnlocks sessionId={round.clientId} newRoundId={round.clientId} />
+        )}
 
         <div className="mt-4 space-y-2">
           <Button
