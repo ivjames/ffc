@@ -11,7 +11,7 @@ import { VENDORED_ART, FILLED_ART } from './vendored.generated';
 //                 basketball, baseball, hockey, steering-wheel, flag-checkered.
 //                 FILLED on a 256 grid — a different rendering mode, taken
 //                 anyway because these were the weakest drawings in the set.
-//   BESPOKE (11)  what remains here. A skee-ball alley, a claw machine, a
+//   BESPOKE (12)  what remains here. A skee-ball alley, a claw machine, a
 //                 milk-bottle pyramid, a high striker — nobody draws these.
 //                 They want a real illustrator; manifest.ts holds the briefs.
 //
@@ -130,6 +130,16 @@ const BESPOKE_ART = {
       <path d="M3 8h9v4H8l-2 4H4l1.5-4H3z" />
       <path d="M12 9.5h3" />
       <path d="M17 7.5c1 .8 1 1.7 0 2.5M20 6c2 1.8 2 4.2 0 6" />
+    </>
+  ),
+
+  // Sheep Drive — a sheep in profile: cloud body, stub legs, low round head.
+  // The only farm animal in the set, so it carries no collision note.
+  'game.sheep-drive': (
+    <>
+      <path d="M6.5 8.5a3 3 0 0 1 1.6-3.6 3.2 3.2 0 0 1 4-1.4 3.2 3.2 0 0 1 4.4.8 3 3 0 0 1 2.6 3.2 2.8 2.8 0 0 1 .3 4.7 3 3 0 0 1-3.4 2.6h-6a3 3 0 0 1-3.5-2.8 2.9 2.9 0 0 1 0-3.5z" />
+      <path d="M9 15v4M15.5 15v4" />
+      <circle cx="5.5" cy="10.5" r="2.2" />
     </>
   ),
 

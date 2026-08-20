@@ -97,6 +97,7 @@ export const SCORED_GAMES = Object.freeze([
   { key: "pinball", label: "Pinball", direction: "high", unit: "points", noun: "points" },
   { key: "popashot", label: "Pop-a-Shot", direction: "high", unit: "count", noun: "baskets" },
   { key: "ringtoss", label: "Ring Toss", direction: "high", unit: "points", noun: "points" },
+  { key: "sheepdrive", label: "Sheep Drive", direction: "high", unit: "points", noun: "points" },
   { key: "shootinggallery", label: "Shooting Gallery", direction: "high", unit: "points", noun: "points" },
   { key: "skeeball", label: "Skee-Ball", direction: "high", unit: "points", noun: "points" },
   { key: "trivia", label: "Trivia", direction: "high", unit: "count", noun: "correct" },

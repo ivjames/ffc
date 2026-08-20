@@ -163,6 +163,14 @@ const TILES: Tile[] = [
     earns: true,
   },
   {
+    to: '/arcade/sheep',
+    icon: 'game.sheep-drive',
+    title: 'Sheep Drive',
+    blurb: 'Send the dog — herd the whole flock into the pen.',
+    accent: '#a3e635',
+    earns: true,
+  },
+  {
     to: '/arcade/claw',
     icon: 'game.claw-machine',
     title: 'Claw Machine',

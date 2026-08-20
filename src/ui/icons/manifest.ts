@@ -93,6 +93,7 @@ export const ICONS = {
   'game.high-striker': { means: 'High striker — the strongman bell.', draw: 'A claw hammer, head raised. The long handle is what separates it from whack-a-mole’s wide mallet.', not: 'game.whack-a-mole, order.ready — 🔨 and 🔔 both collided here.', placeholder: '🔔' },
   'game.trivia': { means: 'Trivia.', draw: 'A brain in plan, two lobes.', placeholder: '🧠' },
   'game.water-gun-race': { means: 'The water gun race.', draw: 'A water pistol with a JET aimed at a rising target.', not: 'score.water-hazard — 💦 covered both; that one is a splash.', placeholder: '💦' },
+  'game.sheep-drive': { means: 'Sheep Drive — the herding game.', draw: 'A sheep in profile: a woolly cloud of a body on two stub legs, round dark head low at the front.', placeholder: '🐑' },
   'game.challenge-spinner': { means: 'The challenge spinner wheel.', draw: 'A segmented wheel with a pointer at the top.', placeholder: '🔻' },
 
   // ── Putting outcomes ──────────────────────────────────────────────────────
@@ -227,6 +228,7 @@ export const ROLE_ICONS: Record<string, IconName> = {
   'arcade.pinball 🕹️': 'game.pinball',
   'arcade.putt ⛳️': 'game.arcade-putt',
   'arcade.rings 🎪': 'game.ring-toss',
+  'arcade.sheep 🐑': 'game.sheep-drive',
   'arcade.skeeball 🎳': 'game.skee-ball',
   'arcade.striker 🔔': 'game.high-striker',
   'arcade.trivia 🧠': 'game.trivia',

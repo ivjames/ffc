@@ -44,6 +44,7 @@ const GAME_ROUTES: Record<string, string> = {
   pinball: '/arcade/pinball',
   popashot: '/arcade/hoops',
   ringtoss: '/arcade/rings',
+  sheepdrive: '/arcade/sheep',
   shootinggallery: '/arcade/gallery',
   skeeball: '/arcade/skeeball',
   trivia: '/arcade/trivia',

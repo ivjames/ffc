@@ -34,7 +34,9 @@ export const GAMES = [skeeball, ringtoss, popashot, highstriker, axethrow, darts
 export const BY_KEY = new Map(GAMES.map((g) => [g.key, g]));
 
 /** Server-registry games with no policy yet, and why. */
-export const UNSUPPORTED = [];
+export const UNSUPPORTED = [
+  ["sheepdrive", "reactive herding — the flock's positions change frame by frame, so a gesture policy can't play it"],
+];
 
 export function resolve(keys) {
   if (!keys || keys.length === 0) return GAMES;

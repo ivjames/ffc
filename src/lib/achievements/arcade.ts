@@ -32,6 +32,7 @@ export const ARCADE_GAME_KEYS = [
   'pinball',
   'popashot',
   'ringtoss',
+  'sheepdrive',
   'shootinggallery',
   'skeeball',
   'trivia',

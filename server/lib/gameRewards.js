@@ -32,6 +32,7 @@ export const GAME_REWARD_GAMES = [
   { key: "pinball", label: "Pinball" },
   { key: "popashot", label: "Pop-a-Shot" },
   { key: "ringtoss", label: "Ring Toss" },
+  { key: "sheepdrive", label: "Sheep Drive" },
   { key: "shootinggallery", label: "Shooting Gallery" },
   { key: "skeeball", label: "Skee-Ball" },
   { key: "trivia", label: "Trivia" },

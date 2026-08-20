@@ -47,6 +47,7 @@ import HighStriker from './features/fun/HighStriker';
 import RingToss from './features/fun/RingToss';
 import MilkBottle from './features/fun/MilkBottle';
 import WaterGunRace from './features/fun/WaterGunRace';
+import SheepDrive from './features/fun/SheepDrive';
 import Pinball from './features/fun/Pinball';
 import Food from './features/food/Food';
 import Checkout from './features/food/Checkout';
@@ -221,6 +222,7 @@ export default function App() {
           <Route path="/arcade/rings" element={<RingToss />} />
           <Route path="/arcade/bottles" element={<MilkBottle />} />
           <Route path="/arcade/watergun" element={<WaterGunRace />} />
+          <Route path="/arcade/sheep" element={<SheepDrive />} />
           <Route path="/arcade/pinball" element={<Pinball />} />
           </Route>
           {/* Native F&B ordering — POS-integration add-on, rendered only for
