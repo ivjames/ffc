@@ -30,7 +30,9 @@ import {
 // §12 Bowling — the sixth attraction mini-game. Swipe up the lane to roll (aim
 // with the angle, power with the length; an angled shot hooks a little). Real
 // ball↔pin↔pin physics knock the rack down, scored with standard 10-frame rules
-// (strikes, spares, 10th-frame fill balls). Canvas, client-side, offline.
+// (strikes, spares, 10th-frame fill balls). An optional bumper mode (persisted
+// per device) bounces the lane edges instead of guttering. Canvas, client-side,
+// offline.
 
 // —— Lane + physics (logical units; the canvas scales to fit) ————————————————
 const W = 340;
@@ -59,6 +61,8 @@ const MAX_ROLL_MS = 2200; // hard stop for a roll's simulation
 const SWEEP_MS = 950; // pause showing the fallen pins before the sweep clears them
 const TURKEY_SWEEP_MS = 1900; // longer hold on a turkey so the bird gets its flight
 const REST_SPEED = 0.5; // below this a ball/pin is parked so micro-jitter can't stall settle
+const GUTTER_OUT = 10; // outer cap rail of each gutter channel (sim x, mirrored)
+const BUMPER_REST = 0.72; // bumper bounce keeps most of the ball's lateral speed — lively, not pinball
 
 type Pin = { x: number; y: number; vx: number; vy: number; ox: number; oy: number; down: boolean };
 /** What the last roll earned, if anything — drives the banner, the shake and
@@ -230,7 +234,30 @@ type GS = {
   sweepMs: number; // how long this sweep pause runs (a turkey gets longer)
   lastClack: number; // throttle so a pile-up doesn't machine-gun the clack
   afterSweep: 'rack' | 'clear' | 'done'; // what the sweep resolves to
+  bumpers: boolean; // bumper mode: the lane edges bounce instead of swallowing
+  bumpHits: number; // total bumper bounces — FX edge-detects the increment
+  bumpX: number; // where the last bounce landed (sim units, for the spark)
+  bumpY: number;
 };
+
+// Bumper preference, per device. Both accessors swallow storage errors —
+// private mode can throw on the mere touch — so the toggle still works for
+// the session even when it can't persist.
+const BUMPERS_KEY = 'ffc-bowling-bumpers';
+function loadBumpers(): boolean {
+  try {
+    return localStorage.getItem(BUMPERS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function saveBumpers(v: boolean) {
+  try {
+    localStorage.setItem(BUMPERS_KEY, v ? '1' : '0');
+  } catch {
+    /* private mode — non-persistent is fine */
+  }
+}
 
 function freshBall(): Ball {
   return { x: START.x, y: START.y, vx: 0, vy: 0, gutter: false, rolling: false };
@@ -255,6 +282,10 @@ function freshGS(): GS {
     sweepMs: SWEEP_MS,
     lastClack: -1e9,
     afterSweep: 'rack',
+    bumpers: loadBumpers(),
+    bumpHits: 0,
+    bumpX: 0,
+    bumpY: 0,
   };
 }
 
@@ -280,12 +311,31 @@ function step(gs: GS, now: number) {
   }
 
   // Gutters: once past the lane edge the ball drops in and can't hit pins.
+  // With bumpers up the edge bounces instead — clamp back onto the lane and
+  // reflect (only an outward vx, so a ball already hooking back in isn't
+  // re-kicked), never capturing, so a bumper game can't gutter.
   if (!ball.gutter) {
-    if (ball.x < LANE_L + BALL_R) {
+    const overL = ball.x < LANE_L + BALL_R;
+    const overR = ball.x > LANE_R - BALL_R;
+    if (gs.bumpers) {
+      if (overL || overR) {
+        ball.x = overL ? LANE_L + BALL_R : LANE_R - BALL_R;
+        if (overL ? ball.vx < 0 : ball.vx > 0) {
+          ball.vx = -ball.vx * BUMPER_REST;
+          gs.bumpHits += 1;
+          gs.bumpX = overL ? LANE_L : LANE_R;
+          gs.bumpY = ball.y;
+          if (now - gs.lastClack > 55) {
+            gs.lastClack = now;
+            playPinClack(0.5);
+          }
+        }
+      }
+    } else if (overL) {
       ball.x = LANE_L + BALL_R - 2;
       ball.vx = 0;
       ball.gutter = true;
-    } else if (ball.x > LANE_R - BALL_R) {
+    } else if (overR) {
       ball.x = LANE_R - BALL_R + 2;
       ball.vx = 0;
       ball.gutter = true;
@@ -386,6 +436,7 @@ type FX = {
   turkeys: Turkey[]; // birds launched out of the pit on three-in-a-row
   downSeen: Map<Pin, boolean>; // pins already spark-flashed (so each falls once)
   prevPhase: Phase; // for edge-detecting the roll → sweep transition
+  prevBumpHits: number; // for edge-detecting a bumper bounce
 };
 
 /** A live bird: screen-space (px) ballistics, tumbling and flapping as it goes.
@@ -403,7 +454,7 @@ type Turkey = {
 };
 
 function freshFX(): FX {
-  return { trail: [], particles: [], shake: 0, flash: 0, floaters: [], turkeys: [], downSeen: new Map(), prevPhase: 'aim' };
+  return { trail: [], particles: [], shake: 0, flash: 0, floaters: [], turkeys: [], downSeen: new Map(), prevPhase: 'aim', prevBumpHits: 0 };
 }
 
 const PURPLE_LIGHT = '#e9d5ff';
@@ -480,6 +531,13 @@ function updateFX(fx: FX, gs: GS, dt: number) {
       const q = projectPin(p.x, p.y);
       spawnBurst(fx.particles, q.x, q.y, 6, 50 + 90 * q.s, PURPLE_LIGHT);
     }
+  }
+
+  // A bumper bounce throws a small spark at the point of contact.
+  if (gs.bumpHits > fx.prevBumpHits) {
+    fx.prevBumpHits = gs.bumpHits;
+    const q = project(gs.bumpX, gs.bumpY);
+    spawnBurst(fx.particles, q.x, q.y, 5, 40 + 70 * q.s, PURPLE);
   }
 
   // On the roll → sweep edge, celebrate what the roll earned: a turkey throws
@@ -736,12 +794,60 @@ function drawTurkeys(ctx: CanvasRenderingContext2D, list: Turkey[]) {
  *  in proportion to the (boosted) pins at the deck. */
 const ballView = (s: number) => 1 + (1 - s) * 1.35;
 
-/** The glossy bowling ball, shrinking as it rolls away from the bowler. */
-function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number) {
+/** The glossy bowling ball, shrinking as it rolls away from the bowler. A
+ *  gutter ball draws sunken instead: partly below the lane lip, a touch
+ *  smaller and dimmer with a tight shadow, so the drop-in reads at a glance. */
+function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number, sunk: boolean) {
   const q = project(x, y);
+  if (sunk) {
+    const r = Math.max(3, BALL_R * q.s * ballView(q.s) * 0.82);
+    drawShadow(ctx, q.x, q.y + r * 0.12, r * 0.65, r * 0.26, 0.42);
+    ctx.save();
+    ctx.globalAlpha = 0.72;
+    drawSphere(ctx, q.x, q.y + r * 0.2, r, PURPLE_LIGHT, PURPLE, PURPLE_DEEP, { rim: true });
+    ctx.restore();
+    return;
+  }
   const r = Math.max(3, BALL_R * q.s * ballView(q.s));
   drawShadow(ctx, q.x, q.y + r * 0.3, r * 0.95, r * 0.4, 0.35);
   drawSphere(ctx, q.x, q.y - r * 0.45, r, PURPLE_LIGHT, PURPLE, PURPLE_DEEP, { rim: true });
+}
+
+// —— Bumper rails ——
+// Two inflated neon tubes lying in the gutters when bumper mode is on. Drawn
+// per-frame in the dynamic layer, NOT in the cached alley — the toggle would
+// otherwise have to invalidate the cache — but they're only two quads and two
+// lines, so that's cheap.
+const BUMPER_TOP = HEAD_Y - PIN_GAP_Y * 3; // up to the rack's back row
+const BUMPER_BOT = H - 76; // from just past the foul line
+const BUMPER_HALF = 4; // rail half-width, sim units
+
+function drawBumperRails(ctx: CanvasRenderingContext2D) {
+  for (const [outer, inner] of [
+    [GUTTER_OUT, LANE_L],
+    [W - GUTTER_OUT, LANE_R],
+  ] as const) {
+    const mid = (outer + inner) / 2;
+    const a = project(mid - BUMPER_HALF, BUMPER_BOT);
+    const b = project(mid + BUMPER_HALF, BUMPER_BOT);
+    const c = project(mid + BUMPER_HALF, BUMPER_TOP);
+    const d = project(mid - BUMPER_HALF, BUMPER_TOP);
+    const g = ctx.createLinearGradient(0, c.y, 0, a.y);
+    g.addColorStop(0, withAlpha(PURPLE_DEEP, 0.9));
+    g.addColorStop(1, withAlpha(PURPLE, 0.9));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(c.x, c.y);
+    ctx.lineTo(d.x, d.y);
+    ctx.closePath();
+    ctx.fill();
+    // A bright core down the crown is what makes the quad read as a tube.
+    const m0 = project(mid, BUMPER_BOT);
+    const m1 = project(mid, BUMPER_TOP);
+    neonLine(ctx, m0.x, m0.y - 1, m1.x, m1.y - 1, PURPLE_LIGHT, 2, 10);
+  }
 }
 
 // —— Cached static layer ——
@@ -782,26 +888,58 @@ function paintAlley(ctx: CanvasRenderingContext2D) {
   // alley, where "small and glowing" is exactly how the real thing reads.
   drawLogo(ctx, W / 2, farL.y - 16, { variant: 'wordmark', width: 76, tint: PURPLE, alpha: 0.8 });
 
-  // —— Gutters: converging recessed channels either side of the lane ——
+  // —— Gutters: converging recessed U-channels either side of the lane ——
+  // Depth is sold in three passes per side: the channel floor, a darker
+  // groove pooled down its center (a tapered quad, so the projection narrows
+  // it with distance), and lit rim edges — the lane-side board catches a
+  // sliver of the wood's warmth, the outer cap rail a whisper of the house
+  // purple. All quiet tones: the channels have to read, not compete with the
+  // lane.
   const gut = ctx.createLinearGradient(0, farL.y, 0, nearL.y);
   gut.addColorStop(0, '#0a0813');
   gut.addColorStop(1, '#141021');
-  ctx.fillStyle = gut;
-  for (const [x0, x1] of [
-    [10, LANE_L],
-    [LANE_R, W - 10],
+  for (const [outer, inner] of [
+    [GUTTER_OUT, LANE_L],
+    [W - GUTTER_OUT, LANE_R],
   ] as const) {
-    const a = project(x0, H);
-    const b = project(x1, H);
-    const c = project(x1, 0);
-    const d = project(x0, 0);
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.lineTo(c.x, c.y);
-    ctx.lineTo(d.x, d.y);
-    ctx.closePath();
+    const quad = (x0: number, x1: number) => {
+      const a = project(x0, H);
+      const b = project(x1, H);
+      const c = project(x1, 0);
+      const d = project(x0, 0);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.lineTo(c.x, c.y);
+      ctx.lineTo(d.x, d.y);
+      ctx.closePath();
+    };
+    // Channel floor.
+    ctx.fillStyle = gut;
+    quad(outer, inner);
     ctx.fill();
+    // Center groove — the darkest line of the channel is its bottom.
+    const mid = (outer + inner) / 2;
+    const half = Math.abs(inner - outer) * 0.26;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    quad(mid - half, mid + half);
+    ctx.fill();
+    // Rim edges. Plain strokes, not neon — a lip, not a light fixture.
+    const edge = (x: number, style: string, width: number) => {
+      const a = project(x, H);
+      const b = project(x, 0);
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    };
+    // The lane fill paints after this block and would cover half a stroke laid
+    // exactly on LANE_L/LANE_R, so the lip highlight sits a hair inside the
+    // channel.
+    edge(inner + Math.sign(outer - inner) * 0.9, 'rgba(255,226,170,0.22)', 1.5); // lane-edge board
+    edge(outer, withAlpha(PURPLE_DEEP, 0.6), 1.8); // outer cap rail
   }
 
   // —— Lane: polished boards converging on the pin deck ——
@@ -931,6 +1069,9 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     ctx.translate(s.x, s.y);
   }
 
+  // Bumper rails first, so the ball and pins paint over them.
+  if (gs.bumpers) drawBumperRails(ctx);
+
   // Rolling ball motion streak, tapering behind the ball.
   for (let i = 0; i < fx.trail.length; i++) {
     const t = fx.trail[i];
@@ -951,7 +1092,7 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
     sy: projectPin(p.x, p.y).y,
     d: p.down ? () => drawFallenPin(ctx, p) : () => drawStandingPin(ctx, p),
   }));
-  items.push({ sy: project(gs.ball.x, gs.ball.y).y, d: () => drawBall(ctx, gs.ball.x, gs.ball.y) });
+  items.push({ sy: project(gs.ball.x, gs.ball.y).y, d: () => drawBall(ctx, gs.ball.x, gs.ball.y, gs.ball.gutter) });
   items.sort((a, b) => a.sy - b.sy);
   for (const it of items) it.d();
 
@@ -1047,8 +1188,21 @@ export default function Bowling() {
   const [note, setNote] = useState('');
   const [turkeys, setTurkeys] = useState(0);
   const [rolls, setRolls] = useState<number[]>([]);
+  const [bumpers, setBumpers] = useState(() => loadBumpers());
   // One id per played round — the ticket award's idempotency key.
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+
+  // Flip the preference everywhere at once: React state (the pill), the live
+  // sim (gsRef) and storage. The button is disabled mid-roll, so a live ball
+  // can't be rescued by raising the bumpers under it.
+  const toggleBumpers = useCallback(() => {
+    setBumpers((v) => {
+      const next = !v;
+      gsRef.current.bumpers = next;
+      saveBumpers(next);
+      return next;
+    });
+  }, []);
 
   const playing = phase !== 'done';
   useFitCanvas(canvasRef, W, H, playing);
@@ -1293,7 +1447,11 @@ export default function Bowling() {
   }, []);
 
   const restart = useCallback(() => {
+    // Carry the live bumper flag across, not loadBumpers(): where storage can't
+    // persist (private mode) the pill and the sim must still agree.
+    const bumpers = gsRef.current.bumpers;
     gsRef.current = freshGS();
+    gsRef.current.bumpers = bumpers;
     fxRef.current = freshFX();
     setScore(0);
     setFrame(0);
@@ -1359,6 +1517,18 @@ export default function Bowling() {
           Frame <span className="text-fairway-100">{Math.min(frame + 1, 10)}</span>
           <span className="font-normal text-fairway-400"> / 10</span>
         </span>
+        <button
+          type="button"
+          onClick={toggleBumpers}
+          disabled={phase === 'rolling'}
+          className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+            bumpers
+              ? 'border-fairway-500 bg-fairway-700 text-fairway-50'
+              : 'border-fairway-800 bg-fairway-900 text-fairway-400'
+          }`}
+        >
+          Bumpers {bumpers ? 'on' : 'off'}
+        </button>
         <span className="text-fairway-300">
           Score <span className="font-bold text-fairway-100">{score}</span>
         </span>
@@ -1381,7 +1551,12 @@ export default function Bowling() {
 
       <p className="flex h-16 shrink-0 items-center justify-center px-4 pb-4 pt-3 text-center text-sm text-fairway-100/80">
         <span className="line-clamp-2">
-          {phase === 'rolling' ? 'Rolling…' : note || 'Swipe up the lane to roll — angle it for a hook.'}
+          {phase === 'rolling'
+            ? 'Rolling…'
+            : note ||
+              (bumpers
+                ? 'Bumpers up — swipe up the lane to roll.'
+                : 'Swipe up the lane to roll — angle it for a hook.')}
         </span>
       </p>
     </div>
