@@ -390,7 +390,10 @@ export function pinsSettled(pins: Pin[]): boolean {
     if (!p.down) {
       const L = hyp(p.lx, p.ly);
       if (L >= TIP) return false; // mid-topple
-      if (L > 0.01 && hyp(p.lvx, p.lvy) > 0.004) return false; // still wobbling
+      // Still wobbling while EITHER holds: at the swing's peak the angular
+      // velocity is ~0 with the lean at max, and at the bottom the lean is ~0
+      // with the velocity at max — both have to die out before it's at rest.
+      if (L > 0.01 || hyp(p.lvx, p.lvy) > 0.004) return false;
     }
   }
   return true;

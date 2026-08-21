@@ -119,6 +119,17 @@ describe('pin bodies', () => {
     expect(pinsSettled(pins)).toBe(true);
   });
 
+  it('pinsSettled waits out a wobble even at the swing peak, where angular velocity is ~0', () => {
+    const pins = makePins().slice(0, 1);
+    pins[0].lx = TIP * 0.5; // leaning mid-wobble…
+    pins[0].lvx = 0; // …caught exactly at the peak of the swing
+    expect(pinsSettled(pins)).toBe(false);
+    const ball = freshBall();
+    for (let i = 0; i < 900; i++) stepRoll(ball, pins, false);
+    expect(pins[0].down).toBe(false);
+    expect(pinsSettled(pins)).toBe(true); // recovered upright, then settled
+  });
+
   it('pinsSettled waits out a mid-topple pin', () => {
     const pins = makePins().slice(0, 1);
     pins[0].lx = TIP * 1.5; // past the balance point, still falling
