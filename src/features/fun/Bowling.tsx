@@ -62,7 +62,7 @@ const SWEEP_MS = 950; // pause showing the fallen pins before the sweep clears t
 const TURKEY_SWEEP_MS = 1900; // longer hold on a turkey so the bird gets its flight
 const REST_SPEED = 0.5; // below this a ball/pin is parked so micro-jitter can't stall settle
 const GUTTER_OUT = 10; // outer cap rail of each gutter channel (sim x, mirrored)
-const BUMPER_REST = 0.72; // bumper bounce keeps most of the ball's lateral speed — lively, not pinball
+const BUMPER_REST = 0.95; // bumper bounce keeps nearly all lateral speed — bank shots are the point
 
 type Pin = { x: number; y: number; vx: number; vy: number; ox: number; oy: number; down: boolean };
 /** What the last roll earned, if anything — drives the banner, the shake and
@@ -331,12 +331,10 @@ function step(gs: GS, now: number) {
           }
         }
       }
-    } else if (overL) {
-      ball.x = LANE_L + BALL_R - 2;
-      ball.vx = 0;
-      ball.gutter = true;
-    } else if (overR) {
-      ball.x = LANE_R - BALL_R + 2;
+    } else if (overL || overR) {
+      // Drop into the channel's center, not the lane edge — a gutter ball has
+      // to be seen riding the gutter the rest of the way down.
+      ball.x = overL ? (GUTTER_OUT + LANE_L) / 2 : (W - GUTTER_OUT + LANE_R) / 2;
       ball.vx = 0;
       ball.gutter = true;
     }
