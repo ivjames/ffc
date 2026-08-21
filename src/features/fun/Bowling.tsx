@@ -27,71 +27,46 @@ import {
   fxRandom,
 } from './fx';
 
-// §12 Bowling — the sixth attraction mini-game. Swipe up the lane to roll (aim
-// with the angle, power with the length; an angled shot hooks a little). Real
-// ball↔pin↔pin physics knock the rack down, scored with standard 10-frame rules
-// (strikes, spares, 10th-frame fill balls). An optional bumper mode (persisted
-// per device) bounces the lane edges instead of guttering. Canvas, client-side,
-// offline.
+// §12 Bowling — the sixth attraction mini-game. Swipe up the lane to roll: the
+// length is power, the angle both aims the ball and loads its revs, so an
+// angled shot skids up the oil and hooks back late, the way a real ball does.
+// The 2.5D sim in ./bowlingPhysics gives every pin a body — it wobbles,
+// topples, flies off a hard hit and banks off the kickbacks — scored with
+// standard 10-frame rules (strikes, spares, 10th-frame fill balls). An
+// optional bumper mode (persisted per device) bounces the lane edges instead
+// of guttering. Canvas, client-side, offline.
+import {
+  W,
+  H,
+  LANE_L,
+  LANE_R,
+  BALL_R,
+  PIN_R,
+  HEAD_Y,
+  PIN_GAP_Y,
+  GUTTER_OUT,
+  OIL_END,
+  FIXED,
+  FLAT,
+  makePins,
+  freshBall,
+  launch,
+  stepRoll,
+  pinsSettled,
+  steadyPins,
+  ghostPath,
+  type Ball,
+  type Pin,
+} from './bowlingPhysics';
 
-// —— Lane + physics (logical units; the canvas scales to fit) ————————————————
-const W = 340;
-const H = 560;
-const LANE_L = 40;
-const LANE_R = W - 40;
-const BALL_R = 12;
-const PIN_R = 9;
-const HEAD_Y = 150; // head pin (nearest the bowler)
-const PIN_GAP_X = 22;
-const PIN_GAP_Y = 24;
-const START = { x: W / 2, y: H - 40 };
-
-const FIXED = 1000 / 120;
-const BALL_FRICTION = 0.996;
-const PIN_FRICTION = 0.93; // higher = pins slide farther, so they knock each other over more
-const REST = 0.5; // collision restitution
-const BALL_M = 6;
-const PIN_M = 1;
-const MIN_V = 4;
-const MAX_V = 9;
-const MAX_DRAG = 260;
-const HOOK = 0.006; // lateral curve per step, in the aim's x direction
-const DOWN_DIST = 6; // a pin moved this far from its spot is knocked down
-const MAX_ROLL_MS = 2200; // hard stop for a roll's simulation
+// —— Roll pacing (the physics itself lives in ./bowlingPhysics) ——————————————
+const MAX_ROLL_MS = 3000; // hard stop for a roll — topples and flights need room to finish
 const SWEEP_MS = 950; // pause showing the fallen pins before the sweep clears them
 const TURKEY_SWEEP_MS = 1900; // longer hold on a turkey so the bird gets its flight
-const REST_SPEED = 0.5; // below this a ball/pin is parked so micro-jitter can't stall settle
-const GUTTER_OUT = 10; // outer cap rail of each gutter channel (sim x, mirrored)
-const BUMPER_REST = 0.95; // bumper bounce keeps nearly all lateral speed — bank shots are the point
 
-type Pin = { x: number; y: number; vx: number; vy: number; ox: number; oy: number; down: boolean };
 /** What the last roll earned, if anything — drives the banner, the shake and
  *  (for a turkey) the birds. Derived from the deck, not from the note text. */
 type Celebration = 'strike' | 'spare' | 'turkey' | null;
-type Ball = { x: number; y: number; vx: number; vy: number; gutter: boolean; rolling: boolean };
-type Vel = { vx0: number; vy0: number; spin: number };
-
-/** The 10-pin rack: 4 rows receding from the head pin. */
-function makePins(): Pin[] {
-  const pins: Pin[] = [];
-  for (let r = 0; r < 4; r++) {
-    for (let i = 0; i <= r; i++) {
-      const x = W / 2 + (i - r / 2) * PIN_GAP_X;
-      const y = HEAD_Y - r * PIN_GAP_Y;
-      pins.push({ x, y, vx: 0, vy: 0, ox: x, oy: y, down: false });
-    }
-  }
-  return pins;
-}
-
-function launch(dx: number, dy: number): Vel | null {
-  const len = Math.hypot(dx, dy);
-  if (len < 10) return null;
-  if (dy / len > -0.3) return null; // must be aimed up the lane
-  const power = Math.min(len / MAX_DRAG, 1);
-  const speed = MIN_V + power * (MAX_V - MIN_V);
-  return { vx0: (dx / len) * speed, vy0: (dy / len) * speed, spin: Math.max(-1, Math.min(1, dx / MAX_DRAG)) };
-}
 
 /** Standard 10-frame scoring over a flat list of pinfalls. Missing future
  *  bonus balls count as 0 so the running total updates as you play. */
@@ -259,10 +234,6 @@ function saveBumpers(v: boolean) {
   }
 }
 
-function freshBall(): Ball {
-  return { x: START.x, y: START.y, vx: 0, vy: 0, gutter: false, rolling: false };
-}
-
 function freshGS(): GS {
   return {
     phase: 'aim',
@@ -291,134 +262,31 @@ function freshGS(): GS {
 
 const standingCount = (pins: Pin[]) => pins.reduce((n, p) => n + (p.down ? 0 : 1), 0);
 
-/** One physics substep of a live roll. `now` is only used to throttle the
- *  collision clacks — the physics itself stays fixed-timestep. */
+/** One physics substep of a live roll. The sim itself is pure (./bowlingPhysics);
+ *  this wrapper turns its impact events into clacks and bumper sparks. `now` is
+ *  only used to throttle the sounds — the physics stays fixed-timestep. */
 function step(gs: GS, now: number) {
-  const ball = gs.ball;
-  if (ball.rolling && !ball.gutter) {
-    // Hook: a gentle lateral pull in the aim's x direction while moving.
-    ball.vx += Math.sign(ball.vx) * HOOK * Math.min(Math.abs(ball.vx), 3);
-  }
-  ball.vx *= BALL_FRICTION;
-  ball.vy *= BALL_FRICTION;
-  ball.x += ball.vx;
-  ball.y += ball.vy;
-  // Once the ball has almost stopped (e.g. nestled among the pins) park it, so
-  // it doesn't keep nudging the pins and stall the settle check.
-  if (Math.hypot(ball.vx, ball.vy) < REST_SPEED) {
-    ball.vx = 0;
-    ball.vy = 0;
-  }
-
-  // Gutters: once past the lane edge the ball drops in and can't hit pins.
-  // With bumpers up the edge bounces instead — clamp back onto the lane and
-  // reflect (only an outward vx, so a ball already hooking back in isn't
-  // re-kicked), never capturing, so a bumper game can't gutter.
-  if (!ball.gutter) {
-    const overL = ball.x < LANE_L + BALL_R;
-    const overR = ball.x > LANE_R - BALL_R;
-    if (gs.bumpers) {
-      if (overL || overR) {
-        ball.x = overL ? LANE_L + BALL_R : LANE_R - BALL_R;
-        if (overL ? ball.vx < 0 : ball.vx > 0) {
-          ball.vx = -ball.vx * BUMPER_REST;
-          gs.bumpHits += 1;
-          gs.bumpX = overL ? LANE_L : LANE_R;
-          gs.bumpY = ball.y;
-          if (now - gs.lastClack > 55) {
-            gs.lastClack = now;
-            playPinClack(0.5);
-          }
-        }
-      }
-    } else if (overL || overR) {
-      // Drop into the channel's center, not the lane edge — a gutter ball has
-      // to be seen riding the gutter the rest of the way down.
-      ball.x = overL ? (GUTTER_OUT + LANE_L) / 2 : (W - GUTTER_OUT + LANE_R) / 2;
-      ball.vx = 0;
-      ball.gutter = true;
-    }
-  }
-
-  // Pins: integrate + friction + keep on the lane.
-  for (const p of gs.pins) {
-    if (p.vx || p.vy) {
-      p.vx *= PIN_FRICTION;
-      p.vy *= PIN_FRICTION;
-      p.x += p.vx;
-      p.y += p.vy;
-      p.x = Math.max(LANE_L + PIN_R, Math.min(LANE_R - PIN_R, p.x));
-      if (Math.hypot(p.x - p.ox, p.y - p.oy) > DOWN_DIST) p.down = true;
-      // Park a nearly-stopped pin so lingering micro-jitter doesn't stall settle.
-      if (Math.hypot(p.vx, p.vy) < REST_SPEED) {
-        p.vx = 0;
-        p.vy = 0;
-      }
-    }
-  }
-
-  // Ball ↔ pin collisions (only pins still standing on the deck).
-  let ballHit = 0;
-  if (!ball.gutter) {
-    for (const p of gs.pins) {
-      ballHit = Math.max(ballHit, collide(ball, p, BALL_M, PIN_M));
-    }
-  }
-  // Pin ↔ pin collisions.
-  let pinHit = 0;
-  for (let a = 0; a < gs.pins.length; a++) {
-    for (let b = a + 1; b < gs.pins.length; b++) {
-      pinHit = Math.max(pinHit, collide(gs.pins[a], gs.pins[b], PIN_M, PIN_M));
+  const ev = stepRoll(gs.ball, gs.pins, gs.bumpers);
+  if (ev.bump) {
+    gs.bumpHits += 1;
+    gs.bumpX = ev.bump.x;
+    gs.bumpY = ev.bump.y;
+    if (now - gs.lastClack > 55) {
+      gs.lastClack = now;
+      playPinClack(0.5);
     }
   }
   // Voice the loudest impact this substep: a sharp clack for the ball striking
   // a pin, a lighter clatter for pins bouncing off each other.
   if (now - gs.lastClack > 55) {
-    if (ballHit > 0.6) {
+    if (ev.ballHit > 0.6) {
       gs.lastClack = now;
-      playPinClack(Math.min(1.4, 0.4 + ballHit * 0.12));
-    } else if (pinHit > 0.45) {
+      playPinClack(Math.min(1.4, 0.4 + ev.ballHit * 0.12));
+    } else if (ev.pinHit > 0.45) {
       gs.lastClack = now;
-      playPinClack(Math.min(0.9, 0.25 + pinHit * 0.1));
+      playPinClack(Math.min(0.9, 0.25 + ev.pinHit * 0.1));
     }
   }
-}
-
-/** Resolve a circle↔circle collision with mass + restitution. Returns the
- *  closing speed when a bounce was applied (0 otherwise) so the caller can
- *  voice the impact. */
-function collide(
-  a: { x: number; y: number; vx: number; vy: number },
-  b: { x: number; y: number; vx: number; vy: number },
-  ma: number,
-  mb: number,
-): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const dist = Math.hypot(dx, dy) || 0.0001;
-  const min = ma === BALL_M || mb === BALL_M ? BALL_R + PIN_R : PIN_R * 2;
-  if (dist >= min) return 0;
-  const nx = dx / dist;
-  const ny = dy / dist;
-  const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-  // Separate proportionally to inverse mass.
-  const overlap = min - dist;
-  const invA = 1 / ma;
-  const invB = 1 / mb;
-  const push = overlap / (invA + invB);
-  a.x -= nx * push * invA;
-  a.y -= ny * push * invA;
-  b.x += nx * push * invB;
-  b.y += ny * push * invB;
-  if (rel < 0) {
-    const j = (-(1 + REST) * rel) / (invA + invB);
-    a.vx -= j * invA * nx;
-    a.vy -= j * invA * ny;
-    b.vx += j * invB * nx;
-    b.vy += j * invB * ny;
-    return -rel;
-  }
-  return 0;
 }
 
 // —— juice: rendering-only effects (no gameplay state) ————————————————————————
@@ -631,30 +499,37 @@ function drawPinShape(ctx: CanvasRenderingContext2D) {
   ctx.stroke();
 }
 
-/** A standing pin seen from behind the bowler: upright, base on the lane. */
-function drawStandingPin(ctx: CanvasRenderingContext2D, p: Pin) {
+/** A pin at any point of its life: upright, mid-wobble, toppling, flat on the
+ *  boards, or airborne off a hard hit. The sim's lean vector drives one
+ *  continuous swing from standing (base on the lane, head up) to fallen
+ *  (squashed onto the ground plane, head pointing along the topple), pivoting
+ *  at the base the whole way — so the fall is an animation the physics plays,
+ *  not a sprite swap. Height (z) lifts the body off its ground shadow. */
+function drawPin(ctx: CanvasRenderingContext2D, p: Pin) {
   const q = projectPin(p.x, p.y);
   const sc = q.s * PIN_VIEW;
-  drawShadow(ctx, q.x, q.y + 1.5, PIN_R * 1.1 * sc, PIN_R * 0.36 * sc, 0.3);
+  const L = Math.min(Math.hypot(p.lx, p.ly), FLAT);
+  const t = L / FLAT; // 0 upright … 1 flat
+  const lift = p.z * 2.4 * sc; // stylized: real z is small, flights must read
+  drawShadow(
+    ctx,
+    q.x + t * 1.5,
+    q.y + 1.5,
+    PIN_R * (1.1 + t) * sc,
+    PIN_R * (0.36 + t * 0.09) * sc,
+    (p.down ? 0.18 : 0.3) * Math.max(0.4, 1 - lift * 0.02),
+  );
   ctx.save();
-  ctx.translate(q.x, q.y);
-  ctx.scale(sc, sc);
-  ctx.rotate(-Math.PI / 2);
-  ctx.translate(PIN_R * 1.48, 0); // put the flat base on the lane point
-  drawPinShape(ctx);
-  ctx.restore();
-}
-
-/** A fallen pin lying flat on the lane, foreshortened by the ground plane and
- *  pointing head-first along its topple direction. */
-function drawFallenPin(ctx: CanvasRenderingContext2D, p: Pin) {
-  const q = projectPin(p.x, p.y);
-  const sc = q.s * PIN_VIEW;
-  drawShadow(ctx, q.x + 1.5, q.y + 1.5, PIN_R * 2.1 * sc, PIN_R * 0.45 * sc, 0.18);
-  ctx.save();
-  ctx.translate(q.x, q.y);
-  ctx.scale(sc, sc * 0.62); // squash before rotating: the pin lies on the lane
-  ctx.rotate(Math.atan2(p.y - p.oy, p.x - p.ox) || 0);
+  ctx.translate(q.x, q.y - lift);
+  ctx.scale(sc, sc * (1 - 0.38 * t)); // squash toward the ground plane as it goes over
+  // Swing from upright toward the topple direction, shortest way around.
+  const upright = -Math.PI / 2;
+  const dir = L > 1e-4 ? Math.atan2(p.ly, p.lx) : 0;
+  let delta = dir - upright;
+  while (delta > Math.PI) delta -= TWO_PI;
+  while (delta < -Math.PI) delta += TWO_PI;
+  ctx.rotate(upright + delta * t);
+  ctx.translate(PIN_R * 1.48, 0); // keep the flat base pivoting on the lane point
   drawPinShape(ctx);
   ctx.restore();
 }
@@ -1048,8 +923,10 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
 
   // Lane oil. A dressed lane is wet down the middle and dry at the edges, and
   // the head of it mirrors the pin-deck lighting back at the bowler. Static —
-  // a dressing pattern is a property of the surface, not an animation.
-  const oilY = deck.y + 115;
+  // a dressing pattern is a property of the surface, not an animation. The
+  // sheen pools just below where the sim's pattern actually ends (OIL_END), so
+  // the spot the hook breaks is the spot the shine runs out.
+  const oilY = project(W / 2, OIL_END).y + 42;
   const oil = ctx.createRadialGradient(W / 2, oilY, 6, W / 2, oilY, 130);
   oil.addColorStop(0, withAlpha(PURPLE_LIGHT, 0.09));
   oil.addColorStop(0.5, withAlpha(PURPLE, 0.04));
@@ -1086,22 +963,24 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
   // so a pin that slid toward the bowler isn't painted under a farther
   // standing pin or the ball. Sort on projected screen y, since pins project
   // through the rack's display-only depth spread and the ball doesn't.
-  const items: Array<{ sy: number; d: () => void }> = gs.pins.map((p) => ({
-    sy: projectPin(p.x, p.y).y,
-    d: p.down ? () => drawFallenPin(ctx, p) : () => drawStandingPin(ctx, p),
-  }));
+  const items: Array<{ sy: number; d: () => void }> = gs.pins
+    .filter((p) => !p.pit) // the pit has swallowed these
+    .map((p) => ({
+      sy: projectPin(p.x, p.y).y,
+      d: () => drawPin(ctx, p),
+    }));
   items.push({ sy: project(gs.ball.x, gs.ball.y).y, d: () => drawBall(ctx, gs.ball.x, gs.ball.y, gs.ball.gutter) });
   items.sort((a, b) => a.sy - b.sy);
   for (const it of items) it.d();
 
-  // Aim guide (glowing), converging up the lane with the perspective.
+  // Aim guide (glowing), converging up the lane with the perspective. The
+  // guide is a ghost roll through the real ball physics, so it curves with the
+  // hook — its reach ends before the break finishes, which keeps reading the
+  // backend part of the skill.
   if (gs.phase === 'aim' && gs.drag.active) {
     const v = launch(gs.drag.dx, gs.drag.dy);
     if (v) {
-      const len = 150;
-      const sp = Math.hypot(v.vx0, v.vy0);
-      const from = project(START.x, START.y);
-      const to = project(START.x + (v.vx0 / sp) * len, START.y + (v.vy0 / sp) * len);
+      const pts = ghostPath(v, gs.bumpers);
       ctx.save();
       ctx.strokeStyle = withAlpha('#38bdf8', 0.85);
       ctx.shadowColor = withAlpha('#38bdf8', 0.8);
@@ -1110,8 +989,12 @@ function draw(ctx: CanvasRenderingContext2D, gs: GS, fx: FX) {
       ctx.lineCap = 'round';
       ctx.setLineDash([6, 6]);
       ctx.beginPath();
+      const from = project(pts[0].x, pts[0].y);
       ctx.moveTo(from.x, from.y - 6);
-      ctx.lineTo(to.x, to.y);
+      for (let i = 1; i < pts.length; i++) {
+        const q = project(pts[i].x, pts[i].y);
+        ctx.lineTo(q.x, q.y);
+      }
       ctx.stroke();
       ctx.restore();
     }
@@ -1320,6 +1203,7 @@ export default function Bowling() {
       gs.standing = 10;
     } else {
       gs.pins = gs.pins.filter((p) => !p.down); // sweep the fallen pins away
+      steadyPins(gs.pins); // the pinsetter stands the survivors up level
       gs.standing = gs.pins.length;
     }
     gs.ball = freshBall();
@@ -1378,11 +1262,10 @@ export default function Bowling() {
 
       if (gs.phase === 'rolling') {
         const ballSpeed = Math.hypot(gs.ball.vx, gs.ball.vy);
-        const pinsMoving = gs.pins.some((p) => Math.abs(p.vx) + Math.abs(p.vy) > 0.05);
         const ballDone = gs.ball.y < -20 || ballSpeed < 0.06;
-        // Wait for the pins to finish toppling even after the ball leaves, so a
-        // fast strike isn't scored before the chain reaction completes.
-        if ((ballDone && !pinsMoving) || now - gs.rollStart > MAX_ROLL_MS) {
+        // Wait for the pins to finish toppling, wobbling and flying even after
+        // the ball leaves, so a fast strike isn't scored mid-chain-reaction.
+        if ((ballDone && pinsSettled(gs.pins)) || now - gs.rollStart > MAX_ROLL_MS) {
           settleRoll();
         }
       } else if (gs.phase === 'sweep' && now - gs.sweepAt > gs.sweepMs) {
@@ -1433,6 +1316,7 @@ export default function Bowling() {
     if (!v) return;
     gs.ball.vx = v.vx0;
     gs.ball.vy = v.vy0;
+    gs.ball.spin = v.spin;
     gs.ball.rolling = true;
     gs.phase = 'rolling';
     gs.rollStart = performance.now();
@@ -1554,7 +1438,7 @@ export default function Bowling() {
             : note ||
               (bumpers
                 ? 'Bumpers up — swipe up the lane to roll.'
-                : 'Swipe up the lane to roll — angle it for a hook.')}
+                : 'Swipe up the lane — angle the swipe and it hooks back.')}
         </span>
       </p>
     </div>
