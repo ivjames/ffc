@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "putt:sim": "node --experimental-strip-types scripts/putt-sim.ts",
+    "bowling:sim": "node --experimental-strip-types scripts/bowling-sim.ts",
     "pinball:sim": "node --experimental-strip-types scripts/pinball-sim.ts",
     "test:app": "vitest run --config vitest.app.config.ts",
     "test:admin": "vitest run --config vitest.admin.config.ts",
