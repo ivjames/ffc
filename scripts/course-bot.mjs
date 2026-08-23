@@ -55,6 +55,8 @@
 //                         prints the server/.env line + matching bot export, no discovery/POST
 //   --yes                 skip the pre-flight confirmation prompt
 //   --dry-run             discover + estimate + print sample payloads, POST nothing
+//   --no-retry            exit immediately if startup discovery fails, instead of
+//                         backing off and waiting for the API to come back
 //
 // Reports per-sweep and cumulative stats: rounds OK/failed, latency p50/p95/max,
 // throughput, bytes sent, and the annualized round/player volume the current
@@ -85,6 +87,7 @@ function parseArgs(argv) {
     yes: false,
     dryRun: false,
     genKey: false,
+    noRetry: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const k = argv[i];
@@ -103,6 +106,7 @@ function parseArgs(argv) {
       case "--fallback-tz": a.fallbackTz = val(); break;
       case "--yes": a.yes = true; break;
       case "--dry-run": a.dryRun = true; break;
+      case "--no-retry": a.noRetry = true; break;
       case "--help": case "-h": printHelpAndExit(); break;
       default: fail(`unknown arg: ${k} (try --help)`);
     }
@@ -229,9 +233,15 @@ async function fetchCatalog(api, key) {
     // POST would fail the same way a moment later anyway).
     if (res.status !== 404) {
       const j = await res.json().catch(() => ({}));
-      throw new Error(
+      const err = new Error(
         `course discovery failed: GET ${url} → ${res.status}${j.error ? ` (${j.error})` : ""}`
       );
+      // 4xx is us: a rejected key, the feature switched off. Retrying cannot
+      // fix it, and a bot that retries a 403 forever hides a misconfiguration.
+      // 5xx is the dependency, which may well come back — that one is worth
+      // waiting for.
+      err.permanent = res.status >= 400 && res.status < 500;
+      throw err;
     }
     console.warn(
       "  ! this API has no /api/synthetic/catalog (older build) — falling back to " +
@@ -240,7 +250,11 @@ async function fetchCatalog(api, key) {
   }
   const url = `${api}/api/content`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`course discovery failed: GET ${url} → ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(`course discovery failed: GET ${url} → ${res.status}`);
+    err.permanent = res.status >= 400 && res.status < 500;
+    throw err;
+  }
   return { ...(await res.json()), scope: "default org only (tenant-scoped feed)" };
 }
 
@@ -281,12 +295,17 @@ async function discoverCourses(api, location, fallbackTz = null, key = "") {
     // Name the scope in the error: "no live courses at <uuid>" is baffling when
     // the venue is plainly there in Master Control but belongs to another org.
     const where = location ? `at location ${location}` : "to play";
-    throw new Error(
+    // Permanent: the catalog answered, it just has nothing matching. Waiting
+    // will not conjure a course, and Master Control should show the operator a
+    // real error rather than a bot retrying forever behind a "running" badge.
+    const err = new Error(
       `no live courses ${where} — catalog scope: ${content.scope}` +
         (content.scope.startsWith("default org")
           ? " (a venue at another org is invisible on this feed; run with --key so the bot uses /api/synthetic/catalog)"
           : "")
     );
+    err.permanent = true;
+    throw err;
   }
 
   const noPars = courses.filter((c) => !c.pars).length;
@@ -465,6 +484,45 @@ async function mapLimit(items, limit, fn) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// --- startup discovery, with backoff ---------------------------------------
+// Startup used to be fatal: one failed discovery and the process exited(1). Run
+// under a supervisor that restarts on exit, that turns a dependency being
+// briefly down into a restart-per-second crash loop — this bot logged 585,908
+// restarts over 6.6 days against an ffc-api that was not answering, and
+// recovered only because the API came back.
+//
+// The mid-run refresh already had the right policy ("refresh failed; using
+// last-known set"). This applies the same judgement before the first sweep:
+// wait for a dependency, exit on a misconfiguration. Backoff is exponential
+// with jitter and a ceiling, so a long outage costs a handful of log lines an
+// hour rather than half a million process starts.
+const DISCOVERY_BASE_MS = 5_000;
+const DISCOVERY_MAX_MS = 5 * 60_000;
+
+async function discoverWithBackoff(a) {
+  let attempt = 0;
+  let delay = DISCOVERY_BASE_MS;
+  for (;;) {
+    try {
+      return await discoverCourses(a.api, a.location, a.fallbackTz, a.key);
+    } catch (e) {
+      // A permanent error is not going to fix itself, and retrying one buries
+      // the reason. Fail exactly as before.
+      if (e.permanent || a.noRetry) fail(e.message);
+      attempt++;
+      // Jitter so a fleet of bots restarted together does not resynchronize
+      // into a thundering herd against an API that is already struggling.
+      const wait = delay + Math.floor(Math.random() * 1_000);
+      console.warn(
+        `course-bot: discovery attempt ${attempt} failed (${e.message}) — ` +
+          `retrying in ${(wait / 1000).toFixed(0)}s`
+      );
+      await sleep(wait);
+      delay = Math.min(delay * 2, DISCOVERY_MAX_MS);
+    }
+  }
+}
+
 // --- parent-death watchdog -------------------------------------------------
 // When launched by the Master Control control plane (which sets
 // FFC_EXIT_WITH_PARENT=1), stop the moment we're orphaned — i.e. our parent
@@ -494,10 +552,16 @@ async function main() {
   }
   const runId = new Date().toISOString().replace(/[:.]/g, "-");
   let courses;
-  try {
-    courses = await discoverCourses(a.api, a.location, a.fallbackTz, a.key);
-  } catch (e) {
-    fail(e.message);
+  if (a.dryRun) {
+    // Interactive preview: a human is watching, so surface the failure now
+    // instead of making them sit through a backoff loop.
+    try {
+      courses = await discoverCourses(a.api, a.location, a.fallbackTz, a.key);
+    } catch (e) {
+      fail(e.message);
+    }
+  } else {
+    courses = await discoverWithBackoff(a);
   }
   const { roundsPerSweep, avgPlayers } = preflight(a, courses);
 
