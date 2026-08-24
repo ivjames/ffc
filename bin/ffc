@@ -119,19 +119,68 @@ die(){ printf '%serror:%s %s\n' "$c_r" "$c_o" "$*" >&2; exit 1; }
 # regenerating the lock), and a lockfile-only stamp would skip that check and
 # quietly deploy the stale node_modules tree. FFC_FRESH_DEPS=1 forces a full
 # reinstall.
+#
+# ATOMICITY (why the staging dance below): `npm ci` DELETES node_modules first
+# and reinstalls second, so an install that dies partway — OOM kill, a dropped
+# ssh session, ^C, a registry hiccup — leaves NOTHING behind. That is strictly
+# worse than never having run: on 2026-08-23/24 it emptied
+# /var/www/ffc/server/node_modules twice and ffc-api died on
+# "ERR_MODULE_NOT_FOUND: Cannot find package 'express'". Worse, the second time
+# the deploy died before any restart, so the already-running API kept serving
+# from modules held in memory while its node_modules was empty on disk —
+# invisible until the next restart.
+#
+# So install into a staging tree and swap it in only once npm ci has EXITED 0.
+# A failed install now leaves the working tree untouched: same atomic-swap
+# discipline build_release/activate_release already apply one directory up for
+# the build, extended to dependencies. The swap is two renames within $dir (so
+# always same-filesystem, always instant), rather than the minutes-long window
+# npm ci opens.
+#
+# Only the `npm ci` path is staged. `npm install` (no lockfile) does not empty
+# node_modules up front, so a failure there is already non-destructive — and
+# staging it would write the generated lockfile somewhere we then throw away.
 NPM_QUIET=(--loglevel=error --no-fund --no-audit)
 npm_install(){
   local dir="$1"; shift
-  if [ -f "$dir/package-lock.json" ]; then
-    local stamp="$dir/node_modules/.ffc-lock-hash" want
-    want="$(cat "$dir/package-lock.json" "$dir/package.json" | sha256sum | cut -d' ' -f1)"
-    if [ -z "${FFC_FRESH_DEPS:-}" ] && [ "$want" = "$(cat "$stamp" 2>/dev/null || true)" ]; then
-      log "deps in $dir current (lockfile unchanged) — skipping npm ci"
-      return 0
-    fi
-    ( cd "$dir" && npm ci "${NPM_QUIET[@]}" "$@" )
-    printf '%s\n' "$want" > "$stamp"
-  else log "no lockfile in $dir — using npm install"; ( cd "$dir" && npm install "${NPM_QUIET[@]}" "$@" ); fi
+  if [ ! -f "$dir/package-lock.json" ]; then
+    log "no lockfile in $dir — using npm install"
+    ( cd "$dir" && npm install "${NPM_QUIET[@]}" "$@" )
+    return 0
+  fi
+  local stamp want
+  stamp="$dir/node_modules/.ffc-lock-hash"
+  want="$(cat "$dir/package-lock.json" "$dir/package.json" | sha256sum | cut -d' ' -f1)"
+  if [ -z "${FFC_FRESH_DEPS:-}" ] && [ "$want" = "$(cat "$stamp" 2>/dev/null || true)" ]; then
+    log "deps in $dir current (lockfile unchanged) — skipping npm ci"
+    return 0
+  fi
+  # Sweep anything a previously-killed deploy left behind — a staging tree or a
+  # swapped-out old tree is pure garbage once its deploy is gone, and a full
+  # node_modules copy is not small enough to leave lying around.
+  rm -rf "$dir"/.ffc-deps-staging "$dir"/.ffc-deps-old.*
+  local staging="$dir/.ffc-deps-staging"
+  mkdir -p "$staging"
+  # npm ci reads only the two manifests (plus .npmrc for registry/auth config);
+  # this repo has no workspaces and no file:/link: deps, so a staging dir
+  # holding just those resolves the same tree the real dir would.
+  cp "$dir/package-lock.json" "$dir/package.json" "$staging/"
+  if [ -f "$dir/.npmrc" ]; then cp "$dir/.npmrc" "$staging/"; fi
+  if ! ( cd "$staging" && npm ci "${NPM_QUIET[@]}" "$@" ); then
+    rm -rf "$staging"
+    die "npm ci failed in $dir — existing node_modules left INTACT (nothing was removed), so the running app keeps working. Fix the cause and re-run; FFC_FRESH_DEPS=1 forces a rebuild."
+  fi
+  # Stamp inside the staged tree, before the swap: the stamp must only ever
+  # exist in a tree whose install completed, and it rides into place with it.
+  printf '%s\n' "$want" > "$staging/node_modules/.ffc-lock-hash"
+  # Swap. Rename the old tree OUT and the new tree IN — two instant renames, so
+  # node_modules is absent for microseconds rather than for the length of an
+  # install. Deleting the old tree first would reopen exactly the window this
+  # function exists to close.
+  local old="$dir/.ffc-deps-old.$$"
+  if [ -d "$dir/node_modules" ]; then mv -T "$dir/node_modules" "$old"; fi
+  mv -T "$staging/node_modules" "$dir/node_modules"
+  rm -rf "$old" "$staging"
 }
 
 # Server deps once per invocation: deploy needs them for the test gate, the
