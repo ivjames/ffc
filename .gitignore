@@ -1,6 +1,10 @@
 # dependencies
 node_modules/
 server/node_modules/
+# transient trees from npm_install's atomic swap (bin/ffc) — a staged install
+# in flight, or an old tree swapped out and awaiting deletion
+.ffc-deps-staging/
+.ffc-deps-old.*
 
 # build output
 dist/
