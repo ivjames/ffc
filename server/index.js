@@ -9,8 +9,15 @@ import { startBoothPhotoRetention } from "./lib/boothPhotoRetention.js";
 import { startTriviaAutopilot } from "./routes/triviaLive.js";
 
 const port = process.env.PORT || 8060;
-app.listen(port, () => {
-  console.log(`[ffc-server] listening on port ${port}`);
+// Bind to loopback by default: on the droplet this API sits behind nginx, so
+// the raw port must not be reachable from the internet. Without a host argument
+// Express binds every interface, which left :8068 publicly listening and
+// relying on the host firewall to close it — a guarantee the process should be
+// making itself. Same default and reasoning as mock-centeredge's MOCK_HOST.
+// Override with HOST=0.0.0.0 only for local cross-device testing.
+const host = process.env.HOST || "127.0.0.1";
+app.listen(port, host, () => {
+  console.log(`[ffc-server] listening on ${host}:${port}`);
   warnIfNoToken();
   warnIfConsoleMailer();
   // Privacy: stored hunt photos are deleted after HUNT_PHOTO_RETENTION_DAYS
