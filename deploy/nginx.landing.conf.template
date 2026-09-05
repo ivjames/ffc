@@ -24,8 +24,17 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    # http2 belongs on the listen line for the nginx this box runs (1.24;
+    # the per-server `http2 on;` directive arrives in 1.25.1). Every other
+    # vhost on the droplet carries the flag, and nginx keeps ONE set of
+    # protocol options per :443 socket — so a vhost that omits it makes
+    # nginx warn "protocol options redefined" for every vhost that disagrees.
+    # This file is rewritten on every deploy, so omitting it here brought the
+    # warnings back after each one. If the box moves to nginx >= 1.25.1 this
+    # becomes `http2 on;` inside the block; `fix-nginx-http2` (lab980 repo)
+    # audits and reports which form the box wants.
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name __FQDN__;
 
     # Wildcard cert covering *.<fqdn> AND the apex, issued via DNS-01.
