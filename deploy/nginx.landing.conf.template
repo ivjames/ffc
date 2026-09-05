@@ -25,8 +25,9 @@ server {
 
 server {
     # http2 belongs on the listen line for the nginx this box runs (1.24;
-    # the per-server `http2 on;` directive arrives in 1.25.1). Every other
-    # vhost on the droplet carries the flag, and nginx keeps ONE set of
+    # the per-server `http2 on;` directive arrives in 1.25.1, and is an
+    # unknown directive before it). At the time of writing
+    # most vhosts on the droplet carry the flag, and nginx keeps ONE set of
     # protocol options per :443 socket — so a vhost that omits it makes
     # nginx warn "protocol options redefined" for every vhost that disagrees.
     # This file is rewritten on every deploy, so omitting it here brought the
