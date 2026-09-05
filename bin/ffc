@@ -308,10 +308,10 @@ save_if_online(){
   # not just this one; otherwise say so and leave the previous dump alone.
   local bad
   if ! bad="$(pm2_not_online)"; then
-    log "WARNING: skipping pm2 save: cannot read the pm2 process list ($bad)"; return 0
+    log "WARNING: skipping pm2 save: cannot read the pm2 process list ($bad)" >&2; return 0
   fi
   if [ -n "$bad" ]; then
-    log "WARNING: not every pm2 process is online ($bad) — skipping pm2 save so the dump keeps its last good state. Run 'pm2 save' yourself once they are."
+    log "WARNING: not every pm2 process is online ($bad) — skipping pm2 save so the dump keeps its last good state. Run 'pm2 save' yourself once they are." >&2
     return 0
   fi
   pm2_clean save
@@ -337,7 +337,11 @@ mock_up(){
   [ "$CE_MOCK_PORT" != "$API_PORT" ] \
     || die "CE_MOCK_PORT ($CE_MOCK_PORT) collides with the API port — reserve a free port via CE_MOCK_PORT in $APP_DIR/.env (or FFC_CE_PORT)"
   npm_install "$APP_DIR/mock-centeredge" --omit=dev
-  PM2_PORT="$CE_MOCK_PORT" pm2_clean restart ffc-centeredge-mock \
+  # The mock has no dotenv, so a changed CE_MOCK_PORT only reaches it through
+  # pm2 — and a restart by name keeps the stored env. --update-env re-captures
+  # the calling environment, which under pm2_clean is PATH/HOME/PM2_HOME/TERM/
+  # LANG and this PORT, nothing else, so here it is safe.
+  PM2_PORT="$CE_MOCK_PORT" pm2_clean restart ffc-centeredge-mock --update-env \
     || PM2_PORT="$CE_MOCK_PORT" pm2_clean start index.js --name ffc-centeredge-mock --cwd "$APP_DIR/mock-centeredge"
   save_if_online
 }
