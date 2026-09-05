@@ -255,14 +255,76 @@ activate_release(){
     | grep -vF "$RELEASE_DIR" | tail -n +$((KEEP)) | xargs -r rm -rf
 }
 
+# Every pm2 call goes through pm2_clean, which launches it from an EMPTY
+# environment plus the handful of variables pm2 itself needs and PORT. pm2
+# copies the environment of the `pm2 start` call into the process, and from
+# there into ~/.pm2/dump.pm2 on save; `pm2 restart --update-env` re-captured
+# the calling shell on every deploy — the live ffc-api registration carried
+# FFC_REEXEC and FFC_BRANCH from this very script, and any key the operator's
+# shell exported went the same way, for an indefinite on-disk lifetime. The
+# API reads server/.env through dotenv (cwd server/) and the CenterEdge mock
+# needs only PORT, so PORT is the one thing handed in: the API port by default,
+# PM2_PORT for the mock. The daemon itself keeps the environment of whichever
+# call first spawned it, which is why jlist and logs go through here as well.
+pm2_clean(){
+  env -i PATH="$PATH" HOME="$HOME" ${PM2_HOME:+PM2_HOME="$PM2_HOME"} \
+    ${TERM:+TERM="$TERM"} LANG=C.UTF-8 PORT="${PM2_PORT:-$API_PORT}" pm2 "$@"
+}
+
+# `pm2 jlist` is JSON only on a good day: pm2 writes chatter to STDOUT ahead
+# of it (`[PM2] Spawning PM2 daemon…`, `>>>> In-memory PM2 is out-of-date`),
+# so the JSON is taken from the first line that starts one and parses.
+PM2_JSON='import json, sys
+lines = sys.stdin.read().split("\n")
+for i, line in enumerate(lines):
+    if line[:1] in "[{":
+        try:
+            procs = json.loads("\n".join(lines[i:]))
+        except ValueError:
+            continue
+        if isinstance(procs, list):
+            json.dump(procs, sys.stdout); sys.exit(0)
+sys.exit("no parseable JSON in pm2 jlist output")'
+pm2_jlist(){   # -> JSON array on stdout; 1 with the reason on stderr
+  local jl
+  jl="$(pm2_clean jlist 2>/dev/null)" || { echo "pm2 jlist failed" >&2; return 1; }
+  printf '%s' "$jl" | python3 -c "$PM2_JSON"
+}
+
+# Names of registered processes that are not online (empty = all online);
+# exit 1 with the reason when the list cannot be read.
+pm2_not_online(){
+  local js
+  js="$(pm2_jlist 2>&1)" || { printf '%s' "$js"; return 1; }
+  printf '%s' "$js" | python3 -c 'import json, sys
+print(" ".join(x.get("name", "?") for x in json.load(sys.stdin)
+               if x.get("pm2_env", {}).get("status") != "online"))'
+}
+
+save_if_online(){
+  # pm2 save overwrites the dump with whatever is running right now, so a save
+  # while anything is down persists a dump that comes back short on the next
+  # reboot. The box rule (lab980 CLAUDE.md) is EVERY app online before a save,
+  # not just this one; otherwise say so and leave the previous dump alone.
+  local bad
+  if ! bad="$(pm2_not_online)"; then
+    log "WARNING: skipping pm2 save: cannot read the pm2 process list ($bad)"; return 0
+  fi
+  if [ -n "$bad" ]; then
+    log "WARNING: not every pm2 process is online ($bad) — skipping pm2 save so the dump keeps its last good state. Run 'pm2 save' yourself once they are."
+    return 0
+  fi
+  pm2_clean save
+}
+
 # Install deps + (re)start the API under pm2. Start from server/ (--cwd) so
 # dotenv loads server/.env (DATABASE_URL, APP_TOKEN).
 api_up(){
   [ -d "$APP_DIR/server" ] || return 0
   server_deps
-  pm2 restart ffc-api --update-env \
-    || pm2 start index.js --name ffc-api --cwd "$APP_DIR/server"
-  pm2 save
+  pm2_clean restart ffc-api \
+    || pm2_clean start index.js --name ffc-api --cwd "$APP_DIR/server"
+  save_if_online
 }
 
 # Install deps + (re)start the CenterEdge mock under pm2, bound to loopback on
@@ -275,9 +337,9 @@ mock_up(){
   [ "$CE_MOCK_PORT" != "$API_PORT" ] \
     || die "CE_MOCK_PORT ($CE_MOCK_PORT) collides with the API port — reserve a free port via CE_MOCK_PORT in $APP_DIR/.env (or FFC_CE_PORT)"
   npm_install "$APP_DIR/mock-centeredge" --omit=dev
-  PORT="$CE_MOCK_PORT" pm2 restart ffc-centeredge-mock --update-env \
-    || PORT="$CE_MOCK_PORT" pm2 start index.js --name ffc-centeredge-mock --cwd "$APP_DIR/mock-centeredge"
-  pm2 save
+  PM2_PORT="$CE_MOCK_PORT" pm2_clean restart ffc-centeredge-mock \
+    || PM2_PORT="$CE_MOCK_PORT" pm2_clean start index.js --name ffc-centeredge-mock --cwd "$APP_DIR/mock-centeredge"
+  save_if_online
 }
 
 # Pre-deploy gate: run the server test suite (server/*.test.js, node:test)
@@ -564,7 +626,7 @@ cmd_deploy(){
   api_up
   if ! api_health; then
     log "API FAILED its health check after restart — recent logs:"
-    pm2 logs ffc-api --lines 30 --nostream || true
+    pm2_clean logs ffc-api --lines 30 --nostream || true
     die "deploy is NOT healthy (old client still being served — new build was never activated). Roll back with: ffc rollback  (target: $(cat "$APP_DIR/.ffc-prev-sha" 2>/dev/null || echo 'unknown — pass a sha'))"
   fi
   activate_release      # new API is healthy — flip the served client to match
@@ -713,7 +775,7 @@ cmd_rollback(){
   build_release
   api_up
   if ! api_health; then
-    pm2 logs ffc-api --lines 30 --nostream || true
+    pm2_clean logs ffc-api --lines 30 --nostream || true
     die "API still unhealthy after rollback — inspect: ffc logs"
   fi
   activate_release      # same cutover order as deploy: healthy API first
@@ -784,8 +846,8 @@ case "${1:-}" in
   landing-vhost)    cmd_landing_vhost ;;
   seed)             cmd_seed ;;
   seed-demo)        cmd_seed_demo ;;
-  restart)          pm2 restart ffc-api && pm2 save ;;
-  logs)             pm2 logs ffc-api ;;
+  restart)          pm2_clean restart ffc-api && save_if_online ;;
+  logs)             pm2_clean logs ffc-api ;;
   backup)           cmd_backup ;;
   backup-cron)      cmd_backup_cron ;;
   wildcard-cert)    cmd_wildcard_cert ;;
