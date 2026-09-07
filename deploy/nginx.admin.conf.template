@@ -41,6 +41,17 @@ server {
     root __APP_DIR__/current/dist-admin;
     index index.html;
 
+    # Shared security headers (HSTS, X-Content-Type-Options, X-Frame-Options,
+    # Referrer-Policy). This file is re-rendered onto the droplet by `ffc
+    # vhost` / `ffc admin-vhost` / `ffc landing-vhost`, which OVERWRITES the
+    # installed vhost — so a header block added on the box by
+    # fix-security-headers is wiped on the next run and the site silently
+    # serves without them. Carrying the include here is what makes it survive.
+    #
+    # nginx does not merge add_header across contexts: a location{} that sets
+    # its own stops inheriting these, so each one below re-includes the line.
+    include snippets/lab980-security-headers.conf;
+
     # API → the same Node/Express backend the player app uses.
     location /api/ {
         client_max_body_size 16m;
@@ -54,6 +65,7 @@ server {
 
     location /assets/ {
         expires 1y;
+        include snippets/lab980-security-headers.conf;
         add_header Cache-Control "public, immutable";
     }
 

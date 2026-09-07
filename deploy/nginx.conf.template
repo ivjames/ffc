@@ -36,6 +36,17 @@ server {
     root __APP_DIR__/current/dist;
     index index.html;
 
+    # Shared security headers (HSTS, X-Content-Type-Options, X-Frame-Options,
+    # Referrer-Policy). This file is re-rendered onto the droplet by `ffc
+    # vhost` / `ffc admin-vhost` / `ffc landing-vhost`, which OVERWRITES the
+    # installed vhost — so a header block added on the box by
+    # fix-security-headers is wiped on the next run and the site silently
+    # serves without them. Carrying the include here is what makes it survive.
+    #
+    # nginx does not merge add_header across contexts: a location{} that sets
+    # its own stops inheriting these, so each one below re-includes the line.
+    include snippets/lab980-security-headers.conf;
+
     # API → Node/Express (pm2) on its local port. Must come before the SPA
     # fallback so /api/* is never rewritten to index.html. This prefix also
     # carries the per-tenant PWA manifest (/api/manifest.webmanifest).
@@ -75,18 +86,22 @@ server {
     # Hashed build assets are immutable — cache hard.
     location /assets/ {
         expires 1y;
+        include snippets/lab980-security-headers.conf;
         add_header Cache-Control "public, immutable";
     }
 
     # The service worker must never be cached by the browser, or clients get
     # stuck on an old SW and never pick up new releases.
     location = /sw.js {
+        include snippets/lab980-security-headers.conf;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
     location = /registerSW.js {
+        include snippets/lab980-security-headers.conf;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
     location = /manifest.webmanifest {
+        include snippets/lab980-security-headers.conf;
         add_header Cache-Control "no-cache";
     }
 
