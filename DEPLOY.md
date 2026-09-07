@@ -20,12 +20,26 @@ edit of the DB credentials.
 
 ## First-time provisioning
 
+> **Don't export `GITHUB_TOKEN` for this.** `ivjames/ffc` is a **public** repo —
+> verified 2026-09-07, the GitHub API reports `private: false` — so the clone
+> needs no credential at all. This section used to say otherwise and tell you to
+> export a token into the shell that then runs `provision-site`.
+>
+> That is not a harmless surplus step on this droplet. pm2 copies the
+> environment of whatever shell starts a process into the process *and* into
+> `~/.pm2/dump.pm2`, where it acquires an indefinite on-disk lifetime; the
+> 2026-09-05 audit found `GITHUB_TOKEN` in **18 of 21** pm2 registrations, none
+> of which had asked for it. An exported token in the provisioning shell is one
+> of the ways it got there — and here it bought nothing.
+
+
 Run as **root on the droplet**. Subdomain `ffc.lab980.com` throughout; change the
 `ffc` label if you want a different one (and set `FFC_FQDN` for `ffc setup`).
 
 ```bash
 # 1. Subdomain shell: DNS + clone + dir + reserve a port. One command.
-#    (ivjames/ffc is private — export GITHUB_TOKEN=ghp_... first so the clone auths.)
+#    (ivjames/ffc is PUBLIC — no token needed. This line used to say it was
+#     private and to export GITHUB_TOKEN first; see the note below.)
 provision-site ffc ivjames/ffc
 
 # 2. Postgres: the role OWNS the db (so it can create tables in `public` on
