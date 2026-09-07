@@ -231,8 +231,18 @@ Two features lean on infrastructure beyond the code:
 
 ## Routine redeploys
 
+> **`deploy` hard-resets; it does not pull.** `bin/ffc:585-590` runs
+> `git fetch origin $BRANCH` then `git reset --hard origin/$BRANCH`. A tracked
+> file edited on the droplet is destroyed silently — fix it in the repo. This
+> page used to say "pull", which reads as a merge that would conflict rather
+> than discard, and the lab980 conventions make the distinction load-bearing
+> ("most hard-reset, so the edit is destroyed silently; at least one
+> fast-forwards"). The untracked state — `.env`, `current`, `releases/`,
+> `node_modules/` — survives.
+
+
 ```bash
-ffc deploy      # pull main -> TEST GATE -> build into releases/<ts> -> migrate DB -> restart API -> health check -> swap current
+ffc deploy      # fetch + reset --hard origin/main -> TEST GATE -> build into releases/<ts> -> migrate DB -> restart API -> health check -> swap current
 ```
 
 **Cutover order.** Everything slow (tests, npm installs, the client build, the
@@ -247,7 +257,7 @@ only the API is on new code. Deploys also skip `npm ci` when the relevant
 (`FFC_FRESH_DEPS=1` forces a full reinstall).
 
 **The test gate.** There is no CI on this project, so the deploy is the gate:
-after pulling, `ffc deploy` runs the full server suite (`server/*.test.js`,
+after syncing, `ffc deploy` runs the full server suite (`server/*.test.js`,
 node:test) against a scratch database (`<dbname>_test` on the same Postgres,
 created automatically; `FFC_TEST_DATABASE_URL` overrides) **before anything
 ships** — a red suite aborts with production untouched (no build swap, no
@@ -262,7 +272,7 @@ if the live config is missing `client_max_body_size` (needed for scavenger-hunt
 photo uploads), deploy re-renders it once (which re-runs certbot); otherwise it
 just reloads.
 
-`ffc deploy` pulls `main`, then **re-execs the freshly-pulled copy of itself** so
+`ffc deploy` syncs `main`, then **re-execs the freshly-synced copy of itself** so
 changes to the deploy logic take effect on the same run (no more "lands one
 deploy late"). After restarting the API it **polls `/api/health` (~30 s)** and
 fails the deploy loudly — with recent pm2 logs — if the API doesn't come up:
