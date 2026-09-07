@@ -81,6 +81,15 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # build_release copies landing/ verbatim into each release, and that
+    # directory carries its own docs — so /README.md and /SPEC.md were served
+    # as real files (200) while every other .md path fell through to the SPA
+    # index. A regex location outranks the prefix locations above, so this
+    # covers both. Same rule as the canonical static vhost in the lab980
+    # new-site scaffold.
+    location ~ /\.(?!well-known) { deny all; return 404; }
+    location ~* \.md$ { deny all; }
+
     location / {
         try_files $uri /index.html;
     }
